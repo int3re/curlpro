@@ -19,14 +19,18 @@ from __future__ import annotations
 
 from ._ffi import CurlProError, WebSocketClosed
 from .aio import AsyncSession
+from .cookies import Cookie, Cookies
 from .session import Response, Session, delete, get, head, options, patch, post, put
-from .profiles import ensure_loaded, list_profiles, load_profiles, register_profile
+from .profiles import Profile, ensure_loaded, list_profiles, load_profiles, register_profile
 from .stream import StreamResponse
 from .websocket import WebSocket
 
 __all__ = [
     "AsyncSession",
+    "Cookie",
+    "Cookies",
     "CurlProError",
+    "Profile",
     "Response",
     "Session",
     "StreamResponse",

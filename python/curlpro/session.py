@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from ._ffi import _call, call_framed, encode
+from .cookies import Cookies
+from .encoding import detect as detect_encoding
 from .headers import SessionHeaders
 from .profiles import ensure_loaded
 from .stream import StreamResponse
@@ -187,7 +189,7 @@ def _request_meta(
 class Response:
     """Ответ сервера."""
 
-    __slots__ = ("status", "proto", "headers", "content", "url")
+    __slots__ = ("status", "proto", "headers", "content", "url", "_encoding")
 
     def __init__(self, status: int, proto: str, headers: dict[str, list[str]],
                  content: bytes, url: str = ""):
@@ -196,12 +198,35 @@ class Response:
         self.headers = headers
         self.content = content
         self.url = url
+        self._encoding: str | None = None
+
+    @property
+    def encoding(self) -> str:
+        """Кодировка тела: из Content-Type, затем BOM, затем сам документ.
+
+        Определяется один раз и запоминается. Присваивание перекрывает
+        определённое значение — сайт может объявить кодировку неверно,
+        и тогда решать вызывающему.
+        """
+        if self._encoding is None:
+            self._encoding = detect_encoding(self.content, self.header("content-type"))
+        return self._encoding
+
+    @encoding.setter
+    def encoding(self, value: str) -> None:
+        self._encoding = value
 
     @property
     def text(self) -> str:
-        return self.content.decode("utf-8", errors="replace")
+        return self.content.decode(self.encoding, errors="replace")
 
     def json(self) -> Any:
+        """Разбор JSON.
+
+        Байты отдаются как есть: json.loads сам распознаёт UTF-8, UTF-16
+        и UTF-32 по RFC 8259. Кодировка из заголовка тут не годится —
+        сайты объявляют в ней что угодно, а тело всё равно UTF-8.
+        """
         return json.loads(self.content)
 
     @property
@@ -280,6 +305,7 @@ class Session:
         force_http1: bool = False,
         http3: bool = False,
         keep_alive: bool = True,
+        hooks: Mapping[str, Iterable[Callable[..., Any]]] | None = None,
         device: str | None = None,
         devices: Iterable[Mapping[str, str]] | None = None,
         max_idle_conns: int = 0,
@@ -328,6 +354,16 @@ class Session:
         #: Заголовки, добавляемые ко всем запросам сессии. Хранятся отдельно
         #: от профильных, поэтому clear() возвращает чистый отпечаток.
         self.headers = SessionHeaders(self._id)
+        #: Куки сессии: чтение, изменение, сохранение и загрузка из файла.
+        self.cookies = Cookies(self._id)
+        #: Перехватчики: "request" вызывается перед отправкой и получает
+        #: описание запроса, "response" — после, с готовым ответом. Оба могут
+        #: вернуть замену; вернувший None ничего не меняет.
+        self.hooks: dict[str, list[Callable[..., Any]]] = {"request": [], "response": []}
+        for event, fns in (hooks or {}).items():
+            if event not in self.hooks:
+                raise ValueError(f"неизвестное событие {event!r}: есть request и response")
+            self.hooks[event].extend(fns)
 
     def request(
         self,
@@ -367,14 +403,37 @@ class Session:
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
             respect_retry_after=respect_retry_after, proxy=proxy, mode=mode,
         )
+        for hook in self.hooks["request"]:
+            replaced = hook(meta)
+            if replaced is not None:
+                meta = replaced
+
         payload, content = call_framed("curlpro_request", self._id, body=body, meta=meta)
-        return Response(
+        return self._after(Response(
             status=payload["status"],
             proto=payload.get("proto", ""),
             headers=payload.get("headers") or {},
             content=content,
             url=payload.get("url") or url,
-        )
+        ))
+
+    def _after(self, response: Response) -> Response:
+        """Пропускает ответ через перехватчики."""
+        for hook in self.hooks["response"]:
+            replaced = hook(response)
+            if replaced is not None:
+                response = replaced
+        return response
+
+    def on_request(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+        """Добавляет перехватчик запроса. Годится и как декоратор."""
+        self.hooks["request"].append(fn)
+        return fn
+
+    def on_response(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+        """Добавляет перехватчик ответа. Годится и как декоратор."""
+        self.hooks["response"].append(fn)
+        return fn
 
     def stream(
         self,

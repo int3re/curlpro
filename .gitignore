@@ -41,4 +41,6 @@ build/
 # Исходники живут в dist/ и profiles/ соответственно.
 python/curlpro/lib/
 python/curlpro/profiles/
+python/LICENSE
+python/NOTICE
 python/dist/

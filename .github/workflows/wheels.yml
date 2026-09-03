@@ -66,6 +66,7 @@ jobs:
         run: |
           python -m pip install --upgrade build wheel
           cd python
+          cp ../LICENSE ../NOTICE .
           python -m build --wheel
           # Тег платформы проставляется явно: колесо содержит нативный
           # код и не является universal.

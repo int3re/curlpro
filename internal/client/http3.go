@@ -228,7 +228,9 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL) (*nethttp.
 	}
 	if s.jar != nil {
 		if cookies := resp.Cookies(); len(cookies) > 0 {
-			s.jar.SetCookies(u, toFhttpCookies(cookies))
+			fc := toFhttpCookies(cookies)
+			s.jar.SetCookies(u, fc)
+			s.recordCookies(u, fc)
 		}
 	}
 

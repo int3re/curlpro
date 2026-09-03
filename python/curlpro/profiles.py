@@ -59,3 +59,63 @@ def register_profile(profile: dict[str, Any] | str | bytes) -> list[str]:
 def list_profiles() -> list[str]:
     """Имена зарегистрированных профилей."""
     return _call("curlpro_profiles_list")["profiles"]
+
+
+class Profile:
+    """Профиль браузера как объект.
+
+    Профиль — это данные, а не код: под новую версию браузера правится JSON,
+    и пересобирать нативную часть не нужно. Класс добавляет к этим данным
+    привычные операции, не пряча их: :attr:`data` остаётся обычным словарём.
+
+        base = Profile.from_file("profiles/chrome-152-windows.json")
+        my = base.derive("chrome-153-windows",
+                         headers={"user_agent": "...Chrome/153..."})
+        my.register()
+    """
+
+    __slots__ = ("data",)
+
+    def __init__(self, data: dict[str, Any]):
+        if not isinstance(data, dict):
+            raise TypeError("профиль — словарь с полями JSON")
+        self.data = data
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> "Profile":
+        return cls(json.loads(Path(path).read_text(encoding="utf-8")))
+
+    @property
+    def name(self) -> str:
+        return self.data.get("name", "")
+
+    @property
+    def based_on(self) -> str:
+        return self.data.get("based_on", "")
+
+    def derive(self, name: str, **overrides: Any) -> "Profile":
+        """Новый профиль дельтой над этим.
+
+        Наследование живёт в ядре: дельта хранит только отличия, остальное
+        берётся у предка. Так весь профиль Chrome 110 — это одна строка
+        про перемешивание расширений.
+        """
+        if not self.name:
+            raise ValueError("у профиля-предка нет имени: дельта не на что опереться")
+        data: dict[str, Any] = {"name": name, "based_on": self.name}
+        data.update(overrides)
+        return Profile(data)
+
+    def register(self) -> list[str]:
+        """Регистрирует профиль в рантайме и возвращает имена всех известных."""
+        return register_profile(self.data)
+
+    def save(self, path: str | Path) -> None:
+        Path(path).write_text(
+            json.dumps(self.data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    def __repr__(self) -> str:
+        base = f" на основе {self.based_on}" if self.based_on else ""
+        return f"<Profile {self.name or 'без имени'}{base}>"

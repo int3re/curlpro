@@ -4,20 +4,33 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curlpro"
-version = "0.1.0"
-description = "HTTP-клиент с сетевым отпечатком браузера: TLS ClientHello, кадры HTTP/2, порядок заголовков"
+version = "0.2.0"
+description = "HTTP-клиент с сетевым отпечатком браузера: TLS ClientHello, кадры HTTP/2 и HTTP/3, порядок заголовков"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
-keywords = ["tls", "ja3", "ja4", "http2", "fingerprint", "impersonate", "scraping"]
+license = "Apache-2.0"
+# Лицензия и NOTICE копируются сюда при сборке колеса (wheels.yml),
+# как и нативная библиотека с профилями: в дереве они лежат в корне,
+# а дублировать их в двух местах — прямой путь к расхождению.
+license-files = ["LICENSE*", "NOTICE*"]
+keywords = ["tls", "ja3", "ja4", "http2", "http3", "quic", "fingerprint", "impersonate", "scraping"]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Go",
     "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Operating System :: OS Independent",
 ]
 
 [project.urls]
-Source = "https://github.com/curlpro/curlpro"
+Source = "https://github.com/int3re/curlpro"
+Issues = "https://github.com/int3re/curlpro/issues"
+Changelog = "https://github.com/int3re/curlpro/blob/main/ROADMAP.md"
 
 [tool.setuptools]
 packages = ["curlpro"]

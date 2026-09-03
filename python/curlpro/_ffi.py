@@ -114,6 +114,9 @@ for _name, _args in (
     ("curlpro_session_remove_header", [ctypes.c_longlong, ctypes.c_char_p]),
     ("curlpro_session_reset_headers", [ctypes.c_longlong]),
     ("curlpro_session_headers", [ctypes.c_longlong]),
+    ("curlpro_session_cookies", [ctypes.c_longlong]),
+    ("curlpro_session_set_cookies", [ctypes.c_longlong, ctypes.c_char_p]),
+    ("curlpro_session_clear_cookies", [ctypes.c_longlong]),
 ):
     try:
         _fn = getattr(_lib, _name)
@@ -159,7 +162,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Минимальная версия нативной части: мажор и минор. Поднимать вместе
 # с lib/curlpro.go, когда Python начинает зависеть от нового экспорта или поля.
-REQUIRED_VERSION = (0, 5)
+REQUIRED_VERSION = (0, 6)
 
 
 def _check_version() -> None:

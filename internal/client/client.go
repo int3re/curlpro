@@ -244,6 +244,10 @@ type Session struct {
 	// мьютексом, что и пул: заполняется из ответов, читается при сборке.
 	acceptCH map[string]map[string]bool
 
+	// cookies — свой учёт кук для выгрузки: банка отдаёт только пару
+	// «имя-значение» для адреса, а сохранить сессию этого мало.
+	cookies map[string]Cookie
+
 	h3 h3Transport
 }
 
@@ -302,9 +306,9 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 		s.alpn = []string{"http/1.1"}
 	}
 	if opts.Cookies {
-		jar, err := cookiejar.New(nil)
+		jar, err := newCookieJar()
 		if err != nil {
-			return nil, fmt.Errorf("cookie-jar: %w", err)
+			return nil, err
 		}
 		s.jar = jar
 	}
@@ -518,6 +522,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if s.jar != nil {
 		if cookies := resp.Cookies(); len(cookies) > 0 {
 			s.jar.SetCookies(u, cookies)
+			s.recordCookies(u, cookies)
 		}
 	}
 	return resp, cancel, c, nil

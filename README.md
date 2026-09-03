@@ -83,7 +83,51 @@ curlpro.register_profile({
     "based_on": "chrome-151-windows",
     "headers": {"user_agent": "...Chrome/152.0.0.0..."},
 })
+
+# то же объектом, если профиль удобнее собирать из существующего
+base = curlpro.Profile.from_file("profiles/chrome-152-windows.json")
+base.derive("chrome-153-windows",
+            headers={"user_agent": "...Chrome/153.0.0.0..."}).register()
 ```
+
+## Для парсера
+
+Сессия переносится между запусками: авторизация не теряется при перезапуске.
+
+```python
+with curlpro.Session("chrome-152-windows") as s:
+    s.cookies.load_file("state.json")     # нет файла — не ошибка, первый запуск
+    s.post("https://example.com/login", fields={"user": "u", "password": "p"})
+    page = s.get("https://example.com/account")
+    print(page.text)                      # кодировка из Content-Type,
+                                          # BOM или <meta charset>
+    s.cookies.save("state.json")
+```
+
+Куки видны целиком — домен, путь, срок, флаги:
+
+```python
+s.cookies["sid"]                          # значение
+s.cookies.all()                           # полные записи
+s.cookies.set("token", "xyz", domain="example.com")
+s.cookies.clear()
+```
+
+Перехватчики дают вклиниться до отправки и после ответа, не трогая саму
+библиотеку:
+
+```python
+with curlpro.Session() as s:
+    @s.on_request
+    def sign(meta):                       # meta можно менять на месте
+        meta.setdefault("headers", {})["X-Signature"] = sign_it(meta["url"])
+
+    @s.on_response
+    def log(resp):
+        print(resp.status, resp.url)
+```
+
+Разбор HTML сюда намеренно не входит: это работа `selectolax` или `lxml`.
 
 ## Два набора заголовков
 

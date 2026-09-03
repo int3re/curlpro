@@ -102,7 +102,8 @@ func curlpro_free(s *C.char) {
 // с нулём попыток означает «без повторов», а не «взять из сессии».
 // 0.4.0: mode (навигация или fetch) и keep_alive у сессии.
 // 0.5.0: device и devices — подсказки высокой энтропии по Accept-CH.
-const Version = "0.5.0"
+// 0.6.0: выгрузка, загрузка и очистка кук.
+const Version = "0.6.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -236,6 +237,56 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 	sessions[id] = s
 	sessionsMu.Unlock()
 	return respond(map[string]any{"session": id}, nil)
+}
+
+// curlpro_session_cookies отдаёт куки сессии.
+//
+// Банка внутри клиента наружу не выведена: там только пара «имя-значение»
+// для конкретного адреса. Здесь — полные записи с доменом, путём и сроком,
+// чтобы сессию можно было сохранить и продолжить в другом запуске.
+//
+//export curlpro_session_cookies
+func curlpro_session_cookies(id C.longlong) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	return respond(map[string]any{"cookies": s.Cookies()}, nil)
+}
+
+// curlpro_session_set_cookies загружает куки в сессию.
+//
+//export curlpro_session_set_cookies
+func curlpro_session_set_cookies(id C.longlong, data *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	var cs []client.Cookie
+	if err := json.Unmarshal([]byte(C.GoString(data)), &cs); err != nil {
+		return respond(nil, fmt.Errorf("разбор кук: %w", err))
+	}
+	if err := s.SetCookies(cs); err != nil {
+		return respond(nil, err)
+	}
+	return respond(map[string]any{"cookies": s.Cookies()}, nil)
+}
+
+// curlpro_session_clear_cookies забывает все куки сессии.
+//
+//export curlpro_session_clear_cookies
+func curlpro_session_clear_cookies(id C.longlong) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	if err := s.ClearCookies(); err != nil {
+		return respond(nil, err)
+	}
+	return respond(nil, nil)
 }
 
 //export curlpro_session_close
