@@ -43,8 +43,28 @@ curlpro.register_profile({
 Совпадение сетевого отпечатка необходимо, но не достаточно: современные
 системы скорят JA4 вместе с JA4H, JA3S/JARM и поведенческим анализом.
 
-Поддерживаются HTTP/1.1, HTTP/2 и HTTP/3, куки, редиректы, прокси
-(HTTP CONNECT и SOCKS5), multipart, потоковое чтение, асинхронный API.
+Поддерживаются HTTP/1.1, HTTP/2, HTTP/3 и WebSocket, куки, редиректы, прокси
+(HTTP CONNECT и SOCKS5), multipart, потоковое чтение и отправка, асинхронный API.
+
+```python
+# WebSocket: рукопожатие по шаблону профиля браузера, permessage-deflate поддержан
+with curlpro.Session() as s:
+    with s.websocket("wss://echo.websocket.org/", max_message_size=1 << 20) as ws:
+        ws.send("привет")        # str  → текстовый кадр
+        ws.send(b"\x00\xff")     # bytes → двоичный
+        for message in ws:       # до закрытия сервером — curlpro.WebSocketClosed;
+            print(message)       # таймаут тишины — CurlProError с .code == "timeout"
+
+# Большой файл уходит потоком, а не через память
+with curlpro.Session() as s:
+    s.post("https://example.com/upload", body_file="archive.zip")
+
+# Соединение переиспользуется между запросами, как у браузера.
+# keep_alive=False даёт каждому запросу своё — нужно, когда балансировщик
+# прибивает клиента к одному узлу
+with curlpro.Session(keep_alive=False) as s:
+    s.get("https://example.com/")
+```
 
 Отпечаток HTTP/3 сверен с Chrome 144 на `quic.browserleaks.com`:
 
@@ -54,9 +74,8 @@ with curlpro.Session("chrome-151-windows", http3=True) as s:
     # 1:65536;6:262144;7:100;51:1;GREASE|GREASE|984832|m,a,s,p
 ```
 
-Известное ограничение: профиль объявляет ёмкость динамической таблицы QPACK,
-как Chrome, но декодер её не поддерживает — сервер, который ей воспользуется,
-вернёт неразбираемый ответ.
+Динамическая таблица QPACK поддержана своим декодером: профиль объявляет
+ёмкость, как Chrome, и ответ сервера, который ей пользуется, разбирается.
 
 ## Установка
 

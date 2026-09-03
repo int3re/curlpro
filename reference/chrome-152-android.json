@@ -1,0 +1,111 @@
+{
+  "captured": {
+    "browser": "Chrome 152.0.7977.65, Android 17, Pixel 7",
+    "oracles": [
+      "локальный echo-server через USB (adb reverse) — TLS и HTTP/2, 5 сэмплов",
+      "локальный стенд сырых заголовков — HTTP/1.1, fetch, XHR, WebSocket",
+      "tls.browserleaks.com — публичный эталон JA4"
+    ],
+    "recorded": "2026-09-03",
+    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36",
+    "ja4": [
+      "t13d1517h2_8daaf6152771_cb7bf5808d99"
+    ],
+    "akamai": "1:65536;2:0;4:6291456;6:262144|15663105|1:1:0:256|m,a,s,p",
+    "note": "JA4 совпал с chrome-152-windows: TLS-стек один и тот же, платформа ClientHello не меняет. Профиль отличается только заголовками"
+  },
+  "tls": {
+    "extensions_count": 19,
+    "signature_algorithms": [
+      "GREASE",
+      2308,
+      2309,
+      2310,
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537
+    ],
+    "permute_extensions": true,
+    "allow_blunt_mimicry": true,
+    "note": "GREASE в signature_algorithms меняется между запусками браузера: захват записал 0xAAAA, телефон позже слал 0xEAEA. В профиле стоит маркер 2570, значение разыгрывается на каждое соединение. Расширение trust_anchors (0xCA34) uTLS не знает — включён allow_blunt_mimicry"
+  },
+  "headers": {
+    "navigate_h1": [
+      "Host",
+      "Connection",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "Upgrade-Insecure-Requests",
+      "User-Agent",
+      "Accept",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Dest",
+      "Accept-Encoding",
+      "Accept-Language"
+    ],
+    "fetch_post_h1": [
+      "Host",
+      "Connection",
+      "Content-Length",
+      "sec-ch-ua-platform",
+      "User-Agent",
+      "sec-ch-ua",
+      "Content-Type",
+      "X-Api-Key",
+      "sec-ch-ua-mobile",
+      "Accept",
+      "Origin",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Dest",
+      "Referer",
+      "Accept-Encoding",
+      "Accept-Language"
+    ],
+    "websocket": [
+      "Host",
+      "Connection: Upgrade",
+      "Pragma: no-cache",
+      "Cache-Control: no-cache",
+      "User-Agent",
+      "Upgrade: websocket",
+      "Origin",
+      "Sec-WebSocket-Version: 13",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Sec-WebSocket-Key",
+      "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits"
+    ],
+    "note": "шаблоны HTTP/1.1, fetch, XHR и WebSocket совпали с десктопным Chrome имя в имя, поэтому унаследованы от chrome-152-windows. sec-fetch-site и sec-fetch-user в профиле проставлены под переход по набранному адресу: браузер приводился командой из другого приложения и потому слал cross-site без sec-fetch-user"
+  },
+  "not_measured": [
+    "HTTP/3 и QUIC: Chromium требует для QUIC цепочку к публично известному корню, а стенд подписан своим CA — см. docs/CAPTURE.md",
+    "заголовки на редиректе"
+  ],
+  "client_hints": {
+    "requested_via": "Accept-CH в ответе стенда; Critical-CH заставляет повторить запрос сразу",
+    "values_measured": {
+      "sec-ch-ua-full-version": "\"152.0.7977.65\"",
+      "sec-ch-ua-arch": "\"\"",
+      "sec-ch-ua-platform-version": "\"17.0.0\"",
+      "sec-ch-ua-model": "\"Pixel 7\"",
+      "sec-ch-ua-bitness": "\"\"",
+      "sec-ch-ua-wow64": "?0",
+      "sec-ch-ua-form-factors": "\"Mobile\""
+    },
+    "order_navigate": "upgrade-insecure-requests user-agent accept sec-ch-ua sec-ch-ua-mobile sec-ch-ua-full-version sec-ch-ua-arch sec-ch-ua-platform sec-ch-ua-platform-version sec-ch-ua-model sec-ch-ua-bitness sec-ch-ua-wow64 sec-ch-ua-full-version-list sec-ch-ua-form-factors sec-fetch-* accept-encoding accept-language priority",
+    "order_subresource": "sec-ch-ua-full-version-list sec-ch-ua-platform sec-ch-ua sec-ch-ua-bitness sec-ch-ua-model sec-ch-ua-mobile sec-ch-ua-form-factors sec-ch-ua-wow64 sec-ch-ua-arch sec-ch-ua-full-version user-agent sec-ch-ua-platform-version accept sec-fetch-* referer accept-encoding accept-language priority",
+    "note": "с появлением подсказок Chromium перестраивает весь кластер: порядок зависит от набора имён, но для одного набора устойчив — два независимых прогона совпали"
+  },
+  "devices": {
+    "measured": "Pixel 7 / 17.0.0 — снят с телефона",
+    "plausible": "остальные записи в профиле (Pixel 8, Pixel 6a, SM-S911B, SM-S901B, SM-A546E, 23021RAAEG, 2211133G) — правдоподобные пары «модель плюс версия», на устройствах не проверялись"
+  }
+}

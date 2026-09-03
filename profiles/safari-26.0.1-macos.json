@@ -113,6 +113,27 @@
     ],
     "permute_extensions": false
   },
+  "http1": {
+    "order": [
+      "Host",
+      "Connection",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "Upgrade-Insecure-Requests",
+      "User-Agent",
+      "Accept",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-User",
+      "Sec-Fetch-Dest",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie",
+      "priority"
+    ],
+    "connection": "keep-alive"
+  },
   "http2": {
     "settings": [
       {
@@ -169,6 +190,10 @@
         "value": "en-US,en;q=0.9"
       },
       {
+        "key": "cookie",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": "u=0, i"
       },
@@ -176,6 +201,7 @@
         "key": "accept-encoding",
         "value": "gzip, deflate, br"
       }
-    ]
+    ],
+    "custom_anchor": "accept-encoding"
   }
 }

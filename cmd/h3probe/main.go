@@ -47,7 +47,7 @@ func run(dir, name, target string, n int) error {
 
 	fmt.Printf("профиль: %s, паррот QUIC: %s\n", p.Name, orDefault(p.QUIC.Parrot, "chrome146"))
 	fmt.Printf("SETTINGS: %v, GREASE-кадр: %v, PRIORITY_UPDATE: %d\n\n",
-		p.HTTP3.SettingsOrder, p.HTTP3.SendGreaseFrame, p.HTTP3.PriorityParam)
+		p.HTTP3.SettingsOrder, p.HTTP3.SendsGreaseFrame(), p.HTTP3.PriorityParamValue())
 
 	sess, err := client.New(p, client.Options{
 		HTTP3:           true,

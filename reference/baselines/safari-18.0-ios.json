@@ -1,0 +1,11 @@
+{
+  "profile": "safari-18.0-ios",
+  "oracle": "https://tls.browserleaks.com/json",
+  "ja4": [
+    "t13d2014h2_a09f3c656075_e42f34c56612"
+  ],
+  "ja3n": "44f7ed5185d22c92b96da72dbe68d307",
+  "akamai": "2:0;3:100;4:2097152;8:1;9:1|10420225|0|m,s,a,p",
+  "recorded": "2026-09-02T19:15:04Z",
+  "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+}

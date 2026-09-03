@@ -117,6 +117,27 @@
     ],
     "permute_extensions": false
   },
+  "http1": {
+    "order": [
+      "Host",
+      "Connection",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "Upgrade-Insecure-Requests",
+      "User-Agent",
+      "Accept",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-User",
+      "Sec-Fetch-Dest",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie",
+      "priority"
+    ],
+    "connection": "keep-alive"
+  },
   "http2": {
     "pseudo_order": [
       ":method",
@@ -144,7 +165,12 @@
       {
         "key": "accept-encoding",
         "value": "gzip, deflate, br"
+      },
+      {
+        "key": "cookie",
+        "value": ""
       }
-    ]
+    ],
+    "custom_anchor": "accept-encoding"
   }
 }

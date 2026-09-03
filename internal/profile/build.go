@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"crypto/rand"
 	"fmt"
 
 	utls "github.com/refraction-networking/utls"
@@ -54,6 +55,7 @@ var extensionIDs = map[string]int{
 	"key_share":                              51,
 	"application_settings":                   17513,
 	"application_settings_new":               17613,
+	"trust_anchors":                          51764, // 0xCA34, Chrome 152+
 	"encrypted_client_hello":                 65037,
 	"renegotiation_info":                     65281,
 }
@@ -210,9 +212,34 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 	}
 }
 
+// isGREASE распознаёт значения RFC 8701: оба байта равны и вида 0x?A.
+func isGREASE(v uint16) bool {
+	return byte(v>>8) == byte(v) && v&0x0f0f == 0x0a0a
+}
+
+// randomGREASE выбирает одно из шестнадцати значений GREASE.
+func randomGREASE() uint16 {
+	var b [1]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return GreaseValue // источник случайности недоступен — берём плейсхолдер
+	}
+	v := uint16(b[0]&0xf0) | 0x0a
+	return v<<8 | v
+}
+
+// toSigSchemes переводит алгоритмы подписи, разыгрывая GREASE.
+//
+// Chrome 152 шлёт GREASE первым в signature_algorithms, и значение меняется
+// от запуска к запуску: замер телефона дал 0xEAEA там, где захват записал
+// 0xAAAA. Постоянное значение выдавало бы клиента тому, кто смотрит несколько
+// соединений подряд. ApplyPreset разыгрывает плейсхолдер в шифрах, группах и
+// версиях, но не здесь — замер: четыре соединения дали 0x0A0A без изменений.
 func toSigSchemes(in []uint16) []utls.SignatureScheme {
 	out := make([]utls.SignatureScheme, len(in))
 	for i, a := range in {
+		if isGREASE(a) {
+			a = randomGREASE()
+		}
 		out[i] = utls.SignatureScheme(a)
 	}
 	return out

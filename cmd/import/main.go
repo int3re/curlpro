@@ -37,16 +37,16 @@ type signature struct {
 			Frames []frame `yaml:"frames"`
 		} `yaml:"http2"`
 		ClientHello struct {
-			CipherSuites []yamlNum   `yaml:"ciphersuites"`
-			CompMethods  []int       `yaml:"comp_methods"`
-			Extensions   []yamlExt   `yaml:"extensions"`
+			CipherSuites []yamlNum `yaml:"ciphersuites"`
+			CompMethods  []int     `yaml:"comp_methods"`
+			Extensions   []yamlExt `yaml:"extensions"`
 		} `yaml:"tls_client_hello"`
 	} `yaml:"signature"`
 	ThirdParty struct {
-		JA3NHash    string `yaml:"ja3n_hash"`
-		JA3NText    string `yaml:"ja3n_text"`
-		AkamaiText  string `yaml:"akamai_text"`
-		UserAgent   string `yaml:"user_agent"`
+		JA3NHash   string `yaml:"ja3n_hash"`
+		JA3NText   string `yaml:"ja3n_text"`
+		AkamaiText string `yaml:"akamai_text"`
+		UserAgent  string `yaml:"user_agent"`
 	} `yaml:"third_party"`
 }
 
@@ -65,18 +65,18 @@ type setting struct {
 }
 
 type yamlExt struct {
-	Type             string    `yaml:"type"`
-	SupportedGroups  []yamlNum `yaml:"supported_groups"`
-	SupportedVers    []yamlNum `yaml:"supported_versions"`
-	SigHashAlgs      []uint16  `yaml:"sig_hash_algs"`
-	Algorithms       []uint16  `yaml:"algorithms"`
-	ECPointFormats   []uint8   `yaml:"ec_point_formats"`
-	PSKKeMode        *uint8    `yaml:"psk_ke_mode"`
-	ALPNList         []string  `yaml:"alpn_list"`
-	ALPSALPNList     []string  `yaml:"alps_alpn_list"`
+	Type             string     `yaml:"type"`
+	SupportedGroups  []yamlNum  `yaml:"supported_groups"`
+	SupportedVers    []yamlNum  `yaml:"supported_versions"`
+	SigHashAlgs      []uint16   `yaml:"sig_hash_algs"`
+	Algorithms       []uint16   `yaml:"algorithms"`
+	ECPointFormats   []uint8    `yaml:"ec_point_formats"`
+	PSKKeMode        *uint8     `yaml:"psk_ke_mode"`
+	ALPNList         []string   `yaml:"alpn_list"`
+	ALPSALPNList     []string   `yaml:"alps_alpn_list"`
 	KeyShares        []keyShare `yaml:"key_shares"`
-	RecordSizeLimit  uint16    `yaml:"record_size_limit"`
-	SupportedSigAlgs []uint16  `yaml:"supported_signature_algorithms"`
+	RecordSizeLimit  uint16     `yaml:"record_size_limit"`
+	SupportedSigAlgs []uint16   `yaml:"supported_signature_algorithms"`
 }
 
 type keyShare struct {

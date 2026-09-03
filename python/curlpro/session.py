@@ -6,10 +6,62 @@ import json
 from typing import Any, Iterable, Mapping
 
 from ._ffi import _call, call_framed, encode
+from .headers import SessionHeaders
 from .profiles import ensure_loaded
 from .stream import StreamResponse
+from .websocket import WebSocket, connect as ws_connect
 
 DEFAULT_PROFILE = "chrome-151-windows"
+
+
+def _proxy_override(proxy: str | bool | None) -> str | None:
+    """Переводит аргумент proxy в значение для нативной части.
+
+    Три состояния, и их приходится различать: ``None`` — наследовать прокси
+    сессии, ``False`` — идти напрямую в обход него, строка — использовать
+    указанный. Одной строкой это не выразить, потому что пустая строка уже
+    занята под «напрямую».
+    """
+    if proxy is None:
+        return None
+    if proxy is False:
+        return ""
+    if proxy is True:
+        raise ValueError("proxy=True бессмысленно: укажите адрес или False")
+    if not isinstance(proxy, str):
+        raise TypeError(f"proxy должен быть строкой, False или None, получено {type(proxy).__name__}")
+    return proxy
+
+
+def _retry_config(
+    retries: int | None,
+    statuses: Iterable[int] | None,
+    methods: Iterable[str] | None,
+    backoff: float | None,
+    max_backoff: float | None,
+    respect_retry_after: bool,
+) -> dict[str, Any] | None:
+    """Собирает политику повторов.
+
+    ``None`` — «не задано»: у сессии это «без повторов», у запроса —
+    «взять из сессии». Ноль — явное «без повторов»: так запрос может
+    отключить повторы, которые заданы сессии. Раньше ноль схлопывался
+    в ``None`` и отключить их на один запрос было нельзя.
+
+    По умолчанию повторяются только идемпотентные методы: повтор POST может
+    создать второй заказ, потому что сервер мог обработать запрос и не успеть
+    ответить. Разрешить это можно явным списком в ``retry_methods``.
+    """
+    if retries is None:
+        return None
+    return {
+        "attempts": int(retries),
+        "statuses": list(statuses) if statuses else None,
+        "methods": list(methods) if methods else None,
+        "backoff_ms": int((backoff or 0.2) * 1000),
+        "max_backoff_ms": int((max_backoff or 10.0) * 1000),
+        "respect_retry_after": respect_retry_after,
+    }
 
 
 def _build_multipart(
@@ -58,6 +110,78 @@ def _build_multipart(
         "file_sizes": sizes,
     }
     return meta, bytes(blob)
+
+
+def _request_meta(
+    method: str,
+    url: str,
+    *,
+    headers: Mapping[str, str] | None,
+    data: bytes | str | None,
+    json_body: Any,
+    files: Mapping[str, Any] | None,
+    fields: Mapping[str, str] | None,
+    body_file: str | Any,
+    header_order: Iterable[str] | None,
+    default_headers: bool | None,
+    timeout: float | None,
+    allow_redirects: bool | None,
+    max_redirects: int | None,
+    retries: int | None,
+    retry_statuses: Iterable[int] | None,
+    retry_methods: Iterable[str] | None,
+    retry_backoff: float | None,
+    retry_max_backoff: float | None,
+    respect_retry_after: bool,
+    proxy: str | bool | None,
+    mode: str | None,
+) -> tuple[dict[str, Any], bytes]:
+    """Собирает кадр запроса. Общий для request() и stream(): раньше у потока
+    была своя урезанная копия без таймаута, прокси, повторов и файлов."""
+    hdrs = dict(headers or {})
+    multipart = None
+
+    if body_file is not None:
+        if data is not None or json_body is not None or files or fields:
+            raise ValueError("body_file несовместим с data, json_body и multipart")
+        body_file = str(body_file)
+    elif files or fields:
+        if data is not None or json_body is not None:
+            raise ValueError("multipart несовместим с data и json_body")
+        multipart, data = _build_multipart(fields, files)
+    elif json_body is not None:
+        if data is not None:
+            raise ValueError("укажите либо data, либо json_body, не оба")
+        data = encode(json_body)
+        hdrs.setdefault("content-type", "application/json")
+
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+
+    meta = {
+        "method": method.upper(),
+        "url": url,
+        "headers": hdrs,
+        "header_order": list(header_order) if header_order else None,
+        "no_default_headers": default_headers is False,
+        "multipart": multipart,
+        "body_file": body_file or "",
+        # None означает «взять из сессии»; ноль — осмысленное значение,
+        # поэтому передаётся именно отсутствие, а не подстановка.
+        "timeout_ms": None if timeout is None else int(timeout * 1000),
+        "follow_redirects": allow_redirects,
+        "max_redirects": max_redirects,
+        "retry": _retry_config(
+            retries, retry_statuses, retry_methods,
+            retry_backoff, retry_max_backoff, respect_retry_after,
+        ),
+        # None — взять из сессии, False — идти напрямую в обход
+        # сессионного прокси, строка — использовать указанный.
+        "proxy": _proxy_override(proxy),
+        # None — режим сессии; "navigate" или "fetch" — явный набор заголовков.
+        "mode": mode or "",
+    }
+    return meta, data or b""
 
 
 class Response:
@@ -110,7 +234,8 @@ class Session:
     :param proxy: ``http://``, ``https://`` или ``socks5://``, можно с user:pass
     :param default_headers: подставлять заголовки профиля. Выключите, чтобы
         полностью управлять набором и порядком самостоятельно — анти-боты
-        смотрят и на порядок
+        смотрят и на порядок. Без своего ``user-agent`` заголовок не уходит
+        вовсе: подставлять умолчание Go библиотека не станет
     :param header_order: желаемый порядок заголовков; не перечисленные идут
         следом, сохраняя относительный порядок
     :param allow_redirects: переходить по 3xx
@@ -120,6 +245,24 @@ class Session:
     :param http3: отправлять запросы по QUIC вместо TCP. Профиль обязан
         описывать секцию ``http3``, иначе сессия не создастся. Это отдельный
         транспорт, а не вариант ALPN, поэтому выбирается явно
+    :param keep_alive: переиспользовать соединение между запросами. Включено:
+        так делает браузер, и рукопожатие TLS не повторяется на каждый запрос.
+        ``False`` закрывает соединение сразу после ответа — нужно, когда
+        балансировщик прибивает клиента к одному узлу. Заголовок
+        ``Connection: close`` при этом не отправляется: браузер его не шлёт
+    :param device: телефон, от имени которого идёт сессия: имя из секции
+        ``devices`` профиля или ``"random"``. Современный Chrome вырезал модель
+        из ``User-Agent`` (там у всех ``Android 10; K``), поэтому устройство
+        сообщается подсказками ``sec-ch-ua-model`` и
+        ``sec-ch-ua-platform-version`` — и только после того, как сайт запросил
+        их заголовком ``Accept-CH``. Выбирается один раз на сессию
+    :param devices: свой список устройств вместо профильного; каждый элемент —
+        ``{"name": ..., "model": ..., "platform_version": ...}``
+    :param retries: сколько повторов делать после первой попытки
+    :param mode: набор заголовков: ``"navigate"`` — переход по адресу,
+        ``"fetch"`` — запрос fetch/XHR со страницы, ``"auto"`` — по признакам
+        запроса (метод кроме GET/HEAD/POST, тело не формы, кастомный
+        заголовок означают fetch). У профиля должна быть секция ``fetch``
     """
 
     def __init__(
@@ -136,6 +279,18 @@ class Session:
         cookies: bool = True,
         force_http1: bool = False,
         http3: bool = False,
+        keep_alive: bool = True,
+        device: str | None = None,
+        devices: Iterable[Mapping[str, str]] | None = None,
+        max_idle_conns: int = 0,
+        idle_conn_timeout: float = 0.0,
+        retries: int = 0,
+        retry_statuses: Iterable[int] | None = None,
+        retry_methods: Iterable[str] | None = None,
+        retry_backoff: float = 0.2,
+        retry_max_backoff: float = 10.0,
+        respect_retry_after: bool = True,
+        mode: str = "auto",
     ):
         # Профили, вложенные в пакет, подгружаются при первом обращении:
         # после pip install библиотека должна работать без лишних шагов.
@@ -155,11 +310,24 @@ class Session:
                     "cookies": cookies,
                     "force_http1": force_http1,
                     "http3": http3,
+                    "keep_alive": keep_alive,
+                    "device": device or "",
+                    "devices": [dict(d) for d in devices] if devices else None,
+                    "max_idle_conns": max_idle_conns,
+                    "idle_conn_timeout_ms": int(idle_conn_timeout * 1000),
+                    "retry": _retry_config(
+                        retries or None, retry_statuses, retry_methods,
+                        retry_backoff, retry_max_backoff, respect_retry_after,
+                    ),
+                    "mode": "" if mode == "auto" else mode,
                 }
             ),
         )["session"]
         self.impersonate = impersonate
         self._closed = False
+        #: Заголовки, добавляемые ко всем запросам сессии. Хранятся отдельно
+        #: от профильных, поэтому clear() возвращает чистый отпечаток.
+        self.headers = SessionHeaders(self._id)
 
     def request(
         self,
@@ -171,46 +339,40 @@ class Session:
         json_body: Any = None,
         files: Mapping[str, Any] | None = None,
         fields: Mapping[str, str] | None = None,
+        body_file: str | Any = None,
         header_order: Iterable[str] | None = None,
         default_headers: bool | None = None,
+        timeout: float | None = None,
+        allow_redirects: bool | None = None,
+        max_redirects: int | None = None,
+        retries: int | None = None,
+        retry_statuses: Iterable[int] | None = None,
+        retry_methods: Iterable[str] | None = None,
+        retry_backoff: float | None = None,
+        retry_max_backoff: float | None = None,
+        respect_retry_after: bool = True,
+        proxy: str | bool | None = None,
+        mode: str | None = None,
     ) -> Response:
         if self._closed:
             raise RuntimeError("сессия закрыта")
 
-        hdrs = dict(headers or {})
-        multipart = None
-
-        if files or fields:
-            if data is not None or json_body is not None:
-                raise ValueError("multipart несовместим с data и json_body")
-            multipart, data = _build_multipart(fields, files)
-        elif json_body is not None:
-            if data is not None:
-                raise ValueError("укажите либо data, либо json_body, не оба")
-            data = encode(json_body)
-            hdrs.setdefault("content-type", "application/json")
-
-        if isinstance(data, str):
-            data = data.encode("utf-8")
-
-        payload, body = call_framed(
-            "curlpro_request",
-            self._id,
-            body=data or b"",
-            meta={
-                "method": method.upper(),
-                "url": url,
-                "headers": hdrs,
-                "header_order": list(header_order) if header_order else None,
-                "no_default_headers": default_headers is False,
-                "multipart": multipart,
-            },
+        meta, body = _request_meta(
+            method, url, headers=headers, data=data, json_body=json_body,
+            files=files, fields=fields, body_file=body_file,
+            header_order=header_order, default_headers=default_headers,
+            timeout=timeout, allow_redirects=allow_redirects,
+            max_redirects=max_redirects, retries=retries,
+            retry_statuses=retry_statuses, retry_methods=retry_methods,
+            retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
+            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode,
         )
+        payload, content = call_framed("curlpro_request", self._id, body=body, meta=meta)
         return Response(
             status=payload["status"],
             proto=payload.get("proto", ""),
             headers=payload.get("headers") or {},
-            content=body,
+            content=content,
             url=payload.get("url") or url,
         )
 
@@ -222,40 +384,65 @@ class Session:
         headers: Mapping[str, str] | None = None,
         data: bytes | str | None = None,
         json_body: Any = None,
+        files: Mapping[str, Any] | None = None,
+        fields: Mapping[str, str] | None = None,
+        body_file: str | Any = None,
         header_order: Iterable[str] | None = None,
         default_headers: bool | None = None,
+        timeout: float | None = None,
+        allow_redirects: bool | None = None,
+        max_redirects: int | None = None,
+        retries: int | None = None,
+        retry_statuses: Iterable[int] | None = None,
+        retry_methods: Iterable[str] | None = None,
+        retry_backoff: float | None = None,
+        retry_max_backoff: float | None = None,
+        respect_retry_after: bool = True,
+        proxy: str | bool | None = None,
+        mode: str | None = None,
     ) -> "StreamResponse":
         """Открывает ответ для чтения по частям.
 
-        Поток удерживает соединение до закрытия, поэтому использовать его
-        следует через ``with``.
+        Принимает те же аргументы, что и :meth:`request`. Поток удерживает
+        соединение до закрытия, поэтому использовать его следует через ``with``.
+        Закрытие потока с недочитанным телом выбрасывает соединение, а не
+        дочитывает остаток: прочитать килобайт и закрыть — дёшево.
         """
         if self._closed:
             raise RuntimeError("сессия закрыта")
 
-        hdrs = dict(headers or {})
-        if json_body is not None:
-            if data is not None:
-                raise ValueError("укажите либо data, либо json_body, не оба")
-            data = encode(json_body)
-            hdrs.setdefault("content-type", "application/json")
-        if isinstance(data, str):
-            data = data.encode("utf-8")
-
-        payload, _ = call_framed(
-            "curlpro_stream_open",
-            self._id,
-            body=data or b"",
-            meta={
-                "method": method.upper(),
-                "url": url,
-                "headers": hdrs,
-                "header_order": list(header_order) if header_order else None,
-                "no_default_headers": default_headers is False,
-                "multipart": None,
-            },
+        meta, body = _request_meta(
+            method, url, headers=headers, data=data, json_body=json_body,
+            files=files, fields=fields, body_file=body_file,
+            header_order=header_order, default_headers=default_headers,
+            timeout=timeout, allow_redirects=allow_redirects,
+            max_redirects=max_redirects, retries=retries,
+            retry_statuses=retry_statuses, retry_methods=retry_methods,
+            retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
+            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode,
         )
+        payload, _ = call_framed("curlpro_stream_open", self._id, body=body, meta=meta)
         return StreamResponse(payload)
+
+    def websocket(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        subprotocols: Iterable[str] | None = None,
+        timeout: float = 30.0,
+        max_message_size: int = 0,
+    ) -> "WebSocket":
+        """Открывает WebSocket с заголовками рукопожатия из профиля.
+
+        ``timeout`` ограничивает рукопожатие и ожидание одного сообщения;
+        ``max_message_size`` — предел принимаемого сообщения в байтах
+        (ноль — 64 МиБ). Соединение держится до закрытия — используйте ``with``.
+        """
+        if self._closed:
+            raise RuntimeError("сессия закрыта")
+        return ws_connect(self._id, url, headers=headers, subprotocols=subprotocols,
+                          timeout=timeout, max_message_size=max_message_size)
 
     def get(self, url: str, **kw: Any) -> Response:
         return self.request("GET", url, **kw)

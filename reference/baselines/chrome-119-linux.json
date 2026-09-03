@@ -1,0 +1,12 @@
+{
+  "profile": "chrome-119-linux",
+  "oracle": "https://tls.browserleaks.com/json",
+  "ja4": [
+    "t13d1516h2_8daaf6152771_02713d6af862",
+    "t13d1517h2_8daaf6152771_b1ff8ab2d16f"
+  ],
+  "ja3n": "8a9ee1d3c6f0f892b4d43cabcf554150",
+  "akamai": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+  "recorded": "2026-09-03T17:58:21Z",
+  "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+}

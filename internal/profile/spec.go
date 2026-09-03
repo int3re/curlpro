@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	utls "github.com/refraction-networking/utls"
 )
@@ -30,7 +31,7 @@ func BuildSpec(p *Profile) (*utls.ClientHelloSpec, error) {
 
 	switch {
 	case p.TLS.RawClientHello != "":
-		spec, err = specFromRaw(p.TLS.RawClientHello)
+		spec, err = specFromRaw(p.TLS.RawClientHello, p.TLS.BluntMimicry())
 	case len(p.TLS.Extensions) > 0:
 		spec, err = specFromDeclared(&p.TLS)
 	case len(p.TLS.ClientHelloSpec) > 0:
@@ -53,14 +54,19 @@ func BuildSpec(p *Profile) (*utls.ClientHelloSpec, error) {
 	return spec, nil
 }
 
-func specFromRaw(b64 string) (*utls.ClientHelloSpec, error) {
+func specFromRaw(b64 string, blunt bool) (*utls.ClientHelloSpec, error) {
 	raw, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
 		return nil, fmt.Errorf("raw_client_hello: некорректный base64: %w", err)
 	}
-	fp := &utls.Fingerprinter{}
+	fp := &utls.Fingerprinter{AllowBluntMimicry: blunt}
 	spec, err := fp.RawClientHello(raw)
 	if err != nil {
+		if strings.Contains(err.Error(), "unsupported extension") && !blunt {
+			return nil, fmt.Errorf("разбор захваченного ClientHello: %w "+
+				"(расширение неизвестно uTLS; если оно статическое, задайте "+
+				"tls.allow_blunt_mimicry: true, и оно уйдёт сырыми байтами)", err)
+		}
 		return nil, fmt.Errorf("разбор захваченного ClientHello: %w", err)
 	}
 	return spec, nil
@@ -149,10 +155,8 @@ func specFromJSON(data []byte) (*utls.ClientHelloSpec, error) {
 // дельтой: у месячного бампа Chrome обычно меняются только sigalgs и заголовки.
 func applyOverrides(spec *utls.ClientHelloSpec, t *TLSSpec) error {
 	if len(t.SignatureAlgorithms) > 0 {
-		algs := make([]utls.SignatureScheme, len(t.SignatureAlgorithms))
-		for i, a := range t.SignatureAlgorithms {
-			algs[i] = utls.SignatureScheme(a)
-		}
+		// GREASE здесь разыгрывается на каждое соединение — см. toSigSchemes.
+		algs := toSigSchemes(t.SignatureAlgorithms)
 		if !replaceExt(spec, func(e utls.TLSExtension) bool {
 			x, ok := e.(*utls.SignatureAlgorithmsExtension)
 			if ok {

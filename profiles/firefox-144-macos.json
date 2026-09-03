@@ -19,6 +19,18 @@
         "value": "gzip, deflate, br, zstd"
       },
       {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
         "key": "upgrade-insecure-requests",
         "value": "1"
       },
@@ -39,6 +51,10 @@
         "value": "?1"
       },
       {
+        "key": "cookie",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": "u=0, i"
       },
@@ -47,7 +63,8 @@
         "value": "trailers"
       }
     ],
-    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:144.0) Gecko/20100101 Firefox/144.0"
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:144.0) Gecko/20100101 Firefox/144.0",
+    "custom_anchor": "connection, upgrade-insecure-requests"
   },
   "name": "firefox-144-macos"
 }

@@ -1,0 +1,341 @@
+{
+  "name": "chrome-152-android",
+  "based_on": "chrome-152-windows",
+  "tls": {
+    "raw_client_hello": "FgMBB4wBAAeIAwPp5B6/xlZ3UhPq61od/9JoeSGDJ5pfEoa8wJv/GOi2DyB/N+C+qduHJ3crUoK1GDK2oFJCrBAOgl1Wvmkd9/ZQnAAgiooTARMCEwPAK8AvwCzAMMypzKjAE8AUAJwAnQAvADUBAAcfKioAAAASAAAAEAAOAAwCaDIIaHR0cC8xLjEADQAaABiqqgkECQUJBgQDCAQEAQUDCAUFAQgGBgEAAAAOAAwAAAlsb2NhbGhvc3T/AQABAETNAAUAAwJoMgAbAAMCAAIAFwAAyjQAzgDMBNZ5CQoE1nkJAQTWeQkGCIOaZIybLQEIBNZ5CQkFgt8TAhQIg5pkjJstAQkFgt8TAgEIg5pkjJstAQoE1nkJCATWeQkLBNZ5CQUIg5pkjJstAQsFgt8TAhME1nkJDQiDmmSMmy0BEgTWeQkEBYLfEwIGBNZ5CQMFgt8TAhIE1nkJDwTWeQkMCIOaZIybLQETBYLfEwIPBYLfEwIOCIOaZIybLQEMCIOaZIybLQEHCIOaZIybLQENBNZ5CQ4Fgt8TAg0E1nkJAgTWeQkHAAoADAAKamoR7AAdABcAGAAjAAAAKwAHBpqaAwQDAwAzBO8E7WpqAAEAEewEwL5JA4inGJq7TlqIAlmgr2vZYGT2ObubdMXskwxiDZfrhr/rziHqZws2jAkQwMnVIthaTGqJQ7ODI0KBKfZThNGWNUPqrsoJPa5zKFHjzPGVVtNjjBMah3omblp3aHNoivH5EXSxuU5ryjxEh6CAulFIxjp6MHgxIN76jdjHVkl5Wb6sisraMKVzo1AaOZEMlDOcDsh2pBDTa8oHFshsAnqKOBjwyXwyafIsGthUyRdaCC6hnegABOC6mupoDDoGVGv3VMf0fBNDfY32EoaESp9ytFT3zzEAtvQLqIeqO7VEd8L6zQAnZljDFWO6dhBrCdn5V6A6SlwYS4KGhLJGYS8YcOi3Swg0HYwaCF9bgGl1CwtyFJ76tuxmR/HQRFZlacKytB0KMes2FZRrT2CogXNmE2IQlBbJs0eHBuPDHB9MVY16vYR2xHjXJ/60VfYytZkUrZ/8caaZpycVvFlRTXhGioLjoPc2q7U4WO3GrOwBMRQmWWbHnTnKnZDCMig3M4I2arxjZUtxTYM7xG3sUK0AXVj8EaywBKABkwOCa+KMO1GMg2AZdKm7QGMMRMSlov7xR3OBQ7/Xw05mmIVBDRJaApDGWUcLMgZ2rtHBrCf3jxxmN/LIK3miSTBBINPEsObWrPYYs00gxH/YqJv3mQK5PK3ciGxopquzUPGpGLt5DT/EsMeTf3+4m8bTdFlUzdZRSu12VWurUTJRpD46w+MrksFVVl4jLgiIvIN5MTd4FRSgOXECIkgrTD3Ln3wiwMPqsF62SKomcL/UgAuLAbgsBqmVHx0saQyDp9k0oZhocIFJrRaKGPUyMDtnRhxbL/nKPQHSX2fHog8YGAlgr3ZXUPAgUzbTmkoDSJxru5igCZ7nxwMsit6HRJTEi7yGBWQ6nXgVtrM4OFYIQPIJKB4jIJXieY5pDpPQhUrWv0GUP0VzGjW6OJdonN4CIaelM/t5CHXHr2w7UUO5GwIgU5v5bLbWdog2V9QyXBsqgMTUwUcDX9dUR/QKSuBSiVlGxSABsxlTrkmnZwWUCZZ5iwKaDSSMJ6FriFU8p1now9XbzWnXApc0VYLQA8ekIGnXUXeUPIZUxH6MJcKJLRgUwhlJnkX2szloInLDl1S6NnC5Vr74gVOVyfJikWd7tyawZAwFXClKiqZSHxiBpCh0H0uEwW76OEAMxhxYaNBBessZxavDsR8Ua9olASpHS0J8Uf/MlUKkgAM0Rq+wZBVxzz9YBnjaMq8YgosVgNwKb3GFkwi8ZjSgOcp8JFDTz9OcGfcSYyImV0sbNSJFaL+VWBX5ADl6kC5qjwXKxzUrOCc3Z9oiBt7npMh0D/agB9uxt4g7s3FAEoNrVObBVE9yQZmyd3Vsc1AwUB56vbrARLcgPk9arz4wYuABf5DaRcMiju5FBdHVg8YJx9KlS1OAnHspzFMyV7tUH8ZbtuJ1tprKeTN0MrETVU7XcFo7a+Q6dzBgHoaSh0YXtAkrShbBJiURttiKzqzUe7JRah6UNYcllJE0ERAwvUVkdm1bMpUbD0RuVTUZYXiJQyAnye3wXcYUlMIf4HXjdhPCL5YC/V70s+4AJuZMIM8TiA6nSkUq2id0Nkf/abeT5sWzN8+5kH4AHQAgqryCTrbeqgvOWPBW+Ppr/Z2C8fNOgvjf5DCSNBmqrhoALQACAQH+DQC6AAABAAHtACDDiFrVUM1O4lOfbQ2XrRqFtSSf7MdBjPAPYAq1PX9gcgCQjBTWtiHwi0fVsh92KnKvTmQHzdCkts4DNbLU6MjJ71l6sEz8UrQZAo6P4HA4o7RW/sg+UnTGmi3pRXBHpsv5VUeEi2Y2mZj3oLqOHhfbw5PDnoIC/A5IynXTeoxb98Z9NIhWkBeyYpVqEXXGSDe8ovMiir0gT+l7HOMEo2ydXZT9g2GIdidc3X0B9XW+QLijAAUABQEAAAAAAAsAAgEAamoAAQA=",
+    "signature_algorithms": [
+      2570,
+      2308,
+      2309,
+      2310,
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537
+    ],
+    "permute_extensions": true,
+    "allow_blunt_mimicry": true
+  },
+  "http1": {},
+  "http3": {},
+  "quic": {},
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36",
+    "order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": "\"Chromium\";v=\"152\", \"Not?A_Brand\";v=\"24\", \"Google Chrome\";v=\"152\""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": "?1"
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": "\"Android\""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      },
+      {
+        "key": "accept-language",
+        "value": "ru,en-US;q=0.9,en;q=0.8,zh-CN;q=0.7,zh;q=0.6"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      }
+    ]
+  },
+  "websocket": {},
+  "fetch": {},
+  "client_hints": {
+    "values": {
+      "sec-ch-ua-full-version": "\"152.0.7977.65\"",
+      "sec-ch-ua-arch": "\"\"",
+      "sec-ch-ua-bitness": "\"\"",
+      "sec-ch-ua-wow64": "?0",
+      "sec-ch-ua-full-version-list": "\"Chromium\";v=\"152.0.7977.65\", \"Not?A_Brand\";v=\"24.0.0.0\", \"Google Chrome\";v=\"152.0.7977.65\"",
+      "sec-ch-ua-form-factors": "\"Mobile\""
+    },
+    "order": [
+      {
+        "key": "upgrade-insecure-requests",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ],
+    "fetch_order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ]
+  },
+  "devices": [
+    {
+      "name": "Pixel 7",
+      "model": "Pixel 7",
+      "platform_version": "17.0.0"
+    },
+    {
+      "name": "Pixel 8",
+      "model": "Pixel 8",
+      "platform_version": "16.0.0"
+    },
+    {
+      "name": "Pixel 6a",
+      "model": "Pixel 6a",
+      "platform_version": "15.0.0"
+    },
+    {
+      "name": "Galaxy S23",
+      "model": "SM-S911B",
+      "platform_version": "15.0.0"
+    },
+    {
+      "name": "Galaxy S22",
+      "model": "SM-S901B",
+      "platform_version": "14.0.0"
+    },
+    {
+      "name": "Galaxy A54",
+      "model": "SM-A546E",
+      "platform_version": "14.0.0"
+    },
+    {
+      "name": "Redmi Note 12",
+      "model": "23021RAAEG",
+      "platform_version": "14.0.0"
+    },
+    {
+      "name": "Xiaomi 13",
+      "model": "2211133G",
+      "platform_version": "15.0.0"
+    }
+  ]
+}

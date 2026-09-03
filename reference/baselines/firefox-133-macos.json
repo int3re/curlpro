@@ -1,0 +1,11 @@
+{
+  "profile": "firefox-133-macos",
+  "oracle": "https://tls.browserleaks.com/json",
+  "ja4": [
+    "t13d1716h2_5b57614c22b0_eeeea6562960"
+  ],
+  "ja3n": "90634f51dcf65fc506946108904d6913",
+  "akamai": "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s",
+  "recorded": "2026-09-02T19:10:24Z",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0"
+}

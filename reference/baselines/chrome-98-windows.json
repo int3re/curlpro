@@ -1,0 +1,11 @@
+{
+  "profile": "chrome-98-windows",
+  "oracle": "https://tls.browserleaks.com/json",
+  "ja4": [
+    "t13d1516h2_8daaf6152771_e5627efa2ab1"
+  ],
+  "ja3n": "aa56c057ad164ec4fdcb7a5a283be9fc",
+  "akamai": "|15663105|0|m,a,s,p",
+  "recorded": "2026-09-02T19:09:54Z",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36"
+}

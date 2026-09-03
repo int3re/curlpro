@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
 	"strings"
@@ -62,6 +63,20 @@ func (d echoDetail) path() string {
 
 func isGREASE(v int) bool { return v&0x0f0f == 0x0a0a }
 
+// extensionOrder сводит список расширений к строке для сравнения порядка.
+// Значения GREASE случайны на каждом соединении, но позиции их стабильны,
+// поэтому они заменяются одним маркером, а не вырезаются.
+func extensionOrder(exts []int) string {
+	norm := make([]int, len(exts))
+	for i, e := range exts {
+		if isGREASE(e) {
+			e = 0x0a0a
+		}
+		norm[i] = e
+	}
+	return fmt.Sprint(norm)
+}
+
 func runCapture(args []string) error {
 	fs := newFlagSet("capture", `curlpro capture — снятие эталонного отпечатка браузера
 
@@ -76,6 +91,7 @@ func runCapture(args []string) error {
 	server := fs.String("server", "", "путь к echo-server (по умолчанию ищется в tools/)")
 	certDir := fs.String("certs", "capture/certs", "каталог с tls.crt и tls.key")
 	out := fs.String("out", "profiles", "каталог для профиля")
+	basedOn := fs.String("based-on", "", "профиль-предок: записать дельту (tls и headers), а не полный профиль")
 	browser := fs.String("browser", "", "путь к браузеру (по умолчанию Chrome)")
 	manual := fs.Bool("manual", false, "не запускать браузер: открыть страницу вручную")
 	wait := fs.Duration("wait", 90*time.Second, "сколько ждать сэмплы в ручном режиме")
@@ -114,6 +130,11 @@ func runCapture(args []string) error {
 	if err != nil {
 		return err
 	}
+	if *basedOn != "" {
+		if p, err = toDelta(p, *basedOn, *out); err != nil {
+			return err
+		}
+	}
 
 	path := filepath.Join(*out, *name+".json")
 	if err := os.MkdirAll(*out, 0o755); err != nil {
@@ -131,6 +152,31 @@ func runCapture(args []string) error {
 	fmt.Printf("проверить: curlpro validate -only %s -oracle https://%s/json -insecure\n",
 		*name, *addr)
 	return nil
+}
+
+// toDelta оставляет в профиле только то, что захват вправе переопределить:
+// TLS и заголовки. Секции http1, http3, quic и websocket захват не снимает
+// (стенд видит TCP и HTTP/2), и полный профиль записал бы их пустыми —
+// а дельта наследует их от предка. http2 остаётся, только если отличается.
+func toDelta(p *profile.Profile, basedOn, dir string) (*profile.Profile, error) {
+	reg := profile.NewRegistry()
+	if err := reg.LoadFS(os.DirFS(dir), "."); err != nil {
+		return nil, err
+	}
+	base, err := reg.Resolve(basedOn)
+	if err != nil {
+		return nil, fmt.Errorf("предок: %w", err)
+	}
+	delta := &profile.Profile{
+		Name:    p.Name,
+		BasedOn: basedOn,
+		TLS:     p.TLS,
+		Headers: profile.HeadersSpec{UserAgent: p.Headers.UserAgent, Order: p.Headers.Order},
+	}
+	if !reflect.DeepEqual(p.HTTP2, base.HTTP2) {
+		delta.HTTP2 = p.HTTP2
+	}
+	return delta, nil
 }
 
 // collect поднимает стенд, приводит браузер и собирает сэмплы из его вывода.
@@ -297,13 +343,36 @@ func buildProfile(name string, details []echoDetail) (*profile.Profile, error) {
 		return nil, fmt.Errorf("некорректный ClientHello в сэмпле")
 	}
 
+	// permute_extensions выводится из сэмплов, а не пишется константой:
+	// раньше capture ставил true всегда, и снятый Firefox или Safari получал
+	// профиль, тасующий расширения на каждом соединении.
+	if len(details) < 2 {
+		return nil, fmt.Errorf("нужно не меньше двух сэмплов, чтобы определить permute_extensions")
+	}
+	orders := map[string]bool{}
+	for _, d := range details {
+		orders[extensionOrder(d.JA3.AllExtensions)] = true
+	}
+	permute := len(orders) > 1
+
 	p := &profile.Profile{
 		Name: name,
 		TLS: profile.TLSSpec{
 			RawClientHello:      first.Metadata.ClientHelloRecord,
 			SignatureAlgorithms: first.JA4.SignatureAlgorithms,
-			PermuteExtensions:   boolPtr(true),
+			PermuteExtensions:   boolPtr(permute),
 		},
+	}
+	// Расширение, неизвестное uTLS (trust_anchors у Chrome 152), роняет
+	// сборку спеки. Включаем воспроизведение сырыми байтами только когда
+	// без него нельзя: так профиль честно показывает, что в нём есть
+	// нечто, чего библиотека не понимает.
+	if _, err := profile.BuildSpec(p); err != nil && strings.Contains(err.Error(), "unsupported extension") {
+		p.TLS.AllowBluntMimicry = boolPtr(true)
+		if _, err := profile.BuildSpec(p); err != nil {
+			return nil, err
+		}
+		fmt.Printf("  в ClientHello есть расширение, неизвестное uTLS: включён allow_blunt_mimicry\n")
 	}
 
 	frames := first.Metadata.HTTP2Frames
@@ -328,6 +397,7 @@ func buildProfile(name string, details []echoDetail) (*profile.Profile, error) {
 	if p.Headers.UserAgent == "" {
 		p.Headers.UserAgent = first.UserAgent
 	}
+	p.Headers.Order = withSlots(p.Headers.Order, p.Headers.UserAgent)
 
 	// Приоритет с HEADERS-кадра: на проводе вес на единицу меньше (RFC 7540).
 	for _, pr := range frames.Priorities {
@@ -346,3 +416,56 @@ func buildProfile(name string, details []echoDetail) (*profile.Profile, error) {
 }
 
 func boolPtr(b bool) *bool { return &b }
+
+// withSlots добавляет к захваченному порядку слоты, которых в навигационном
+// GET не бывает: cookie и заголовки тела.
+//
+// Позиции сняты живыми браузерами (docs/STAGE15-RESULTS.md): у Chromium
+// content-length идёт первым, content-type перед user-agent, origin после
+// него; у Firefox все три — после accept-encoding. cookie у обоих стоит
+// перед priority.
+func withSlots(order []profile.HeaderPair, userAgent string) []profile.HeaderPair {
+	has := func(name string) bool {
+		for _, h := range order {
+			if strings.EqualFold(h.Key, name) {
+				return true
+			}
+		}
+		return false
+	}
+	insert := func(name string, at int) {
+		if has(name) {
+			return
+		}
+		if at < 0 || at > len(order) {
+			at = len(order)
+		}
+		order = append(order[:at], append([]profile.HeaderPair{{Key: name}}, order[at:]...)...)
+	}
+	index := func(name string) int {
+		for i, h := range order {
+			if strings.EqualFold(h.Key, name) {
+				return i
+			}
+		}
+		return -1
+	}
+
+	switch {
+	case has("sec-ch-ua"):
+		insert("content-length", 0)
+		insert("content-type", index("user-agent"))
+		insert("origin", index("user-agent")+1)
+	case strings.Contains(userAgent, "Firefox/"):
+		at := index("accept-encoding") + 1
+		insert("content-type", at)
+		insert("content-length", at+1)
+		insert("origin", at+2)
+	}
+	if i := index("priority"); i >= 0 {
+		insert("cookie", i)
+	} else {
+		insert("cookie", len(order))
+	}
+	return order
+}

@@ -27,6 +27,10 @@
         "value": "en-US,en;q=0.9"
       },
       {
+        "key": "cookie",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": "u=0, i"
       },
@@ -35,7 +39,8 @@
         "value": "gzip, deflate, br"
       }
     ],
-    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Mobile/15E148 Safari/604.1"
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Mobile/15E148 Safari/604.1",
+    "custom_anchor": "accept-encoding"
   },
   "http2": {
     "connection_window_update": 10420225,

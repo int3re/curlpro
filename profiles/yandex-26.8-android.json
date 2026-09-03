@@ -1,0 +1,329 @@
+{
+  "based_on": "chrome-151-windows",
+  "headers": {
+    "order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Yandex\";v=\"26\""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": "?1"
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": "\"Android\""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd, sdch",
+        "value_by_method": {
+          "POST": "gzip, deflate, br, zstd"
+        }
+      },
+      {
+        "key": "accept-language",
+        "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      }
+    ],
+    "user_agent": "Mozilla/5.0 (Linux; arm_64; Android 17; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.121 YaBrowser/26.8.2.121.00 Mobile Safari/537.36",
+    "user_agent_template": "Mozilla/5.0 (Linux; {arch}; Android {android}; {model}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.121 YaBrowser/26.8.2.121.00 Mobile Safari/537.36"
+  },
+  "name": "yandex-26.8-android",
+  "client_hints": {
+    "values": {
+      "sec-ch-ua-full-version": "\"26.8.2.121\"",
+      "sec-ch-ua-arch": "\"\"",
+      "sec-ch-ua-bitness": "\"\"",
+      "sec-ch-ua-wow64": "?0",
+      "sec-ch-ua-full-version-list": "\"Not;A=Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"150.0.7871.121\", \"Yandex\";v=\"26.8.2.121\"",
+      "sec-ch-ua-form-factors": "\"Mobile\""
+    },
+    "order": [
+      {
+        "key": "upgrade-insecure-requests",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ],
+    "fetch_order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ]
+  },
+  "devices": [
+    {
+      "name": "Pixel 7",
+      "model": "Pixel 7",
+      "platform_version": "17.0.0",
+      "arch": "arm_64"
+    },
+    {
+      "name": "Pixel 8",
+      "model": "Pixel 8",
+      "platform_version": "16.0.0",
+      "arch": "arm_64"
+    },
+    {
+      "name": "Pixel 6a",
+      "model": "Pixel 6a",
+      "platform_version": "15.0.0",
+      "arch": "arm_64"
+    },
+    {
+      "name": "Galaxy S23",
+      "model": "SM-S911B",
+      "platform_version": "15.0.0",
+      "arch": "arm_64"
+    },
+    {
+      "name": "Galaxy S22",
+      "model": "SM-S901B",
+      "platform_version": "14.0.0",
+      "arch": "arm_64"
+    },
+    {
+      "name": "Galaxy A54",
+      "model": "SM-A546E",
+      "platform_version": "14.0.0",
+      "arch": "arm_64"
+    },
+    {
+      "name": "Redmi Note 12",
+      "model": "23021RAAEG",
+      "platform_version": "14.0.0",
+      "arch": "arm_64"
+    },
+    {
+      "name": "Xiaomi 13",
+      "model": "2211133G",
+      "platform_version": "15.0.0",
+      "arch": "arm_64"
+    }
+  ]
+}

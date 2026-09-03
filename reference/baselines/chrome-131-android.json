@@ -1,0 +1,11 @@
+{
+  "profile": "chrome-131-android",
+  "oracle": "https://tls.browserleaks.com/json",
+  "ja4": [
+    "t13d1516h2_8daaf6152771_02713d6af862"
+  ],
+  "ja3n": "473f0e7c0b6a0f7b049072f4e683068b",
+  "akamai": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+  "recorded": "2026-09-02T19:09:37Z",
+  "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+}

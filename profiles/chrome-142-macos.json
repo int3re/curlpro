@@ -3,6 +3,10 @@
   "headers": {
     "order": [
       {
+        "key": "content-length",
+        "value": ""
+      },
+      {
         "key": "sec-ch-ua",
         "value": "\"Chromium\";v=\"142\", \"Google Chrome\";v=\"142\", \"Not_A Brand\";v=\"99\""
       },
@@ -19,7 +23,15 @@
         "value": "1"
       },
       {
+        "key": "content-type",
+        "value": ""
+      },
+      {
         "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
         "value": ""
       },
       {
@@ -51,11 +63,16 @@
         "value": "en-US,en;q=0.9"
       },
       {
+        "key": "cookie",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": "u=0, i"
       }
     ],
-    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+    "custom_anchor": "accept"
   },
   "name": "chrome-142-macos"
 }

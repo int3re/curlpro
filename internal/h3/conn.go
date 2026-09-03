@@ -39,6 +39,8 @@ type rawConn struct {
 	rcvdQPACKEncoderStr atomic.Bool
 	rcvdQPACKDecoderStr atomic.Bool
 	controlStrHandler   func(*quic.ReceiveStream, *frameParser) // is called *after* the SETTINGS frame was parsed
+	// onEncoderStream получает поток кодировщика QPACK; nil — поток игнорируется.
+	onEncoderStream func(*quic.ReceiveStream)
 
 	onStreamsEmpty func()
 
@@ -179,14 +181,22 @@ func (c *rawConn) handleUnidirectionalStream(str *quic.ReceiveStream, isServer b
 	case streamTypeQPACKEncoderStream:
 		if isFirst := c.rcvdQPACKEncoderStr.CompareAndSwap(false, true); !isFirst {
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK encoder stream")
+			return
 		}
-		// Our QPACK implementation doesn't use the dynamic table yet.
+		// Инструкции кодировщика наполняют динамическую таблицу декодера;
+		// апстрим их игнорировал, и любая ссылка на таблицу в ответе
+		// заканчивалась ошибкой декомпрессии.
+		if c.onEncoderStream != nil {
+			c.onEncoderStream(str)
+		}
 		return
 	case streamTypeQPACKDecoderStream:
 		if isFirst := c.rcvdQPACKDecoderStr.CompareAndSwap(false, true); !isFirst {
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK decoder stream")
 		}
-		// Our QPACK implementation doesn't use the dynamic table yet.
+		// Наш кодировщик статический, подтверждать серверу нечего: поток
+		// читается в никуда, чтобы не копить окно потока.
+		go io.Copy(io.Discard, str)
 		return
 	case streamTypePushStream:
 		if isServer {

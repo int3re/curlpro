@@ -29,9 +29,14 @@
       {
         "key": "sec-fetch-dest",
         "value": "document"
+      },
+      {
+        "key": "cookie",
+        "value": ""
       }
     ],
-    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+    "custom_anchor": "accept-encoding"
   },
   "http2": {
     "connection_window_update": 10485760,

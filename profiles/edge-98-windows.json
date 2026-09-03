@@ -3,6 +3,10 @@
   "headers": {
     "order": [
       {
+        "key": "content-length",
+        "value": ""
+      },
+      {
         "key": "sec-ch-ua",
         "value": "\" Not A;Brand\";v=\"99\", \"Chromium\";v=\"98\", \"Microsoft Edge\";v=\"98\""
       },
@@ -19,7 +23,15 @@
         "value": "1"
       },
       {
+        "key": "content-type",
+        "value": ""
+      },
+      {
         "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
         "value": ""
       },
       {
@@ -49,9 +61,14 @@
       {
         "key": "accept-language",
         "value": "en-US,en;q=0.9"
+      },
+      {
+        "key": "cookie",
+        "value": ""
       }
     ],
-    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36 Edg/98.0.1108.62"
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36 Edg/98.0.1108.62",
+    "custom_anchor": "accept"
   },
   "name": "edge-98-windows"
 }

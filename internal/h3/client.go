@@ -13,7 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/quic-go/qpack"
+	"github.com/refraction-networking/uquic/quicvarint"
+
+	qp "github.com/curlpro/curlpro/internal/qpack"
 	"github.com/refraction-networking/uquic"
 	"github.com/refraction-networking/uquic/http3/qlog"
 	"github.com/refraction-networking/uquic/qlogwriter"
@@ -52,7 +54,9 @@ type ClientConn struct {
 	conn    *quic.Conn
 	rawConn *rawConn
 
-	decoder *qpack.Decoder
+	// decoder — свой QPACK с динамической таблицей: quic-go/qpack умеет
+	// только статическую, а профиль объявляет ёмкость 65536, как Chrome.
+	decoder *qp.Decoder
 
 	// Additional HTTP/3 settings.
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
@@ -150,8 +154,15 @@ func newClientConn(
 		lastStreamID:       invalidStreamID,
 		logger:             logger,
 		qlogger:            qlogger,
-		decoder:            qpack.NewDecoder(),
+		// Ёмкость таблицы — наша же объявленная SETTINGS_QPACK_MAX_TABLE_CAPACITY
+		// (0x01): больше кодировщик сервера задать не вправе.
+		decoder: qp.NewDecoder(additionalSettings[settingQPACKMaxTableCapacity]),
 	}
+	// Заблокированные секции ждут вставок кодировщика; закрытие соединения
+	// обязано их разбудить, иначе поток запроса повис бы навсегда.
+	context.AfterFunc(conn.Context(), func() {
+		c.decoder.Close(context.Cause(conn.Context()))
+	})
 	if maxResponseHeaderBytes <= 0 {
 		c.maxResponseHeaderBytes = defaultMaxResponseHeaderBytes
 	} else {
@@ -167,6 +178,12 @@ func newClientConn(
 		qlogger,
 		c.logger,
 	)
+	// Поток кодировщика сервера кормит нашу динамическую таблицу.
+	c.rawConn.onEncoderStream = func(str *quic.ReceiveStream) {
+		if err := c.decoder.ReadEncoderStream(str); err != nil {
+			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeQPACKEncoderStreamError), err.Error())
+		}
+	}
 	// send the SETTINGs frame, using 0-RTT data, if possible
 	go func() {
 		sf := &settingsFrame{
@@ -189,6 +206,19 @@ func newClientConn(
 		c.controlMx.Lock()
 		c.controlStream = str
 		c.controlMx.Unlock()
+		// Потоки QPACK открываются сразу за управляющим, как у Chrome:
+		// кодировщика (0x02) и декодера (0x03). Первый пуст — наши запросы
+		// динамической таблицей не пользуются; по второму уходят подтверждения
+		// секций, без которых кодировщик сервера не может вытеснять записи.
+		if err == nil {
+			if enc, e := c.rawConn.OpenUniStream(); e == nil {
+				_, _ = enc.Write(quicvarint.Append(nil, streamTypeQPACKEncoderStream))
+			}
+			if dec, e := c.rawConn.OpenUniStream(); e == nil {
+				_, _ = dec.Write(quicvarint.Append(nil, streamTypeQPACKDecoderStream))
+				c.decoder.SetDecoderStream(dec)
+			}
+		}
 		close(c.settingsSent)
 		if err != nil {
 			if c.logger != nil {

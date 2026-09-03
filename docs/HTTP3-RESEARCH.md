@@ -36,6 +36,14 @@ SETTINGS | псевдо-заголовки | transport parameters | длины C
 (id 15) заменяется на `AUTO`, `version_information` (id 17) печатается
 как `chosen@available,…`.
 
+**Порядок обычных заголовков не отдаёт ни один оракул** — только SETTINGS
+и псевдо-заголовки. Поэтому он снимается своим стендом `cmd/hcapture -h3`:
+QUIC с ALPN `h3`, HEADERS разбирается своим QPACK-декодером, имена печатаются
+в порядке провода. Первый же замер против Chrome 152 нашёл расхождение —
+`Content-Length` уходил у нас последним, у Chrome он первый в наборе fetch
+(см. [STAGE16-RESULTS.md](STAGE16-RESULTS.md)). Порядок остальных заголовков
+у Chrome в HTTP/3 совпал с HTTP/2 имя в имя.
+
 Отдельно: **JA4-q покрывает только TLS ClientHello внутри QUIC Initial.**
 Буква `q` — единственный вклад транспорта. Ни transport parameters, ни SETTINGS
 в JA4 не входят, и аналога JA4T для UDP не существует. Значит проверять эти

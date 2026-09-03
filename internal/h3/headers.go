@@ -15,6 +15,8 @@ import (
 	"golang.org/x/net/http/httpguts"
 
 	"github.com/quic-go/qpack"
+
+	qp "github.com/curlpro/curlpro/internal/qpack"
 	"github.com/refraction-networking/uquic"
 	"github.com/refraction-networking/uquic/http3/qlog"
 	"github.com/refraction-networking/uquic/qlogwriter"
@@ -389,7 +391,7 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 	return true, err
 }
 
-func decodeTrailers(r io.Reader, hf *headersFrame, maxHeaderBytes int, decoder *qpack.Decoder, qlogger qlogwriter.Recorder, streamID quic.StreamID) (http.Header, error) {
+func decodeTrailers(r io.Reader, hf *headersFrame, maxHeaderBytes int, decoder *qp.Decoder, qlogger qlogwriter.Recorder, streamID quic.StreamID) (http.Header, error) {
 	if hf.Length > uint64(maxHeaderBytes) {
 		maybeQlogInvalidHeadersFrame(qlogger, streamID, hf.Length)
 		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, maxHeaderBytes)
@@ -399,7 +401,7 @@ func decodeTrailers(r io.Reader, hf *headersFrame, maxHeaderBytes int, decoder *
 	if _, err := io.ReadFull(r, b); err != nil {
 		return nil, err
 	}
-	decodeFn := decoder.Decode(b)
+	decodeFn := decoder.Decode(uint64(streamID), b)
 	var fields []qpack.HeaderField
 	var headerFields *[]qpack.HeaderField
 	if qlogger != nil {

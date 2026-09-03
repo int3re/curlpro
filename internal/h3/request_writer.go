@@ -179,15 +179,27 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 			f("trailer", trailers)
 		}
 
-		var didUA bool
+		var didUA, didCL bool
 		// Обычные заголовки тоже идут в заданном порядке: обход map давал
 		// случайную последовательность на каждом запросе — то, что у bogdanfinn
 		// висит открытым багом для HTTP/3.
-		for _, k := range headerSequence(req) {
+		seq := headerSequence(req)
+		sendCL := shouldSendReqContentLength(req.Method, contentLength)
+		if sendCL {
+			seq = withSlot(req, seq, "content-length")
+		}
+		for _, k := range seq {
 			vv := req.Header[k]
-			if strings.EqualFold(k, "host") || strings.EqualFold(k, "content-length") {
+			if strings.EqualFold(k, "host") {
 				// Host is :authority, already sent.
-				// Content-Length is automatic, set below.
+				continue
+			} else if strings.EqualFold(k, "content-length") {
+				// Значение всегда посчитанное, а не пользовательское: оно
+				// могло бы разойтись с телом. Позиция — из порядка профиля.
+				if !didCL {
+					didCL = true
+					f("content-length", strconv.FormatInt(contentLength, 10))
+				}
 				continue
 			} else if strings.EqualFold(k, "connection") || strings.EqualFold(k, "proxy-connection") ||
 				strings.EqualFold(k, "transfer-encoding") || strings.EqualFold(k, "upgrade") ||
@@ -216,9 +228,6 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 			for _, v := range vv {
 				f(k, v)
 			}
-		}
-		if shouldSendReqContentLength(req.Method, contentLength) {
-			f("content-length", strconv.FormatInt(contentLength, 10))
 		}
 		if addGzipHeader {
 			f("accept-encoding", "gzip")

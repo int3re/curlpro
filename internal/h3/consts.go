@@ -15,3 +15,8 @@ const (
 	streamTypeQPACKEncoderStream = 2
 	streamTypeQPACKDecoderStream = 3
 )
+
+// settingQPACKMaxTableCapacity — SETTINGS_QPACK_MAX_TABLE_CAPACITY (RFC 9204, 5).
+// Значение берётся из профиля (AdditionalSettings) и задаёт ёмкость нашей
+// динамической таблицы.
+const settingQPACKMaxTableCapacity = 0x01

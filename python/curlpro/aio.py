@@ -71,10 +71,11 @@ class AsyncSession:
 
     async def close(self) -> None:
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(self._pool, self._session.close)
-        # Дожидаемся завершения задач, иначе поток может обратиться
-        # к уже закрытой сессии.
-        self._pool.shutdown(wait=True)
+        # Сначала дожидаемся запросов в полёте, потом закрываем сессию:
+        # в обратном порядке они получали «сессия закрыта». Ожидание уходит
+        # в отдельный поток, чтобы не блокировать цикл событий.
+        await loop.run_in_executor(None, lambda: self._pool.shutdown(wait=True))
+        await loop.run_in_executor(None, self._session.close)
 
     async def __aenter__(self) -> "AsyncSession":
         return self

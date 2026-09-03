@@ -3,25 +3,30 @@ package client
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
-	"strconv"
 	"strings"
+	"time"
 
 	http "github.com/bogdanfinn/fhttp"
 	"golang.org/x/net/proxy"
 )
 
 // dialRaw открывает TCP-соединение до addr, при необходимости через прокси.
-func (s *Session) dialRaw(ctx context.Context, addr string) (net.Conn, error) {
+//
+// Адрес прокси приходит параметром, а не читается из опций сессии: отдельный
+// запрос вправе его переопределить или отключить.
+func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, error) {
 	d := &net.Dialer{}
-	if s.opts.Proxy == "" {
+	if proxy == "" {
 		return d.DialContext(ctx, "tcp", addr)
 	}
 
-	pu, err := url.Parse(s.opts.Proxy)
+	pu, err := url.Parse(proxy)
 	if err != nil {
 		return nil, fmt.Errorf("разбор адреса прокси: %w", err)
 	}
@@ -30,7 +35,7 @@ func (s *Session) dialRaw(ctx context.Context, addr string) (net.Conn, error) {
 	case "socks5", "socks5h":
 		return dialSOCKS5(ctx, pu, addr)
 	case "http", "https", "":
-		return dialHTTPProxy(ctx, d, pu, addr)
+		return dialHTTPProxy(ctx, d, pu, addr, s.profile.Headers.UserAgent)
 	default:
 		return nil, fmt.Errorf("схема прокси %q не поддерживается (нужна http, https или socks5)", pu.Scheme)
 	}
@@ -42,7 +47,11 @@ func dialSOCKS5(ctx context.Context, pu *url.URL, addr string) (net.Conn, error)
 		pass, _ := pu.User.Password()
 		auth = &proxy.Auth{User: pu.User.Username(), Password: pass}
 	}
-	d, err := proxy.SOCKS5("tcp", pu.Host, auth, proxy.Direct)
+	host := pu.Host
+	if pu.Port() == "" {
+		host = net.JoinHostPort(pu.Hostname(), "1080")
+	}
+	d, err := proxy.SOCKS5("tcp", host, auth, proxy.Direct)
 	if err != nil {
 		return nil, fmt.Errorf("socks5: %w", err)
 	}
@@ -52,7 +61,58 @@ func dialSOCKS5(ctx context.Context, pu *url.URL, addr string) (net.Conn, error)
 	return d.Dial("tcp", addr)
 }
 
-func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr string) (net.Conn, error) {
+func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAgent string) (net.Conn, error) {
+	conn, err := dialProxyConn(ctx, d, pu)
+	if err != nil {
+		return nil, err
+	}
+	// Обмен CONNECT идёт по голому сокету и контекста не знает: без дедлайна
+	// прокси, принявший TCP и замолчавший, держал бы запрос бесконечно при
+	// любом timeout. После туннеля дедлайн снимается — для HTTP/2 сокет общий,
+	// и оставшийся предел оборвал бы чужие потоки.
+	setDeadline := func(c net.Conn) {
+		if deadline, ok := ctx.Deadline(); ok {
+			_ = c.SetDeadline(deadline)
+		}
+	}
+	clearDeadline := func(c net.Conn) { _ = c.SetDeadline(time.Time{}) }
+	setDeadline(conn)
+
+	err = connectProxy(conn, pu, addr, userAgent, false)
+
+	// 407 — это не отказ, а вызов: Chrome отвечает на него повтором
+	// с учётными данными. Первый CONNECT уходит без них, как у браузера.
+	var need needAuthError
+	if errors.As(err, &need) && pu.User != nil {
+		if !need.reusable {
+			// Прокси закрыл соединение вместе с 407 — второй попытке нужен
+			// свежий сокет, иначе повтор уйдёт в закрытый.
+			clearDeadline(conn)
+			conn.Close()
+			if conn, err = dialProxyConn(ctx, d, pu); err != nil {
+				return nil, err
+			}
+			setDeadline(conn)
+		}
+		err = connectProxy(conn, pu, addr, userAgent, true)
+	}
+	clearDeadline(conn)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return conn, nil
+}
+
+// dialProxyConn открывает соединение до самого прокси.
+//
+// Для https:// канал до прокси шифруется, и CONNECT уходит уже внутри TLS.
+// Раньше схема принималась, но запрос уходил открытым текстом в TLS-порт:
+// прокси его не понимал, а логин с паролем утекал в сеть.
+//
+// TLS здесь обычный, не браузерный: этот отпечаток не видит никто,
+// кроме самого прокси.
+func dialProxyConn(ctx context.Context, d *net.Dialer, pu *url.URL) (net.Conn, error) {
 	host := pu.Host
 	if pu.Port() == "" {
 		host = net.JoinHostPort(pu.Hostname(), defaultProxyPort(pu.Scheme))
@@ -61,11 +121,31 @@ func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr string)
 	if err != nil {
 		return nil, fmt.Errorf("соединение с прокси: %w", err)
 	}
-	if err := connectProxy(conn, pu, addr); err != nil {
-		conn.Close()
-		return nil, err
+	if strings.EqualFold(pu.Scheme, "https") {
+		tconn := tls.Client(conn, &tls.Config{ServerName: pu.Hostname()})
+		if err := tconn.HandshakeContext(ctx); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("TLS до прокси: %w", err)
+		}
+		conn = tconn
 	}
 	return conn, nil
+}
+
+// needAuthError — прокси ответил 407.
+//
+// reusable говорит, можно ли повторить по тому же сокету: тело ответа
+// дочитано и закрываться прокси не собирается.
+type needAuthError struct {
+	reusable bool
+	scheme   string // схема из Proxy-Authenticate, для сообщения об ошибке
+}
+
+func (e needAuthError) Error() string {
+	if e.scheme != "" {
+		return "прокси требует авторизацию (" + e.scheme + ")"
+	}
+	return "прокси требует авторизацию"
 }
 
 func defaultProxyPort(scheme string) string {
@@ -76,18 +156,34 @@ func defaultProxyPort(scheme string) string {
 }
 
 // connectProxy выполняет CONNECT-туннель до target.
-func connectProxy(conn net.Conn, pu *url.URL, target string) error {
+//
+// Заголовки — как у Chrome: Host, Proxy-Connection: keep-alive, User-Agent
+// браузера. С пустым Header fhttp подставлял Go-http-client/1.1, и прокси
+// видел не браузер, а Go: провайдеры прокси клиентов классифицируют.
+//
+// withAuth=false — первый заход, как у браузера: Chrome шлёт CONNECT без
+// учётных данных и добавляет их только в ответ на 407. Прокси, ведущий
+// журнал, видит у нас ту же пару запросов, что у Chrome.
+func connectProxy(conn net.Conn, pu *url.URL, target, userAgent string, withAuth bool) error {
 	req := &http.Request{
 		Method: http.MethodConnect,
 		URL:    &url.URL{Opaque: target},
 		Host:   target,
 		Header: make(http.Header),
 	}
-	if pu.User != nil {
-		pass, _ := pu.User.Password()
-		req.Header.Set("Proxy-Authorization",
-			"Basic "+base64.StdEncoding.EncodeToString([]byte(pu.User.Username()+":"+pass)))
+	req.Header["Host"] = []string{target}
+	req.Header["Proxy-Connection"] = []string{"keep-alive"}
+	// Пустой слайс запрещает fhttp подставить свой User-Agent.
+	req.Header["User-Agent"] = []string{}
+	if userAgent != "" {
+		req.Header["User-Agent"] = []string{userAgent}
 	}
+	if withAuth && pu.User != nil {
+		pass, _ := pu.User.Password()
+		req.Header["Proxy-Authorization"] = []string{
+			"Basic " + base64.StdEncoding.EncodeToString([]byte(pu.User.Username()+":"+pass))}
+	}
+	req.Header[http.HeaderOrderKey] = []string{"host", "proxy-connection", "user-agent", "proxy-authorization"}
 	if err := req.Write(conn); err != nil {
 		return fmt.Errorf("CONNECT: %w", err)
 	}
@@ -98,6 +194,16 @@ func connectProxy(conn net.Conn, pu *url.URL, target string) error {
 		return fmt.Errorf("ответ прокси: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusProxyAuthRequired && !withAuth {
+		return needAuthError{
+			// Сокет годен для повтора, только если тело дочитано, прокси
+			// не собирается закрываться и в буфере ничего не осталось:
+			// иначе второй CONNECT разобрал бы ответ из чужих байтов.
+			reusable: drain(resp, nil) && br.Buffered() == 0 && !resp.Close &&
+				!strings.EqualFold(resp.Header.Get("Proxy-Connection"), "close"),
+			scheme: resp.Header.Get("Proxy-Authenticate"),
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("прокси вернул %s", resp.Status)
 	}
@@ -107,12 +213,4 @@ func connectProxy(conn net.Conn, pu *url.URL, target string) error {
 		return fmt.Errorf("прокси прислал %d лишних байт после CONNECT", br.Buffered())
 	}
 	return nil
-}
-
-// hostPort нормализует адрес, добавляя порт по умолчанию.
-func hostPort(host string, def int) string {
-	if _, _, err := net.SplitHostPort(host); err == nil {
-		return host
-	}
-	return net.JoinHostPort(host, strconv.Itoa(def))
 }

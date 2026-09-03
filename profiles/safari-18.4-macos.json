@@ -27,6 +27,10 @@
         "value": "en-US,en;q=0.9"
       },
       {
+        "key": "cookie",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": "u=0, i"
       },
@@ -35,7 +39,8 @@
         "value": "gzip, deflate, br"
       }
     ],
-    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15"
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15",
+    "custom_anchor": "accept-encoding"
   },
   "http2": {
     "connection_window_update": 10420225,

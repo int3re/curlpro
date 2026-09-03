@@ -115,6 +115,29 @@
     ],
     "permute_extensions": true
   },
+  "http1": {
+    "order": [
+      "Host",
+      "Connection",
+      "Content-Length",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "Upgrade-Insecure-Requests",
+      "Content-Type",
+      "User-Agent",
+      "Origin",
+      "Accept",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-User",
+      "Sec-Fetch-Dest",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie"
+    ],
+    "connection": "keep-alive"
+  },
   "http2": {
     "settings": [
       {
@@ -148,6 +171,10 @@
     "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
     "order": [
       {
+        "key": "content-length",
+        "value": ""
+      },
+      {
         "key": "sec-ch-ua",
         "value": "\"Chromium\";v=\"118\", \"Google Chrome\";v=\"118\", \"Not=A?Brand\";v=\"99\""
       },
@@ -164,7 +191,15 @@
         "value": "1"
       },
       {
+        "key": "content-type",
+        "value": ""
+      },
+      {
         "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
         "value": ""
       },
       {
@@ -194,7 +229,160 @@
       {
         "key": "accept-language",
         "value": "en-US,en;q=0.9"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      }
+    ],
+    "custom_anchor": "accept"
+  },
+  "websocket": {
+    "order": [
+      {
+        "key": "Host",
+        "value": ""
+      },
+      {
+        "key": "Connection",
+        "value": "Upgrade"
+      },
+      {
+        "key": "Pragma",
+        "value": "no-cache"
+      },
+      {
+        "key": "Cache-Control",
+        "value": "no-cache"
+      },
+      {
+        "key": "User-Agent",
+        "value": ""
+      },
+      {
+        "key": "Upgrade",
+        "value": "websocket"
+      },
+      {
+        "key": "Origin",
+        "value": ""
+      },
+      {
+        "key": "Sec-WebSocket-Version",
+        "value": "13"
+      },
+      {
+        "key": "Accept-Encoding",
+        "value": ""
+      },
+      {
+        "key": "Accept-Language",
+        "value": ""
+      },
+      {
+        "key": "Cookie",
+        "value": ""
+      },
+      {
+        "key": "Sec-WebSocket-Key",
+        "value": ""
+      },
+      {
+        "key": "Sec-WebSocket-Extensions",
+        "value": "permessage-deflate; client_max_window_bits"
+      },
+      {
+        "key": "Sec-WebSocket-Protocol",
+        "value": ""
       }
     ]
+  },
+  "fetch": {
+    "order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "*/*"
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "same-origin"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "cors"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "empty"
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=1, i"
+      }
+    ],
+    "http1_order": [
+      "Host",
+      "Connection",
+      "Content-Length",
+      "sec-ch-ua-platform",
+      "User-Agent",
+      "sec-ch-ua",
+      "Content-Type",
+      "sec-ch-ua-mobile",
+      "Accept",
+      "Origin",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Dest",
+      "Referer",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie"
+    ],
+    "custom_anchor": "sec-ch-ua-mobile"
   }
 }

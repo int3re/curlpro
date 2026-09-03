@@ -3,6 +3,10 @@
   "headers": {
     "order": [
       {
+        "key": "content-length",
+        "value": ""
+      },
+      {
         "key": "sec-ch-ua",
         "value": "\"Google Chrome\";v=\"107\", \"Chromium\";v=\"107\", \"Not=A?Brand\";v=\"24\""
       },
@@ -19,7 +23,15 @@
         "value": "1"
       },
       {
+        "key": "content-type",
+        "value": ""
+      },
+      {
         "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
         "value": ""
       },
       {
@@ -49,9 +61,14 @@
       {
         "key": "accept-language",
         "value": "en-US,en;q=0.9"
+      },
+      {
+        "key": "cookie",
+        "value": ""
       }
     ],
-    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+    "custom_anchor": "accept"
   },
   "name": "chrome-107-windows"
 }

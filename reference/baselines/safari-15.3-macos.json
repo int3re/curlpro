@@ -1,0 +1,11 @@
+{
+  "profile": "safari-15.3-macos",
+  "oracle": "https://tls.browserleaks.com/json",
+  "ja4": [
+    "t13d2613h2_2802a3db6c62_845d286b0d67"
+  ],
+  "ja3n": "4e732e0294d23442159b756947e9daba",
+  "akamai": "|15663105|0|m,s,p,a",
+  "recorded": "2026-09-02T19:10:40Z",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.3 Safari/605.1.15"
+}

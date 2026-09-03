@@ -3,6 +3,7 @@ package h3
 import (
 	"net/http"
 	"sort"
+	"strings"
 )
 
 // Порядок заголовков задаётся через служебные ключи в http.Header — тот же
@@ -27,6 +28,38 @@ func pseudoOrder(req *http.Request) []string {
 		return v
 	}
 	return defaultPseudoOrder
+}
+
+// withSlot вставляет имя в последовательность на позицию, которую оно
+// занимает в HeaderOrderKey, даже если такого заголовка в запросе нет.
+//
+// Нужно для заголовков, которые добавляет сам транспорт: Chrome шлёт
+// Content-Length первым в наборе fetch, а не в хвосте. Замер стендом
+// cmd/hcapture: на HTTP/2 позиция бралась из порядка, на HTTP/3 — нет.
+func withSlot(req *http.Request, seq []string, name string) []string {
+	want := req.Header[HeaderOrderKey]
+	idx := -1
+	for i, w := range want {
+		if strings.EqualFold(w, name) {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return append(seq, name) // порядок про него молчит — как было, в хвост
+	}
+	// Встаём перед первым именем, которое идёт после слота и реально уходит.
+	for _, w := range want[idx+1:] {
+		for j, s := range seq {
+			if strings.EqualFold(s, w) {
+				out := make([]string, 0, len(seq)+1)
+				out = append(out, seq[:j]...)
+				out = append(out, name)
+				return append(out, seq[j:]...)
+			}
+		}
+	}
+	return append(seq, name)
 }
 
 // headerSequence возвращает имена обычных заголовков в порядке отправки.

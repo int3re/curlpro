@@ -47,7 +47,9 @@ def test_http_proxy_with_auth():
         with curlpro.Session(proxy=f"http://user:s3cret@{proxy.url_host}") as s:
             assert s.get(TARGET).status == 200
         assert proxy.tunnels == ["httpbin.org:443"]
-        assert proxy.rejected == 0
+        # Один отказ обязателен: первый CONNECT уходит без учётных данных,
+        # как у браузера, и они добавляются только в ответ на 407.
+        assert proxy.rejected == 1
 
 
 def test_http_proxy_rejects_wrong_password():
@@ -55,7 +57,8 @@ def test_http_proxy_rejects_wrong_password():
         with curlpro.Session(proxy=f"http://user:wrong@{proxy.url_host}") as s:
             with pytest.raises(curlpro.CurlProError, match="407"):
                 s.get(TARGET)
-        assert proxy.rejected == 1
+        # Два отказа: пробный CONNECT без данных и повтор с неверными.
+        assert proxy.rejected == 2
         assert proxy.tunnels == []
 
 

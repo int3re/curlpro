@@ -7,9 +7,11 @@
 package profile
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"math/big"
 	"path"
 	"sort"
 	"strings"
@@ -26,11 +28,189 @@ type Profile struct {
 	Name    string      `json:"name"`
 	BasedOn string      `json:"based_on,omitempty"`
 	TLS     TLSSpec     `json:"tls"`
+	HTTP1   HTTP1Spec   `json:"http1,omitempty"`
 	HTTP2   HTTP2Spec   `json:"http2"`
 	HTTP3   HTTP3Spec   `json:"http3,omitempty"`
 	QUIC    QUICSpec    `json:"quic,omitempty"`
 	Headers HeadersSpec `json:"headers"`
+	// WebSocket описывает рукопожатие: у него свой набор и порядок заголовков,
+	// не совпадающий с навигационным.
+	WebSocket WebSocketSpec `json:"websocket,omitempty"`
+	// Devices — телефоны, которыми может представляться сессия.
+	Devices []Device `json:"devices,omitempty"`
+	// ClientHints — подсказки высокой энтропии, если браузер их поддерживает.
+	ClientHints ClientHintsSpec `json:"client_hints,omitempty"`
+
+	// Fetch описывает запросы fetch/XHR: набор, порядок и якорь у них свои.
+	Fetch FetchSpec `json:"fetch,omitempty"`
 }
+
+// FetchSpec — заголовки запросов fetch() и XMLHttpRequest.
+//
+// Навигационный набор для них не годится: браузер шлёт accept: */*,
+// sec-fetch-mode: cors, sec-fetch-dest: empty, Origin и Referer, а
+// upgrade-insecure-requests и sec-fetch-user не шлёт вовсе. Кастомный
+// заголовок бывает только у таких запросов, поэтому запрос с ним поверх
+// навигационного набора аномален при любом якоре (замер Chrome 152
+// и Firefox 154, docs/STAGE15-RESULTS.md).
+//
+// Пустое значение в order — слот: имя, известное навигационному набору
+// (sec-ch-ua*, accept-encoding, accept-language, user-agent), берёт значение
+// оттуда, чтобы дельта на новую версию браузера правила его один раз;
+// остальные (content-type, content-length, origin, referer, cookie)
+// заполняются запросом, библиотекой или транспортом.
+type FetchSpec struct {
+	Order []HeaderPair `json:"order,omitempty"`
+	// HTTP1Order — порядок и регистр для HTTP/1.1, включая Host и Connection.
+	HTTP1Order []string `json:"http1_order,omitempty"`
+	// CustomAnchor — якорь кастомных заголовков, список через запятую.
+	CustomAnchor string `json:"custom_anchor,omitempty"`
+}
+
+// Enabled сообщает, описан ли в профиле набор fetch.
+func (f FetchSpec) Enabled() bool { return len(f.Order) > 0 }
+
+// ResolvedFetchHeaders возвращает набор fetch, подставив в пустые слоты
+// значения из навигационного набора там, где они есть.
+func (p *Profile) ResolvedFetchHeaders() []HeaderPair {
+	nav := p.ResolvedHeaders()
+	out := make([]HeaderPair, 0, len(p.Fetch.Order))
+	for _, h := range p.Fetch.Order {
+		if h.Value == "" {
+			for _, n := range nav {
+				if n.Value != "" && strings.EqualFold(n.Key, h.Key) {
+					h.Value = n.Value
+					// Переопределения по методу переносятся вместе со
+					// значением: иначе слот fetch получил бы значение
+					// навигации, но потерял бы правило.
+					if h.ValueByMethod == nil {
+						h.ValueByMethod = n.ValueByMethod
+					}
+					break
+				}
+			}
+		}
+		out = append(out, h)
+	}
+	return out
+}
+
+// ResolvedHints возвращает шаблон с подсказками: fetch=true — набор fetch.
+//
+// Пустые значения заполняются по имени: сначала из values профиля, потом
+// из устройства, потом из обычного набора. Незаполненный слот остаётся
+// пустым и на провод не уходит — как и в остальных шаблонах.
+func (p *Profile) ResolvedHints(fetch bool, dev Device) []HeaderPair {
+	tpl := p.ClientHints.Order
+	base := p.ResolvedHeaders()
+	if fetch {
+		if len(p.ClientHints.FetchOrder) > 0 {
+			tpl = p.ClientHints.FetchOrder
+		}
+		base = p.ResolvedFetchHeaders()
+	}
+	out := make([]HeaderPair, 0, len(tpl))
+	for _, h := range tpl {
+		if h.Value == "" {
+			h.Value = p.hintValue(h.Key, dev, base)
+		}
+		out = append(out, h)
+	}
+	return out
+}
+
+// hintValue подбирает значение для имени в шаблоне подсказок.
+func (p *Profile) hintValue(key string, dev Device, base []HeaderPair) string {
+	switch strings.ToLower(key) {
+	case "sec-ch-ua-model":
+		if dev.Model != "" {
+			return quoteHint(dev.Model)
+		}
+	case "sec-ch-ua-platform-version":
+		if dev.PlatformVersion != "" {
+			return quoteHint(dev.PlatformVersion)
+		}
+	}
+	if v, ok := p.ClientHints.Values[strings.ToLower(key)]; ok {
+		return v
+	}
+	for _, b := range base {
+		if strings.EqualFold(b.Key, key) && b.Value != "" {
+			return b.Value
+		}
+	}
+	if strings.EqualFold(key, "user-agent") {
+		return p.Headers.UserAgent
+	}
+	return ""
+}
+
+// quoteHint оборачивает значение в кавычки формата структурированных полей.
+func quoteHint(v string) string {
+	if strings.HasPrefix(v, "\"") {
+		return v
+	}
+	return "\"" + v + "\""
+}
+
+// PickDevice выбирает устройство по имени; пустое имя или "random" — случайное.
+//
+// Устройство держится на сессию, а не на запрос: настоящий клиент телефон
+// между запросами не меняет.
+func (p *Profile) PickDevice(name string) (Device, error) {
+	if len(p.Devices) == 0 {
+		return Device{}, fmt.Errorf("профиль %q не описывает устройств (секция devices)", p.Name)
+	}
+	if name == "" || strings.EqualFold(name, "random") {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(p.Devices))))
+		if err != nil {
+			return p.Devices[0], nil
+		}
+		return p.Devices[n.Int64()], nil
+	}
+	for _, d := range p.Devices {
+		if strings.EqualFold(d.Name, name) || strings.EqualFold(d.Model, name) {
+			return d, nil
+		}
+	}
+	return Device{}, fmt.Errorf("устройство %q не найдено в профиле %q", name, p.Name)
+}
+
+// WebSocketSpec задаёт заголовки рукопожатия WebSocket в порядке и регистре
+// отправки. Пустое значение — слот, заполняемый по имени: host, user-agent,
+// origin, sec-websocket-key, sec-websocket-protocol, cookie; для остальных имён
+// значение берётся из headers.order (accept-encoding, accept-language).
+// Слот без значения в запрос не попадает.
+//
+// Chrome на рукопожатии не шлёт ни sec-ch-ua, ни sec-fetch-*, ни accept,
+// зато шлёт Pragma и Cache-Control и ставит Sec-WebSocket-Key после
+// Accept-Language — навигационный набор здесь не годится.
+type WebSocketSpec struct {
+	Order []HeaderPair `json:"order,omitempty"`
+}
+
+// HTTP1Spec описывает отпечаток уровня HTTP/1.1.
+//
+// Он отличается от HTTP/2 сильнее, чем кажется. В HTTP/2 имена заголовков
+// обязаны быть в нижнем регистре, а в HTTP/1.1 регистр произволен — и браузеры
+// им пользуются: Chrome шлёт Title-Case для большинства заголовков, но
+// sec-ch-* и priority оставляет строчными. Плюс появляются Host и Connection,
+// которых в HTTP/2 нет вовсе.
+type HTTP1Spec struct {
+	// Order задаёт имена заголовков в порядке и регистре отправки.
+	// Значения берутся из общей секции headers по имени без учёта регистра.
+	//
+	// Chrome начинает с Host и Connection: первый обязателен по RFC 7230,
+	// второй браузер шлёт явно, хотя keep-alive и так подразумевается.
+	Order []string `json:"order,omitempty"`
+
+	// Connection — значение одноимённого заголовка. Пусто означает,
+	// что заголовок не отправляется.
+	Connection string `json:"connection,omitempty"`
+}
+
+// Enabled сообщает, описан ли в профиле HTTP/1.1.
+func (h HTTP1Spec) Enabled() bool { return len(h.Order) > 0 }
 
 // HTTP3Spec описывает отпечаток уровня HTTP/3.
 //
@@ -47,9 +227,27 @@ type HTTP3Spec struct {
 	// PseudoOrder — порядок псевдо-заголовков. Chrome m,a,s,p; Firefox m,s,a,p.
 	PseudoOrder []string `json:"pseudo_order,omitempty"`
 	// SendGreaseFrame включает GREASE-кадр на управляющем потоке.
-	SendGreaseFrame bool `json:"send_grease_frame,omitempty"`
-	// PriorityParam — тип кадра PRIORITY_UPDATE. Chrome 984832; Firefox не шлёт.
-	PriorityParam uint64 `json:"priority_param,omitempty"`
+	//
+	// Указатель, а не bool: дельта обязана уметь выключить то, что включил
+	// предок. С голым bool «false» был неотличим от «не задано», и профиль
+	// Firefox поверх базы Chrome не мог убрать GREASE-кадр.
+	SendGreaseFrame *bool `json:"send_grease_frame,omitempty"`
+	// PriorityParam — тип кадра PRIORITY_UPDATE. Chrome 984832; Firefox не шлёт
+	// (ноль). Указатель по той же причине, что и SendGreaseFrame.
+	PriorityParam *uint64 `json:"priority_param,omitempty"`
+}
+
+// SendsGreaseFrame сообщает, включён ли GREASE-кадр.
+func (h HTTP3Spec) SendsGreaseFrame() bool {
+	return h.SendGreaseFrame != nil && *h.SendGreaseFrame
+}
+
+// PriorityParamValue возвращает тип кадра PRIORITY_UPDATE; ноль — не слать.
+func (h HTTP3Spec) PriorityParamValue() uint64 {
+	if h.PriorityParam == nil {
+		return 0
+	}
+	return *h.PriorityParam
 }
 
 // H3Setting — пара id/value уровня HTTP/3.
@@ -82,15 +280,27 @@ type TLSSpec struct {
 	SignatureAlgorithms []uint16 `json:"signature_algorithms,omitempty"`
 	ALPN                []string `json:"alpn,omitempty"`
 	PermuteExtensions   *bool    `json:"permute_extensions,omitempty"`
+
+	// AllowBluntMimicry разрешает воспроизводить расширения, которых uTLS
+	// не знает, сырыми байтами из raw_client_hello.
+	//
+	// Так новый примитив браузера не требует релиза: trust_anchors (0xCA34)
+	// у Chrome 152 иначе роняет разбор захвата с «unsupported extension».
+	// Риск ограничен: ключевой материал (key_share, ECH) uTLS знает и
+	// генерирует сам, а сырыми уходят только статические расширения.
+	AllowBluntMimicry *bool `json:"allow_blunt_mimicry,omitempty"`
 }
+
+// BluntMimicry сообщает, включено ли воспроизведение неизвестных расширений.
+func (t TLSSpec) BluntMimicry() bool { return t.AllowBluntMimicry != nil && *t.AllowBluntMimicry }
 
 // HTTP2Spec описывает отпечаток уровня HTTP/2.
 type HTTP2Spec struct {
-	Settings             []Setting `json:"settings,omitempty"`
-	ConnectionWindowUpdate uint32  `json:"connection_window_update,omitempty"`
-	PseudoOrder          []string  `json:"pseudo_order,omitempty"`
-	StreamWeight         *uint16   `json:"stream_weight,omitempty"`
-	StreamExclusive      *bool     `json:"stream_exclusive,omitempty"`
+	Settings               []Setting `json:"settings,omitempty"`
+	ConnectionWindowUpdate uint32    `json:"connection_window_update,omitempty"`
+	PseudoOrder            []string  `json:"pseudo_order,omitempty"`
+	StreamWeight           *uint16   `json:"stream_weight,omitempty"`
+	StreamExclusive        *bool     `json:"stream_exclusive,omitempty"`
 }
 
 // Setting — пара id/value. Порядок в слайсе значим: он воспроизводится
@@ -102,21 +312,116 @@ type Setting struct {
 
 // HeadersSpec задаёт заголовки и их порядок.
 type HeadersSpec struct {
-	UserAgent string       `json:"user_agent,omitempty"`
-	Order     []HeaderPair `json:"order,omitempty"`
+	UserAgent string `json:"user_agent,omitempty"`
+	// UserAgentTemplate — строка с {model}, {android}, {arch} для профилей,
+	// у которых устройство видно в самом User-Agent. Пусто — подстановки нет.
+	UserAgentTemplate string       `json:"user_agent_template,omitempty"`
+	Order             []HeaderPair `json:"order,omitempty"`
 
 	// FormBoundary — стиль границы multipart-формы: "webkit" или "firefox".
 	// Форма границы наблюдаема и различает браузеры, поэтому это часть профиля,
 	// а не деталь реализации.
 	FormBoundary string `json:"form_boundary,omitempty"`
+
+	// CustomAnchor — имя заголовка, ПЕРЕД которым вставляются заголовки,
+	// добавленные пользователем.
+	//
+	// Служебный хвост (accept-encoding, cookie, priority) браузер дописывает
+	// последним, поэтому кастомный заголовок после него заметен. Пусто —
+	// вставлять в конец.
+	CustomAnchor string `json:"custom_anchor,omitempty"`
 }
 
-// HeaderPair — заголовок с его позицией в порядке отправки. Пустое значение
-// означает «подставить из UserAgent», сохранив позицию.
+// HeaderPair — заголовок с его позицией в порядке отправки. Пустое значение —
+// слот: позиция для заголовка, который придёт от библиотеки (user-agent,
+// cookie, origin), от сессии или запроса (content-type и любое другое имя)
+// либо от транспорта (content-length). Слот без значения выпадает.
 type HeaderPair struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
+	// ValueByMethod переопределяет значение для отдельных методов.
+	//
+	// Замер Яндекс.Браузера 26.8 на Pixel 7: sdch в Accept-Encoding уходит
+	// на GET, HEAD, DELETE и PUT, но не на POST — включая POST с пустым телом.
+	// Правило описывается данными, а не кодом: другой браузер выразит своё
+	// тем же полем, без правки Go.
+	//
+	// Пустое значение означает слот: заголовок на этом методе не уходит,
+	// если его нечем заполнить.
+	ValueByMethod map[string]string `json:"value_by_method,omitempty"`
 }
+
+// For возвращает значение заголовка для метода запроса.
+func (h HeaderPair) For(method string) string {
+	for m, v := range h.ValueByMethod {
+		if strings.EqualFold(m, method) {
+			return v
+		}
+	}
+	return h.Value
+}
+
+// Device — телефон, от имени которого идут запросы.
+//
+// Chrome с версии 110 вырезал из User-Agent и модель, и версию системы:
+// замер Pixel 7 на Android 17 даёт «Android 10; K» — заглушку, одинаковую
+// у всех. Настоящее устройство живёт в подсказках sec-ch-ua-model и
+// sec-ch-ua-platform-version, и браузер шлёт их только после Accept-CH.
+type Device struct {
+	Name            string `json:"name"`
+	Model           string `json:"model"`
+	PlatformVersion string `json:"platform_version"`
+	// Arch — архитектура в том виде, в каком её пишет в User-Agent браузер,
+	// который её туда пишет (Яндекс: arm_64). Подсказке sec-ch-ua-arch это
+	// поле не соответствует: на Android она пустая — замер Pixel 7.
+	Arch string `json:"arch,omitempty"`
+}
+
+// UserAgentFor подставляет устройство в строку User-Agent.
+//
+// Работает только там, где браузер устройство в строку пишет: у Яндекса это
+// «Linux; arm_64; Android 17; Pixel 7», у Chrome с версии 110 — заглушка
+// «Android 10; K», одинаковая у всех, и подставлять туда нечего. Шаблон задаёт
+// профиль, поэтому код не решает за браузер, что тот сообщает.
+//
+// Поддерживаются {model}, {android} (мажор версии), {platform_version} и {arch}.
+func (p *Profile) UserAgentFor(dev Device) string {
+	tpl := p.Headers.UserAgentTemplate
+	if tpl == "" || dev.Model == "" {
+		return p.Headers.UserAgent
+	}
+	android := dev.PlatformVersion
+	if i := strings.Index(android, "."); i > 0 {
+		android = android[:i]
+	}
+	arch := dev.Arch
+	r := strings.NewReplacer(
+		"{model}", dev.Model,
+		"{android}", android,
+		"{platform_version}", dev.PlatformVersion,
+		"{arch}", arch,
+	)
+	return r.Replace(tpl)
+}
+
+// ClientHintsSpec описывает подсказки высокой энтропии.
+//
+// Values — постоянные для версии браузера (полная версия, разрядность,
+// форм-фактор). Модель и версия системы берутся из Device.
+//
+// Order и FetchOrder — полный порядок заголовков для запроса, в котором
+// подсказки есть: с их появлением Chromium перестраивает весь кластер, и
+// порядок оказывается функцией от набора имён. Два независимых прогона дали
+// одинаковую последовательность, поэтому она снята замером и хранится целиком,
+// а не собирается из позиций.
+type ClientHintsSpec struct {
+	Values     map[string]string `json:"values,omitempty"`
+	Order      []HeaderPair      `json:"order,omitempty"`
+	FetchOrder []HeaderPair      `json:"fetch_order,omitempty"`
+}
+
+// Enabled сообщает, описаны ли подсказки в профиле.
+func (c ClientHintsSpec) Enabled() bool { return len(c.Order) > 0 }
 
 // Registry хранит профили и разрешает наследование.
 type Registry struct {
@@ -194,11 +499,61 @@ func (r *Registry) Resolve(name string) (*Profile, error) {
 		merge(out, chain[i])
 	}
 	out.Name = name
-	if out.TLS.RawClientHello == "" && len(out.TLS.ClientHelloSpec) == 0 && len(out.TLS.Extensions) == 0 {
-		return nil, fmt.Errorf("профиль %q: не задан источник ClientHello "+
-			"(raw_client_hello, extensions или client_hello_spec) ни в нём, ни в предках", name)
+	if err := out.validate(); err != nil {
+		return nil, fmt.Errorf("профиль %q: %w", name, err)
 	}
 	return out, nil
+}
+
+// validate отвергает профиль, который молча дал бы не тот отпечаток.
+//
+// Проверяется схлопнутый профиль, а не файл: дельта вправе не повторять
+// поле, если его задал предок.
+func (p *Profile) validate() error {
+	if p.TLS.RawClientHello == "" && len(p.TLS.ClientHelloSpec) == 0 && len(p.TLS.Extensions) == 0 {
+		return fmt.Errorf("не задан источник ClientHello " +
+			"(raw_client_hello, extensions или client_hello_spec) ни в нём, ни в предках")
+	}
+	// Умолчания здесь нет намеренно. Перемешивание верно для Chrome >= 110
+	// и неверно для Firefox, Safari и старых Chrome; профиль без поля раньше
+	// перемешивался, и захваченный Firefox давал новый порядок расширений
+	// на каждом соединении — чего локальный validate не видит, потому что
+	// JA4 к порядку нечувствителен.
+	if p.TLS.PermuteExtensions == nil {
+		return fmt.Errorf("не задан tls.permute_extensions: укажите true для Chrome >= 110 " +
+			"и false для остальных браузеров — угадывать библиотека не будет")
+	}
+	// pre_shared_key бывает только в захвате возобновлённой сессии. На свежем
+	// соединении тикета нет, uTLS шлёт пустое расширение — а клиент выбрасывает
+	// его через OmitEmptyPsk. Итог: профиль тихо теряет и PSK, и padding,
+	// который на его месте шлёт браузер. Так были испорчены два профиля
+	// корпуса, и заметить это удалось только при разборе долгов (STAGE16).
+	for _, e := range p.TLS.Extensions {
+		if e.Type == "pre_shared_key" {
+			return fmt.Errorf("расширение pre_shared_key бывает только при возобновлении " +
+				"сессии: снимите профиль на свежем соединении, там на этом месте padding")
+		}
+	}
+	// На проводе вес на единицу меньше и укладывается в байт (RFC 7540):
+	// значение сверх 256 молча оборачивалось бы при приведении к uint8.
+	if w := p.HTTP2.StreamWeight; w != nil && *w > 256 {
+		return fmt.Errorf("http2.stream_weight %d вне диапазона 0..256", *w)
+	}
+	// Порядок SETTINGS обязан покрывать все настройки: непокрытая ушла бы
+	// в конец по возрастанию идентификатора, то есть не туда, куда её шлёт
+	// браузер, и без единого предупреждения.
+	if len(p.HTTP3.SettingsOrder) > 0 {
+		listed := make(map[uint64]bool, len(p.HTTP3.SettingsOrder))
+		for _, id := range p.HTTP3.SettingsOrder {
+			listed[id] = true
+		}
+		for _, st := range p.HTTP3.Settings {
+			if !listed[st.ID] {
+				return fmt.Errorf("http3.settings_order не содержит настройку %d", st.ID)
+			}
+		}
+	}
+	return nil
 }
 
 // chain собирает цепочку от листа к корню, ловя циклы и обрывы.
@@ -265,6 +620,9 @@ func merge(dst, src *Profile) {
 	if src.TLS.PermuteExtensions != nil {
 		dst.TLS.PermuteExtensions = src.TLS.PermuteExtensions
 	}
+	if src.TLS.AllowBluntMimicry != nil {
+		dst.TLS.AllowBluntMimicry = src.TLS.AllowBluntMimicry
+	}
 
 	if src.HTTP2.Settings != nil {
 		dst.HTTP2.Settings = src.HTTP2.Settings
@@ -282,6 +640,13 @@ func merge(dst, src *Profile) {
 		dst.HTTP2.StreamExclusive = src.HTTP2.StreamExclusive
 	}
 
+	if src.HTTP1.Order != nil {
+		dst.HTTP1.Order = src.HTTP1.Order
+	}
+	if src.HTTP1.Connection != "" {
+		dst.HTTP1.Connection = src.HTTP1.Connection
+	}
+
 	if src.HTTP3.Settings != nil {
 		dst.HTTP3.Settings = src.HTTP3.Settings
 	}
@@ -291,10 +656,10 @@ func merge(dst, src *Profile) {
 	if src.HTTP3.PseudoOrder != nil {
 		dst.HTTP3.PseudoOrder = src.HTTP3.PseudoOrder
 	}
-	if src.HTTP3.SendGreaseFrame {
-		dst.HTTP3.SendGreaseFrame = true
+	if src.HTTP3.SendGreaseFrame != nil {
+		dst.HTTP3.SendGreaseFrame = src.HTTP3.SendGreaseFrame
 	}
-	if src.HTTP3.PriorityParam != 0 {
+	if src.HTTP3.PriorityParam != nil {
 		dst.HTTP3.PriorityParam = src.HTTP3.PriorityParam
 	}
 
@@ -304,14 +669,42 @@ func merge(dst, src *Profile) {
 	if src.QUIC.ConnectionOptions != "" {
 		dst.QUIC.ConnectionOptions = src.QUIC.ConnectionOptions
 	}
-	if src.QUIC.SendInitialRTT {
-		dst.QUIC.SendInitialRTT = true
+	if src.QUIC.SendInitialRTT != nil {
+		dst.QUIC.SendInitialRTT = src.QUIC.SendInitialRTT
 	}
-	if src.QUIC.LegacyVersionInformationID {
-		dst.QUIC.LegacyVersionInformationID = true
+	if src.QUIC.LegacyVersionInformationID != nil {
+		dst.QUIC.LegacyVersionInformationID = src.QUIC.LegacyVersionInformationID
 	}
 	if src.QUIC.GreaseVersionFirst != nil {
 		dst.QUIC.GreaseVersionFirst = src.QUIC.GreaseVersionFirst
+	}
+
+	if src.WebSocket.Order != nil {
+		dst.WebSocket.Order = src.WebSocket.Order
+	}
+	if src.Headers.UserAgentTemplate != "" {
+		dst.Headers.UserAgentTemplate = src.Headers.UserAgentTemplate
+	}
+	if src.Devices != nil {
+		dst.Devices = src.Devices
+	}
+	if src.ClientHints.Values != nil {
+		dst.ClientHints.Values = src.ClientHints.Values
+	}
+	if src.ClientHints.Order != nil {
+		dst.ClientHints.Order = src.ClientHints.Order
+	}
+	if src.ClientHints.FetchOrder != nil {
+		dst.ClientHints.FetchOrder = src.ClientHints.FetchOrder
+	}
+	if src.Fetch.Order != nil {
+		dst.Fetch.Order = src.Fetch.Order
+	}
+	if src.Fetch.HTTP1Order != nil {
+		dst.Fetch.HTTP1Order = src.Fetch.HTTP1Order
+	}
+	if src.Fetch.CustomAnchor != "" {
+		dst.Fetch.CustomAnchor = src.Fetch.CustomAnchor
 	}
 
 	if src.Headers.UserAgent != "" {
@@ -322,6 +715,9 @@ func merge(dst, src *Profile) {
 	}
 	if src.Headers.FormBoundary != "" {
 		dst.Headers.FormBoundary = src.Headers.FormBoundary
+	}
+	if src.Headers.CustomAnchor != "" {
+		dst.Headers.CustomAnchor = src.Headers.CustomAnchor
 	}
 }
 

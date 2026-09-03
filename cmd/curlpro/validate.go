@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/curlpro/curlpro/internal/client"
@@ -39,9 +40,18 @@ type baseline struct {
 	UserAgent string `json:"user_agent,omitempty"`
 }
 
+// anyJA4 отключает сверку отпечатка для оракула, который считает его иначе.
+//
+// Стенд fingerproxy включает GREASE из signature_algorithms в хеш JA4, а
+// значение GREASE разыгрывается на каждое соединение — у профилей Chrome 152
+// это даёт шестнадцать законных значений. Публичный оракул считает по
+// спецификации, GREASE игнорирует, и там отпечаток стабилен: сверять эти
+// профили нужно по reference/baselines, а локально — по остальным полям.
+const anyJA4 = "*"
+
 func (b baseline) allows(ja4 string) bool {
 	for _, v := range b.JA4 {
-		if v == ja4 {
+		if v == ja4 || v == anyJA4 {
 			return true
 		}
 	}
@@ -157,6 +167,14 @@ func validateOne(reg *profile.Registry, name, oracle, refDir string,
 		DefaultHeaders:     true,
 		FollowRedirects:    true,
 		InsecureSkipVerify: insecure,
+		// Повторы берутся из клиента, а не пишутся здесь циклом: собственный
+		// цикл поверх клиентского давал бы девять запросов вместо трёх
+		// и не соблюдал общий бюджет времени.
+		Retry: &client.RetryPolicy{
+			Attempts:          2,
+			Backoff:           time.Second,
+			RespectRetryAfter: true,
+		},
 	})
 	if err != nil {
 		return "", err
@@ -164,21 +182,13 @@ func validateOne(reg *profile.Registry, name, oracle, refDir string,
 	defer sess.Close()
 
 	// Внешние оракулы срываются на серии запросов, а прогон по 44 профилям —
-	// именно серия. Без повторов треть прогонов заканчивалась бы ложным
-	// «расхождением» из-за чужой сети.
-	var resp *client.Response
-	for attempt := 1; ; attempt++ {
-		resp, err = sess.Do(&client.Request{Method: "GET", URL: oracle})
-		if err == nil && resp.Status == 200 {
-			break
-		}
-		if attempt >= 3 {
-			if err != nil {
-				return "", err
-			}
-			return "", fmt.Errorf("оракул ответил %d", resp.Status)
-		}
-		time.Sleep(time.Duration(attempt) * time.Second)
+	// именно серия. Повторы делает сам клиент (см. Retry выше).
+	resp, err := sess.Do(&client.Request{Method: "GET", URL: oracle})
+	if err != nil {
+		return "", err
+	}
+	if resp.Status != 200 {
+		return "", fmt.Errorf("оракул ответил %d", resp.Status)
 	}
 
 	var reply oracleReply
@@ -196,6 +206,12 @@ func validateOne(reg *profile.Registry, name, oracle, refDir string,
 		JA4:       []string{reply.JA4},
 		Akamai:    reply.akamai(),
 		UserAgent: p.Headers.UserAgent,
+	}
+
+	if msg, err := checkExtensionOrder(p, oracle, insecure, timeout); err != nil {
+		return "", err
+	} else if msg != "" {
+		return msg, nil
 	}
 
 	path := filepath.Join(refDir, name+".json")
@@ -228,6 +244,58 @@ func validateOne(reg *profile.Registry, name, oracle, refDir string,
 
 	return fmt.Sprintf("JA4 %s не входит в [%s]",
 		got.JA4[0], strings.Join(old.JA4, " ")), nil
+}
+
+// detailUnsupported выставляется, когда оракул не отдаёт /json/detail.
+var detailUnsupported atomic.Bool
+
+// checkExtensionOrder сверяет перемешивание расширений с permute_extensions.
+//
+// JA4 к порядку нечувствителен, а JA3N с локального оракула не сравнивается,
+// поэтому профиль, тасующий расширения вопреки браузеру, проходил validate.
+// Два свежих соединения: у Chrome >= 110 порядок обязан отличаться,
+// у остальных — совпадать. Нужен оракул с /json/detail (echo-server);
+// иначе проверка молча пропускается.
+func checkExtensionOrder(p *profile.Profile, oracle string, insecure bool, timeout time.Duration) (string, error) {
+	if !strings.HasSuffix(oracle, "/json") || detailUnsupported.Load() {
+		return "", nil
+	}
+	var orders []string
+	for i := 0; i < 2; i++ {
+		sess, err := client.New(p, client.Options{
+			Timeout:            timeout,
+			DefaultHeaders:     true,
+			InsecureSkipVerify: insecure,
+		})
+		if err != nil {
+			return "", err
+		}
+		resp, err := sess.Do(&client.Request{Method: "GET", URL: oracle + "/detail"})
+		sess.Close()
+		if err != nil || resp.Status != 200 {
+			// Публичный оракул /detail не отдаёт: запоминаем и не тратим
+			// на него по два запроса на каждый профиль — серия и так рвётся.
+			detailUnsupported.Store(true)
+			return "", nil
+		}
+		var reply struct {
+			Detail echoDetail `json:"detail"`
+		}
+		if err := json.Unmarshal(resp.Body, &reply); err != nil || len(reply.Detail.JA3.AllExtensions) == 0 {
+			detailUnsupported.Store(true)
+			return "", nil
+		}
+		orders = append(orders, extensionOrder(reply.Detail.JA3.AllExtensions))
+	}
+	permute := p.TLS.PermuteExtensions != nil && *p.TLS.PermuteExtensions
+	stable := orders[0] == orders[1]
+	switch {
+	case permute && stable:
+		return "расширения не перемешиваются, хотя permute_extensions=true", nil
+	case !permute && !stable:
+		return "порядок расширений плавает, хотя permute_extensions=false", nil
+	}
+	return "", nil
 }
 
 func compareRest(want, got baseline) string {

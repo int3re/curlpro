@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"crypto/rand"
 	"encoding/binary"
 	"fmt"
 
@@ -40,21 +41,32 @@ type QUICSpec struct {
 	//
 	// uquic шлёт его как «новое в Chrome 146», httpcloak убрал, утверждая,
 	// что реальный Chrome 151 его не шлёт. По умолчанию не шлём.
-	SendInitialRTT bool `json:"send_initial_rtt,omitempty"`
+	// Указатель: дельта должна уметь выключить то, что включил предок.
+	SendInitialRTT *bool `json:"send_initial_rtt,omitempty"`
 
 	// LegacyVersionInformationID заставляет использовать черновой ID 0xff73db
 	// вместо RFC-назначенного 0x11 для version_information.
 	//
 	// uquic использует черновой; современный Chrome — RFC-назначенный.
 	// Устаревший ID отличает клиента однозначно, поэтому по умолчанию false.
-	LegacyVersionInformationID bool `json:"legacy_version_information_id,omitempty"`
+	LegacyVersionInformationID *bool `json:"legacy_version_information_id,omitempty"`
 
-	// GreaseVersionFirst задаёт порядок в available_versions.
+	// GreaseVersionFirst фиксирует порядок в available_versions.
 	//
-	// Документация utls и паррот uquic ставят GREASE первым; curl-impersonate
-	// записывает "1,GREASE". Разногласие не разрешено захватом, поэтому
-	// вынесено в профиль. По умолчанию GREASE первым.
+	// Документация utls ставит GREASE первым, curl-impersonate пишет "1,GREASE".
+	// Захват Chrome 152 показал, что правы оба: позиция случайна на каждом
+	// соединении. Поэтому без явного значения порядок разыгрывается; поле
+	// оставлено для профилей, у которых порядок постоянен.
 	GreaseVersionFirst *bool `json:"grease_version_first,omitempty"`
+}
+
+// randomBool — честная монета для розыгрыша порядка версий.
+func randomBool() bool {
+	var b [1]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return true
+	}
+	return b[0]&1 == 1
 }
 
 // ApplyQUIC правит transport parameters в спеке под профиль.
@@ -76,7 +88,7 @@ func ApplyQUIC(spec *utls.ClientHelloSpec, q *QUICSpec) error {
 		case *utls.FakeQUICTransportParameter:
 			switch v.Id {
 			case tpGoogleInitialRTT:
-				if !q.SendInitialRTT {
+				if q.SendInitialRTT == nil || !*q.SendInitialRTT {
 					continue // Chrome его не шлёт
 				}
 			case tpGoogleConnectionOptions:
@@ -90,7 +102,16 @@ func ApplyQUIC(spec *utls.ClientHelloSpec, q *QUICSpec) error {
 			out = append(out, v)
 
 		case *utls.VersionInformation:
-			greaseFirst := q.GreaseVersionFirst == nil || *q.GreaseVersionFirst
+			// Замер Chrome 152 (cmd/quiccapture, три соединения): позиция GREASE
+			// в available_versions случайна — в одном сэмпле версия шла первой,
+			// в двух GREASE. Так разрешилось разногласие utls («GREASE первым»)
+			// и curl-impersonate («1,GREASE»): каждый видел один захват.
+			// Без явного значения порядок разыгрывается на каждое соединение;
+			// явное true или false фиксирует его.
+			greaseFirst := randomBool()
+			if q.GreaseVersionFirst != nil {
+				greaseFirst = *q.GreaseVersionFirst
+			}
 			versions := []uint32{utls.VERSION_GREASE, utls.VERSION_1}
 			if !greaseFirst {
 				versions = []uint32{utls.VERSION_1, utls.VERSION_GREASE}
@@ -98,7 +119,7 @@ func ApplyQUIC(spec *utls.ClientHelloSpec, q *QUICSpec) error {
 			out = append(out, &utls.VersionInformation{
 				ChoosenVersion:    utls.VERSION_1,
 				AvailableVersions: versions,
-				LegacyID:          q.LegacyVersionInformationID,
+				LegacyID:          q.LegacyVersionInformationID != nil && *q.LegacyVersionInformationID,
 			})
 
 		default:

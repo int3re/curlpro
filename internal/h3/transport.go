@@ -92,6 +92,12 @@ type Transport struct {
 	// поведение апстрима, которое не совпадает ни с одним браузером.
 	Fingerprint *Fingerprint
 
+	// DisableInternalRetry выключает встроенный повтор запроса.
+	//
+	// Нужен, когда повторами управляет вызывающий: два независимых механизма
+	// дают вдвое больше запросов, чем заявлено, и не соблюдают общий бюджет.
+	DisableInternalRetry bool
+
 	// MaxResponseHeaderBytes specifies a limit on how many response bytes are
 	// allowed in the server's response header.
 	// Zero means to use a default limit.
@@ -252,7 +258,10 @@ func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, isRetrie
 			return nil, err
 		default:
 		}
-		if isRetried {
+		// Клиент курлПро ведёт собственный учёт попыток и общий бюджет времени.
+		// Внутренний повтор складывался бы с ним: заявленное число попыток
+		// удваивается, а каждая переустановка — лишнее рукопожатие QUIC.
+		if isRetried || t.DisableInternalRetry {
 			return nil, err
 		}
 

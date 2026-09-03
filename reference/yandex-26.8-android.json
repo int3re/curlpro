@@ -1,0 +1,190 @@
+{
+  "captured": {
+    "browser": "Яндекс.Браузер 26.8.2.121.00 (Chromium 150), Android 17, Pixel 7",
+    "oracles": [
+      "https://tls.peet.ws/api/all — TLS, HTTP/2, навигационные заголовки, 2 сэмпла",
+      "локальный стенд по USB (adb reverse) — HTTP/1.1, fetch, XHR, WebSocket, 2 прогона"
+    ],
+    "recorded": "2026-09-03",
+    "user_agent": "Mozilla/5.0 (Linux; arm_64; Android 17; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.121 YaBrowser/26.8.2.121.00 Mobile Safari/537.36",
+    "ja4": [
+      "t13d1516h2_8daaf6152771_806a8c22fdea"
+    ],
+    "ja3_hashes": [
+      "ab7e91a68e93452847a56ae7de23bd2b",
+      "dda6c0d6fa617f03c9d80eba9fd1c024"
+    ],
+    "peetprint_hash": "67c3e9111bed9e7f03d2f21d6d88994b",
+    "akamai": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+    "note": "peet.ws печатает секцию PRIORITY как 0; сам кадр HEADERS пришёл с флагом Priority (weight 256, exclusive, depends_on 0), что fingerproxy показывает как 1:1:0:256"
+  },
+  "tls": {
+    "cipher_suites": [
+      4865,
+      4866,
+      4867,
+      49195,
+      49199,
+      49196,
+      49200,
+      52393,
+      52392,
+      49171,
+      49172,
+      156,
+      157,
+      47,
+      53
+    ],
+    "extensions_normalized": [
+      0,
+      5,
+      10,
+      11,
+      13,
+      16,
+      18,
+      23,
+      27,
+      35,
+      43,
+      45,
+      51,
+      17613,
+      65037,
+      65281
+    ],
+    "supported_groups": [
+      4588,
+      29,
+      23,
+      24
+    ],
+    "signature_algorithms": [
+      2308,
+      2309,
+      2310,
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537
+    ],
+    "key_share": [
+      "GREASE",
+      4588,
+      29
+    ],
+    "permute_extensions": true,
+    "note": "два сэмпла дали разный порядок расширений при одинаковом наборе — перемешивание подтверждено замером. Набор совпал с chrome-150-macos и JA4 с chrome-151-windows, поэтому профиль записан дельтой"
+  },
+  "headers": {
+    "navigate_h2": [
+      ":method",
+      ":authority",
+      ":scheme",
+      ":path",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "upgrade-insecure-requests",
+      "user-agent",
+      "accept",
+      "sec-fetch-site",
+      "sec-fetch-mode",
+      "sec-fetch-user",
+      "sec-fetch-dest",
+      "accept-encoding",
+      "accept-language",
+      "priority"
+    ],
+    "navigate_h1": [
+      "Host",
+      "Connection",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "Upgrade-Insecure-Requests",
+      "User-Agent",
+      "Accept",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-User",
+      "Sec-Fetch-Dest",
+      "Accept-Encoding",
+      "Accept-Language"
+    ],
+    "fetch_post_h1": [
+      "Host",
+      "Connection",
+      "Content-Length",
+      "sec-ch-ua-platform",
+      "User-Agent",
+      "sec-ch-ua",
+      "Content-Type",
+      "X-Api-Key",
+      "sec-ch-ua-mobile",
+      "Accept",
+      "Origin",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Dest",
+      "Referer",
+      "Accept-Encoding",
+      "Accept-Language"
+    ],
+    "websocket": [
+      "Host",
+      "Connection: Upgrade",
+      "Pragma: no-cache",
+      "Cache-Control: no-cache",
+      "User-Agent",
+      "Upgrade: websocket",
+      "Origin",
+      "Sec-WebSocket-Version: 13",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Sec-WebSocket-Key",
+      "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits"
+    ],
+    "accept_encoding": {
+      "GET": "gzip, deflate, br, zstd, sdch",
+      "HEAD": "gzip, deflate, br, zstd, sdch",
+      "DELETE": "gzip, deflate, br, zstd, sdch",
+      "PUT": "gzip, deflate, br, zstd, sdch",
+      "POST": "gzip, deflate, br, zstd",
+      "note": "sdch — примета Яндекс.Браузера, Chromium его выбросил. Правило именно про метод, а не про тело: POST с пустым телом тоже без sdch, PUT с телом — с ним"
+    },
+    "accept_language_seen": [
+      "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+      "ru"
+    ],
+    "note": "порядок и регистр HTTP/1.1, набор fetch и рукопожатие WebSocket совпали с шаблонами Chrome имя в имя — секции унаследованы от chrome-151-windows осознанно, а не по умолчанию"
+  },
+  "not_measured": [
+    "HTTP/3 и QUIC. Снять не удалось: браузер отвергает сертификат стенда именно в QUIC (TLS alert 46, certificate unknown), тогда как по TCP тот же сертификат проходит проверку. Chromium требует для QUIC цепочку к публично известному корню, а ключа --ignore-certificate-errors-spki-list на Android нет. Секции http3 и quic унаследованы от chrome-151-windows",
+    "заголовки на редиректе"
+  ],
+  "client_hints": {
+    "requested_via": "Accept-CH в ответе стенда, замер по USB",
+    "values_measured": {
+      "sec-ch-ua-full-version": "\"26.8.2.121\"",
+      "sec-ch-ua-full-version-list": "\"Not;A=Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"150.0.7871.121\", \"Yandex\";v=\"26.8.2.121\"",
+      "sec-ch-ua-platform-version": "\"17.0.0\"",
+      "sec-ch-ua-model": "\"Pixel 7\"",
+      "sec-ch-ua-arch": "\"\"",
+      "sec-ch-ua-bitness": "\"\"",
+      "sec-ch-ua-wow64": "?0",
+      "sec-ch-ua-form-factors": "\"Mobile\""
+    },
+    "note": "полная версия у Яндекса своя, а не хромовская — в отличие от Chrome, где sec-ch-ua-full-version равна версии браузера. Порядок кластера с подсказками совпал с Chrome 152"
+  },
+  "devices": {
+    "measured": "Pixel 7 / Android 17 / arm_64 — снят с телефона",
+    "plausible": "остальные пары «модель плюс версия» в профиле не проверялись на устройствах",
+    "note": "у Яндекса устройство стоит и в User-Agent, поэтому оно подставляется в обе стороны: строка и подсказки обязаны совпадать"
+  }
+}

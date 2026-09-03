@@ -17,11 +17,12 @@
 
 from __future__ import annotations
 
-from ._ffi import CurlProError
+from ._ffi import CurlProError, WebSocketClosed
 from .aio import AsyncSession
 from .session import Response, Session, delete, get, head, options, patch, post, put
 from .profiles import ensure_loaded, list_profiles, load_profiles, register_profile
 from .stream import StreamResponse
+from .websocket import WebSocket
 
 __all__ = [
     "AsyncSession",
@@ -29,6 +30,8 @@ __all__ = [
     "Response",
     "Session",
     "StreamResponse",
+    "WebSocket",
+    "WebSocketClosed",
     "delete",
     "ensure_loaded",
     "get",

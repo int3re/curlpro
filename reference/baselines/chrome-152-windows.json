@@ -1,0 +1,11 @@
+{
+  "profile": "chrome-152-windows",
+  "oracle": "https://tls.browserleaks.com/json",
+  "ja4": [
+    "t13d1517h2_8daaf6152771_cb7bf5808d99"
+  ],
+  "ja3n": "bd4930bd9b000ee684830e44bab76fdf",
+  "akamai": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+  "recorded": "2026-09-03T11:25:43Z",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+}

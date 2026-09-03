@@ -8,11 +8,10 @@
 package client
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/url"
 	"sync"
 	"time"
@@ -53,6 +52,23 @@ type Options struct {
 	// Cookies включает cookie-jar, общий для всех запросов сессии.
 	Cookies bool
 
+	// MaxIdleConns ограничивает число соединений в пуле. 0 — 64.
+	//
+	// Предел нужен не гипотетически: ротационный прокси с идентификатором
+	// сессии в логине даёт новое соединение на каждый запрос.
+	MaxIdleConns int
+	// IdleConnTimeout — сколько держать неиспользуемое соединение. 0 — 300 с,
+	// столько же держит Chrome.
+	IdleConnTimeout time.Duration
+	// DisableKeepAlive выключает переиспользование: каждый запрос получает
+	// своё соединение, и оно закрывается сразу после ответа.
+	//
+	// Полярность как у net/http.Transport.DisableKeepAlives — нулевое
+	// значение сохраняет обычное поведение. Заголовок «Connection: close»
+	// при этом не отправляется: браузер его не шлёт, и он выдал бы клиента.
+	// Клиент просто закрывает сокет, как браузер закрывает простаивающий.
+	DisableKeepAlive bool
+
 	// ForceHTTP1 запрещает h2 даже если сервер его предлагает.
 	ForceHTTP1 bool
 
@@ -61,6 +77,23 @@ type Options struct {
 	// Это отдельный транспорт, а не вариант ALPN, поэтому он выбирается явно.
 	// Профиль обязан описывать секцию http3, иначе сессия не создастся.
 	HTTP3 bool
+
+	// Retry задаёт повторы. nil означает, что повторов нет.
+	Retry *RetryPolicy
+
+	// Mode выбирает набор заголовков: "navigate" — переход по адресу,
+	// "fetch" — fetch/XHR, "" или "auto" — по признакам запроса (см. modeFor).
+	Mode string
+
+	// Device — имя устройства из секции devices профиля; "random" — случайное
+	// из списка. Пусто — устройство не выбирается, и подсказки высокой
+	// энтропии остаются со значениями профиля.
+	//
+	// Устройство держится на сессию: настоящий клиент телефон между запросами
+	// не меняет, и смена в середине была бы приметой сама по себе.
+	Device string
+	// Devices переопределяет список устройств профиля.
+	Devices []profile.Device
 }
 
 // Request — запрос в терминах библиотеки.
@@ -74,10 +107,104 @@ type Request struct {
 	// Взаимоисключающ с Body.
 	Multipart *MultipartForm
 
+	// BodyFile — путь к файлу, который отправляется телом запроса.
+	//
+	// Файл читается потоком, а не целиком в память: отправка гигабайтного
+	// архива не должна требовать гигабайта памяти. Взаимоисключающ с Body.
+	BodyFile string
+	// BodySize — размер тела для Content-Length. Ноль при заданном BodyFile
+	// означает «взять из файла».
+	BodySize int64
+
 	// HeaderOrder переопределяет порядок для одного запроса.
 	HeaderOrder []string
 	// NoDefaultHeaders отключает заголовки профиля для одного запроса.
 	NoDefaultHeaders bool
+
+	// Переопределения сессионных настроек на один запрос.
+	// nil означает «взять из сессии» — это отличает «не задано» от «задано
+	// в ноль», что для таймаута и редиректов принципиально разные вещи.
+
+	// Timeout ограничивает этот запрос целиком, включая редиректы и повторы.
+	Timeout *time.Duration
+	// FollowRedirects переопределяет переходы по 3xx.
+	FollowRedirects *bool
+	// MaxRedirects переопределяет предел длины цепочки.
+	MaxRedirects *int
+	// Retry переопределяет политику повторов для этого запроса.
+	Retry *RetryPolicy
+
+	// Proxy переопределяет прокси сессии.
+	//
+	// nil означает «взять из сессии», пустая строка — идти напрямую в обход
+	// сессионного прокси. Это разные вещи, поэтому указатель, а не строка.
+	Proxy *string
+
+	// SuppressHeaders гасит заголовки по имени уже после сборки из профиля.
+	//
+	// Нужно для случаев вроде sec-fetch-user: он приходит из профиля,
+	// и удаление из Headers его не затронуло бы.
+	SuppressHeaders []string
+
+	// RedirectHop помечает запрос как шаг цепочки редиректов. Chromium на
+	// таком шаге ставит client hints (sec-ch-ua*) не в начало, а после
+	// Sec-Fetch-Dest — см. buildHeaders.
+	RedirectHop bool
+
+	// Mode переопределяет Options.Mode для одного запроса.
+	Mode string
+}
+
+// proxyFor возвращает адрес прокси для запроса.
+func (s *Session) proxyFor(r *Request) string {
+	if r != nil && r.Proxy != nil {
+		return *r.Proxy
+	}
+	return s.opts.Proxy
+}
+
+// timeout возвращает предел для запроса с учётом переопределения.
+//
+// Ноль отвергается на входе (New и validate), поэтому здесь он означать ничего
+// не может: раньше ноль в опциях подставлял 30 секунд, а ноль в запросе давал
+// мгновенный таймаут — одно и то же число значило противоположное.
+func (s *Session) timeout(r *Request) time.Duration {
+	if r != nil && r.Timeout != nil {
+		return *r.Timeout
+	}
+	return s.opts.Timeout
+}
+
+// validate проверяет переопределения запроса до отправки.
+func (r *Request) validate() error {
+	if r == nil {
+		return nil
+	}
+	if r.Timeout != nil && *r.Timeout <= 0 {
+		return fmt.Errorf("timeout должен быть положительным, получено %s "+
+			"(чтобы не ограничивать, не задавайте его вовсе)", *r.Timeout)
+	}
+	if r.MaxRedirects != nil && *r.MaxRedirects < 0 {
+		return fmt.Errorf("max_redirects не может быть отрицательным, получено %d",
+			*r.MaxRedirects)
+	}
+	return nil
+}
+
+// followRedirects сообщает, переходить ли по 3xx для этого запроса.
+func (s *Session) followRedirects(r *Request) bool {
+	if r != nil && r.FollowRedirects != nil {
+		return *r.FollowRedirects
+	}
+	return s.opts.FollowRedirects
+}
+
+// maxRedirects возвращает предел длины цепочки для этого запроса.
+func (s *Session) maxRedirects(r *Request) int {
+	if r != nil && r.MaxRedirects != nil && *r.MaxRedirects > 0 {
+		return *r.MaxRedirects
+	}
+	return s.opts.MaxRedirects
 }
 
 // Response — ответ.
@@ -97,7 +224,25 @@ type Session struct {
 	jar     *cookiejar.Jar
 
 	mu    sync.Mutex
-	conns map[string]*conn
+	conns map[dialSpec][]*conn
+
+	// orphans — HTTP/2-соединения, выведенные из пула, но ещё доигрывающие
+	// текущие потоки. Без учёта они утекли бы вместе с горутиной чтения.
+	orphans map[*conn]struct{}
+
+	// closed под тем же мьютексом, что и пул: иначе запрос, начатый
+	// одновременно с Close, оставил бы соединение без владельца.
+	closed bool
+
+	// headers — заголовки, добавленные пользователем к сессии. Хранятся
+	// отдельно от профильных, чтобы ResetHeaders вернул чистый отпечаток.
+	headers *sessionHeaders
+
+	// device — телефон, от имени которого идут запросы этой сессии.
+	device profile.Device
+	// acceptCH — подсказки, запрошенные сайтом, по origin. Под тем же
+	// мьютексом, что и пул: заполняется из ответов, читается при сборке.
+	acceptCH map[string]map[string]bool
 
 	h3 h3Transport
 }
@@ -111,6 +256,9 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if _, err := profile.BuildSpec(p); err != nil {
 		return nil, err
 	}
+	if opts.Timeout < 0 {
+		return nil, fmt.Errorf("timeout не может быть отрицательным, получено %s", opts.Timeout)
+	}
 	if opts.Timeout == 0 {
 		opts.Timeout = 30 * time.Second
 	}
@@ -118,11 +266,37 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 		opts.MaxRedirects = DefaultMaxRedirects
 	}
 
+	// Устройство выбирается один раз на сессию. Список из опций
+	// перекрывает профильный: свои телефоны задаются, не трогая профиль.
+	if len(opts.Devices) > 0 {
+		clone := *p
+		clone.Devices = opts.Devices
+		p = &clone
+	}
+	var dev profile.Device
+	if opts.Device != "" {
+		var err error
+		if dev, err = p.PickDevice(opts.Device); err != nil {
+			return nil, err
+		}
+		// У профилей, где устройство стоит прямо в User-Agent, строка
+		// пересобирается: иначе подсказка сказала бы одно, а строка рядом
+		// другое — расхождение заметнее, чем одинаковый телефон у всех.
+		if ua := p.UserAgentFor(dev); ua != p.Headers.UserAgent {
+			clone := *p
+			clone.Headers.UserAgent = ua
+			p = &clone
+		}
+	}
+
 	s := &Session{
 		profile: p,
 		opts:    opts,
 		alpn:    alpnFromProfile(p),
-		conns:   make(map[string]*conn),
+		conns:   make(map[dialSpec][]*conn),
+		orphans: make(map[*conn]struct{}),
+		headers: newSessionHeaders(),
+		device:  dev,
 	}
 	if opts.ForceHTTP1 {
 		s.alpn = []string{"http/1.1"}
@@ -139,20 +313,54 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if opts.HTTP3 && !p.HTTP3.Enabled() {
 		return nil, fmt.Errorf("профиль %q не описывает HTTP/3", p.Name)
 	}
+	// Прокси для QUIC не реализован. Молча пойти напрямую нельзя: это раскрыло
+	// бы реальный адрес, ради сокрытия которого прокси и задавали.
+	if opts.HTTP3 && opts.Proxy != "" {
+		return nil, fmt.Errorf("прокси для HTTP/3 не поддерживается: QUIC требует " +
+			"CONNECT-UDP (RFC 9298), которого нет ни в одной доступной библиотеке. " +
+			"Уберите http3 или прокси")
+	}
 	return s, nil
 }
 
-// Close закрывает все соединения сессии.
+// Close закрывает все соединения сессии и запрещает дальнейшее использование.
+//
+// Без запрета параллельный запрос успевал создать соединение уже после
+// опустошения пула — и закрыть его было бы некому.
 func (s *Session) Close() {
-	s.closeH3()
-
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	for k, c := range s.conns {
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	s.closed = true
+	conns := s.conns
+	orphans := s.orphans
+	s.conns = map[dialSpec][]*conn{}
+	s.orphans = map[*conn]struct{}{}
+	s.mu.Unlock()
+
+	s.closeH3()
+	for _, list := range conns {
+		closeAll(list)
+	}
+	// Сироты доигрывали текущие потоки; при закрытии сессии ждать их незачем.
+	for c := range orphans {
 		c.close()
-		delete(s.conns, k)
 	}
 }
+
+// ensureOpen отвергает работу с закрытой сессией.
+func (s *Session) ensureOpen() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return errSessionClosed
+	}
+	return nil
+}
+
+var errSessionClosed = errors.New("сессия закрыта")
 
 // Do выполняет запрос, при необходимости проходя цепочку редиректов,
 // и возвращает тело целиком.
@@ -177,8 +385,16 @@ func (s *Session) Do(r *Request) (*Response, error) {
 }
 
 // prepare разворачивает multipart-форму в тело запроса.
+//
+// Карта заголовков копируется всегда: при повторе один и тот же *Request
+// проходит здесь дважды, и запись content-type в карту вызывающего исказила бы
+// его запрос, а с ним и отпечаток.
 func (s *Session) prepare(r *Request) (Request, error) {
 	out := *r
+	out.Headers = make(map[string]string, len(r.Headers))
+	for k, v := range r.Headers {
+		out.Headers[k] = v
+	}
 	if out.Multipart == nil {
 		return out, nil
 	}
@@ -190,9 +406,6 @@ func (s *Session) prepare(r *Request) (Request, error) {
 		return out, err
 	}
 	out.Body = body
-	if out.Headers == nil {
-		out.Headers = map[string]string{}
-	}
 	// Границу нельзя задать снаружи: она сгенерирована здесь и должна
 	// совпасть с телом.
 	out.Headers["content-type"] = contentType
@@ -200,50 +413,106 @@ func (s *Session) prepare(r *Request) (Request, error) {
 	return out, nil
 }
 
-// send выполняет один запрос без учёта редиректов. Тело ответа остаётся
-// открытым — закрыть его обязан вызывающий.
-func (s *Session) send(r *Request) (*http.Response, error) {
+// send выполняет один запрос без учёта редиректов.
+//
+// Тело ответа остаётся открытым, и вместе с ним возвращается отмена контекста:
+// вызвать её обязан тот, кто закрывает тело, иначе таймаут продолжит тикать
+// на уже завершённом запросе.
+// Возвращает и само соединение: вызывающий обязан отпустить его через
+// Session.release, когда тело дочитано.
+func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.CancelFunc, *conn, error) {
 	u, err := url.Parse(r.URL)
 	if err != nil {
-		return nil, fmt.Errorf("разбор URL: %w", err)
+		return nil, nil, nil, fmt.Errorf("разбор URL: %w", err)
 	}
 	if u.Scheme != "https" {
-		return nil, fmt.Errorf("поддерживается только https, получено %q", u.Scheme)
-	}
-
-	if s.opts.HTTP3 {
-		resp, err := s.sendH3(r, u)
-		if err != nil {
-			return nil, err
-		}
-		return fromStdResponse(resp), nil
+		return nil, nil, nil, fmt.Errorf("поддерживается только https, получено %q", u.Scheme)
 	}
 
 	method := r.Method
 	if method == "" {
 		method = http.MethodGet
 	}
-	var body io.Reader
-	if len(r.Body) > 0 {
-		body = bytes.NewReader(r.Body)
+
+	body, size, err := requestBody(r)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	req, err := http.NewRequest(method, r.URL, body)
 	if err != nil {
-		return nil, err
+		if c, ok := body.(io.Closer); ok {
+			c.Close()
+		}
+		return nil, nil, nil, err
 	}
-	s.applyHeaders(req, r, u)
-
-	c, err := s.conn(u)
-	if err != nil {
-		return nil, err
+	// Предел живёт в контексте запроса: HTTP/2 читает его сам,
+	// а HTTP/1.1 переносит на дедлайн сокета (см. conn.roundTrip).
+	//
+	// Дедлайн общий на всю цепочку, а не свой у каждого шага: иначе двадцать
+	// редиректов растянулись бы на двадцать таймаутов вместо одного.
+	// Отмена возвращается наружу и вызывается при закрытии тела: до этого
+	// момента чтение должно оставаться под тем же пределом.
+	var cancel context.CancelFunc
+	if !deadline.IsZero() {
+		var ctx context.Context
+		ctx, cancel = context.WithDeadline(context.Background(), deadline)
+		req = req.WithContext(ctx)
+	}
+	// Без явного размера транспорт перешёл бы на chunked-кодирование,
+	// которого браузер при отправке файла не использует.
+	if size >= 0 {
+		req.ContentLength = size
 	}
 
-	resp, err := c.roundTrip(req)
+	fail := func(err error) (*http.Response, context.CancelFunc, *conn, error) {
+		// Тело могло остаться открытым файлом: без закрытия дескриптор течёт,
+		// а с повторами — умножается на число попыток.
+		if c, ok := body.(io.Closer); ok {
+			c.Close()
+		}
+		if cancel != nil {
+			cancel()
+		}
+		return nil, nil, nil, err
+	}
+
+	// Ветка HTTP/3 стоит здесь, а не раньше: до создания контекста она
+	// уходила без таймаута вовсе, и зависший запрос висел бы вечно.
+	// Заголовки для неё собирает sendH3 сам: fhttp-запрос ей не нужен.
+	if s.opts.HTTP3 {
+		if r.Proxy != nil && *r.Proxy != "" {
+			return fail(fmt.Errorf("прокси для HTTP/3 не поддерживается " +
+				"(QUIC требует CONNECT-UDP, RFC 9298)"))
+		}
+		resp, err := s.sendH3(req.Context(), r, u)
+		if err != nil {
+			return fail(err)
+		}
+		// У HTTP/3 своё соединение внутри транспорта, отпускать нечего.
+		return fromStdResponse(resp), cancel, nil, nil
+	}
+
+	spec := newDialSpec(u, s.proxyFor(r), s.opts.ForceHTTP1)
+	c, err := s.conn(req.Context(), u, spec)
 	if err != nil {
-		// Соединение могло протухнуть — выбрасываем, чтобы следующий запрос
-		// переустановил TLS, а не бился в закрытый сокет.
-		s.drop(hostKey(u))
-		return nil, fmt.Errorf("запрос: %w", err)
+		// Соединения нет — запрос до сервера не дошёл, повтор безопасен.
+		return fail(&unprocessedError{err})
+	}
+	// Заголовки собираются после выбора соединения: порядок и регистр
+	// HTTP/1.1 зависят от того, что согласовал сервер, а не от опции.
+	s.applyHeaders(req, r, u, c.proto == "http/1.1")
+
+	resp, err := c.roundTrip(req.Context(), req)
+	if err != nil {
+		// Соединение больше непригодно. Для HTTP/2 закрываем мягко: жёсткое
+		// закрытие оборвало бы потоки соседних запросов.
+		s.release(c)
+		s.evict(c, c.h2 == nil)
+		err = fmt.Errorf("запрос: %w", err)
+		if c.h2 != nil && h2Unprocessed(err) {
+			return fail(&unprocessedError{err})
+		}
+		return fail(err)
 	}
 
 	if s.jar != nil {
@@ -251,52 +520,11 @@ func (s *Session) send(r *Request) (*http.Response, error) {
 			s.jar.SetCookies(u, cookies)
 		}
 	}
-	return resp, nil
+	return resp, cancel, c, nil
 }
 
-func (s *Session) conn(u *url.URL) (*conn, error) {
-	key := hostKey(u)
-
-	s.mu.Lock()
-	if c, ok := s.conns[key]; ok && c.usable() {
-		s.mu.Unlock()
-		return c, nil
-	}
-	s.mu.Unlock()
-
-	c, err := s.dial(u)
-	if err != nil {
-		return nil, err
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// Пока мы устанавливали соединение, его мог установить и другой вызов.
-	if old, ok := s.conns[key]; ok && old.usable() {
-		c.close()
-		return old, nil
-	}
-	if old, ok := s.conns[key]; ok {
-		old.close()
-	}
-	s.conns[key] = c
-	return c, nil
-}
-
-func (s *Session) drop(key string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if c, ok := s.conns[key]; ok {
-		c.close()
-		delete(s.conns, key)
-	}
-}
-
-func (s *Session) dial(u *url.URL) (*conn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), s.opts.Timeout)
-	defer cancel()
-
-	raw, err := s.dialRaw(ctx, hostKey(u))
+func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, error) {
+	raw, err := s.dialRaw(ctx, ds.addr, ds.proxy)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +540,10 @@ func (s *Session) dial(u *url.URL) (*conn, error) {
 	// ALPN живёт в самой спеке, и ApplyPreset перекрывает Config.NextProtos.
 	// Поэтому ограничение протокола — это правка расширения, а не конфигурации.
 	// Отпечаток при этом меняется законно: браузер без h2 так и выглядит.
-	if s.opts.ForceHTTP1 {
+	//
+	// Признак берётся из dialSpec, а не из опций сессии: он входит в ключ пула,
+	// и h1-соединение WebSocket не подменит собой h2-соединение обычных запросов.
+	if ds.forceHTTP1 {
 		if !setALPN(spec, []string{"http/1.1"}) {
 			raw.Close()
 			return nil, fmt.Errorf("force_http1: в профиле %q нет расширения ALPN", s.profile.Name)
@@ -351,9 +582,9 @@ func (s *Session) dial(u *url.URL) (*conn, error) {
 			uconn.Close()
 			return nil, fmt.Errorf("h2: %w", err)
 		}
-		return newH2Conn(cc), nil
+		return newH2Conn(cc, ds), nil
 	case "http/1.1", "":
-		return newH1Conn(uconn), nil
+		return newH1Conn(uconn, ds), nil
 	default:
 		uconn.Close()
 		return nil, fmt.Errorf("сервер согласовал %q — протокол не поддерживается", proto)
@@ -400,11 +631,4 @@ func (s *Session) transport() *http2.Transport {
 		}
 	}
 	return tr
-}
-
-func hostKey(u *url.URL) string {
-	if u.Port() != "" {
-		return u.Host
-	}
-	return net.JoinHostPort(u.Hostname(), "443")
 }

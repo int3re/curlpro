@@ -122,6 +122,27 @@
     ],
     "permute_extensions": false
   },
+  "http1": {
+    "order": [
+      "Host",
+      "User-Agent",
+      "Accept",
+      "Accept-Language",
+      "Accept-Encoding",
+      "Content-Type",
+      "Content-Length",
+      "Origin",
+      "Connection",
+      "Upgrade-Insecure-Requests",
+      "Sec-Fetch-Dest",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-User",
+      "Cookie",
+      "Priority"
+    ],
+    "connection": "keep-alive"
+  },
   "http2": {
     "settings": [
       {
@@ -171,6 +192,18 @@
         "value": "gzip, deflate, br, zstd"
       },
       {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
         "key": "upgrade-insecure-requests",
         "value": "1"
       },
@@ -191,6 +224,10 @@
         "value": "?1"
       },
       {
+        "key": "cookie",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": "u=0, i"
       },
@@ -198,6 +235,161 @@
         "key": "te",
         "value": "trailers"
       }
+    ],
+    "custom_anchor": "connection, upgrade-insecure-requests"
+  },
+  "websocket": {
+    "order": [
+      {
+        "key": "Host",
+        "value": ""
+      },
+      {
+        "key": "User-Agent",
+        "value": ""
+      },
+      {
+        "key": "Accept",
+        "value": "*/*"
+      },
+      {
+        "key": "Accept-Language",
+        "value": ""
+      },
+      {
+        "key": "Accept-Encoding",
+        "value": ""
+      },
+      {
+        "key": "Sec-WebSocket-Version",
+        "value": "13"
+      },
+      {
+        "key": "Origin",
+        "value": ""
+      },
+      {
+        "key": "Sec-WebSocket-Extensions",
+        "value": "permessage-deflate"
+      },
+      {
+        "key": "Sec-WebSocket-Key",
+        "value": ""
+      },
+      {
+        "key": "Sec-WebSocket-Protocol",
+        "value": ""
+      },
+      {
+        "key": "Connection",
+        "value": "Upgrade"
+      },
+      {
+        "key": "Cookie",
+        "value": ""
+      },
+      {
+        "key": "Sec-Fetch-Dest",
+        "value": "empty"
+      },
+      {
+        "key": "Sec-Fetch-Mode",
+        "value": "websocket"
+      },
+      {
+        "key": "Sec-Fetch-Site",
+        "value": "same-origin"
+      },
+      {
+        "key": "Pragma",
+        "value": "no-cache"
+      },
+      {
+        "key": "Cache-Control",
+        "value": "no-cache"
+      },
+      {
+        "key": "Upgrade",
+        "value": "websocket"
+      }
     ]
+  },
+  "fetch": {
+    "order": [
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "*/*"
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "empty"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "cors"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "same-origin"
+      },
+      {
+        "key": "priority",
+        "value": "u=4"
+      },
+      {
+        "key": "te",
+        "value": "trailers"
+      }
+    ],
+    "http1_order": [
+      "Host",
+      "User-Agent",
+      "Accept",
+      "Accept-Language",
+      "Accept-Encoding",
+      "Referer",
+      "Content-Type",
+      "Content-Length",
+      "Origin",
+      "Connection",
+      "Cookie",
+      "Sec-Fetch-Dest",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Site",
+      "Priority"
+    ],
+    "custom_anchor": "content-length, origin, connection, sec-fetch-dest"
   }
 }

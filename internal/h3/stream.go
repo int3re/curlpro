@@ -14,6 +14,8 @@ import (
 	"github.com/refraction-networking/uquic/qlogwriter"
 
 	"github.com/quic-go/qpack"
+
+	qp "github.com/curlpro/curlpro/internal/qpack"
 )
 
 type datagramStream interface {
@@ -165,7 +167,7 @@ type RequestStream struct {
 
 	responseBody io.ReadCloser // set by ReadResponse
 
-	decoder            *qpack.Decoder
+	decoder            *qp.Decoder
 	requestWriter      *requestWriter
 	maxHeaderBytes     int
 	reqDone            chan<- struct{}
@@ -181,7 +183,7 @@ func newRequestStream(
 	str *Stream,
 	requestWriter *requestWriter,
 	reqDone chan<- struct{},
-	decoder *qpack.Decoder,
+	decoder *qp.Decoder,
 	disableCompression bool,
 	maxHeaderBytes int,
 	rsp *http.Response,
@@ -345,7 +347,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		return nil, fmt.Errorf("http3: failed to read response headers: %w", err)
 	}
-	decodeFn := s.decoder.Decode(headerBlock)
+	decodeFn := s.decoder.Decode(uint64(s.str.StreamID()), headerBlock)
 	var hfs []qpack.HeaderField
 	if s.str.qlogger != nil {
 		hfs = make([]qpack.HeaderField, 0, 16)

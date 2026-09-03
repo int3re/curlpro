@@ -22,7 +22,7 @@ func mustRegister(t *testing.T, r *Registry, jsons ...string) {
 func TestResolveInheritance(t *testing.T) {
 	r := NewRegistry()
 	mustRegister(t, r,
-		`{"name":"base","tls":{"raw_client_hello":"AAAA","signature_algorithms":[1,2]},
+		`{"name":"base","tls":{"raw_client_hello":"AAAA","signature_algorithms":[1,2],"permute_extensions":false},
 		  "http2":{"connection_window_update":15663105,"pseudo_order":[":method",":path"]},
 		  "headers":{"user_agent":"base-ua","order":[{"key":"user-agent","value":""}]}}`,
 		`{"name":"child","based_on":"base","tls":{"signature_algorithms":[9,9,9]},

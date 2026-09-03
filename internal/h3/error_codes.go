@@ -28,6 +28,8 @@ const (
 	ErrCodeVersionFallback          ErrCode = 0x110
 	ErrCodeDatagramError            ErrCode = 0x33
 	ErrCodeQPACKDecompressionFailed ErrCode = 0x200
+	ErrCodeQPACKEncoderStreamError  ErrCode = 0x201
+	ErrCodeQPACKDecoderStreamError  ErrCode = 0x202
 )
 
 func (e ErrCode) String() string {

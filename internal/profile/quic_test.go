@@ -87,7 +87,8 @@ func TestApplyQUICFixesParrotDivergences(t *testing.T) {
 
 func TestApplyQUICCanKeepInitialRTT(t *testing.T) {
 	spec := specWithQUIC()
-	if err := ApplyQUIC(spec, &QUICSpec{SendInitialRTT: true}); err != nil {
+	keep := true
+	if err := ApplyQUIC(spec, &QUICSpec{SendInitialRTT: &keep}); err != nil {
 		t.Fatalf("ApplyQUIC: %v", err)
 	}
 	for _, p := range params(t, spec) {
@@ -98,8 +99,27 @@ func TestApplyQUICCanKeepInitialRTT(t *testing.T) {
 	t.Error("google_initial_rtt удалён, хотя запрошен явно")
 }
 
-// Порядок версий — единственное расхождение, не разрешённое захватом,
-// поэтому он обязан быть настраиваемым в обе стороны.
+// Без явного значения порядок версий разыгрывается: захват Chrome 152 дал
+// оба варианта. За 64 соединения обязаны встретиться оба.
+func TestApplyQUICVersionOrderIsRandomByDefault(t *testing.T) {
+	seen := map[bool]bool{}
+	for i := 0; i < 64 && len(seen) < 2; i++ {
+		spec := specWithQUIC()
+		if err := ApplyQUIC(spec, &QUICSpec{}); err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range params(t, spec) {
+			if v, ok := p.(*utls.VersionInformation); ok {
+				seen[v.AvailableVersions[0] == utls.VERSION_GREASE] = true
+			}
+		}
+	}
+	if len(seen) != 2 {
+		t.Errorf("за 64 соединения встретился только один порядок: %v", seen)
+	}
+}
+
+// Явное значение фиксирует порядок в обе стороны.
 func TestApplyQUICVersionOrder(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
