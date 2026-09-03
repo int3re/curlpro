@@ -15,6 +15,12 @@ jobs:
           go-version: "1.27"
           cache: true
 
+      # Сертификат стенда в репозиторий не входит: приватный ключ там ни к чему.
+      # Тесты HTTP/3, WebSocket и повторов поднимают локальный TLS-сервер и
+      # без него падают — на первом же прогоне CI это и всплыло.
+      - name: certs
+        run: bash scripts/gen-certs.sh
+
       - name: vet
         run: go vet ./internal/... ./cmd/...
 
@@ -41,6 +47,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      # Сертификат стенда в репозиторий не входит: приватный ключ там ни к чему.
+      # Тесты HTTP/3, WebSocket и повторов поднимают локальный TLS-сервер и
+      # без него падают — на первом же прогоне CI это и всплыло.
+      - name: certs
+        run: bash scripts/gen-certs.sh
 
       - name: build native library
         run: CGO_ENABLED=1 go build -buildmode=c-shared -o dist/libcurlpro.so ./lib
