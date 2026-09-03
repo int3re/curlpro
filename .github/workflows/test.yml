@@ -1,0 +1,58 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+
+      - name: vet
+        run: go vet ./internal/... ./cmd/...
+
+      - name: tests
+        run: go test ./internal/...
+
+      # Отдельная цель: собрать нативную библиотеку. Пакеты internal/h3
+      # и internal/client тестами не покрыты, и без сборки поломка в них
+      # всплыла бы только при выпуске wheels.
+      - name: build c-shared
+        run: |
+          CGO_ENABLED=1 go build -buildmode=c-shared -o dist/libcurlpro.so ./lib
+          ls -la dist/
+
+  python:
+    runs-on: ubuntu-latest
+    needs: go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: build native library
+        run: CGO_ENABLED=1 go build -buildmode=c-shared -o dist/libcurlpro.so ./lib
+
+      - name: install
+        run: pip install pytest ./python
+
+      # Тесты ходят в интернет: httpbin.org, browserleaks, quic.browserleaks.
+      # Сетевые сбои не должны валить сборку, поэтому один повтор.
+      - name: tests
+        env:
+          CURLPRO_LIBRARY: ${{ github.workspace }}/dist/libcurlpro.so
+        run: |
+          cd python
+          python -m pytest tests -q --tb=short || python -m pytest tests -q --tb=short --lf

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "curlpro"
+version = "0.1.0"
+description = "HTTP-клиент с сетевым отпечатком браузера: TLS ClientHello, кадры HTTP/2, порядок заголовков"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["tls", "ja3", "ja4", "http2", "fingerprint", "impersonate", "scraping"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Go",
+    "Topic :: Internet :: WWW/HTTP",
+]
+
+[project.urls]
+Source = "https://github.com/curlpro/curlpro"
+
+[tool.setuptools]
+packages = ["curlpro"]
+
+# В колесо кладутся нативная библиотека и профили: без профилей библиотека
+# бесполезна, а требовать их отдельной загрузки — лишний шаг для пользователя.
+# Оба каталога наполняются на этапе сборки (.github/workflows/wheels.yml).
+[tool.setuptools.package-data]
+curlpro = ["lib/*", "profiles/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

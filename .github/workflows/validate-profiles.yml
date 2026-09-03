@@ -1,0 +1,46 @@
+name: validate-profiles
+
+# Профили протухают не от коммитов, а от изменений на стороне браузеров
+# и сервисов проверки. Поэтому валидация идёт по расписанию, а не только
+# на push: иначе расхождение всплывёт у пользователя, а не в CI.
+on:
+  schedule:
+    - cron: "17 4 * * 1" # еженедельно, понедельник
+  workflow_dispatch:
+  push:
+    paths:
+      - "profiles/**"
+      - "internal/profile/**"
+      - "internal/client/**"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+
+      # Спека каждого профиля должна собираться — это проверка самих данных,
+      # не требующая сети.
+      - name: собрать все профили
+        run: go run ./cmd/curlpro list
+
+      # Внешний оракул срывается на серии запросов, поэтому пауза между
+      # профилями и умеренная частота запуска.
+      - name: сверить отпечатки
+        run: |
+          go run ./cmd/curlpro validate \
+            -oracle https://tls.browserleaks.com/json \
+            -baselines reference/baselines \
+            -pause 2s
+
+      - name: показать расхождения
+        if: failure()
+        run: |
+          echo "Отпечаток разошёлся с эталоном."
+          echo "Если изменение ожидаемо (обновился профиль или сервис),"
+          echo "пополните эталон: curlpro validate -update"
+          git diff --stat reference/baselines || true

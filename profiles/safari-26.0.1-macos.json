@@ -1,0 +1,181 @@
+{
+  "name": "safari-26.0.1-macos",
+  "tls": {
+    "cipher_suites": [
+      2570,
+      4866,
+      4867,
+      4865,
+      49196,
+      49195,
+      52393,
+      49200,
+      49199,
+      52392,
+      49162,
+      49161,
+      49172,
+      49171,
+      157,
+      156,
+      53,
+      47,
+      49160,
+      49170,
+      10
+    ],
+    "compression_methods": "AA==",
+    "extensions": [
+      {
+        "type": "GREASE"
+      },
+      {
+        "type": "server_name"
+      },
+      {
+        "type": "extended_master_secret"
+      },
+      {
+        "type": "renegotiation_info"
+      },
+      {
+        "type": "supported_groups",
+        "groups": [
+          2570,
+          4588,
+          29,
+          23,
+          24,
+          25
+        ]
+      },
+      {
+        "type": "ec_point_formats",
+        "formats": "AA=="
+      },
+      {
+        "type": "application_layer_protocol_negotiation",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ]
+      },
+      {
+        "type": "status_request"
+      },
+      {
+        "type": "signature_algorithms",
+        "algorithms": [
+          1027,
+          2052,
+          1025,
+          1283,
+          2053,
+          2053,
+          1281,
+          2054,
+          1537,
+          513
+        ]
+      },
+      {
+        "type": "signed_certificate_timestamp"
+      },
+      {
+        "type": "key_share",
+        "groups": [
+          2570,
+          4588,
+          29
+        ]
+      },
+      {
+        "type": "psk_key_exchange_modes",
+        "modes": "AQ=="
+      },
+      {
+        "type": "supported_versions",
+        "versions": [
+          2570,
+          772,
+          771
+        ]
+      },
+      {
+        "type": "compress_certificate",
+        "algorithms": [
+          1
+        ]
+      },
+      {
+        "type": "GREASE"
+      }
+    ],
+    "permute_extensions": false
+  },
+  "http2": {
+    "settings": [
+      {
+        "id": 2,
+        "value": 0
+      },
+      {
+        "id": 3,
+        "value": 100
+      },
+      {
+        "id": 4,
+        "value": 2097152
+      },
+      {
+        "id": 9,
+        "value": 1
+      }
+    ],
+    "connection_window_update": 10420225,
+    "pseudo_order": [
+      ":method",
+      ":scheme",
+      ":authority",
+      ":path"
+    ],
+    "stream_weight": 0
+  },
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0.1 Safari/605.1.15",
+    "order": [
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "accept-language",
+        "value": "en-US,en;q=0.9"
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br"
+      }
+    ]
+  }
+}

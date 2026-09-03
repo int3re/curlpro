@@ -1,0 +1,203 @@
+{
+  "name": "firefox-133-macos",
+  "tls": {
+    "cipher_suites": [
+      4865,
+      4867,
+      4866,
+      49195,
+      49199,
+      52393,
+      52392,
+      49196,
+      49200,
+      49162,
+      49161,
+      49171,
+      49172,
+      156,
+      157,
+      47,
+      53
+    ],
+    "compression_methods": "AA==",
+    "extensions": [
+      {
+        "type": "server_name"
+      },
+      {
+        "type": "extended_master_secret"
+      },
+      {
+        "type": "renegotiation_info"
+      },
+      {
+        "type": "supported_groups",
+        "groups": [
+          4588,
+          29,
+          23,
+          24,
+          25,
+          256,
+          257
+        ]
+      },
+      {
+        "type": "ec_point_formats",
+        "formats": "AA=="
+      },
+      {
+        "type": "session_ticket"
+      },
+      {
+        "type": "application_layer_protocol_negotiation",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ]
+      },
+      {
+        "type": "status_request"
+      },
+      {
+        "type": "delegated_credentials",
+        "algorithms": [
+          1027,
+          1283,
+          1539,
+          515
+        ]
+      },
+      {
+        "type": "key_share",
+        "groups": [
+          4588,
+          29,
+          23
+        ]
+      },
+      {
+        "type": "supported_versions",
+        "versions": [
+          772,
+          771
+        ]
+      },
+      {
+        "type": "signature_algorithms",
+        "algorithms": [
+          1027,
+          1283,
+          1539,
+          2052,
+          2053,
+          2054,
+          1025,
+          1281,
+          1537,
+          515,
+          513
+        ]
+      },
+      {
+        "type": "psk_key_exchange_modes",
+        "modes": "AQ=="
+      },
+      {
+        "type": "record_size_limit",
+        "limit": 16385
+      },
+      {
+        "type": "compress_certificate",
+        "algorithms": [
+          1,
+          2,
+          3
+        ]
+      },
+      {
+        "type": "encrypted_client_hello"
+      }
+    ],
+    "permute_extensions": false
+  },
+  "http2": {
+    "settings": [
+      {
+        "id": 1,
+        "value": 65536
+      },
+      {
+        "id": 2,
+        "value": 0
+      },
+      {
+        "id": 4,
+        "value": 131072
+      },
+      {
+        "id": 5,
+        "value": 16384
+      }
+    ],
+    "connection_window_update": 12517377,
+    "pseudo_order": [
+      ":method",
+      ":path",
+      ":authority",
+      ":scheme"
+    ],
+    "stream_weight": 42,
+    "stream_exclusive": false
+  },
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
+    "order": [
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      },
+      {
+        "key": "accept-language",
+        "value": "en-US,en;q=0.5"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      },
+      {
+        "key": "te",
+        "value": "trailers"
+      }
+    ]
+  }
+}

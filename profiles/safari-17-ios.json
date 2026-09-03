@@ -1,0 +1,61 @@
+{
+  "based_on": "safari-15.5-macos",
+  "headers": {
+    "order": [
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": "en-US,en;q=0.9"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      }
+    ],
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
+  },
+  "http2": {
+    "connection_window_update": 10485760,
+    "pseudo_order": [
+      ":method",
+      ":scheme",
+      ":path",
+      ":authority"
+    ],
+    "settings": [
+      {
+        "id": 2,
+        "value": 0
+      },
+      {
+        "id": 4,
+        "value": 2097152
+      },
+      {
+        "id": 3,
+        "value": 100
+      }
+    ],
+    "stream_weight": 0
+  },
+  "name": "safari-17-ios"
+}

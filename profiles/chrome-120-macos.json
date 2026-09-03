@@ -1,0 +1,203 @@
+{
+  "name": "chrome-120-macos",
+  "tls": {
+    "cipher_suites": [
+      2570,
+      4865,
+      4866,
+      4867,
+      49195,
+      49199,
+      49196,
+      49200,
+      52393,
+      52392,
+      49171,
+      49172,
+      156,
+      157,
+      47,
+      53
+    ],
+    "compression_methods": "AA==",
+    "extensions": [
+      {
+        "type": "GREASE"
+      },
+      {
+        "type": "server_name"
+      },
+      {
+        "type": "renegotiation_info"
+      },
+      {
+        "type": "ec_point_formats",
+        "formats": "AA=="
+      },
+      {
+        "type": "signed_certificate_timestamp"
+      },
+      {
+        "type": "application_settings",
+        "alpn": [
+          "h2"
+        ]
+      },
+      {
+        "type": "signature_algorithms",
+        "algorithms": [
+          1027,
+          2052,
+          1025,
+          1283,
+          2053,
+          1281,
+          2054,
+          1537
+        ]
+      },
+      {
+        "type": "session_ticket"
+      },
+      {
+        "type": "extended_master_secret"
+      },
+      {
+        "type": "compress_certificate",
+        "algorithms": [
+          2
+        ]
+      },
+      {
+        "type": "status_request"
+      },
+      {
+        "type": "encrypted_client_hello"
+      },
+      {
+        "type": "key_share",
+        "groups": [
+          2570,
+          29
+        ]
+      },
+      {
+        "type": "application_layer_protocol_negotiation",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ]
+      },
+      {
+        "type": "psk_key_exchange_modes",
+        "modes": "AQ=="
+      },
+      {
+        "type": "supported_groups",
+        "groups": [
+          2570,
+          29,
+          23,
+          24
+        ]
+      },
+      {
+        "type": "supported_versions",
+        "versions": [
+          2570,
+          772,
+          771
+        ]
+      },
+      {
+        "type": "GREASE"
+      },
+      {
+        "type": "pre_shared_key"
+      }
+    ],
+    "permute_extensions": true
+  },
+  "http2": {
+    "settings": [
+      {
+        "id": 1,
+        "value": 65536
+      },
+      {
+        "id": 2,
+        "value": 0
+      },
+      {
+        "id": 4,
+        "value": 6291456
+      },
+      {
+        "id": 6,
+        "value": 262144
+      }
+    ],
+    "connection_window_update": 15663105,
+    "pseudo_order": [
+      ":method",
+      ":authority",
+      ":scheme",
+      ":path"
+    ],
+    "stream_weight": 256,
+    "stream_exclusive": true
+  },
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "order": [
+      {
+        "key": "sec-ch-ua",
+        "value": "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": "?0"
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": "\"macOS\""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br"
+      },
+      {
+        "key": "accept-language",
+        "value": "en-US,en;q=0.9"
+      }
+    ]
+  }
+}

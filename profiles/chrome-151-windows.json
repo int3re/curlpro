@@ -1,0 +1,144 @@
+{
+  "name": "chrome-151-windows",
+  "tls": {
+    "raw_client_hello": "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",
+    "signature_algorithms": [
+      2308,
+      2309,
+      2310,
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537
+    ],
+    "permute_extensions": true
+  },
+  "http2": {
+    "settings": [
+      {
+        "id": 1,
+        "value": 65536
+      },
+      {
+        "id": 2,
+        "value": 0
+      },
+      {
+        "id": 4,
+        "value": 6291456
+      },
+      {
+        "id": 6,
+        "value": 262144
+      }
+    ],
+    "connection_window_update": 15663105,
+    "pseudo_order": [
+      ":method",
+      ":authority",
+      ":scheme",
+      ":path"
+    ],
+    "stream_weight": 256,
+    "stream_exclusive": true
+  },
+  "http3": {
+    "settings": [
+      {
+        "id": 1,
+        "value": 65536
+      },
+      {
+        "id": 6,
+        "value": 262144
+      },
+      {
+        "id": 7,
+        "value": 100
+      },
+      {
+        "id": 51,
+        "value": 1
+      }
+    ],
+    "settings_order": [
+      1,
+      6,
+      7,
+      51
+    ],
+    "pseudo_order": [
+      ":method",
+      ":authority",
+      ":scheme",
+      ":path"
+    ],
+    "send_grease_frame": true,
+    "priority_param": 984832
+  },
+  "quic": {
+    "parrot": "chrome146",
+    "connection_options": "ORIG"
+  },
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "order": [
+      {
+        "key": "sec-ch-ua",
+        "value": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": "?0"
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": "\"Windows\""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      },
+      {
+        "key": "accept-language",
+        "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      }
+    ]
+  }
+}

@@ -1,0 +1,93 @@
+name: wheels
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Нативная библиотека собирается cgo, а cgo не кросс-компилируется без
+# тулчейна целевой платформы. Поэтому каждая платформа собирается на себе,
+# а не одной машиной с флагами GOOS/GOARCH.
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goarch: amd64
+            lib: libcurlpro.so
+            plat: manylinux_2_28_x86_64
+          - os: ubuntu-24.04-arm
+            goarch: arm64
+            lib: libcurlpro.so
+            plat: manylinux_2_28_aarch64
+          - os: macos-13
+            goarch: amd64
+            lib: libcurlpro.dylib
+            plat: macosx_10_15_x86_64
+          - os: macos-latest
+            goarch: arm64
+            lib: libcurlpro.dylib
+            plat: macosx_11_0_arm64
+          - os: windows-latest
+            goarch: amd64
+            lib: curlpro.dll
+            plat: win_amd64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: build native library
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -buildmode=c-shared -o "python/curlpro/lib/${{ matrix.lib }}" ./lib
+          ls -la python/curlpro/lib/
+
+      # Профили едут внутри пакета: без них библиотека бесполезна,
+      # а требовать от пользователя отдельной загрузки — лишний шаг.
+      - name: вложить профили
+        shell: bash
+        run: cp -r profiles python/curlpro/profiles
+
+      - name: build wheel
+        shell: bash
+        run: |
+          python -m pip install --upgrade build wheel
+          cd python
+          python -m build --wheel
+          # Тег платформы проставляется явно: колесо содержит нативный
+          # код и не является universal.
+          python -m pip install wheel
+          for w in dist/*.whl; do
+            python -m wheel tags --platform-tag ${{ matrix.plat }} --remove "$w"
+          done
+          ls -la dist/
+
+      - name: проверить, что колесо ставится и работает
+        shell: bash
+        run: |
+          python -m pip install python/dist/*.whl
+          python -c "
+          import curlpro, pathlib
+          names = curlpro.load_profiles(pathlib.Path(curlpro.__file__).parent / 'profiles')
+          assert 'chrome-151-windows' in names, names
+          r = curlpro.get('https://tls.browserleaks.com/json')
+          print('JA4:', r.json()['ja4'])
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.plat }}
+          path: python/dist/*.whl

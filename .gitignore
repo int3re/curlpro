@@ -1,0 +1,44 @@
+# Скачиваемые бинарники стенда (см. docs/CAPTURE.md — берутся из релизов fingerproxy)
+tools/*.exe
+tools/echo-server_*
+tools/fingerproxy_*
+
+# Приватный ключ самоподписанного сертификата — генерируется локально
+capture/certs/tls.key
+capture/certs/tls.crt
+
+# Сырые сэмплы захвата: объёмны и воспроизводимы; в репозиторий идёт
+# только нормализованный эталон из reference/
+capture/samples/
+
+# Исходный корпус curl-impersonate: скачивается ./cmd/import, в репозиторий
+# идут только полученные из него профили в profiles/
+corpus/
+
+# Эталоны, снятые с локального стенда: зависят от машины и сертификата.
+# Эталоны с публичного оракула (reference/baselines/) — наоборот, коммитятся.
+reference/baselines-local/
+
+# Go / нативная сборка
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.h
+vendor/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+.pytest_cache/
+
+# Наполняются на этапе сборки колеса: нативная библиотека и копия профилей.
+# Исходники живут в dist/ и profiles/ соответственно.
+python/curlpro/lib/
+python/curlpro/profiles/
+python/dist/

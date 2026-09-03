@@ -1,0 +1,97 @@
+{
+  "captured": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "samples": 6,
+    "ja4": [
+      "t13d1516h2_8daaf6152771_806a8c22fdea"
+    ],
+    "ja3_hashes": [
+      "3c8e57318212c0db4c31b846dbae2108",
+      "5d87cd2ee0e52cfc6bcf9f58f50e7186",
+      "660278303c0d5006dd5b913e9353ab61",
+      "8f6df4317b3bb304fa6505f918dc457b",
+      "c499901c396a7bd2fefd198845b6dc83",
+      "dd08378fb23bbb37fb6c4a7cd62a24fb"
+    ]
+  },
+  "tls": {
+    "extensions_normalized": [
+      0,
+      5,
+      10,
+      11,
+      13,
+      16,
+      18,
+      23,
+      27,
+      35,
+      43,
+      45,
+      51,
+      17613,
+      65037,
+      65281
+    ],
+    "extensions_readable": [
+      "server_name (0x0000)",
+      "status_request (0x0005)",
+      "supported_groups (0x000a)",
+      "ec_point_formats (0x000b)",
+      "signature_algorithms (0x000d)",
+      "alpn (0x0010)",
+      "signed_certificate_timestamp (0x0012)",
+      "extended_master_secret (0x0017)",
+      "compress_certificate (0x001b)",
+      "session_ticket (0x0023)",
+      "supported_versions (0x002b)",
+      "psk_key_exchange_modes (0x002d)",
+      "key_share (0x0033)",
+      "application_settings_new (0x44cd)",
+      "encrypted_client_hello (0xfe0d)",
+      "renegotiation_info (0xff01)"
+    ],
+    "grease_positions": {
+      "first": 6,
+      "last": 6
+    },
+    "cipher_suites": [
+      4865,
+      4866,
+      4867,
+      49195,
+      49199,
+      49196,
+      49200,
+      52393,
+      52392,
+      49171,
+      49172,
+      156,
+      157,
+      47,
+      53
+    ],
+    "signature_algorithms": [
+      2308,
+      2309,
+      2310,
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537
+    ],
+    "supported_groups_readable": [
+      "unknown (0xcaca)",
+      "unknown (0x11ec)",
+      "x25519 (0x1d)",
+      "secp256r1 (0x17)",
+      "secp384r1 (0x18)"
+    ]
+  },
+  "raw_client_hello_b64": "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"
+}
