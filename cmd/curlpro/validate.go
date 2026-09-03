@@ -34,10 +34,13 @@ type baseline struct {
 	// фиксировать единственное значение было бы ошибкой.
 	JA4 []string `json:"ja4"`
 
-	JA3N      string `json:"ja3n,omitempty"`
-	Akamai    string `json:"akamai,omitempty"`
-	Recorded  string `json:"recorded"`
-	UserAgent string `json:"user_agent,omitempty"`
+	// JA3N — тоже множество: у профилей с padding колеблется и он. Первый
+	// же прогон в CI это и показал, когда JA4 уже был списком, а JA3N нет.
+	// Старые эталоны со строкой читаются как список из одного значения.
+	JA3N      stringSet `json:"ja3n,omitempty"`
+	Akamai    string    `json:"akamai,omitempty"`
+	Recorded  string    `json:"recorded"`
+	UserAgent string    `json:"user_agent,omitempty"`
 }
 
 // anyJA4 отключает сверку отпечатка для оракула, который считает его иначе.
@@ -48,6 +51,56 @@ type baseline struct {
 // спецификации, GREASE игнорирует, и там отпечаток стабилен: сверять эти
 // профили нужно по reference/baselines, а локально — по остальным полям.
 const anyJA4 = "*"
+
+// stringSet читается и как строка, и как список: формат эталона менялся,
+// а перезаписывать разом все файлы ради этого незачем.
+type stringSet []string
+
+func (s *stringSet) UnmarshalJSON(data []byte) error {
+	var one string
+	if err := json.Unmarshal(data, &one); err == nil {
+		if one == "" {
+			*s = nil
+		} else {
+			*s = stringSet{one}
+		}
+		return nil
+	}
+	var many []string
+	if err := json.Unmarshal(data, &many); err != nil {
+		return err
+	}
+	*s = many
+	return nil
+}
+
+// newSet заворачивает значение, пропуская пустое: локальный стенд JA3N
+// не отдаёт вовсе, и пустая строка в наборе ломала бы сверку.
+func newSet(v string) stringSet {
+	if v == "" {
+		return nil
+	}
+	return stringSet{v}
+}
+
+func (s stringSet) has(v string) bool {
+	for _, x := range s {
+		if x == v || x == anyJA4 {
+			return true
+		}
+	}
+	return false
+}
+
+// with добавляет значение, сохраняя порядок и не плодя дубликатов.
+func (s stringSet) with(v string) stringSet {
+	if v == "" || s.has(v) {
+		return s
+	}
+	out := append(append(stringSet{}, s...), v)
+	sort.Strings(out)
+	return out
+}
 
 func (b baseline) allows(ja4 string) bool {
 	for _, v := range b.JA4 {
@@ -202,7 +255,7 @@ func validateOne(reg *profile.Registry, name, oracle, refDir string,
 	got := baseline{
 		Profile:   name,
 		Oracle:    oracle,
-		JA3N:      reply.ja3n(),
+		JA3N:      newSet(reply.ja3n()),
 		JA4:       []string{reply.JA4},
 		Akamai:    reply.akamai(),
 		UserAgent: p.Headers.UserAgent,
@@ -225,21 +278,32 @@ func validateOne(reg *profile.Registry, name, oracle, refDir string,
 		return "recorded", writeBaseline(path, got)
 	}
 
-	if old.allows(got.JA4[0]) {
-		if diff := compareRest(*old, got); diff != "" {
-			return diff, nil
-		}
+	knownJA4 := old.allows(got.JA4[0])
+	diff := compareRest(*old, got)
+	if knownJA4 && diff == "" {
 		return "match", nil
 	}
 
 	if update {
 		// Пополняем набор, а не затираем: у профилей с padding отпечаток
-		// законно колеблется между несколькими значениями.
+		// законно колеблется между несколькими значениями. Пополнять нужно
+		// при любом расхождении, а не только по JA4: раньше расхождение
+		// одного JA3N записать было нельзя вовсе, и прогон в CI падал на нём
+		// каждый раз, когда выпадал второй вариант.
 		merged := *old
-		merged.JA4 = append(append([]string{}, old.JA4...), got.JA4[0])
-		sort.Strings(merged.JA4)
-		merged.JA3N, merged.Akamai = got.JA3N, got.Akamai
+		if !knownJA4 {
+			merged.JA4 = append(append([]string{}, old.JA4...), got.JA4[0])
+			sort.Strings(merged.JA4)
+		}
+		if len(got.JA3N) > 0 {
+			merged.JA3N = old.JA3N.with(got.JA3N[0])
+		}
+		merged.Akamai = got.Akamai
 		return "recorded", writeBaseline(path, merged)
+	}
+
+	if knownJA4 {
+		return diff, nil
 	}
 
 	return fmt.Sprintf("JA4 %s не входит в [%s]",
@@ -300,8 +364,9 @@ func checkExtensionOrder(p *profile.Profile, oracle string, insecure bool, timeo
 
 func compareRest(want, got baseline) string {
 	var out []string
-	if want.JA3N != "" && want.JA3N != got.JA3N {
-		out = append(out, fmt.Sprintf("JA3N %s -> %s", want.JA3N, got.JA3N))
+	if len(want.JA3N) > 0 && len(got.JA3N) > 0 && !want.JA3N.has(got.JA3N[0]) {
+		out = append(out, fmt.Sprintf("JA3N %s -> %s",
+			strings.Join(want.JA3N, " "), got.JA3N[0]))
 	}
 	if want.Akamai != "" && want.Akamai != got.Akamai {
 		out = append(out, fmt.Sprintf("Akamai %s -> %s", want.Akamai, got.Akamai))
