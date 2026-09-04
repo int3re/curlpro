@@ -6,20 +6,20 @@ import (
 	"sync"
 )
 
-// Заголовки, добавленные к сессии пользователем.
+// Headers the user added to the session.
 //
-// Хранятся отдельно от профильных, чтобы Reset мог убрать только их: смысл
-// в том, чтобы вернуться к чистому отпечатку браузера, а не обнулить всё.
+// Stored apart from the profile's so that Reset can drop only these: the point
+// is to return to the plain browser fingerprint, not to clear everything.
 //
-// Порядок добавления сохраняется. Новое имя уходит в конец списка — так же
-// поступает браузер, добавляя заголовок к запросу через fetch(). Если же
-// пользователь переопределяет заголовок, который есть в профиле, меняется
-// только значение: перенос его в конец сломал бы порядок отпечатка.
+// The insertion order is preserved. A new name goes to the end of the list —
+// the same thing a browser does when fetch() adds a header. When the user
+// overrides a header the profile already sets, only the value changes: moving
+// it to the end would break the fingerprint's order.
 type sessionHeaders struct {
 	mu     sync.RWMutex
-	values map[string]string // ключ — имя в нижнем регистре
-	names  map[string]string // нижний регистр -> имя как задал пользователь
-	order  []string          // имена в нижнем регистре, в порядке добавления
+	values map[string]string // key is the lowercase name
+	names  map[string]string // lowercase -> the name as the user wrote it
+	order  []string          // lowercase names, in insertion order
 }
 
 func newSessionHeaders() *sessionHeaders {
@@ -29,7 +29,7 @@ func newSessionHeaders() *sessionHeaders {
 	}
 }
 
-// Set добавляет или заменяет заголовок.
+// Set adds or replaces a header.
 func (h *sessionHeaders) Set(name, value string) {
 	key := strings.ToLower(name)
 
@@ -42,9 +42,9 @@ func (h *sessionHeaders) Set(name, value string) {
 	h.names[key] = name
 }
 
-// Remove убирает заголовок по имени без учёта регистра.
-// Сообщает, был ли он задан: молчаливое «удалили несуществующее» скрыло бы
-// опечатку в имени.
+// Remove drops a header by name, case-insensitively.
+// Reports whether it was set: a silent "removed something that was not there"
+// would hide a typo in the name.
 func (h *sessionHeaders) Remove(name string) bool {
 	key := strings.ToLower(name)
 
@@ -64,7 +64,7 @@ func (h *sessionHeaders) Remove(name string) bool {
 	return true
 }
 
-// Reset убирает все пользовательские заголовки, оставляя профильные.
+// Reset drops every user header, keeping the profile's.
 func (h *sessionHeaders) Reset() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -75,7 +75,7 @@ func (h *sessionHeaders) Reset() int {
 	return n
 }
 
-// All возвращает заголовки в порядке добавления.
+// All returns the headers in insertion order.
 func (h *sessionHeaders) All() []HeaderPair {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -87,8 +87,8 @@ func (h *sessionHeaders) All() []HeaderPair {
 	return out
 }
 
-// Names возвращает имена заданных заголовков, отсортированные для стабильного
-// вывода наружу.
+// Names returns the names that are set, sorted for a stable view from
+// outside.
 func (h *sessionHeaders) Names() []string {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -101,22 +101,22 @@ func (h *sessionHeaders) Names() []string {
 	return out
 }
 
-// HeaderPair — заголовок с его позицией в порядке отправки.
+// HeaderPair is a header together with its position in the send order.
 type HeaderPair struct {
 	Key   string
 	Value string
 }
 
-// SetHeader добавляет заголовок ко всем последующим запросам сессии.
+// SetHeader adds a header to every later request of the session.
 func (s *Session) SetHeader(name, value string) { s.headers.Set(name, value) }
 
-// RemoveHeader убирает ранее добавленный заголовок. Возвращает false,
-// если такого не было.
+// RemoveHeader drops a header added earlier. Returns false when there was
+// none.
 func (s *Session) RemoveHeader(name string) bool { return s.headers.Remove(name) }
 
-// ResetHeaders убирает все добавленные пользователем заголовки, оставляя
-// только заголовки профиля. Возвращает, сколько было убрано.
+// ResetHeaders drops every user-added header, leaving only the profile's.
+// Returns how many were dropped.
 func (s *Session) ResetHeaders() int { return s.headers.Reset() }
 
-// Headers возвращает имена пользовательских заголовков сессии.
+// Headers returns the names of the session's user headers.
 func (s *Session) Headers() []string { return s.headers.Names() }

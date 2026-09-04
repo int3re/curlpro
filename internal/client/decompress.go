@@ -13,26 +13,26 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-// Профиль браузера объявляет "accept-encoding: gzip, deflate, br, zstd",
-// и убрать это нельзя — заголовок часть отпечатка. Значит клиент обязан уметь
-// распаковывать всё, что объявил: сервер вправе ответить любым из кодеков.
+// The browser profile advertises "accept-encoding: gzip, deflate, br, zstd",
+// and it cannot be dropped — the header is part of the fingerprint. So the
+// client must decode everything it advertised: a server may answer with any of them.
 //
-// Используется на путях HTTP/1.1 и HTTP/3: первый ходит мимо fhttp.Transport,
-// второй построен на net/http, который распаковывает только gzip и только
-// когда сам поставил заголовок. HTTP/2 распаковывает транспорт fhttp.
+// Used on the HTTP/1.1 and HTTP/3 paths: the first goes around fhttp.Transport,
+// the second is built on net/http, which decompresses gzip only, and only when
+// it set the header itself. HTTP/2 is decompressed by the fhttp transport.
 
-// decompress оборачивает тело ответа распаковщиками по Content-Encoding.
+// decompress wraps the response body in decoders according to Content-Encoding.
 //
-// Кодировки перечислены в порядке применения, снимаются в обратном:
-// "gzip, br" означает, что тело сначала сжали gzip, потом br.
+// The encodings are listed in the order they were applied and are removed in
+// reverse: "gzip, br" means the body was gzipped first, then brotli-compressed.
 //
-// Распаковщики ленивые: сам кодек создаётся на первом Read. Иначе HEAD, 204
-// и 304 с Content-Encoding (CDN ставят его и на пустые ответы) падали бы
-// на месте — gzip.NewReader читает заголовок потока сразу и на пустом теле
-// возвращает EOF как ошибку.
+// The decoders are lazy: the codec itself is created on the first Read.
+// Otherwise HEAD, 204 and 304 responses carrying Content-Encoding (CDNs set it
+// even on empty bodies) would fail on the spot — gzip.NewReader reads the stream
+// header immediately and returns EOF as an error on an empty body.
 //
-// Неизвестная кодировка — ошибка: молча отдать сжатые байты хуже, чем
-// отказать, потому что вызывающий примет их за содержимое.
+// An unknown encoding is an error: silently handing over compressed bytes is
+// worse than refusing, because the caller would take them for content.
 func decompress(body io.ReadCloser, encoding string) (io.ReadCloser, error) {
 	var codecs []string
 	for _, tok := range strings.Split(encoding, ",") {
@@ -53,12 +53,12 @@ func decompress(body io.ReadCloser, encoding string) (io.ReadCloser, error) {
 	return body, nil
 }
 
-// lazyDecoder создаёт распаковщик при первом чтении.
+// lazyDecoder creates the decoder on the first read.
 type lazyDecoder struct {
 	codec string
 	src   io.ReadCloser
 	r     io.Reader
-	done  io.Closer // ресурсы кодека, если он их держит (zstd)
+	done  io.Closer // codec resources, when it holds any (zstd)
 	err   error
 }
 
@@ -79,7 +79,7 @@ func (d *lazyDecoder) Close() error {
 	return d.src.Close()
 }
 
-// openDecoder подбирает кодек. Пустое тело даёт io.EOF без ошибки.
+// openDecoder picks the codec. An empty body yields io.EOF without an error.
 func openDecoder(codec string, src io.Reader) (io.Reader, io.Closer, error) {
 	switch codec {
 	case "gzip", "x-gzip":
@@ -90,9 +90,9 @@ func openDecoder(codec string, src io.Reader) (io.Reader, io.Closer, error) {
 		return zr, nil, nil
 
 	case "deflate":
-		// По RFC deflate в HTTP — это zlib-обёртка, но многие серверы шлют
-		// сырой поток; браузеры принимают оба. Отличаем по заголовку zlib:
-		// первый байт объявляет метод 8, а пара байт делится на 31.
+		// Per the RFC, deflate in HTTP is the zlib wrapper, but many servers send
+		// a raw stream; browsers accept both. They are told apart by the zlib
+		// header: the first byte declares method 8, and the byte pair divides by 31.
 		br := bufio.NewReader(src)
 		head, err := br.Peek(2)
 		if err != nil {
@@ -125,8 +125,8 @@ func openDecoder(codec string, src io.Reader) (io.Reader, io.Closer, error) {
 	}
 }
 
-// decodeErr оставляет EOF пустого тела как есть: это не сбой, а отсутствие
-// данных, и io.ReadAll обязан вернуть пустой результат без ошибки.
+// decodeErr leaves an empty body's EOF as it is: that is not a failure but
+// absence of data, and io.ReadAll must return an empty result without an error.
 func decodeErr(codec string, err error) error {
 	if err == io.EOF {
 		return io.EOF

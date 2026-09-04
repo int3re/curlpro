@@ -16,10 +16,10 @@ import (
 	"golang.org/x/net/proxy"
 )
 
-// dialRaw открывает TCP-соединение до addr, при необходимости через прокси.
+// dialRaw opens a TCP connection to addr, through a proxy when needed.
 //
-// Адрес прокси приходит параметром, а не читается из опций сессии: отдельный
-// запрос вправе его переопределить или отключить.
+// The proxy address arrives as a parameter instead of being read from the
+// session options: a single request may override or disable it.
 func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, error) {
 	d := &net.Dialer{}
 	network := "tcp"
@@ -30,8 +30,8 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, er
 		network = "tcp6"
 	}
 	if proxy == "" {
-		// Подмена действует только на прямое соединение: через прокси имя
-		// разрешает он сам, и наша таблица там ничего не решает.
+		// The override applies to direct connections only: through a proxy the
+		// name is resolved by the proxy, and our table decides nothing there.
 		return d.DialContext(ctx, network, resolveAddr(s.opts.Resolve, addr))
 	}
 
@@ -50,11 +50,11 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, er
 	}
 }
 
-// resolveAddr применяет таблицу подмены к адресу "host:port".
+// resolveAddr applies the override table to a "host:port" address.
 //
-// Правило ищется сначала по паре с портом, затем по одному имени: так
-// "example.com:443" можно направить отдельно от "example.com". Значение без
-// порта сохраняет исходный порт — подменяется только узел.
+// A rule is looked up first by the host-port pair and then by the bare name,
+// so "example.com:443" can be routed apart from "example.com". A value without
+// a port keeps the original port — only the host is replaced.
 func resolveAddr(table map[string]string, addr string) string {
 	if len(table) == 0 {
 		return addr
@@ -102,10 +102,10 @@ func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAg
 	if err != nil {
 		return nil, err
 	}
-	// Обмен CONNECT идёт по голому сокету и контекста не знает: без дедлайна
-	// прокси, принявший TCP и замолчавший, держал бы запрос бесконечно при
-	// любом timeout. После туннеля дедлайн снимается — для HTTP/2 сокет общий,
-	// и оставшийся предел оборвал бы чужие потоки.
+	// The CONNECT exchange runs on a bare socket and knows no context: without a
+	// deadline a proxy that accepted the TCP connection and went silent would hold
+	// the request forever whatever the timeout. After the tunnel it is cleared —
+	// for HTTP/2 the socket is shared, and a leftover limit would cut other streams.
 	setDeadline := func(c net.Conn) {
 		if deadline, ok := ctx.Deadline(); ok {
 			_ = c.SetDeadline(deadline)
@@ -116,13 +116,13 @@ func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAg
 
 	err = connectProxy(conn, pu, addr, userAgent, false)
 
-	// 407 — это не отказ, а вызов: Chrome отвечает на него повтором
-	// с учётными данными. Первый CONNECT уходит без них, как у браузера.
+	// A 407 is not a refusal but a challenge: Chrome answers it by repeating
+	// the request with credentials. The first CONNECT goes without them, as in a browser.
 	var need needAuthError
 	if errors.As(err, &need) && pu.User != nil {
 		if !need.reusable {
-			// Прокси закрыл соединение вместе с 407 — второй попытке нужен
-			// свежий сокет, иначе повтор уйдёт в закрытый.
+			// The proxy closed the connection along with the 407 — the second
+			// attempt needs a fresh socket, or the retry goes into a closed one.
 			clearDeadline(conn)
 			conn.Close()
 			if conn, err = dialProxyConn(ctx, d, pu); err != nil {
@@ -140,14 +140,14 @@ func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAg
 	return conn, nil
 }
 
-// dialProxyConn открывает соединение до самого прокси.
+// dialProxyConn opens the connection to the proxy itself.
 //
-// Для https:// канал до прокси шифруется, и CONNECT уходит уже внутри TLS.
-// Раньше схема принималась, но запрос уходил открытым текстом в TLS-порт:
-// прокси его не понимал, а логин с паролем утекал в сеть.
+// For https:// the channel to the proxy is encrypted and CONNECT travels inside
+// TLS. The scheme used to be accepted while the request went out in clear text
+// to a TLS port: the proxy did not understand it, and the credentials leaked.
 //
-// TLS здесь обычный, не браузерный: этот отпечаток не видит никто,
-// кроме самого прокси.
+// The TLS here is ordinary, not browser-like: nobody sees this fingerprint
+// except the proxy itself.
 func dialProxyConn(ctx context.Context, d *net.Dialer, pu *url.URL) (net.Conn, error) {
 	host := pu.Host
 	if pu.Port() == "" {
@@ -168,13 +168,13 @@ func dialProxyConn(ctx context.Context, d *net.Dialer, pu *url.URL) (net.Conn, e
 	return conn, nil
 }
 
-// needAuthError — прокси ответил 407.
+// needAuthError means the proxy answered 407.
 //
-// reusable говорит, можно ли повторить по тому же сокету: тело ответа
-// дочитано и закрываться прокси не собирается.
+// reusable says whether the same socket can carry the retry: the response body
+// has been drained and the proxy is not about to close.
 type needAuthError struct {
 	reusable bool
-	scheme   string // схема из Proxy-Authenticate, для сообщения об ошибке
+	scheme   string // the scheme from Proxy-Authenticate, for the error message
 }
 
 func (e needAuthError) Error() string {
@@ -191,15 +191,15 @@ func defaultProxyPort(scheme string) string {
 	return "8080"
 }
 
-// connectProxy выполняет CONNECT-туннель до target.
+// connectProxy performs the CONNECT tunnel to target.
 //
-// Заголовки — как у Chrome: Host, Proxy-Connection: keep-alive, User-Agent
-// браузера. С пустым Header fhttp подставлял Go-http-client/1.1, и прокси
-// видел не браузер, а Go: провайдеры прокси клиентов классифицируют.
+// The headers match Chrome's: Host, Proxy-Connection: keep-alive and the
+// browser's User-Agent. With an empty Header fhttp substituted Go-http-client/1.1,
+// and the proxy saw Go, not a browser: proxy providers classify their clients.
 //
-// withAuth=false — первый заход, как у браузера: Chrome шлёт CONNECT без
-// учётных данных и добавляет их только в ответ на 407. Прокси, ведущий
-// журнал, видит у нас ту же пару запросов, что у Chrome.
+// withAuth=false is the first attempt, as in a browser: Chrome sends CONNECT
+// without credentials and adds them only in response to a 407. A proxy keeping
+// a log sees from us the same pair of requests it sees from Chrome.
 func connectProxy(conn net.Conn, pu *url.URL, target, userAgent string, withAuth bool) error {
 	req := &http.Request{
 		Method: http.MethodConnect,
@@ -209,7 +209,7 @@ func connectProxy(conn net.Conn, pu *url.URL, target, userAgent string, withAuth
 	}
 	req.Header["Host"] = []string{target}
 	req.Header["Proxy-Connection"] = []string{"keep-alive"}
-	// Пустой слайс запрещает fhttp подставить свой User-Agent.
+	// An empty slice stops fhttp from substituting its own User-Agent.
 	req.Header["User-Agent"] = []string{}
 	if userAgent != "" {
 		req.Header["User-Agent"] = []string{userAgent}
@@ -232,9 +232,9 @@ func connectProxy(conn net.Conn, pu *url.URL, target, userAgent string, withAuth
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusProxyAuthRequired && !withAuth {
 		return needAuthError{
-			// Сокет годен для повтора, только если тело дочитано, прокси
-			// не собирается закрываться и в буфере ничего не осталось:
-			// иначе второй CONNECT разобрал бы ответ из чужих байтов.
+			// The socket is fit for a retry only when the body is drained, the proxy is
+			// not about to close and nothing is left in the buffer: otherwise the second
+			// CONNECT would parse its response out of somebody else's bytes.
 			reusable: drain(resp, nil) && br.Buffered() == 0 && !resp.Close &&
 				!strings.EqualFold(resp.Header.Get("Proxy-Connection"), "close"),
 			scheme: resp.Header.Get("Proxy-Authenticate"),
@@ -243,8 +243,8 @@ func connectProxy(conn net.Conn, pu *url.URL, target, userAgent string, withAuth
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("proxy refused CONNECT with %s", resp.Status)
 	}
-	// Прокси не должен слать тело до CONNECT-ответа; если в буфере что-то
-	// осталось, дальнейший TLS-разбор пойдёт по мусору.
+	// A proxy must not send a body before the CONNECT response; anything left in
+	// the buffer means the TLS parsing that follows would start on garbage.
 	if br.Buffered() > 0 {
 		return fmt.Errorf("proxy sent %d unexpected bytes after CONNECT", br.Buffered())
 	}

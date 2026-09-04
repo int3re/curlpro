@@ -7,36 +7,36 @@ import (
 	"time"
 )
 
-// Автопереход на HTTP/3 по Alt-Svc.
+// Automatic upgrade to HTTP/3 through Alt-Svc.
 //
-// Браузер не ходит по QUIC сразу: он идёт по TCP, видит в ответе заголовок
-// Alt-Svc и со следующего запроса к тому же origin пробует HTTP/3. Мы делали
-// иначе — h3 включался опцией на всю сессию, — и это само по себе отличало
-// клиента: настоящий Chrome первым запросом на новый сайт всегда идёт по TCP.
+// A browser does not speak QUIC straight away: it goes over TCP, sees the
+// Alt-Svc header in the response and tries HTTP/3 from the next request to the
+// same origin. We used to do it differently — h3 was switched on for the whole
+// session — and that marked the client: real Chrome always starts a new site over TCP.
 //
-// Неудачная попытка помечает адрес сломанным на растущий срок, как и Chromium:
-// в сети, где UDP закрыт, запросы не должны каждый раз спотыкаться о QUIC.
-// Это поведение мы наблюдали у него же — «ALT_SVC … is_broken: true».
+// A failed attempt marks the address broken for a growing period, as Chromium
+// does: on a network where UDP is blocked, requests must not stumble over QUIC
+// every time. We observed that behaviour in it too — "ALT_SVC … is_broken: true".
 
-// Начальный и предельный срок пометки «сломан». Chromium начинает с пяти минут
-// и удваивает; больше суток держать бессмысленно — сеть меняется.
+// The initial and maximum "broken" periods. Chromium starts at five minutes
+// and doubles; holding it longer than a day is pointless — networks change.
 const (
 	altSvcBrokenBase = 5 * time.Minute
 	altSvcBrokenMax  = 24 * time.Hour
 )
 
 type altSvcEntry struct {
-	// expires — до какого момента действует само объявление (ma).
+	// expires is when the advertisement itself stops being valid (ma).
 	expires time.Time
-	// broken — до какого момента не пробовать после неудачи.
+	// broken is until when not to try again after a failure.
 	broken   time.Time
 	failures int
 }
 
-// altSvcKey — ключ памяти объявлений: узел и порт.
+// altSvcKey is the key of the advertisement memory: host and port.
 //
-// Не origin из hints.go: объявление Alt-Svc привязано именно к паре
-// «узел плюс порт», а схема у нас всегда https.
+// Not the origin from hints.go: an Alt-Svc advertisement is bound exactly to
+// the host-plus-port pair, and our scheme is always https.
 func altSvcKey(u *url.URL) string {
 	port := u.Port()
 	if port == "" {
@@ -45,7 +45,7 @@ func altSvcKey(u *url.URL) string {
 	return strings.ToLower(u.Hostname()) + ":" + port
 }
 
-// noteAltSvc запоминает объявление HTTP/3 из ответа.
+// noteAltSvc remembers an HTTP/3 advertisement from a response.
 func (s *Session) noteAltSvc(u *url.URL, headers map[string][]string) {
 	if s.opts.DisableAltSvc || u == nil {
 		return
@@ -62,8 +62,8 @@ func (s *Session) noteAltSvc(u *url.URL, headers map[string][]string) {
 	}
 	key := altSvcKey(u)
 
-	// «clear» отзывает все объявления для origin — обязано работать, иначе
-	// сайт, отключивший QUIC, не сможет нас увести обратно на TCP.
+	// "clear" withdraws every advertisement for the origin — it has to work,
+	// otherwise a site that turned QUIC off could not pull us back to TCP.
 	if strings.EqualFold(strings.TrimSpace(value), "clear") {
 		s.mu.Lock()
 		delete(s.altSvc, key)
@@ -85,11 +85,11 @@ func (s *Session) noteAltSvc(u *url.URL, headers map[string][]string) {
 	s.mu.Unlock()
 }
 
-// parseAltSvcH3 ищет в заголовке предложение h3 для того же узла и порта.
+// parseAltSvcH3 looks for an h3 alternative on the same host and port.
 //
-// Альтернатива на другом порту игнорируется намеренно: браузер её принимает,
-// но у нас порт участвует в ключе пула и в :authority, и поддержать это
-// вполсилы значит получить запрос с чужим адресом в заголовке.
+// An alternative on a different port is ignored on purpose: a browser accepts
+// it, but here the port takes part in the pool key and in :authority, and
+// supporting that halfway means a request with the wrong address in the header.
 func parseAltSvcH3(value string, u *url.URL) (time.Duration, bool) {
 	port := u.Port()
 	if port == "" {
@@ -107,7 +107,7 @@ func parseAltSvcH3(value string, u *url.URL) (time.Duration, bool) {
 			continue
 		}
 		if host != "" && !strings.EqualFold(host, u.Hostname()) {
-			continue // другой узел: наш путь h3 умеет ходить только на свой
+			continue // another host: our h3 path can only reach its own
 		}
 		if altPort != port {
 			continue
@@ -126,7 +126,7 @@ func parseAltSvcH3(value string, u *url.URL) (time.Duration, bool) {
 	return 0, false
 }
 
-// altSvcH3 сообщает, идти ли к этому адресу по HTTP/3.
+// altSvcH3 reports whether this address should be reached over HTTP/3.
 func (s *Session) altSvcH3(u *url.URL) bool {
 	if s.opts.DisableAltSvc || !s.profile.HTTP3.Enabled() {
 		return false
@@ -142,7 +142,7 @@ func (s *Session) altSvcH3(u *url.URL) bool {
 	return now.After(e.broken)
 }
 
-// markAltSvcBroken откладывает следующую попытку HTTP/3 к этому адресу.
+// markAltSvcBroken postpones the next HTTP/3 attempt to this address.
 func (s *Session) markAltSvcBroken(u *url.URL) {
 	key := altSvcKey(u)
 	s.mu.Lock()

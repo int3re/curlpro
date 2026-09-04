@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// FormFile — файл в multipart-форме.
+// FormFile is a file inside a multipart form.
 type FormFile struct {
 	Field       string `json:"field"`
 	Filename    string `json:"filename"`
@@ -15,23 +15,23 @@ type FormFile struct {
 	Content     []byte `json:"-"`
 }
 
-// MultipartForm описывает форму. Поля отправляются в порядке Order,
-// а не в порядке обхода map: порядок частей наблюдаем и стабилен у браузера.
+// MultipartForm describes a form. Fields are sent in Order rather than in map
+// iteration order: the part order is observable and stable in a browser.
 type MultipartForm struct {
 	Fields map[string]string `json:"fields"`
 	Order  []string          `json:"order"`
 	Files  []FormFile        `json:"files"`
 }
 
-// boundaryAlphabet повторяет таблицу Blink из
-// platform/network/form_data_encoder.cc: 64 символа, как в base64.
+// boundaryAlphabet repeats the Blink table from
+// platform/network/form_data_encoder.cc: 64 characters, as in base64.
 const boundaryAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
-// generateBoundary строит границу в стиле указанного браузера.
+// generateBoundary builds a boundary in the given browser's style.
 //
-// Форма границы — часть отпечатка: Chrome шлёт "----WebKitFormBoundary"
-// и 16 символов, Firefox — длинную череду дефисов и цифры. Подставить чужой
-// стиль значит выдать несоответствие между User-Agent и телом запроса.
+// The boundary shape is part of the fingerprint: Chrome sends "----WebKitFormBoundary"
+// plus 16 characters, Firefox a long run of dashes and digits. Using another
+// browser's style means a mismatch between the User-Agent and the request body.
 func generateBoundary(style string) (string, error) {
 	switch strings.ToLower(style) {
 	case "", "webkit", "chrome", "safari":
@@ -65,10 +65,10 @@ func randomFrom(alphabet string, n int) (string, error) {
 	return string(out), nil
 }
 
-// encodeMultipart собирает тело формы и возвращает его вместе с Content-Type.
+// encodeMultipart builds the form body and returns it with its Content-Type.
 //
-// Кодирование ручное, а не через mime/multipart: тот генерирует границу сам
-// и переставляет заголовки частей, а нам нужен контроль над обоими.
+// The encoding is manual rather than via mime/multipart: that package generates
+// the boundary itself and reorders part headers, and we need control over both.
 func encodeMultipart(form *MultipartForm, style string) (body []byte, contentType string, err error) {
 	boundary, err := generateBoundary(style)
 	if err != nil {

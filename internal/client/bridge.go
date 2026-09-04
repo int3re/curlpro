@@ -6,12 +6,12 @@ import (
 	http "github.com/bogdanfinn/fhttp"
 )
 
-// Мост между net/http и fhttp.
+// The bridge between net/http and fhttp.
 //
-// Вендоренный пакет h3 построен на net/http (перейти на fhttp не вышло:
-// он собран поверх другого форка utls, типы несовместимы), а остальной
-// клиент — на fhttp. Чтобы обе ветки возвращали один тип, ответ HTTP/3
-// переводится в fhttp-представление.
+// The vendored h3 package is built on net/http (moving it to fhttp did not
+// work out: that one sits on a different utls fork and the types clash), while
+// the rest of the client is on fhttp. To let both branches return one type, an
+// HTTP/3 response is converted into the fhttp representation.
 
 func fromStdResponse(r *nethttp.Response) *http.Response {
 	out := &http.Response{
@@ -30,8 +30,8 @@ func fromStdResponse(r *nethttp.Response) *http.Response {
 	return out
 }
 
-// toFhttpCookies переводит куки из net/http в fhttp: cookie-jar сессии
-// работает со вторым.
+// toFhttpCookies converts cookies from net/http to fhttp: the session cookie
+// jar works with the latter.
 func toFhttpCookies(in []*nethttp.Cookie) []*http.Cookie {
 	out := make([]*http.Cookie, 0, len(in))
 	for _, c := range in {

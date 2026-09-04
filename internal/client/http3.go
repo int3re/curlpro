@@ -18,20 +18,20 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// Путь HTTP/3 стоит особняком: это отдельный транспорт поверх UDP, а не ещё
-// один вариант ALPN на TCP. Вдобавок вендоренный пакет h3 построен на net/http,
-// тогда как остальной клиент — на fhttp: их типы несовместимы, поэтому запрос
-// и ответ переводятся между ними явно.
+// The HTTP/3 path stands apart: it is a separate transport over UDP, not one
+// more ALPN option on TCP. On top of that the vendored h3 package is built on
+// net/http while the rest of the client is on fhttp: their types are
+// incompatible, so requests and responses are converted explicitly.
 
 type h3Transport struct {
 	once sync.Once
 	tr   *h3.Transport
 	err  error
 
-	// udp — транспорты QUIC, созданные в Dial. Собранный вручную quic.Transport
-	// не считается одноразовым: закрытие соединения его не останавливает,
-	// а h3.Transport о нём не знает. Без учёта после каждой сессии оставались
-	// UDP-сокет и две горутины.
+	// udp holds the QUIC transports created in Dial. A hand-built quic.Transport
+	// is not considered single-use: closing a connection does not stop it, and
+	// h3.Transport knows nothing about it. Without tracking, every session left
+	// behind a UDP socket and two goroutines.
 	udp udpTransports
 }
 
@@ -61,7 +61,7 @@ func (s *Session) http3() (*h3.Transport, error) {
 		s.h3.tr, s.h3.err = buildH3Transport(s.profile, s.opts, &s.h3.udp)
 	})
 	if s.h3.tr == nil && s.h3.err == nil {
-		// once уже отработал в closeH3: транспорт не создавался и не будет.
+		// once already ran in closeH3: the transport was never created and never will be.
 		return nil, errSessionClosed
 	}
 	return s.h3.tr, s.h3.err
@@ -72,8 +72,8 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports) (*h3
 		return nil, fmt.Errorf("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
 
-	// Настройки 0x06 и 0x33 задаются не напрямую, а через поля транспорта —
-	// так устроен апстрим, и обойти это, не расходясь с ним, нельзя.
+	// Settings 0x06 and 0x33 are set through transport fields rather than
+	// directly — that is how upstream works, and going around it means diverging.
 	var maxFieldSection uint64
 	datagrams := false
 	extra := make(map[uint64]uint64, len(p.HTTP3.Settings))
@@ -92,30 +92,30 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports) (*h3
 		TLSClientConfig: &utls.Config{InsecureSkipVerify: opts.InsecureSkipVerify},
 		QUICConfig: &quic.Config{
 			EnableDatagrams: datagrams,
-			// Предел на рукопожатие задан явно: при автопереходе по Alt-Svc
-			// неудачная попытка QUIC оплачивается из бюджета запроса, и без
-			// границы откат на TCP получал бы уже исчерпанный дедлайн.
+			// The handshake limit is explicit: during an Alt-Svc upgrade a failed QUIC
+			// attempt is paid out of the request budget, and without a bound the
+			// fallback to TCP would inherit an already spent deadline.
 			HandshakeIdleTimeout: 3 * time.Second,
 		},
 		EnableDatagrams:        datagrams,
 		MaxResponseHeaderBytes: int(maxFieldSection),
 		AdditionalSettings:     extra,
-		// Распаковка своя (sendH3), и транспорту вмешиваться незачем. Без
-		// этого флага он искал Accept-Encoding по каноническому ключу, не
-		// находил строчного ключа профиля и дописывал второй accept-encoding:
-		// gzip в хвост — дубль, которого оракулы не показывают.
+		// Decompression is ours (sendH3), and the transport need not interfere.
+		// Without this flag it looked for Accept-Encoding under the canonical key,
+		// missed the profile's lowercase key and appended a second accept-encoding:
+		// gzip at the tail — a duplicate the oracles do not show.
 		DisableCompression: true,
 		Fingerprint: &h3.Fingerprint{
 			SettingsOrder:   p.HTTP3.SettingsOrder,
 			SendGreaseFrame: p.HTTP3.SendsGreaseFrame(),
 			PriorityParam:   p.HTTP3.PriorityParamValue(),
 		},
-		// Повторами управляет сессия: два независимых механизма дали бы вдвое
-		// больше запросов, чем заявлено, и не соблюдали бы общий бюджет.
+		// Retries are the session's business: two independent mechanisms would
+		// double the declared number of requests and ignore the shared budget.
 		DisableInternalRetry: true,
 		Dial: func(ctx context.Context, addr string, cfg *utls.Config, qcfg *quic.Config) (*quic.Conn, error) {
-			// Спека строится заново на каждое соединение: расширения
-			// перемешиваются, значения GREASE разыгрываются заново.
+			// The spec is rebuilt for every connection: extensions are shuffled and
+			// GREASE values are drawn anew.
 			spec, err := quicSpec(p)
 			if err != nil {
 				return nil, err
@@ -145,13 +145,13 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports) (*h3
 	}, nil
 }
 
-// explainH3Error переводит ошибки нижнего уровня в понятные.
+// explainH3Error turns low-level errors into readable ones.
 //
-// Отдельно разбирается случай динамической таблицы QPACK: профиль объявляет
-// ненулевую ёмкость, как Chrome, и сервер вправе ей воспользоваться — но
-// библиотека quic-go/qpack динамическую таблицу не реализует вовсе.
-// Сообщение «expected Required Insert Count to be zero» об этом не говорит
-// ничего, и без подсказки причину искать долго.
+// The QPACK dynamic table case is handled separately: the profile advertises a
+// non-zero capacity, as Chrome does, and the server may use it — while the
+// quic-go/qpack library does not implement the dynamic table at all.
+// The message "expected Required Insert Count to be zero" says nothing about
+// that, and without a hint the cause takes a long time to find.
 func explainH3Error(err error, profileName string) error {
 	if strings.Contains(err.Error(), "Required Insert Count") {
 		return fmt.Errorf("h3: the server used the QPACK dynamic table, which this decoder "+
@@ -165,8 +165,8 @@ func explainH3Error(err error, profileName string) error {
 	return fmt.Errorf("h3: %w", err)
 }
 
-// quicSpec собирает спеку QUIC: паррот uquic плюс правки transport parameters
-// из профиля.
+// quicSpec assembles the QUIC spec: the uquic parrot plus the profile's
+// transport parameter edits.
 func quicSpec(p *profile.Profile) (*quic.QUICSpec, error) {
 	id, err := parrotID(p.QUIC.Parrot)
 	if err != nil {
@@ -188,16 +188,16 @@ func quicSpec(p *profile.Profile) (*quic.QUICSpec, error) {
 	return &spec, nil
 }
 
-// applyQUICTLS доводит ClientHello паррота до профиля.
+// applyQUICTLS brings the parrot's ClientHello up to the profile.
 //
-// Паррот uquic описывает Chrome 146, и от Chrome 152 его отличает ровно одно
-// расширение — trust_anchors: замер cmd/quiccapture дал у Chrome 152 набор
-// 0,10,13,16,27,43,45,51,57,17613,51764,65037, у паррота тот же минус 51764.
-// Алгоритмы подписи здесь трогать нельзя: в QUIC Chrome шлёт свой список
-// из девяти записей, без GREASE и без 0x0904 — и он совпал с парротом.
+// The uquic parrot describes Chrome 146, and exactly one extension separates it
+// from Chrome 152 — trust_anchors: a cmd/quiccapture measurement gave Chrome 152
+// the set 0,10,13,16,27,43,45,51,57,17613,51764,65037, the parrot the same minus 51764.
+// Signature algorithms must not be touched here: in QUIC Chrome sends its own
+// list of nine entries, without GREASE and without 0x0904 — and it matched the parrot.
 //
-// Порядок расширений браузер перемешивает и в QUIC: три захвата дали три
-// разные перестановки одного набора. Постоянный порядок был бы приметой.
+// The browser shuffles the extension order in QUIC too: three captures gave
+// three different permutations of one set. A constant order would be a tell.
 func applyQUICTLS(chs *utls.ClientHelloSpec, p *profile.Profile) error {
 	if ids := p.TLS.TrustAnchors; len(ids) > 0 {
 		ext, err := profile.BuildTrustAnchors(ids)
@@ -236,10 +236,10 @@ func parrotID(name string) (quic.QUICID, error) {
 	}
 }
 
-// sendH3 выполняет один запрос по HTTP/3. Тело ответа остаётся открытым.
+// sendH3 performs one HTTP/3 request. The response body stays open.
 //
-// Контекст приходит от вызывающего: так таймаут действует и здесь, а тело
-// поддерживает BodyFile наравне с обычным путём.
+// The context comes from the caller: that way the timeout applies here as well,
+// and the body supports BodyFile just like on the ordinary path.
 func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL) (*nethttp.Response, error) {
 	tr, err := s.http3()
 	if err != nil {
@@ -278,10 +278,10 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL) (*nethttp.
 		}
 	}
 
-	// В отличие от fhttp, net/http распаковывает только gzip и только когда
-	// сам поставил Accept-Encoding. Профиль объявляет ещё br и zstd, поэтому
-	// на этом пути распаковка своя. HEAD не трогаем: тело пустое по
-	// определению, а Content-Encoding описывает то, что было бы у GET.
+	// Unlike fhttp, net/http decompresses gzip only, and only when it set
+	// Accept-Encoding itself. The profile also advertises br and zstd, so on
+	// this path the decompression is ours. HEAD is left alone: its body is
+	// empty by definition, and Content-Encoding describes what a GET would get.
 	if ce := resp.Header.Get("Content-Encoding"); !resp.Uncompressed && ce != "" && method != nethttp.MethodHead {
 		body, err := decompress(resp.Body, ce)
 		if err != nil {
@@ -293,19 +293,19 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL) (*nethttp.
 	return resp, nil
 }
 
-// applyH3Headers записывает заголовки в запрос net/http и служебные ключи
-// вендоренного пакета.
+// applyH3Headers writes the headers into a net/http request together with the
+// vendored package's service keys.
 //
-// Сборка общая с HTTP/1.1 и HTTP/2 (buildHeaders): пока здесь была своя копия
-// правил, путь HTTP/3 молча терял SuppressHeaders и слот cookie. h1Order не
-// передаётся — Host и Connection в HTTP/3 не отправляются.
+// The assembly is shared with HTTP/1.1 and HTTP/2 (buildHeaders): while a copy
+// of the rules lived here, the HTTP/3 path silently lost SuppressHeaders and the
+// cookie slot. h1Order is not passed — HTTP/3 sends no Host or Connection.
 func (s *Session) applyH3Headers(req *nethttp.Request, r *Request, u *url.URL) {
 	built := s.buildHeaders(r, u, req.Host, nil)
 
 	for _, h := range built {
-		// Прямая запись вместо Set: тот канонизирует имя, а порядок и регистр
-		// задаёт профиль. На провод имена всё равно уйдут строчными — их
-		// приводит request_writer.
+		// A direct write instead of Set: that one canonicalises the name, while the
+		// order and case come from the profile. On the wire the names go lowercase
+		// anyway — request_writer converts them.
 		req.Header[h.Key] = []string{h.Value}
 	}
 	suppressDefaultUA(req.Header, built, false)
@@ -321,11 +321,11 @@ func (s *Session) applyH3Headers(req *nethttp.Request, r *Request, u *url.URL) {
 	}
 }
 
-// closeH3 закрывает транспорт HTTP/3 и UDP-транспорты его соединений.
+// closeH3 closes the HTTP/3 transport and the UDP transports of its connections.
 //
-// once здесь «занимается» намеренно: если транспорт ещё не создавался,
-// создавать его после закрытия сессии незачем, а параллельный первый запрос
-// получит errSessionClosed из http3() вместо гонки за полем tr.
+// once is "used up" here on purpose: if the transport was never created, there
+// is no point creating it after the session closed, and a concurrent first
+// request gets errSessionClosed from http3() instead of racing for the tr field.
 func (s *Session) closeH3() {
 	s.h3.once.Do(func() {})
 	if s.h3.tr != nil {

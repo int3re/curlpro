@@ -8,23 +8,23 @@ import (
 	"strings"
 	"time"
 
-	// Тот же форк, что и в остальном клиенте: типы ответов должны совпадать.
+	// The same fork as in the rest of the client: the response types must match.
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/bogdanfinn/fhttp/http2"
 )
 
-// Повтор запросов.
+// Request retries.
 //
-// По умолчанию повторяются только идемпотентные методы. Повтор POST может
-// создать второй заказ или второй платёж: сервер мог обработать запрос
-// и не успеть ответить, и клиент этого не различает. Поэтому разрешение
-// повторять неидемпотентное — осознанный выбор вызывающего.
+// Only idempotent methods are retried by default. Repeating a POST can create a
+// second order or a second payment: the server may have processed the request
+// and failed to answer in time, and the client cannot tell. So allowing
+// non-idempotent retries is the caller's deliberate choice.
 
-// DefaultRetryStatuses — коды, при которых повтор осмыслен.
+// DefaultRetryStatuses are the codes where a retry makes sense.
 //
-// 429 и 503 сервер шлёт, прямо приглашая повторить; 500, 502 и 504 обычно
-// означают временный сбой инфраструктуры. 4xx кроме 408 и 429 не повторяются:
-// на неверный запрос второй такой же ответит так же.
+// A server sends 429 and 503 as an outright invitation to retry; 500, 502 and
+// 504 usually mean a temporary infrastructure failure. 4xx other than 408 and
+// 429 are not retried: a bad request gets the same answer the second time.
 var DefaultRetryStatuses = []int{
 	http.StatusRequestTimeout,      // 408
 	http.StatusTooManyRequests,     // 429
@@ -34,7 +34,7 @@ var DefaultRetryStatuses = []int{
 	http.StatusGatewayTimeout,      // 504
 }
 
-// idempotentMethods — методы, повтор которых безопасен по RFC 9110.
+// idempotentMethods are the methods RFC 9110 makes safe to repeat.
 var idempotentMethods = map[string]bool{
 	http.MethodGet:     true,
 	http.MethodHead:    true,
@@ -44,29 +44,29 @@ var idempotentMethods = map[string]bool{
 	http.MethodDelete:  true,
 }
 
-// RetryPolicy описывает поведение повторов.
+// RetryPolicy describes the retry behaviour.
 type RetryPolicy struct {
-	// Attempts — сколько дополнительных попыток после первой.
-	// Ноль означает «без повторов».
+	// Attempts is how many extra attempts follow the first one.
+	// Zero means "no retries".
 	Attempts int
 
-	// Statuses — коды ответа, при которых повторять.
-	// Пусто означает DefaultRetryStatuses.
+	// Statuses are the response codes to retry on.
+	// Empty means DefaultRetryStatuses.
 	Statuses []int
 
-	// Methods — методы, которые разрешено повторять.
-	// Пусто означает только идемпотентные.
+	// Methods are the methods allowed to be retried.
+	// Empty means idempotent ones only.
 	Methods []string
 
-	// Backoff — задержка перед первым повтором; дальше удваивается.
-	// Ноль означает 200 мс.
+	// Backoff is the delay before the first retry; it doubles afterwards.
+	// Zero means 200 ms.
 	Backoff time.Duration
 
-	// MaxBackoff ограничивает задержку. Ноль означает 10 с.
+	// MaxBackoff caps the delay. Zero means 10 s.
 	MaxBackoff time.Duration
 
-	// RespectRetryAfter учитывает одноимённый заголовок.
-	// Сервер, который просит подождать, знает лучше формулы.
+	// RespectRetryAfter honours the header of the same name.
+	// A server asking to wait knows better than a formula.
 	RespectRetryAfter bool
 }
 
@@ -91,7 +91,7 @@ func (p *RetryPolicy) maxBackoff() time.Duration {
 	return p.MaxBackoff
 }
 
-// isIdempotent сообщает, безопасен ли повтор метода по RFC 9110.
+// isIdempotent reports whether repeating a method is safe per RFC 9110.
 func isIdempotent(method string) bool {
 	if method == "" {
 		return true
@@ -99,34 +99,34 @@ func isIdempotent(method string) bool {
 	return idempotentMethods[strings.ToUpper(method)]
 }
 
-// unprocessedError помечает сбой, при котором запрос заведомо не дошёл
-// до обработки сервером: его можно повторять даже для POST.
+// unprocessedError marks a failure where the request certainly never reached
+// the server's processing: it is safe to repeat even for POST.
 type unprocessedError struct{ err error }
 
 func (e *unprocessedError) Error() string { return e.err.Error() }
 func (e *unprocessedError) Unwrap() error { return e.err }
 
-// fatalError помечает сбой, который повтор не исправит: сервер согласовал
-// не тот протокол, которого потребовал вызывающий, или профиль не описывает
-// затребованный транспорт. Со второй попытки будет ровно то же самое,
-// а при retries=3 это три лишних рукопожатия.
+// fatalError marks a failure a retry cannot fix: the server negotiated a
+// protocol other than the one the caller demanded, or the profile does not
+// describe the transport asked for. The second attempt would end exactly the
+// same, and with retries=3 that is three wasted handshakes.
 type fatalError struct{ err error }
 
 func (e *fatalError) Error() string { return e.err.Error() }
 func (e *fatalError) Unwrap() error { return e.err }
 
-// isFatal сообщает, что повторять нечего.
+// isFatal reports that there is nothing to retry.
 func isFatal(err error) bool {
 	var fe *fatalError
 	return errors.As(err, &fe)
 }
 
-// h2Unprocessed распознаёт ошибки HTTP/2, при которых поток не обрабатывался.
+// h2Unprocessed recognises HTTP/2 errors where the stream was not processed.
 //
-// Тот же набор, что у net/http canRetryError: непригодное соединение (запрос
-// не отправлялся), GOAWAY с last-stream-id ниже нашего (сервер объявил, что
-// поток не обработан) и REFUSED_STREAM. Первые два в fhttp не экспортируются,
-// поэтому распознаются по тексту.
+// The same set as net/http's canRetryError: an unusable connection (the request
+// was never sent), a GOAWAY with a last-stream-id below ours (the server
+// declared the stream unprocessed) and REFUSED_STREAM. fhttp does not export
+// the first two, so they are recognised by text.
 func h2Unprocessed(err error) bool {
 	var se http2.StreamError
 	if errors.As(err, &se) {
@@ -137,7 +137,7 @@ func h2Unprocessed(err error) bool {
 		strings.Contains(msg, "Server's graceful shutdown GOAWAY")
 }
 
-// allowsMethod сообщает, разрешено ли повторять этот метод.
+// allowsMethod reports whether this method may be retried.
 func (p *RetryPolicy) allowsMethod(method string) bool {
 	if method == "" {
 		method = http.MethodGet
@@ -153,7 +153,7 @@ func (p *RetryPolicy) allowsMethod(method string) bool {
 	return idempotentMethods[strings.ToUpper(method)]
 }
 
-// allowsStatus сообщает, повторять ли при таком коде ответа.
+// allowsStatus reports whether to retry on this response code.
 func (p *RetryPolicy) allowsStatus(code int) bool {
 	list := DefaultRetryStatuses
 	if p != nil && len(p.Statuses) > 0 {
@@ -167,10 +167,10 @@ func (p *RetryPolicy) allowsStatus(code int) bool {
 	return false
 }
 
-// delay вычисляет паузу перед попыткой n (нумерация с единицы).
+// delay computes the pause before attempt n (counting from one).
 //
-// Экспонента с полным джиттером: без него все клиенты, получившие 503
-// одновременно, повторят тоже одновременно и добьют сервер.
+// Exponential with full jitter: without it every client that got a 503 at the
+// same moment would retry at the same moment and finish the server off.
 func (p *RetryPolicy) delay(n int, resp *http.Response) time.Duration {
 	if p != nil && p.RespectRetryAfter && resp != nil {
 		if d, ok := parseRetryAfter(resp.Header.Get("Retry-After")); ok {
@@ -192,7 +192,7 @@ func (p *RetryPolicy) delay(n int, resp *http.Response) time.Duration {
 	return jitter(base)
 }
 
-// jitter размазывает задержку по отрезку [base/2, base].
+// jitter spreads the delay over the [base/2, base] range.
 func jitter(base time.Duration) time.Duration {
 	if base <= 0 {
 		return 0
@@ -208,7 +208,7 @@ func jitter(base time.Duration) time.Duration {
 	return time.Duration(half + n.Int64())
 }
 
-// parseRetryAfter разбирает заголовок в обеих формах: секунды и HTTP-дата.
+// parseRetryAfter parses the header in both forms: seconds and an HTTP date.
 func parseRetryAfter(v string) (time.Duration, bool) {
 	v = strings.TrimSpace(v)
 	if v == "" {
@@ -224,12 +224,12 @@ func parseRetryAfter(v string) (time.Duration, bool) {
 		if d := time.Until(t); d > 0 {
 			return d, true
 		}
-		return 0, true // дата в прошлом — можно повторять сразу
+		return 0, true // a date in the past — retry right away
 	}
 	return 0, false
 }
 
-// retryPolicy возвращает политику для запроса с учётом переопределения.
+// retryPolicy returns the policy for a request, honouring its override.
 func (s *Session) retryPolicy(r *Request) *RetryPolicy {
 	if r != nil && r.Retry != nil {
 		return r.Retry

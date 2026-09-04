@@ -7,29 +7,29 @@ import (
 	"os"
 )
 
-// Коды ошибок, которые уходят за границу FFI.
+// Error codes that cross the FFI boundary.
 //
-// Текст ошибки — для человека, код — для программы. Без кода Python мог
-// различать исходы только разбором текста, и WebSocket.__iter__ глотал любой
-// сбой как «сервер закрыл соединение», включая таймаут чтения на живом
-// соединении.
+// The message is for humans, the code is for programs. Without a code Python
+// could only tell outcomes apart by parsing text, and WebSocket.__iter__
+// swallowed every failure as "the server closed the connection", including a
+// read timeout on a healthy connection.
 type ErrorCode string
 
 const (
-	// CodeSessionClosed — обращение к закрытой сессии.
+	// CodeSessionClosed — the session was already closed.
 	CodeSessionClosed ErrorCode = "session_closed"
-	// CodeTimeout — истёк дедлайн: сокета, контекста запроса или сообщения.
+	// CodeTimeout — a deadline expired: the socket's, the request context's or a message's.
 	CodeTimeout ErrorCode = "timeout"
-	// CodeWSClosed — WebSocket закрыт: сервером кадром Close либо вызывающим.
+	// CodeWSClosed — the WebSocket is closed: by the server's Close frame or by the caller.
 	CodeWSClosed ErrorCode = "ws_closed"
-	// CodeWSTooBig — сообщение превысило предел WebSocketOptions.MaxMessageSize.
+	// CodeWSTooBig — a message exceeded WebSocketOptions.MaxMessageSize.
 	CodeWSTooBig ErrorCode = "ws_too_big"
-	// CodeWSProtocol — сервер нарушил RFC 6455/7692: сжатый кадр без
-	// согласованного расширения, неизвестный опкод и тому подобное.
+	// CodeWSProtocol — the server broke RFC 6455/7692: a compressed frame without
+	// the negotiated extension, an unknown opcode and the like.
 	CodeWSProtocol ErrorCode = "ws_protocol"
 )
 
-// codedError несёт код рядом с исходной ошибкой, не теряя её текста.
+// codedError carries a code next to the original error, without losing its text.
 type codedError struct {
 	code ErrorCode
 	err  error
@@ -45,8 +45,8 @@ func withCode(code ErrorCode, err error) error {
 	return &codedError{code: code, err: err}
 }
 
-// Code возвращает код ошибки. Таймауты распознаются по типу, а не по коду:
-// их порождают net и context, которые о наших кодах не знают.
+// Code returns the error code. Timeouts are recognised by type rather than by
+// code: they come from net and context, which know nothing of our codes.
 func Code(err error) ErrorCode {
 	if err == nil {
 		return ""

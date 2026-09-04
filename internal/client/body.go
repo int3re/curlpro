@@ -7,12 +7,12 @@ import (
 	"os"
 )
 
-// requestBody готовит тело запроса и его размер.
+// requestBody prepares the request body and its size.
 //
-// Возвращает -1 как размер, если он неизвестен: тогда транспорт решает сам.
-// Для файла размер берётся из файловой системы, иначе транспорт перешёл бы
-// на chunked-кодирование, которого браузеры при отправке файла не используют,
-// — и это было бы видно на проводе.
+// Returns -1 as the size when it is unknown: the transport then decides.
+// For a file the size comes from the filesystem, otherwise the transport would
+// switch to chunked encoding, which browsers do not use when uploading a file
+// — and that would be visible on the wire.
 func requestBody(r *Request) (io.Reader, int64, error) {
 	switch {
 	case r.BodyFile != "" && len(r.Body) > 0:

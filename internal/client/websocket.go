@@ -26,14 +26,14 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// WebSocket поверх того же TLS-соединения, что и обычные запросы.
+// WebSocket over the same TLS connection as ordinary requests.
 //
-// Рукопожатие — это обычный HTTP/1.1-запрос с Upgrade, поэтому его заголовки
-// тоже часть отпечатка: браузер шлёт свой набор в своём порядке. Фрейминг
-// реализован здесь, а не взят из библиотеки, чтобы не тянуть чужой диалер,
-// который открыл бы соединение мимо нашего TLS.
+// The handshake is a plain HTTP/1.1 request with Upgrade, so its headers are
+// part of the fingerprint too: a browser sends its own set in its own order.
+// The framing is implemented here rather than taken from a library, to avoid
+// pulling in a dialer that would open the connection past our TLS.
 
-// Опкоды кадров (RFC 6455, раздел 5.2).
+// Frame opcodes (RFC 6455, section 5.2).
 const (
 	opContinuation = 0x0
 	opText         = 0x1
@@ -43,67 +43,67 @@ const (
 	opPong         = 0xA
 )
 
-// magicGUID из RFC 6455: сервер приклеивает его к ключу клиента,
-// чтобы доказать, что понял протокол, а не просто отразил заголовок.
+// magicGUID from RFC 6455: the server appends it to the client key to prove it
+// understood the protocol rather than merely echoing a header.
 const magicGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
-// defaultMaxMessageSize — предел сообщения, если вызывающий его не задал.
-// Длина кадра приходит из сети, и без предела заявленные сервером 2^62 байт
-// уходили в make([]byte) — паника, которая в c-shared библиотеке убивает
-// процесс Python.
+// defaultMaxMessageSize is the message limit when the caller sets none.
+// The frame length comes from the network, and without a limit the 2^62 bytes a
+// server may declare went into make([]byte) — a panic, which in a c-shared
+// library kills the Python process.
 const defaultMaxMessageSize = 64 << 20
 
-// Message — принятое сообщение.
+// Message is a received message.
 type Message struct {
-	// Binary отличает двоичное сообщение от текстового: на проводе это разные
-	// опкоды, и сервер вправе их различать.
+	// Binary tells a binary message from a text one: on the wire these are
+	// different opcodes, and a server may treat them differently.
 	Binary bool
 	Data   []byte
 }
 
-// WebSocket — установленное соединение.
+// WebSocket is an established connection.
 type WebSocket struct {
 	conn net.Conn
 	br   *bufio.Reader
 
-	// Запись сериализуется: два одновременных сообщения перемешали бы кадры.
+	// Writing is serialised: two concurrent messages would interleave frames.
 	writeMx sync.Mutex
 	readMx  sync.Mutex
 
 	closeMx    sync.Mutex
-	closed     bool // кадр Close отправлен или получен
-	connClosed bool // сокет закрыт
+	closed     bool // a Close frame was sent or received
+	connClosed bool // the socket is closed
 
 	timeout    time.Duration
 	maxMessage int64
 
-	// deflate не nil, когда сервер принял permessage-deflate.
+	// deflate is non-nil when the server accepted permessage-deflate.
 	deflate *permessageDeflate
 }
 
-// WebSocketOptions настраивают соединение.
+// WebSocketOptions configure the connection.
 type WebSocketOptions struct {
-	// Headers добавляются к рукопожатию поверх заголовков профиля.
+	// Headers are added to the handshake on top of the profile headers.
 	Headers map[string]string
-	// Subprotocols объявляются в Sec-WebSocket-Protocol.
+	// Subprotocols are advertised in Sec-WebSocket-Protocol.
 	Subprotocols []string
-	// Timeout ограничивает рукопожатие и чтение или запись одного сообщения.
+	// Timeout caps the handshake and reading or writing a single message.
 	Timeout time.Duration
-	// ConnectTimeout ограничивает установку соединения отдельно: разрешение
-	// имени, TCP и рукопожатие TLS. Ноль — только Timeout.
+	// ConnectTimeout caps establishing the connection separately: name
+	// resolution, TCP and the TLS handshake. Zero means Timeout only.
 	ConnectTimeout time.Duration
-	// MaxMessageSize ограничивает принимаемое сообщение, в байтах, включая
-	// распакованный размер. Ноль — defaultMaxMessageSize.
+	// MaxMessageSize caps an incoming message in bytes, decompressed size
+	// included. Zero means defaultMaxMessageSize.
 	MaxMessageSize int64
 }
 
-// errWSClosed — соединение закрыто: сервером или вызывающим.
+// errWSClosed — the connection is closed: by the server or by the caller.
 var errWSClosed = errors.New("connection closed")
 
-// DialWebSocket выполняет рукопожатие и возвращает соединение.
+// DialWebSocket performs the handshake and returns the connection.
 //
-// Схема wss:// обязательна: ws:// без TLS не имеет смысла, потому что весь
-// смысл библиотеки — в отпечатке TLS.
+// The wss:// scheme is mandatory: ws:// without TLS makes no sense here,
+// because the whole point of the library is the TLS fingerprint.
 func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocket, error) {
 	if err := s.ensureOpen(); err != nil {
 		return nil, err
@@ -134,8 +134,8 @@ func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocke
 		ctx = withConnectLimit(ctx, opts.ConnectTimeout)
 	}
 
-	// Рукопожатие идёт по HTTP/1.1: Upgrade в HTTP/2 работает иначе
-	// (RFC 8441, расширенный CONNECT) и поддерживается не везде.
+	// The handshake runs over HTTP/1.1: Upgrade in HTTP/2 works differently
+	// (RFC 8441, extended CONNECT) and is not supported everywhere.
 	c, err := s.dialHTTP1(ctx, u)
 	if err != nil {
 		return nil, err
@@ -174,16 +174,16 @@ func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocke
 		return nil, err
 	}
 
-	// Дедлайн рукопожатия снимается: дальше каждое сообщение ставит свой.
+	// The handshake deadline is cleared: from here every message sets its own.
 	_ = c.raw.SetDeadline(time.Time{})
 	return &WebSocket{conn: c.raw, br: c.br, timeout: timeout, maxMessage: maxMessage, deflate: deflate}, nil
 }
 
-// wsFallbackOrder — рукопожатие для профиля без секции websocket.
+// wsFallbackOrder is the handshake for a profile without a websocket section.
 //
-// Это RFC-минимум в правдоподобном порядке, а не отпечаток конкретного
-// браузера: наборы Chrome и Firefox различаются, и угадывать здесь нечего.
-// Профили Chrome и Edge несут замеренный шаблон, см. PROFILE-SCHEMA.md.
+// This is the RFC minimum in a plausible order, not the fingerprint of any
+// particular browser: the Chrome and Firefox sets differ and there is nothing
+// to guess. The Chrome and Edge profiles carry a measured template, see PROFILE-SCHEMA.md.
 var wsFallbackOrder = []profile.HeaderPair{
 	{Key: "Host"},
 	{Key: "Connection", Value: "Upgrade"},
@@ -199,15 +199,15 @@ var wsFallbackOrder = []profile.HeaderPair{
 	{Key: "Sec-WebSocket-Protocol"},
 }
 
-// websocketHeaders собирает заголовки рукопожатия по шаблону профиля.
+// websocketHeaders assembles the handshake headers from the profile template.
 //
-// Шаблон отдельный от навигационного: Chrome не шлёт на рукопожатии ни
-// sec-ch-ua, ни sec-fetch-*, ни accept, зато шлёт Pragma и Cache-Control,
-// а Sec-WebSocket-Key ставит после Accept-Language (замер Chromium 148).
-// Раньше рукопожатие собиралось из навигационного набора, а WebSocket-имена
-// шли «кастомными» в алфавитном порядке перед якорем — и с Host в конце.
+// The template is separate from the navigation one: on a handshake Chrome sends
+// neither sec-ch-ua nor sec-fetch-* nor accept, while it does send Pragma and
+// Cache-Control and puts Sec-WebSocket-Key after Accept-Language (measured on
+// Chromium 148). The handshake used to be built from the navigation set, and the
+// WebSocket names went out as "custom" ones in alphabetical order before the anchor — with Host last.
 //
-// Пустое значение — слот, заполняемый по имени; слот без значения выпадает.
+// An empty value is a slot filled by name; a slot with no value drops out.
 func (s *Session) websocketHeaders(u *url.URL, key string, opts WebSocketOptions) []headerKV {
 	order := s.profile.WebSocket.Order
 	if len(order) == 0 {
@@ -250,17 +250,17 @@ func (s *Session) websocketHeaders(u *url.URL, key string, opts WebSocketOptions
 				add(h.Key, c)
 			}
 		default:
-			// accept-encoding, accept-language и прочее берутся из
-			// навигационного набора профиля — значения там те же.
+			// accept-encoding, accept-language and the rest come from the
+			// profile's navigation set — the values there are the same.
 			if v := s.profileHeaderValue(h.Key); v != "" {
 				add(h.Key, v)
 			}
 		}
 	}
 
-	// Пользовательские заголовки: переопределение меняет значение на месте,
-	// новое имя уходит в конец. Из браузера к рукопожатию заголовок не
-	// добавить вовсе, так что эталонной позиции у него нет.
+	// User headers: an override changes the value in place, a new name goes to
+	// the end. A browser cannot add a header to a handshake at all, so there is
+	// no reference position for one.
 	names := make([]string, 0, len(opts.Headers))
 	for k := range opts.Headers {
 		names = append(names, k)
@@ -272,7 +272,7 @@ func (s *Session) websocketHeaders(u *url.URL, key string, opts WebSocketOptions
 	return out
 }
 
-// profileHeaderValue возвращает значение заголовка из навигационного набора.
+// profileHeaderValue returns a header value from the navigation set.
 func (s *Session) profileHeaderValue(name string) string {
 	for _, h := range s.profile.ResolvedHeaders() {
 		if strings.EqualFold(h.Key, name) {
@@ -282,7 +282,7 @@ func (s *Session) profileHeaderValue(name string) string {
 	return ""
 }
 
-// websocketRequest собирает запрос рукопожатия.
+// websocketRequest assembles the handshake request.
 func (s *Session) websocketRequest(u *url.URL, key string, opts WebSocketOptions) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
@@ -299,12 +299,12 @@ func (s *Session) websocketRequest(u *url.URL, key string, opts WebSocketOptions
 	return req, nil
 }
 
-// dialHTTP1 открывает отдельное соединение, согласуя http/1.1.
+// dialHTTP1 opens a separate connection, negotiating http/1.1.
 //
-// Признак передаётся в dialSpec, а не выставляется в опциях сессии: правка
-// s.opts на лету была гонкой и меняла ALPN в ClientHello для всех соединений,
-// включая обычные запросы. Соединение WebSocket не кладётся в пул: оно
-// переходит в собственность сокета и живёт до его закрытия.
+// The flag travels in dialSpec instead of being set in the session options:
+// editing s.opts on the fly was a race and changed the ALPN in the ClientHello
+// for every connection, ordinary requests included. A WebSocket connection is
+// not pooled: it becomes the socket's property and lives until it closes.
 func (s *Session) dialHTTP1(ctx context.Context, u *url.URL) (*conn, error) {
 	c, err := s.dial(ctx, u, s.newDialSpec(u, s.opts.Proxy, true))
 	if err != nil {
@@ -334,30 +334,30 @@ func acceptKey(key string) string {
 // permessage-deflate (RFC 7692)
 // ---------------------------------------------------------------------------
 
-// permessageDeflate — состояние согласованного расширения.
+// permessageDeflate is the state of the negotiated extension.
 //
-// Рукопожатие объявляет permessage-deflate, потому что так делает Chrome.
-// До этой правки сервер, принявший расширение (Python websockets, Node ws),
-// слал кадры с RSV1, а клиент отдавал сырой deflate как текст.
+// The handshake advertises permessage-deflate because Chrome does.
+// Before this change a server that accepted the extension (Python websockets,
+// Node ws) sent frames with RSV1 and the client handed raw deflate back as text.
 type permessageDeflate struct {
 	serverNoContext bool
 	clientNoContext bool
 	clientBits      int
 
-	// window — последние 32 КиБ распакованных данных. При context takeover
-	// компрессор сервера ссылается на предыдущие сообщения; вместо хранения
-	// состояния декодера между сообщениями окно подаётся словарём.
+	// window holds the last 32 KiB of decompressed data. With context takeover
+	// the server's compressor refers to earlier messages; instead of keeping
+	// decoder state between messages, the window is supplied as a dictionary.
 	window []byte
 
-	// Отправка: один компрессор на соединение, Flush даёт границу сообщения.
+	// Sending: one compressor per connection, Flush marks a message boundary.
 	wbuf bytes.Buffer
 	w    deflateWriter
 }
 
-// deflateWriter — общее у compress/flate и klauspost/compress/flate.
+// deflateWriter is what compress/flate and klauspost/compress/flate share.
 //
-// Два компрессора нужны из-за окна: стандартный умеет только 32 КиБ,
-// а сервер вправе потребовать меньше через client_max_window_bits.
+// Two compressors are needed because of the window: the standard one only does
+// 32 KiB, while a server may demand less through client_max_window_bits.
 type deflateWriter interface {
 	io.Writer
 	Flush() error
@@ -366,15 +366,15 @@ type deflateWriter interface {
 
 const deflateWindow = 32 << 10
 
-// deflateTail восстанавливает пустой stored-блок, который отправитель срезал
-// (RFC 7692, 7.2.2), а deflateFinal закрывает поток: без финального блока
-// flate.Reader сообщил бы ErrUnexpectedEOF вместо EOF на границе сообщения.
+// deflateTail restores the empty stored block the sender trimmed (RFC 7692,
+// 7.2.2), and deflateFinal closes the stream: without a final block flate.Reader
+// would report ErrUnexpectedEOF instead of EOF at a message boundary.
 var (
 	deflateTail  = []byte{0x00, 0x00, 0xff, 0xff}
 	deflateFinal = []byte{0x01, 0x00, 0x00, 0xff, 0xff}
 )
 
-// parseDeflate разбирает ответное Sec-WebSocket-Extensions.
+// parseDeflate parses the Sec-WebSocket-Extensions response.
 func parseDeflate(header string) (*permessageDeflate, error) {
 	if strings.TrimSpace(header) == "" {
 		return nil, nil
@@ -395,8 +395,8 @@ func parseDeflate(header string) (*permessageDeflate, error) {
 			case "client_no_context_takeover":
 				d.clientNoContext = true
 			case "server_max_window_bits":
-				// Окно сервера ≤ 32 КиБ по определению; декодеру достаточно
-				// максимального, ограничение не нужно.
+			// The server window is <= 32 KiB by definition; the decoder is fine
+			// with the maximum, no limit needed.
 			case "client_max_window_bits":
 				if value != "" {
 					bits, err := strconv.Atoi(value)
@@ -416,7 +416,7 @@ func parseDeflate(header string) (*permessageDeflate, error) {
 	return nil, nil
 }
 
-// inflate распаковывает сообщение и пополняет окно.
+// inflate decompresses a message and refills the window.
 func (d *permessageDeflate) inflate(compressed []byte, limit int64) ([]byte, error) {
 	src := io.MultiReader(bytes.NewReader(compressed), bytes.NewReader(deflateTail), bytes.NewReader(deflateFinal))
 	var r io.ReadCloser
@@ -442,17 +442,17 @@ func (d *permessageDeflate) inflate(compressed []byte, limit int64) ([]byte, err
 	return out, nil
 }
 
-// canCompress сообщает, можно ли сжимать исходящие сообщения.
+// canCompress reports whether outgoing messages may be compressed.
 //
-// Раньше при окне меньше 32 КиБ сообщения уходили несжатыми: compress/flate
-// такого окна не умеет. Это разрешено RFC, но Chrome сжимал бы, а разница
-// видна серверу по каждому кадру.
+// Messages used to go out uncompressed when the window was below 32 KiB:
+// compress/flate cannot do such a window. The RFC allows that, but Chrome would
+// compress, and the difference is visible to the server on every frame.
 func (d *permessageDeflate) canCompress() bool { return d != nil }
 
-// newDeflateWriter создаёт компрессор с окном 1<<bits.
+// newDeflateWriter creates a compressor with a 1<<bits window.
 //
-// Окно меньше стандартного умеет только klauspost/compress; для обычных
-// 15 бит остаётся compress/flate, чтобы не менять то, что уже проверено.
+// Only klauspost/compress can do a window below the standard one; for the usual
+// 15 bits compress/flate stays, so as not to change what is already tested.
 func newDeflateWriter(buf *bytes.Buffer, bits int) (deflateWriter, error) {
 	if bits >= 15 {
 		return flate.NewWriter(buf, flate.DefaultCompression)
@@ -460,7 +460,7 @@ func newDeflateWriter(buf *bytes.Buffer, bits int) (deflateWriter, error) {
 	return kflate.NewWriterWindow(buf, 1<<bits)
 }
 
-// compress сжимает сообщение, срезая границу stored-блока по RFC 7692, 7.2.1.
+// compress compresses a message, trimming the stored-block boundary per RFC 7692, 7.2.1.
 func (d *permessageDeflate) compress(payload []byte) ([]byte, error) {
 	if d.w == nil {
 		w, err := newDeflateWriter(&d.wbuf, d.clientBits)
@@ -485,11 +485,11 @@ func (d *permessageDeflate) compress(payload []byte) ([]byte, error) {
 }
 
 // ---------------------------------------------------------------------------
-// Кадры
+// Frames
 // ---------------------------------------------------------------------------
 
-// Send отправляет сообщение целиком одним кадром. Если расширение
-// согласовано, сообщение сжимается — так делает Chrome.
+// Send sends a whole message as one frame. When the extension has been
+// negotiated the message is compressed — as Chrome does.
 func (ws *WebSocket) Send(binary bool, data []byte) error {
 	op := byte(opText)
 	if binary {
@@ -507,14 +507,14 @@ func (ws *WebSocket) Send(binary bool, data []byte) error {
 	return ws.writeFrame(op, data, false)
 }
 
-// Ping отправляет ping; ответный pong обрабатывается в Recv автоматически.
+// Ping sends a ping; the matching pong is handled inside Recv automatically.
 func (ws *WebSocket) Ping(data []byte) error { return ws.writeFrame(opPing, data, false) }
 
-// writeFrame пишет один кадр.
+// writeFrame writes one frame.
 //
-// Клиент обязан маскировать полезную нагрузку (RFC 6455, раздел 5.3):
-// немаскированный кадр от клиента сервер должен разорвать, и это заодно
-// мгновенно выдало бы не-браузер.
+// A client must mask the payload (RFC 6455, section 5.3): a server must tear
+// down an unmasked frame from a client, and that would also give a non-browser
+// away instantly.
 func (ws *WebSocket) writeFrame(opcode byte, payload []byte, compressed bool) error {
 	ws.writeMx.Lock()
 	defer ws.writeMx.Unlock()
@@ -527,16 +527,16 @@ func (ws *WebSocket) writeFrame(opcode byte, payload []byte, compressed bool) er
 	}
 
 	head := make([]byte, 0, 14+len(payload))
-	first := 0x80 | opcode // FIN + опкод
+	first := 0x80 | opcode // FIN + opcode
 	if compressed {
-		first |= 0x40 // RSV1: сообщение сжато (RFC 7692)
+		first |= 0x40 // RSV1: the message is compressed (RFC 7692)
 	}
 	head = append(head, first)
 
 	n := len(payload)
 	switch {
 	case n < 126:
-		head = append(head, 0x80|byte(n)) // бит маски + длина
+		head = append(head, 0x80|byte(n)) // mask bit + length
 	case n <= 0xFFFF:
 		head = append(head, 0x80|126)
 		head = binary.BigEndian.AppendUint16(head, uint16(n))
@@ -560,7 +560,7 @@ func (ws *WebSocket) writeFrame(opcode byte, payload []byte, compressed bool) er
 	return nil
 }
 
-// Recv читает следующее сообщение, склеивая продолжения и отвечая на ping.
+// Recv reads the next message, joining continuations and answering pings.
 func (ws *WebSocket) Recv() (*Message, error) {
 	ws.readMx.Lock()
 	defer ws.readMx.Unlock()
@@ -584,8 +584,8 @@ func (ws *WebSocket) Recv() (*Message, error) {
 
 		switch fr.opcode {
 		case opPing:
-			// Ответить обязаны: молчание в ответ на ping — тоже поведение,
-			// отличающее клиента от браузера.
+			// Answering is mandatory: silence in response to a ping is behaviour
+			// too, and it tells a client from a browser.
 			if err := ws.writeFrame(opPong, fr.payload, false); err != nil {
 				return nil, err
 			}
@@ -594,10 +594,10 @@ func (ws *WebSocket) Recv() (*Message, error) {
 			continue
 		case opClose:
 			code, reason := parseClose(fr.payload)
-			// Ответный Close и закрытие сокета — сразу (RFC 6455, 5.5.1).
-			// Раньше здесь только выставлялся флаг, и последующий Close()
-			// вызывающего выходил по нему, не закрыв сокет: соединение жило
-			// до конца процесса.
+			// The reply Close and the socket close happen at once (RFC 6455, 5.5.1).
+			// This used to only set a flag, and the caller's later Close() returned
+			// on it without closing the socket: the connection lived until the
+			// process ended.
 			ws.closeWith(fr.payload[:min(len(fr.payload), 2)])
 			return nil, withCode(CodeWSClosed, fmt.Errorf("connection closed by server: %d %s", code, reason))
 		case opText, opBinary:
@@ -640,7 +640,7 @@ func (ws *WebSocket) Recv() (*Message, error) {
 	}
 }
 
-// fail закрывает соединение с кодом «ошибка протокола» и возвращает ошибку.
+// fail closes the connection with a protocol-error code and returns the error.
 func (ws *WebSocket) fail(code ErrorCode, err error) error {
 	ws.closeWith(closePayload(1002))
 	return withCode(code, err)
@@ -652,8 +652,8 @@ type frame struct {
 	payload   []byte
 }
 
-// readFrame читает один кадр. have — сколько байт сообщения уже накоплено:
-// предел действует на сообщение целиком, а не на кадр.
+// readFrame reads one frame. have is how many message bytes are already
+// collected: the limit applies to the whole message, not to a frame.
 func (ws *WebSocket) readFrame(have int64) (frame, error) {
 	var head [2]byte
 	if _, err := io.ReadFull(ws.br, head[:]); err != nil {
@@ -681,7 +681,7 @@ func (ws *WebSocket) readFrame(have int64) (frame, error) {
 		}
 		length = binary.BigEndian.Uint64(ext[:])
 	}
-	// Проверка до выделения памяти: длину называет сервер.
+	// Checked before allocating: the length is whatever the server says.
 	if length > uint64(ws.maxMessage) || have+int64(length) > ws.maxMessage {
 		ws.closeWith(closePayload(1009))
 		return frame{}, withCode(CodeWSTooBig,
@@ -690,7 +690,7 @@ func (ws *WebSocket) readFrame(have int64) (frame, error) {
 
 	var mask [4]byte
 	if masked {
-		// Сервер маскировать не должен, но кадр всё равно надо разобрать.
+		// A server must not mask, but the frame still has to be parsed.
 		if _, err := io.ReadFull(ws.br, mask[:]); err != nil {
 			return frame{}, err
 		}
@@ -712,7 +712,7 @@ func (ws *WebSocket) readFrame(have int64) (frame, error) {
 
 func parseClose(payload []byte) (uint16, string) {
 	if len(payload) < 2 {
-		return 1005, "" // «статус отсутствует» по RFC 6455
+		return 1005, "" // "no status present" per RFC 6455
 	}
 	return binary.BigEndian.Uint16(payload[:2]), string(payload[2:])
 }
@@ -721,17 +721,17 @@ func closePayload(code uint16) []byte {
 	return binary.BigEndian.AppendUint16(nil, code)
 }
 
-// Close отправляет кадр закрытия и разрывает соединение.
+// Close sends a close frame and tears the connection down.
 //
-// Повторный вызов и вызов после Close от сервера безопасны: сокет в любом
-// случае оказывается закрытым.
+// Calling it twice, or after a Close from the server, is safe: the socket ends
+// up closed either way.
 func (ws *WebSocket) Close(code uint16, reason string) error {
 	payload := binary.BigEndian.AppendUint16(nil, code)
 	payload = append(payload, reason...)
 	return ws.closeWith(payload)
 }
 
-// closeWith шлёт Close с данным телом (если ещё не слали) и закрывает сокет.
+// closeWith sends a Close with the given payload (unless already sent) and closes the socket.
 func (ws *WebSocket) closeWith(payload []byte) error {
 	ws.closeMx.Lock()
 	alreadyClosed := ws.closed
@@ -754,8 +754,8 @@ func (ws *WebSocket) closeWith(payload []byte) error {
 	return writeErr
 }
 
-// writeCloseFrame пишет кадр Close в обход проверки isClosed: флаг уже
-// выставлен, а кадр отправить нужно.
+// writeCloseFrame writes a Close frame bypassing the isClosed check: the flag
+// is already set, but the frame still has to go out.
 func (ws *WebSocket) writeCloseFrame(payload []byte) error {
 	ws.writeMx.Lock()
 	defer ws.writeMx.Unlock()

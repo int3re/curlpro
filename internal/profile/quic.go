@@ -106,8 +106,8 @@ func ApplyQUIC(spec *utls.ClientHelloSpec, q *QUICSpec) error {
 			// position inside available_versions is random — in one sample the version
 			// came first, in two the GREASE did. That settles the disagreement between
 			// utls ("GREASE first") and curl-impersonate ("1,GREASE"): each saw one capture.
-			// Без явного значения порядок разыгрывается на каждое соединение;
-			// явное true или false фиксирует его.
+			// Without an explicit value the order is drawn per connection;
+			// an explicit true or false pins it.
 			greaseFirst := randomBool()
 			if q.GreaseVersionFirst != nil {
 				greaseFirst = *q.GreaseVersionFirst
@@ -139,8 +139,8 @@ func findQUICParams(spec *utls.ClientHelloSpec) *utls.QUICTransportParametersExt
 	return nil
 }
 
-// QUICParameterIDs возвращает идентификаторы параметров в порядке спеки.
-// Нужно для диагностики: сверять набор удобнее, чем разбирать байты.
+// QUICParameterIDs returns the parameter identifiers in spec order.
+// For diagnostics: comparing a set is easier than parsing bytes.
 func QUICParameterIDs(spec *utls.ClientHelloSpec) []uint64 {
 	ext := findQUICParams(spec)
 	if ext == nil {
@@ -153,11 +153,11 @@ func QUICParameterIDs(spec *utls.ClientHelloSpec) []uint64 {
 	return out
 }
 
-// TagValue переводит четырёхсимвольный тег QUIC в числовое представление.
+// TagValue converts a four-character QUIC tag into its numeric form.
 //
-// curl-impersonate записывает google_connection_options шестнадцатеричным
-// числом: 0x4f524947 — это ASCII-код "ORIG". Функция нужна при импорте
-// таких строк и для диагностики.
+// curl-impersonate records google_connection_options as a hexadecimal number:
+// 0x4f524947 is the ASCII of "ORIG". The function is needed when importing such
+// strings and for diagnostics.
 func TagValue(tag string) uint32 {
 	var b [4]byte
 	copy(b[:], tag)

@@ -7,46 +7,46 @@ import (
 	"time"
 )
 
-// Пул соединений.
+// The connection pool.
 //
-// Ключ — dialSpec целиком: совпадение всех его полей есть необходимое
-// и достаточное условие переиспользования. Структура, а не склейка в строку:
-// в userinfo прокси нет разделителя, который нельзя было бы встретить
-// в самих данных.
+// The key is the whole dialSpec: matching every one of its fields is both
+// necessary and sufficient for reuse. A struct rather than a joined string:
+// proxy userinfo has no separator that could not also occur inside the data.
+// inside the data itself.
 //
-// Под одним ключом живёт список соединений. Для HTTP/2 в нём одно: потоки
-// мультиплексируются. Для HTTP/1.1 — до maxConnsPerHost: пока одно занято
-// телом ответа, параллельный запрос идёт по соседнему, как в браузере. Раньше
-// пул держал ровно одно, и каждый параллельный запрос поднимал TLS заново
-// и выбрасывал соединение после ответа — 96 запросов давали 36 рукопожатий.
+// One key holds a list of connections. For HTTP/2 there is one: streams are
+// multiplexed. For HTTP/1.1 there are up to maxConnsPerHost: while one is busy
+// with a response body, a parallel request takes the next, as in a browser. The
+// pool used to hold exactly one, and every parallel request raised TLS anew and
+// threw the connection away after the response — 96 requests meant 36 handshakes.
 
 const (
 	defaultMaxIdleConns    = 64
 	defaultIdleConnTimeout = 300 * time.Second
-	// maxConnsPerHost — столько соединений к одному хосту держит Chrome
-	// по HTTP/1.1. Сверх предела соединение живёт один запрос и закрывается.
+	// maxConnsPerHost is how many connections Chrome keeps to one host over
+	// HTTP/1.1. Beyond the limit a connection lives for one request and closes.
 	maxConnsPerHost = 6
 )
 
-// dialSpec — всё, что определяет, каким получится соединение.
+// dialSpec is everything that determines what the connection will be.
 //
-// InsecureSkipVerify сюда не входит: поле сессионное и после New не меняется.
-// Если появится per-request verify, его придётся добавить сюда тем же
-// изменением — иначе запрос без проверки получит соединение с проверкой.
+// InsecureSkipVerify is not part of it: the field is per session and never
+// changes after New. Should a per-request verify appear, it must be added here
+// in the same change — otherwise an unverified request would get a verified connection.
 type dialSpec struct {
-	addr       string // host:port, hostname в нижнем регистре
-	proxy      string // адрес прокси как задан; пусто — напрямую
+	addr       string // host:port, hostname lowercased
+	proxy      string // proxy address as given; empty means direct
 	forceHTTP1 bool
-	// target — куда на самом деле открывается сокет после подмены имени.
-	// Входит в ключ: два правила для одного имени ведут на разные машины,
-	// и общее соединение отправило бы запрос не туда.
+	// target is where the socket actually opens after a name override.
+	// Part of the key: two rules for one name lead to different machines, and a
+	// shared connection would send the request to the wrong one.
 	target string
 }
 
-// newDialSpec собирает ключ соединения.
+// newDialSpec builds the connection key.
 //
-// Hostname приводится к нижнему регистру: иначе https://Example.COM
-// и https://example.com дали бы два соединения к одному серверу.
+// The hostname is lowercased: otherwise https://Example.COM and
+// https://example.com would open two connections to one server.
 func (s *Session) newDialSpec(u *url.URL, proxy string, forceHTTP1 bool) dialSpec {
 	port := u.Port()
 	if port == "" {
@@ -61,15 +61,15 @@ func (s *Session) newDialSpec(u *url.URL, proxy string, forceHTTP1 bool) dialSpe
 	}
 }
 
-// conn возвращает соединение под spec, при необходимости открывая новое.
+// conn returns a connection matching spec, opening a new one when needed.
 func (s *Session) conn(ctx context.Context, u *url.URL, spec dialSpec) (*conn, error) {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return nil, errSessionClosed
 	}
-	// Просроченные собираются под мьютексом, а закрываются после его снятия:
-	// закрытие — сетевой вызов, и держать под ним весь пул незачем.
+	// Expired ones are collected under the mutex and closed after releasing it:
+	// closing is a network call, and holding the whole pool through it is pointless.
 	victims := s.sweepLocked(time.Now())
 
 	if c := s.pickLocked(spec); c != nil && !s.opts.DisableKeepAlive {
@@ -93,10 +93,10 @@ func (s *Session) conn(ctx context.Context, u *url.URL, spec dialSpec) (*conn, e
 		c.close()
 		return nil, errSessionClosed
 	}
-	// Пока шло рукопожатие, соединение мог открыть и другой вызов. Для HTTP/2
-	// второе не нужно — потоки мультиплексируются, и новое закрывается.
-	// Для HTTP/1.1 параллельные запросы живут на разных соединениях,
-	// поэтому новое остаётся.
+	// While the handshake ran, another call may have opened a connection. For
+	// HTTP/2 a second one is useless — streams multiplex, so the new one closes.
+	// For HTTP/1.1 parallel requests live on separate connections, so the new one stays.
+	// so the new one stays.
 	if c.h2 != nil && !s.opts.DisableKeepAlive {
 		if old := s.pickLocked(spec); old != nil && old.h2 != nil {
 			old.acquire()
@@ -111,15 +111,15 @@ func (s *Session) conn(ctx context.Context, u *url.URL, spec dialSpec) (*conn, e
 	c.lastUsed = time.Now()
 	list := s.conns[spec]
 	if s.opts.DisableKeepAlive {
-		// Соединение не попадает в пул вовсе: release закроет его сразу
-		// после ответа, и следующий запрос начнёт рукопожатие заново.
+		// The connection never enters the pool: release closes it right after the
+		// response, and the next request starts a fresh handshake.
 		c.pooled = false
 	} else if c.h2 != nil || len(list) < maxConnsPerHost {
 		s.conns[spec] = append(list, c)
 	} else {
-		// Сверх предела браузера: соединение живёт один запрос и закрывается
-		// в release, чтобы всплеск параллельных запросов не оставил после
-		// себя десятки открытых сокетов.
+		// Beyond the browser's limit: the connection lives for one request and is
+		// closed in release, so that a burst of parallel requests does not leave
+		// dozens of open sockets behind.
 		c.pooled = false
 	}
 	over := s.evictLRULocked()
@@ -130,8 +130,8 @@ func (s *Session) conn(ctx context.Context, u *url.URL, spec dialSpec) (*conn, e
 	return c, nil
 }
 
-// pickLocked выбирает из пула соединение, готовое принять запрос.
-// Вызывается под s.mu.
+// pickLocked picks a pooled connection ready to take a request.
+// Called under s.mu.
 func (s *Session) pickLocked(spec dialSpec) *conn {
 	for _, c := range s.conns[spec] {
 		if c.usable() && c.canTake() {
@@ -141,8 +141,8 @@ func (s *Session) pickLocked(spec dialSpec) *conn {
 	return nil
 }
 
-// inPoolLocked сообщает, числится ли соединение в пуле. Сравнение по указателю
-// обязательно: за время запроса под тем же ключом могло появиться другое.
+// inPoolLocked reports whether a connection is listed in the pool. Comparing by
+// pointer is mandatory: another one may have appeared under the same key meanwhile.
 func (s *Session) inPoolLocked(c *conn) bool {
 	for _, x := range s.conns[c.spec] {
 		if x == c {
@@ -152,7 +152,7 @@ func (s *Session) inPoolLocked(c *conn) bool {
 	return false
 }
 
-// removeLocked убирает соединение из пула, если оно там есть.
+// removeLocked drops a connection from the pool when it is there.
 func (s *Session) removeLocked(c *conn) {
 	list := s.conns[c.spec]
 	for i, x := range list {
@@ -168,7 +168,7 @@ func (s *Session) removeLocked(c *conn) {
 	}
 }
 
-// release освобождает соединение после того, как тело ответа дочитано.
+// release frees a connection once the response body has been read.
 func (s *Session) release(c *conn) {
 	if c == nil {
 		return
@@ -179,24 +179,24 @@ func (s *Session) release(c *conn) {
 	s.mu.Lock()
 	pooled := c.pooled && s.inPoolLocked(c)
 	if pooled {
-		// Время простоя считается от возврата, а не от выдачи: иначе долгий
-		// поток делал бы соединение «просроченным» в момент, когда оно
-		// только что работало.
+		// Idle time counts from the return, not from the hand-out: otherwise a long
+		// stream would make a connection look expired the moment it stopped working.
+		// it had just been working.
 		c.lastUsed = time.Now()
 	}
 	s.mu.Unlock()
-	// Соединение вне пула больше никому не достанется — закрываем сразу,
-	// иначе оно осталось бы висеть до завершения процесса.
+	// A connection outside the pool will never be handed out again — close it
+	// at once, or it would hang around until the process ends.
 	if !pooled {
 		c.close()
 	}
 }
 
-// evict убирает соединение из пула.
+// evict removes a connection from the pool.
 //
-// hard=false нужен для HTTP/2: Close там документирован как прерывающий
-// текущие запросы, и он оборвал бы потоки соседей. После GOAWAY достаточно
-// перестать выдавать соединение и дать ему доиграть.
+// hard=false is needed for HTTP/2: Close is documented there as aborting the
+// current requests, and it would cut the neighbouring streams. After a GOAWAY it
+// is enough to stop handing the connection out and let it finish.
 func (s *Session) evict(c *conn, hard bool) {
 	if c == nil {
 		return
@@ -213,7 +213,7 @@ func (s *Session) evict(c *conn, hard bool) {
 	c.close()
 }
 
-// shutdownOrphan мягко доигрывает HTTP/2-соединение и снимает его с учёта.
+// shutdownOrphan gracefully finishes an HTTP/2 connection and unregisters it.
 func (s *Session) shutdownOrphan(c *conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -224,7 +224,7 @@ func (s *Session) shutdownOrphan(c *conn) {
 	s.mu.Unlock()
 }
 
-// sweepLocked собирает просроченные и непригодные соединения. Вызывается под s.mu.
+// sweepLocked collects expired and unusable connections. Called under s.mu.
 func (s *Session) sweepLocked(now time.Time) []*conn {
 	ttl := s.opts.IdleConnTimeout
 	if ttl <= 0 {
@@ -236,7 +236,7 @@ func (s *Session) sweepLocked(now time.Time) []*conn {
 		for _, c := range list {
 			switch {
 			case c.busy.Load() > 0:
-				kept = append(kept, c) // занятое не трогаем: его закроет release
+				kept = append(kept, c) // leave busy ones alone: release will close them
 			case !c.usable() || now.Sub(c.lastUsed) > ttl:
 				victims = append(victims, c)
 			default:
@@ -252,11 +252,11 @@ func (s *Session) sweepLocked(now time.Time) []*conn {
 	return victims
 }
 
-// evictLRULocked вытесняет самые давние простаивающие соединения сверх лимита.
+// evictLRULocked drops the longest-idle connections above the limit.
 //
-// Ограничитель нужен не гипотетически: ротационный прокси с идентификатором
-// сессии в логине даёт новый dialSpec на каждый запрос, и без предела пул
-// вырос бы до тысяч живых сокетов.
+// The limiter is not hypothetical: a rotating proxy with a session id in the
+// login yields a new dialSpec per request, and without a cap the pool would
+// grow to thousands of live sockets.
 func (s *Session) evictLRULocked() []*conn {
 	limit := s.opts.MaxIdleConns
 	if limit <= 0 {
@@ -276,7 +276,7 @@ func (s *Session) evictLRULocked() []*conn {
 			}
 		}
 		if oldest == nil {
-			break // все заняты — вытеснять некого
+			break // all busy — nothing to evict
 		}
 		s.removeLocked(oldest)
 		victims = append(victims, oldest)

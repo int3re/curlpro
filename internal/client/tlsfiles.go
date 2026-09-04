@@ -10,17 +10,17 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-// Свой корень доверия, клиентские сертификаты и прокси из окружения.
+// A custom trust root, client certificates and the proxy from the environment.
 //
-// Всё это читается один раз при создании сессии: файлы на каждое соединение —
-// лишний ввод-вывод там, где счёт идёт на миллисекунды, а переменные среды
-// внутри процесса не меняются.
+// All of it is read once when the session is created: reading files per
+// connection is wasted I/O where milliseconds count, and environment variables
+// do not change inside a process.
 
-// loadRoots читает корневой сертификат из файла PEM.
+// loadRoots reads a root certificate from a PEM file.
 //
-// Возвращается пул только из него, а не системный плюс он: смысл опции
-// в том, чтобы доверять ровно указанному корню. Кому нужна и системная
-// цепочка, тот оставляет опцию пустой.
+// The returned pool holds only that root, not the system ones plus it: the
+// point of the option is to trust exactly the root given. Anyone who also
+// wants the system chain leaves the option empty.
 func loadRoots(path string) (*x509.CertPool, error) {
 	if path == "" {
 		return nil, nil
@@ -36,7 +36,7 @@ func loadRoots(path string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-// loadClientCert читает пару для взаимной аутентификации.
+// loadClientCert reads the pair used for mutual authentication.
 func loadClientCert(certPath, keyPath string) ([]utls.Certificate, error) {
 	if certPath == "" && keyPath == "" {
 		return nil, nil
@@ -51,11 +51,11 @@ func loadClientCert(certPath, keyPath string) ([]utls.Certificate, error) {
 	return []utls.Certificate{cert}, nil
 }
 
-// proxyFromEnv возвращает прокси для узла из переменных окружения.
+// proxyFromEnv returns the proxy for a host from the environment.
 //
-// Порядок как у curl: HTTPS_PROXY (мы всегда идём по https), затем ALL_PROXY.
-// NO_PROXY отменяет прокси для перечисленных узлов; "*" отменяет для всех.
-// Имена читаются в обоих регистрах: в разных системах принято по-разному.
+// The order is curl's: HTTPS_PROXY (we always speak https), then ALL_PROXY.
+// NO_PROXY excludes the hosts it lists; "*" excludes everything.
+// The names are read in both cases: conventions differ between systems.
 func proxyFromEnv(host string) string {
 	if host == "" {
 		return ""
@@ -71,7 +71,7 @@ func proxyFromEnv(host string) string {
 	return ""
 }
 
-// noProxy сообщает, исключён ли узел из проксирования.
+// noProxy reports whether a host is excluded from proxying.
 func noProxy(host string) bool {
 	list := os.Getenv("NO_PROXY")
 	if list == "" {
@@ -92,8 +92,8 @@ func noProxy(host string) bool {
 		if rule == "*" {
 			return true
 		}
-		// Правило ".example.com" и "example.com" одинаково покрывают
-		// сам домен и его поддомены — так это понимают curl и requests.
+		// ".example.com" and "example.com" equally cover the domain
+		// itself and its subdomains — that is how curl and requests read them.
 		rule = strings.TrimPrefix(rule, ".")
 		if host == rule || strings.HasSuffix(host, "."+rule) {
 			return true

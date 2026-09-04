@@ -20,12 +20,12 @@ func isRedirect(code int) bool {
 	return false
 }
 
-// errRedirectUnsupported означает, что переход возможен по протоколу, но не
-// по возможностям клиента (Location ведёт на http://). Такой ответ отдаётся
-// вызывающему как есть: 301 с Location полезнее исключения.
+// errRedirectUnsupported means the hop is valid by protocol but beyond the
+// client's abilities (Location points at http://). Such a response is handed to
+// the caller as it is: a 301 with a Location is more useful than an exception.
 var errRedirectUnsupported = errors.New("redirect outside https is not supported")
 
-// redirectTarget разрешает Location относительно текущего URL.
+// redirectTarget resolves Location against the current URL.
 func redirectTarget(current, location string) (string, error) {
 	base, err := url.Parse(current)
 	if err != nil {
@@ -42,21 +42,21 @@ func redirectTarget(current, location string) (string, error) {
 	return next.String(), nil
 }
 
-// nextRequest строит запрос следующего шага цепочки.
+// nextRequest builds the request for the next hop of the chain.
 //
-// Что легко сделать неправильно и выдать себя:
-//   - 301/302/303 переводят метод в GET и отбрасывают тело (кроме HEAD);
-//   - при уходе на другой origin снимаются заголовки авторизации и cookie;
-//   - sec-fetch-site считается от инициатора всей цепочки, а не от
-//     предыдущего хопа, и sec-fetch-user переживает редирект.
+// What is easy to get wrong and give yourself away with:
+//   - 301/302/303 turn the method into GET and drop the body (except HEAD);
+//   - moving to another origin strips the authorization and cookie headers;
+//   - sec-fetch-site is computed from the initiator of the whole chain rather
+//     than from the previous hop, and sec-fetch-user survives a redirect.
 //
-// initiator — URL, с которого началась цепочка.
+// initiator is the URL the chain started from.
 func (s *Session) nextRequest(prev *Request, nextURL string, status int, initiator string) Request {
-	// Копия целиком, а меняется только то, что обязано измениться.
+	// A full copy, with only what must change being changed.
 	//
-	// Ручной перечень полей уже терял BodyFile — и 307 с файлом уходил
-	// с пустым телом, — а также per-request таймаут и политику повторов.
-	// Следующее добавленное поле потерялось бы так же тихо.
+	// Listing the fields by hand already lost BodyFile — and a 307 with a file
+	// went out with an empty body — along with the per-request timeout and the
+	// retry policy. The next field added would be lost just as quietly.
 	next := *prev
 	next.URL = nextURL
 	next.RedirectHop = true
@@ -71,8 +71,8 @@ func (s *Session) nextRequest(prev *Request, nextURL string, status int, initiat
 		if !strings.EqualFold(next.Method, http.MethodHead) {
 			next.Method = http.MethodGet
 		}
-		// Тело отбрасывается во всех его видах, иначе GET уйдёт с файлом
-		// или собранной формой.
+		// The body is dropped in all its forms, otherwise a GET would carry a file
+		// or an assembled form.
 		next.Body = nil
 		next.BodyFile = ""
 		next.BodySize = 0
@@ -84,24 +84,24 @@ func (s *Session) nextRequest(prev *Request, nextURL string, status int, initiat
 		dropHeader(next.Headers, "authorization", "cookie", "proxy-authorization")
 	}
 
-	// Замер Chromium 148: у навигации, начатой браузером (профильное none),
-	// инициатора нет, и sec-fetch-site остаётся none на каждом хопе, даже при
-	// смене хоста; sec-fetch-user тоже остаётся. Прежняя логика ставила
-	// same-origin/cross-site по паре соседних URL и гасила sec-fetch-user —
-	// это следовало букве Fetch Metadata для запросов с инициатором, а не
-	// тому, что браузер шлёт при переходе по введённому адресу.
+	// Chromium 148 measurement: for a navigation the browser started itself
+	// (profile value none) there is no initiator, and sec-fetch-site stays none on
+	// every hop, even across hosts; sec-fetch-user stays as well. The earlier
+	// logic set same-origin/cross-site from the neighbouring pair of URLs and
+	// cleared sec-fetch-user — following the letter of Fetch Metadata for requests
+	// with an initiator, not what a browser sends when a URL is typed in.
 	//
-	// Если же значение задано явно и это не none, оно считается от
-	// инициатора против каждого URL цепочки и только ухудшается:
-	// same-origin → same-site → cross-site, обратно не возвращается.
+	// When the value is set explicitly and is not none, it is computed from the
+	// initiator against every URL of the chain and only ever degrades:
+	// same-origin -> same-site -> cross-site, never back.
 	if cur := s.effectiveHeader(prev, "sec-fetch-site"); cur != "" && cur != "none" {
 		setHeader(next.Headers, "sec-fetch-site", worseSite(cur, siteRelation(initiator, nextURL)))
 	}
 	return next
 }
 
-// effectiveHeader возвращает значение заголовка, которое ушло бы в запрос:
-// из самого запроса, из сессии или из профиля.
+// effectiveHeader returns the header value that would go out with the request:
+// from the request itself, from the session or from the profile.
 func (s *Session) effectiveHeader(r *Request, name string) string {
 	for k, v := range r.Headers {
 		if strings.EqualFold(k, name) {
@@ -123,8 +123,8 @@ func (s *Session) effectiveHeader(r *Request, name string) string {
 	return ""
 }
 
-// requestHeader возвращает значение заголовка из запроса или сессии,
-// не заглядывая в профиль: modeFor решает по нему, какой набор профиля брать.
+// requestHeader returns a header value from the request or the session without
+// looking into the profile: modeFor uses it to decide which profile set to take.
 func (s *Session) requestHeader(r *Request, name string) string {
 	for k, v := range r.Headers {
 		if strings.EqualFold(k, name) {
@@ -139,8 +139,8 @@ func (s *Session) requestHeader(r *Request, name string) string {
 	return ""
 }
 
-// setHeader переписывает значение без учёта регистра имени, чтобы в карте
-// не появилось второго ключа под тем же именем.
+// setHeader rewrites a value case-insensitively so the map never gains a second
+// key for the same name.
 func setHeader(h map[string]string, name, value string) {
 	for k := range h {
 		if strings.EqualFold(k, name) {
@@ -151,7 +151,7 @@ func setHeader(h map[string]string, name, value string) {
 	h[name] = value
 }
 
-// siteRelation классифицирует пару URL так, как это делает Fetch Metadata.
+// siteRelation classifies a pair of URLs the way Fetch Metadata does.
 func siteRelation(a, b string) string {
 	switch {
 	case sameOrigin(a, b):
@@ -172,10 +172,10 @@ func worseSite(a, b string) string {
 	return a
 }
 
-// sameSite сравнивает схему и регистрируемый домен (eTLD+1).
+// sameSite compares the scheme and the registrable domain (eTLD+1).
 //
-// Список публичных суффиксов нужен, потому что по одним меткам не отличить
-// a.example.com/b.example.com (same-site) от a.co.uk/b.co.uk (cross-site).
+// The public suffix list is needed because labels alone cannot tell
+// a.example.com/b.example.com (same-site) from a.co.uk/b.co.uk (cross-site).
 func sameSite(a, b string) bool {
 	ua, err1 := url.Parse(a)
 	ub, err2 := url.Parse(b)
@@ -193,11 +193,11 @@ func registrableDomain(host string) string {
 	if d, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
 		return d
 	}
-	return host // localhost и прочие имена без суффикса сравниваются целиком
+	return host // localhost and other suffix-less names compare whole
 }
 
-// dropHeader убирает заголовки без учёта регистра: перечислять оба написания
-// недостаточно, вызывающий мог задать AUTHORIZATION или Content-Type.
+// dropHeader removes headers case-insensitively: listing both spellings is not
+// enough, the caller may have written AUTHORIZATION or Content-Type.
 func dropHeader(h map[string]string, names ...string) {
 	for _, name := range names {
 		lowered := strings.ToLower(name)
@@ -209,10 +209,10 @@ func dropHeader(h map[string]string, names ...string) {
 	}
 }
 
-// sameOrigin сравнивает схему, хост и порт.
+// sameOrigin compares scheme, host and port.
 //
-// Сравнения одного лишь имени хоста мало: переход с другого порта — уже
-// другой источник, и браузер пометил бы его как cross-site.
+// Comparing the host name alone is not enough: a hop from another port is
+// already a different origin, and a browser would mark it cross-site.
 func sameOrigin(a, b string) bool {
 	ua, err1 := url.Parse(a)
 	ub, err2 := url.Parse(b)

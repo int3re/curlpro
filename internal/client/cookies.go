@@ -11,22 +11,22 @@ import (
 	"github.com/bogdanfinn/fhttp/cookiejar"
 )
 
-// Учёт кук для выгрузки и загрузки.
+// Cookie bookkeeping for export and import.
 //
-// Банка fhttp наружу не отдаёт ничего, кроме пары «имя-значение» для адреса:
-// ни домена, ни срока, ни флагов. Для сохранения сессии между запусками этого
-// мало, поэтому здесь ведётся свой учёт — по тем же заголовкам Set-Cookie,
-// которые уходят в банку. Банка остаётся источником истины для отправки:
-// сопоставление доменов и путей у неё уже написано и проверено.
+// The fhttp jar exposes nothing beyond the name-value pair for an address:
+// no domain, no expiry, no flags. That is not enough to carry a session
+// between runs, so a record of our own is kept here — from the same Set-Cookie
+// headers that reach the jar. The jar stays the source of truth for sending:
+// its domain and path matching is already written and tested.
 
-// Cookie — кука в том виде, в каком её можно сохранить и вернуть.
+// Cookie is a cookie in a form that can be saved and restored.
 type Cookie struct {
 	Name   string `json:"name"`
 	Value  string `json:"value"`
 	Domain string `json:"domain"`
 	Path   string `json:"path"`
-	// Expires — момент истечения в секундах эпохи. 0 означает сеансовую куку:
-	// браузер держит её до закрытия, у нас — до закрытия сессии.
+	// Expires is the expiry in epoch seconds. 0 means a session cookie:
+	// a browser keeps it until it closes, we keep it until the session closes.
 	Expires  int64  `json:"expires,omitempty"`
 	Secure   bool   `json:"secure,omitempty"`
 	HTTPOnly bool   `json:"http_only,omitempty"`
@@ -37,10 +37,10 @@ func cookieKey(domain, path, name string) string {
 	return strings.ToLower(domain) + "\x00" + path + "\x00" + name
 }
 
-// recordCookies запоминает куки из ответа.
+// recordCookies remembers the cookies from a response.
 //
-// Домен и путь берутся из самой куки, а если их нет — выводятся из адреса
-// запроса по RFC 6265: домен без ведущей точки, путь — каталог адреса.
+// The domain and path come from the cookie itself; when it has none they are
+// derived from the request URL per RFC 6265: bare domain, directory as path.
 func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie) {
 	if len(cs) == 0 {
 		return
@@ -62,8 +62,8 @@ func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie) {
 		}
 		key := cookieKey(domain, path, c.Name)
 
-		// MaxAge<0 и прошедший срок — удаление: сервер так гасит куку,
-		// и в выгрузке её быть не должно.
+		// MaxAge<0 and an expiry in the past mean deletion: that is how a server
+		// clears a cookie, and it must not appear in the export.
 		if c.MaxAge < 0 || (!c.Expires.IsZero() && c.Expires.Before(now)) {
 			delete(s.cookies, key)
 			continue
@@ -88,7 +88,7 @@ func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie) {
 	}
 }
 
-// defaultCookiePath — каталог адреса, как того требует RFC 6265, 5.1.4.
+// defaultCookiePath is the URL's directory, as RFC 6265, 5.1.4 requires.
 func defaultCookiePath(p string) string {
 	if !strings.HasPrefix(p, "/") {
 		return "/"
@@ -126,10 +126,10 @@ func sameSiteValue(name string) http.SameSite {
 	}
 }
 
-// Cookies отдаёт куки сессии; просроченные пропускаются.
+// Cookies returns the session cookies; expired ones are skipped.
 //
-// Порядок устойчив — домен, путь, имя, — чтобы выгрузка была
-// воспроизводимой и её можно было хранить в системе контроля версий.
+// The order is stable — domain, path, name — so an export is reproducible
+// and can be kept under version control.
 func (s *Session) Cookies() []Cookie {
 	now := time.Now().Unix()
 	s.mu.Lock()
@@ -154,10 +154,10 @@ func (s *Session) Cookies() []Cookie {
 	return out
 }
 
-// SetCookies загружает куки в сессию.
+// SetCookies loads cookies into the session.
 //
-// Кладутся и в банку, и в учёт: банка отвечает за отправку, учёт — за
-// следующую выгрузку. Домен обязателен: без него непонятно, кому куку слать.
+// They go both into the jar and into the record: the jar handles sending, the
+// record the next export. The domain is required: without it there is nobody to send to.
 func (s *Session) SetCookies(cs []Cookie) error {
 	if s.jar == nil {
 		return fmt.Errorf("cookie jar is disabled for this session")
@@ -203,10 +203,10 @@ func (s *Session) SetCookies(cs []Cookie) error {
 	return nil
 }
 
-// ClearCookies забывает все куки сессии.
+// ClearCookies forgets every cookie of the session.
 //
-// Банка пересоздаётся целиком: удалять по одной она не умеет, а гасить
-// каждую куку пустым значением — оставить в ней мусор с чужими сроками.
+// The jar is recreated whole: it cannot delete one by one, and clearing every
+// cookie with an empty value would leave junk with foreign expiries inside.
 func (s *Session) ClearCookies() error {
 	if s.jar == nil {
 		return nil
@@ -222,8 +222,8 @@ func (s *Session) ClearCookies() error {
 	return nil
 }
 
-// newCookieJar создаёт банку. Отдельной функцией, потому что её создают
-// в двух местах: при открытии сессии и при очистке кук.
+// newCookieJar creates the jar. A function of its own because it is created in
+// two places: when a session opens and when cookies are cleared.
 func newCookieJar() (*cookiejar.Jar, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {

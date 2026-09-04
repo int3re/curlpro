@@ -7,31 +7,31 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// Режимы набора заголовков.
+// Header set modes.
 //
-// Профиль описывает два запроса браузера: переход по адресу (navigate) и
-// fetch/XHR со страницы. Наборы различаются целиком, и запрос с кастомным
-// заголовком поверх навигационного набора аномален при любом якоре: в
-// браузере кастомный заголовок бывает только у fetch/XHR.
+// A profile describes two browser requests: a page load (navigate) and a
+// fetch/XHR from a page. The sets differ entirely, and a request with a custom
+// header on top of the navigation set is anomalous with any anchor: in a
+// browser a custom header only ever appears on fetch/XHR.
 const (
 	ModeAuto     = ""
 	ModeNavigate = "navigate"
 	ModeFetch    = "fetch"
 )
 
-// headerTemplate — выбранный набор: пары, порядок, HTTP/1.1-порядок, якорь.
+// headerTemplate is the chosen set: pairs, order, HTTP/1.1 order, anchor.
 type headerTemplate struct {
 	pairs  []profile.HeaderPair
-	h1     []string // порядок и регистр HTTP/1.1; nil — приблизить
+	h1     []string // HTTP/1.1 order and case; nil means approximate it
 	anchor string
 	fetch  bool
 }
 
-// template выбирает набор для запроса.
+// template picks the set for a request.
 //
-// Если сайт запросил подсказки высокой энтропии, берётся отдельный шаблон:
-// с их появлением Chromium перестраивает весь кластер заголовков, и порядок
-// получается другой — он снят замером и хранится в профиле целиком.
+// When the site asked for high-entropy hints a separate template is used: once
+// they appear, Chromium rebuilds the whole header cluster and the order comes
+// out different — it is captured by measurement and stored in the profile whole.
 func (s *Session) template(r *Request) headerTemplate {
 	fetch := s.modeFor(r) == ModeFetch
 	if want := s.hintsForRequest(r); len(want) > 0 {
@@ -62,14 +62,14 @@ func (s *Session) template(r *Request) headerTemplate {
 	}
 }
 
-// hintH1Order строит порядок HTTP/1.1 для набора с подсказками.
+// hintH1Order builds the HTTP/1.1 order for the set with hints.
 //
-// Шаблон подсказок снят по HTTP/2, где Host и Connection не существуют:
-// их берём из обычного порядка HTTP/1.1, оттуда же — регистр знакомых имён.
-// Сами подсказки Chrome шлёт в нижнем регистре, как и остальные sec-ch-ua.
+// The hints template was captured over HTTP/2, where Host and Connection do not
+// exist: they come from the ordinary HTTP/1.1 order, and so does the case of
+// familiar names. Chrome sends the hints themselves lowercase, like other sec-ch-ua.
 func hintH1Order(pairs []profile.HeaderPair, base []string) []string {
 	if len(base) == 0 {
-		return nil // порядок HTTP/1.1 профиль не задаёт — приблизим кодом
+		return nil // the profile sets no HTTP/1.1 order — the code approximates it
 	}
 	caseOf := make(map[string]string, len(base))
 	for _, n := range base {
@@ -95,7 +95,7 @@ func hintH1Order(pairs []profile.HeaderPair, base []string) []string {
 	return out
 }
 
-// hintsForRequest возвращает подсказки, запрошенные сайтом для адреса запроса.
+// hintsForRequest returns the hints the site asked for at the request's address.
 func (s *Session) hintsForRequest(r *Request) map[string]bool {
 	if r == nil || !s.profile.ClientHints.Enabled() {
 		return nil
@@ -107,7 +107,7 @@ func (s *Session) hintsForRequest(r *Request) map[string]bool {
 	return s.hintsFor(u)
 }
 
-// names возвращает имена набора в порядке отправки.
+// names returns the set's names in send order.
 func (t headerTemplate) names() []string {
 	out := make([]string, len(t.pairs))
 	for i, h := range t.pairs {
@@ -116,13 +116,13 @@ func (t headerTemplate) names() []string {
 	return out
 }
 
-// modeFor определяет режим запроса.
+// modeFor decides the request mode.
 //
-// Явный режим запроса важнее сессионного; без обоих режим выводится из
-// признаков, по которым запрос не мог быть навигацией: метод, кроме GET,
-// HEAD и POST; тело не формы (JSON, XML — форма такого не отправит);
-// заголовок, которого в навигационном наборе не бывает. Fetch возможен
-// только у профиля с секцией fetch.
+// An explicit request mode beats the session's; without either, the mode is
+// derived from traits a navigation could not have: a method other than GET,
+// HEAD or POST; a body that is not a form (JSON or XML — no form sends that);
+// a header the navigation set never carries. Fetch is only possible for a
+// profile with a fetch section.
 func (s *Session) modeFor(r *Request) string {
 	mode := r.Mode
 	if mode == "" {
@@ -149,7 +149,7 @@ func (s *Session) modeFor(r *Request) string {
 		return ModeFetch
 	}
 	known := map[string]bool{
-		// Слоты, которые навигация тоже заполняет: по ним fetch не угадать.
+		// Slots navigation fills as well: they cannot tell fetch apart.
 		"cookie": true, "referer": true, "origin": true, "content-type": true, "content-length": true,
 	}
 	for _, h := range s.profile.Headers.Order {
@@ -168,7 +168,7 @@ func (s *Session) modeFor(r *Request) string {
 	return ModeNavigate
 }
 
-// isFormContentType сообщает, могла ли HTML-форма отправить такое тело.
+// isFormContentType reports whether an HTML form could have sent such a body.
 func isFormContentType(ct string) bool {
 	ct = strings.ToLower(strings.TrimSpace(strings.SplitN(ct, ";", 2)[0]))
 	switch ct {

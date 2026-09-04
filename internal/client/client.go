@@ -1,10 +1,10 @@
-// Package client выполняет HTTP-запросы с отпечатком браузера из профиля.
+// Package client performs HTTP requests with a browser fingerprint from a profile.
 //
-// TLS-рукопожатие ведёт uTLS по ClientHelloSpec профиля; протокол выбирается
-// сервером через ALPN, список предложений тоже берётся из профиля. Соединения
-// переиспользуются по ключу host:port, но спека для каждого нового соединения
-// строится заново: Chrome >=110 перемешивает расширения, и постоянный порядок
-// сам по себе отличал бы нас от браузера.
+// The TLS handshake is driven by uTLS from the profile's ClientHelloSpec; the
+// protocol is chosen by the server through ALPN, and the offer list comes from
+// the profile too. Connections are reused by host:port key, but the spec is
+// rebuilt for every new connection: Chrome >= 110 shuffles extensions, and a
+// constant order would set us apart from a browser on its own.
 package client
 
 import (
@@ -25,210 +25,210 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// DefaultMaxRedirects повторяет предел, принятый в браузерах.
+// DefaultMaxRedirects repeats the limit browsers use.
 const DefaultMaxRedirects = 20
 
-// Options настраивают сессию.
+// Options configure a session.
 type Options struct {
-	// InsecureSkipVerify отключает проверку сертификата.
+	// InsecureSkipVerify turns certificate verification off.
 	InsecureSkipVerify bool
-	// Timeout ограничивает каждый запрос целиком, включая редиректы.
+	// Timeout caps every request as a whole, redirects included.
 	Timeout time.Duration
-	// Proxy — http://, https:// или socks5:// с необязательными user:pass.
+	// Proxy is http://, https:// or socks5:// with optional user:pass.
 	Proxy string
 
-	// DefaultHeaders включает подстановку заголовков профиля.
-	// Выключив его, вызывающая сторона полностью управляет набором и порядком —
-	// анти-боты смотрят и на порядок, поэтому такой контроль нужен наружу.
+	// DefaultHeaders enables the profile's headers.
+	// With it off the caller controls the set and the order completely —
+	// anti-bot systems look at the order too, so that control belongs outside.
 	DefaultHeaders bool
-	// HeaderOrder переопределяет порядок отправки. Заголовки, которых здесь нет,
-	// идут после перечисленных, сохраняя относительный порядок.
+	// HeaderOrder overrides the send order. Headers not listed here follow the
+	// listed ones, keeping their relative order.
 	HeaderOrder []string
 
-	// FollowRedirects включает переходы по 3xx.
+	// FollowRedirects enables following 3xx responses.
 	FollowRedirects bool
-	// MaxRedirects ограничивает длину цепочки. 0 — DefaultMaxRedirects.
+	// MaxRedirects caps the chain length. 0 means DefaultMaxRedirects.
 	MaxRedirects int
 
-	// Cookies включает cookie-jar, общий для всех запросов сессии.
+	// Cookies enables the cookie jar shared by every request of the session.
 	Cookies bool
 
-	// MaxIdleConns ограничивает число соединений в пуле. 0 — 64.
+	// MaxIdleConns caps the number of pooled connections. 0 means 64.
 	//
-	// Предел нужен не гипотетически: ротационный прокси с идентификатором
-	// сессии в логине даёт новое соединение на каждый запрос.
+	// The limit is not hypothetical: a rotating proxy with a session id in the
+	// login yields a new connection for every request.
 	MaxIdleConns int
-	// IdleConnTimeout — сколько держать неиспользуемое соединение. 0 — 300 с,
-	// столько же держит Chrome.
+	// IdleConnTimeout is how long an unused connection is kept. 0 means 300 s,
+	// as long as Chrome keeps it.
 	IdleConnTimeout time.Duration
-	// ConnectTimeout ограничивает установку соединения отдельно от Timeout:
-	// разрешение имени, TCP и рукопожатие TLS. 0 — только общий предел.
+	// ConnectTimeout caps establishing a connection separately from Timeout:
+	// name resolution, TCP and the TLS handshake. 0 means the total limit only.
 	//
-	// Нужен там, где узел молчит: без отдельного предела запрос ждёт весь
-	// свой бюджет на мёртвом адресе, хотя понятно всё за секунду.
-	// Чтение ответа этим пределом не ограничивается — на него работает Timeout.
+	// Needed where a host goes silent: without a separate limit the request waits
+	// out its whole budget on a dead address, though everything is clear in a second.
+	// Reading the response is not bounded by it — Timeout covers that.
 	ConnectTimeout time.Duration
 
-	// CACert — путь к своему корневому сертификату (PEM) вместо системных.
+	// CACert is the path to a root certificate (PEM) of your own, instead of the system ones.
 	//
-	// Нужен для стендов, корпоративных сетей и перехватывающих прокси:
-	// без него оставалось только выключить проверку целиком.
+	// Needed for test stands, corporate networks and intercepting proxies:
+	// without it the only option was switching verification off entirely.
 	CACert string
-	// ClientCert и ClientKey включают взаимную аутентификацию (mTLS).
+	// ClientCert and ClientKey enable mutual authentication (mTLS).
 	ClientCert string
 	ClientKey  string
 
-	// TrustEnv разрешает брать прокси из переменных окружения
-	// HTTPS_PROXY, HTTP_PROXY и NO_PROXY, как это делают curl и requests.
-	// Явно заданный Proxy всегда сильнее.
+	// TrustEnv allows taking the proxy from the HTTPS_PROXY, HTTP_PROXY and
+	// NO_PROXY environment variables, the way curl and requests do.
+	// An explicitly set Proxy always wins.
 	TrustEnv bool
 
-	// MaxResponseSize ограничивает тело ответа. 0 — без предела.
+	// MaxResponseSize caps the response body. 0 means no limit.
 	//
-	// Без ограничения враждебный или сломанный сервер с бесконечным телом
-	// съедает память процесса целиком: для парсера это не теория.
+	// Without one, a hostile or broken server with an endless body eats the
+	// process memory whole: for a scraper that is not theory.
 	MaxResponseSize int64
 
-	// DisableAltSvc выключает автопереход на HTTP/3 по заголовку Alt-Svc.
+	// DisableAltSvc turns off the automatic HTTP/3 upgrade driven by Alt-Svc.
 	//
-	// По умолчанию переход включён: так делает браузер — первый запрос
-	// к сайту всегда идёт по TCP, а на HTTP/3 клиент переходит, только
-	// увидев объявление. Выключать стоит там, где UDP заведомо закрыт
-	// и лишняя попытка только тратит время.
+	// The upgrade is on by default: that is what a browser does — the first
+	// request to a site always goes over TCP, and the client moves to HTTP/3 only
+	// after seeing the advertisement. Worth turning off where UDP is known to be
+	// blocked and the extra attempt only wastes time.
 	DisableAltSvc bool
 
-	// Resolve подменяет адрес узла, не трогая имя в SNI и заголовке Host.
+	// Resolve overrides a host's address without touching the name in SNI or Host.
 	//
-	// Ключ — "host:port" или просто "host" (тогда правило действует на любой
-	// порт), значение — "ip" или "ip:port". Аналог --resolve у curl: нужен,
-	// чтобы ходить на конкретный сервер за балансировщиком или проверять
-	// стенд под настоящим именем. Отпечаток при этом не меняется: имя
-	// остаётся тем же, меняется только куда открывается сокет.
+	// The key is "host:port" or just "host" (then the rule applies to any port),
+	// the value is "ip" or "ip:port". The equivalent of curl's --resolve: it is how
+	// you reach one specific server behind a balancer, or test a stand under a real
+	// name. The fingerprint does not change: the name stays the same, only the
+	// socket destination moves.
 	Resolve map[string]string
 
-	// IPVersion ограничивает семейство адресов: "4", "6" или пусто.
+	// IPVersion restricts the address family: "4", "6" or empty.
 	//
-	// Нужен там, где у имени есть запись AAAA, но маршрута по IPv6 нет:
-	// без ограничения соединение сначала уходит в таймаут.
+	// Needed where a name has an AAAA record but there is no IPv6 route:
+	// without the restriction the connection first runs into a timeout.
 	IPVersion string
 
-	// DisableKeepAlive выключает переиспользование: каждый запрос получает
-	// своё соединение, и оно закрывается сразу после ответа.
+	// DisableKeepAlive turns reuse off: every request gets its own connection,
+	// which closes right after the response.
 	//
-	// Полярность как у net/http.Transport.DisableKeepAlives — нулевое
-	// значение сохраняет обычное поведение. Заголовок «Connection: close»
-	// при этом не отправляется: браузер его не шлёт, и он выдал бы клиента.
-	// Клиент просто закрывает сокет, как браузер закрывает простаивающий.
+	// The polarity matches net/http.Transport.DisableKeepAlives — the zero value
+	// keeps the usual behaviour. No "Connection: close" header is sent: a browser
+	// does not send one, and it would give the client away.
+	// The client simply closes the socket, as a browser closes an idle one.
 	DisableKeepAlive bool
 
-	// ForceHTTP1 запрещает h2 даже если сервер его предлагает.
+	// ForceHTTP1 forbids h2 even when the server offers it.
 	ForceHTTP1 bool
 
-	// HTTP3 отправляет запросы по QUIC вместо TCP.
+	// HTTP3 sends requests over QUIC instead of TCP.
 	//
-	// Это отдельный транспорт, а не вариант ALPN, поэтому он выбирается явно.
-	// Профиль обязан описывать секцию http3, иначе сессия не создастся.
+	// This is a separate transport, not an ALPN variant, so it is chosen explicitly.
+	// The profile must describe an http3 section or the session will not be created.
 	HTTP3 bool
 
-	// Retry задаёт повторы. nil означает, что повторов нет.
+	// Retry configures retries. nil means no retries.
 	Retry *RetryPolicy
 
-	// Mode выбирает набор заголовков: "navigate" — переход по адресу,
-	// "fetch" — fetch/XHR, "" или "auto" — по признакам запроса (см. modeFor).
+	// Mode selects the header set: "navigate" for a page load, "fetch" for
+	// fetch/XHR, "" or "auto" to decide from the request (see modeFor).
 	Mode string
 
-	// Device — имя устройства из секции devices профиля; "random" — случайное
-	// из списка. Пусто — устройство не выбирается, и подсказки высокой
-	// энтропии остаются со значениями профиля.
+	// Device is a device name from the profile's devices section; "random" picks
+	// one at random. Empty means no device is chosen, and the high-entropy hints
+	// keep the profile's values.
 	//
-	// Устройство держится на сессию: настоящий клиент телефон между запросами
-	// не меняет, и смена в середине была бы приметой сама по себе.
+	// The device is held for the session: a real client does not swap phones
+	// between requests, and swapping mid-session would be a tell in itself.
 	Device string
-	// Devices переопределяет список устройств профиля.
+	// Devices overrides the profile's device list.
 	Devices []profile.Device
 }
 
-// Request — запрос в терминах библиотеки.
+// Request is a request in the library's terms.
 type Request struct {
 	Method  string
 	URL     string
 	Headers map[string]string
 	Body    []byte
 
-	// Multipart, если задан, кодируется в тело с границей в стиле профиля.
-	// Взаимоисключающ с Body.
+	// Multipart, when set, is encoded into the body with a boundary in the
+	// profile's style. Mutually exclusive with Body.
 	Multipart *MultipartForm
 
-	// BodyFile — путь к файлу, который отправляется телом запроса.
+	// BodyFile is the path to a file sent as the request body.
 	//
-	// Файл читается потоком, а не целиком в память: отправка гигабайтного
-	// архива не должна требовать гигабайта памяти. Взаимоисключающ с Body.
+	// The file is streamed rather than read into memory: sending a gigabyte
+	// archive must not need a gigabyte of RAM. Mutually exclusive with Body.
 	BodyFile string
-	// BodySize — размер тела для Content-Length. Ноль при заданном BodyFile
-	// означает «взять из файла».
+	// BodySize is the body size for Content-Length. Zero together with BodyFile
+	// means "take it from the file".
 	BodySize int64
 
-	// HeaderOrder переопределяет порядок для одного запроса.
+	// HeaderOrder overrides the order for a single request.
 	HeaderOrder []string
-	// DefaultHeaders включает или отключает заголовки профиля для одного
-	// запроса. nil — как задано у сессии.
+	// DefaultHeaders switches the profile headers on or off for a single
+	// request. nil means whatever the session says.
 	//
-	// Указатель, а не bool: сессия может отключить их целиком, и тогда
-	// отдельному запросу нужен способ вернуть их обратно.
+	// A pointer rather than a bool: the session may switch them off entirely, and
+	// then a single request needs a way to bring them back.
 	DefaultHeaders *bool
 
-	// Protocol насильно задаёт транспорт для одного запроса: ProtoHTTP1,
-	// ProtoH2 или ProtoH3. Пусто — как решает сессия: её опции, а на прямых
-	// соединениях ещё и Alt-Svc.
+	// Protocol forces the transport for a single request: ProtoHTTP1, ProtoH2 or
+	// ProtoH3. Empty means whatever the session decides: its options, and on
+	// direct connections Alt-Svc as well.
 	//
-	// Указание сильнее и того и другого: вызывающий просит протокол,
-	// а не совета.
+	// The instruction beats both: the caller is asking for a protocol, not for
+	// advice.
 	Protocol string
 
-	// Переопределения сессионных настроек на один запрос.
-	// nil означает «взять из сессии» — это отличает «не задано» от «задано
-	// в ноль», что для таймаута и редиректов принципиально разные вещи.
+	// Per-request overrides of session settings.
+	// nil means "take the session's" — that tells "not set" from "set to zero",
+	// which for a timeout and for redirects are entirely different things.
 
-	// Timeout ограничивает этот запрос целиком, включая редиректы и повторы.
+	// Timeout caps this request as a whole, redirects and retries included.
 	Timeout *time.Duration
-	// ConnectTimeout переопределяет предел на установку соединения.
+	// ConnectTimeout overrides the limit on establishing the connection.
 	ConnectTimeout *time.Duration
-	// FollowRedirects переопределяет переходы по 3xx.
+	// FollowRedirects overrides whether 3xx are followed.
 	FollowRedirects *bool
-	// MaxRedirects переопределяет предел длины цепочки.
+	// MaxRedirects overrides the chain length limit.
 	MaxRedirects *int
-	// Retry переопределяет политику повторов для этого запроса.
+	// Retry overrides the retry policy for this request.
 	Retry *RetryPolicy
 
-	// Proxy переопределяет прокси сессии.
+	// Proxy overrides the session proxy.
 	//
-	// nil означает «взять из сессии», пустая строка — идти напрямую в обход
-	// сессионного прокси. Это разные вещи, поэтому указатель, а не строка.
+	// nil means "take the session's", an empty string means going directly,
+	// bypassing it. Those differ, hence a pointer rather than a string.
 	Proxy *string
 
-	// SuppressHeaders гасит заголовки по имени уже после сборки из профиля.
+	// SuppressHeaders removes headers by name after they were built from the profile.
 	//
-	// Нужно для случаев вроде sec-fetch-user: он приходит из профиля,
-	// и удаление из Headers его не затронуло бы.
+	// Needed for cases such as sec-fetch-user: it comes from the profile, and
+	// deleting it from Headers would not touch it.
 	SuppressHeaders []string
 
-	// RedirectHop помечает запрос как шаг цепочки редиректов. Chromium на
-	// таком шаге ставит client hints (sec-ch-ua*) не в начало, а после
-	// Sec-Fetch-Dest — см. buildHeaders.
+	// RedirectHop marks the request as a redirect hop. On such a hop Chromium
+	// places the client hints (sec-ch-ua*) not at the front but after
+	// Sec-Fetch-Dest — see buildHeaders.
 	RedirectHop bool
 
-	// Mode переопределяет Options.Mode для одного запроса.
+	// Mode overrides Options.Mode for a single request.
 	Mode string
 
-	// Ctx — родительский контекст запроса. nil означает context.Background.
+	// Ctx is the request's parent context. nil means context.Background.
 	//
-	// Нужен для отмены снаружи: асинхронный вызов из Python отменяется, когда
-	// задача asyncio снята, и без контекста запрос продолжал бы жить до своего
-	// таймаута, занимая соединение.
+	// Needed for cancellation from outside: an async call from Python is cancelled
+	// when the asyncio task is, and without a context the request would live on
+	// until its own timeout, holding a connection.
 	Ctx context.Context
 }
 
-// context возвращает родительский контекст запроса.
+// context returns the request's parent context.
 func (r *Request) context() context.Context {
 	if r != nil && r.Ctx != nil {
 		return r.Ctx
@@ -236,19 +236,19 @@ func (r *Request) context() context.Context {
 	return context.Background()
 }
 
-// Значения Request.Protocol.
+// Values for Request.Protocol.
 //
-// h2 не урезает список ALPN до одного значения: набор из единственного h2
-// не шлёт ни один браузер, и подделка отпечатка на этом бы и кончилась.
-// Поэтому h2 означает «не уходить в QUIC и не соглашаться на HTTP/1.1»:
-// если сервер согласовал http/1.1, запрос падает с внятной ошибкой.
+// h2 does not trim the ALPN list to a single entry: no browser sends a list of
+// h2 alone, and the fingerprint forgery would end right there.
+// So h2 means "do not go to QUIC and do not settle for HTTP/1.1": when the
+// server negotiates http/1.1 the request fails with a clear error.
 const (
 	ProtoHTTP1 = "http1"
 	ProtoH2    = "h2"
 	ProtoH3    = "h3"
 )
 
-// protocol возвращает затребованный запросом транспорт.
+// protocol returns the transport the request asked for.
 func (r *Request) protocol() string {
 	if r == nil {
 		return ""
@@ -256,7 +256,7 @@ func (r *Request) protocol() string {
 	return r.Protocol
 }
 
-// useDefaultHeaders решает, добавлять ли заголовки профиля.
+// useDefaultHeaders decides whether to add the profile headers.
 func (s *Session) useDefaultHeaders(r *Request) bool {
 	if r != nil && r.DefaultHeaders != nil {
 		return *r.DefaultHeaders
@@ -264,7 +264,7 @@ func (s *Session) useDefaultHeaders(r *Request) bool {
 	return s.opts.DefaultHeaders
 }
 
-// proxyFor возвращает адрес прокси для запроса.
+// proxyFor returns the proxy address for a request.
 func (s *Session) proxyFor(r *Request) string {
 	if r != nil && r.Proxy != nil {
 		return *r.Proxy
@@ -272,11 +272,11 @@ func (s *Session) proxyFor(r *Request) string {
 	return s.opts.Proxy
 }
 
-// proxyForHost возвращает прокси с учётом переменных окружения.
+// proxyForHost returns the proxy, taking the environment into account.
 //
-// Явно заданный прокси всегда сильнее: окружение — это умолчание, а не
-// приказ. Пустая строка в запросе означает «идти напрямую», и окружение
-// её тоже не перебивает.
+// An explicitly set proxy always wins: the environment is a default, not an
+// order. An empty string in the request means "go directly", and the
+// environment does not override that either.
 func (s *Session) proxyForHost(r *Request, host string) string {
 	if r != nil && r.Proxy != nil {
 		return *r.Proxy
@@ -290,22 +290,22 @@ func (s *Session) proxyForHost(r *Request, host string) string {
 	return ""
 }
 
-// connectLimitKey помечает предел на установку соединения в контексте.
+// connectLimitKey marks the connect limit inside a context.
 type connectLimitKey struct{}
 
-// withConnectLimit кладёт переопределение запроса в контекст.
+// withConnectLimit puts the request's override into the context.
 //
-// Значением в контексте, а не аргументом: до dial ведут три пути — пул
-// соединений, апгрейд до HTTP/3 и WebSocket, — и лишний параметр пришлось бы
-// протаскивать через каждый.
+// As a context value rather than an argument: three paths lead to dial — the
+// connection pool, the HTTP/3 upgrade and the WebSocket — and an extra
+// parameter would have to be threaded through each of them.
 func withConnectLimit(ctx context.Context, d time.Duration) context.Context {
 	return context.WithValue(ctx, connectLimitKey{}, d)
 }
 
-// connectContext ограничивает фазу установки соединения.
+// connectContext bounds the connection-establishing phase.
 //
-// Возвращает исходный контекст, если отдельного предела нет: лишний слой
-// с отменой на каждое соединение стоил бы дороже, чем экономит.
+// Returns the original context when there is no separate limit: an extra layer
+// with a cancel per connection would cost more than it saves.
 func (s *Session) connectContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	limit := s.opts.ConnectTimeout
 	if d, ok := ctx.Value(connectLimitKey{}).(time.Duration); ok && d > 0 {
@@ -317,11 +317,11 @@ func (s *Session) connectContext(ctx context.Context) (context.Context, context.
 	return context.WithTimeout(ctx, limit)
 }
 
-// timeout возвращает предел для запроса с учётом переопределения.
+// timeout returns the limit for a request, honouring its override.
 //
-// Ноль отвергается на входе (New и validate), поэтому здесь он означать ничего
-// не может: раньше ноль в опциях подставлял 30 секунд, а ноль в запросе давал
-// мгновенный таймаут — одно и то же число значило противоположное.
+// Zero is rejected at the entry points (New and validate), so it cannot mean
+// anything here: zero in the options used to substitute 30 seconds while zero
+// in a request meant an instant timeout — one number with opposite meanings.
 func (s *Session) timeout(r *Request) time.Duration {
 	if r != nil && r.Timeout != nil {
 		return *r.Timeout
@@ -329,7 +329,7 @@ func (s *Session) timeout(r *Request) time.Duration {
 	return s.opts.Timeout
 }
 
-// validate проверяет переопределения запроса до отправки.
+// validate checks the request overrides before sending.
 func (r *Request) validate() error {
 	if r == nil {
 		return nil
@@ -355,7 +355,7 @@ func (r *Request) validate() error {
 	return nil
 }
 
-// followRedirects сообщает, переходить ли по 3xx для этого запроса.
+// followRedirects reports whether to follow 3xx for this request.
 func (s *Session) followRedirects(r *Request) bool {
 	if r != nil && r.FollowRedirects != nil {
 		return *r.FollowRedirects
@@ -363,7 +363,7 @@ func (s *Session) followRedirects(r *Request) bool {
 	return s.opts.FollowRedirects
 }
 
-// maxRedirects возвращает предел длины цепочки для этого запроса.
+// maxRedirects returns the chain length limit for this request.
 func (s *Session) maxRedirects(r *Request) int {
 	if r != nil && r.MaxRedirects != nil && *r.MaxRedirects > 0 {
 		return *r.MaxRedirects
@@ -371,18 +371,18 @@ func (s *Session) maxRedirects(r *Request) int {
 	return s.opts.MaxRedirects
 }
 
-// Response — ответ.
+// Response is a response.
 type Response struct {
 	Status  int
 	Headers map[string][]string
 	Body    []byte
 	Proto   string
-	URL     string // конечный URL после редиректов
-	// History — пройденные редиректы, от первого к последнему.
+	URL     string // the final URL after redirects
+	// History holds the redirects that were followed, first to last.
 	History []Redirect
 }
 
-// Session выполняет запросы с одним профилем.
+// Session performs requests with a single profile.
 type Session struct {
 	profile *profile.Profile
 	opts    Options
@@ -392,41 +392,41 @@ type Session struct {
 	mu    sync.Mutex
 	conns map[dialSpec][]*conn
 
-	// orphans — HTTP/2-соединения, выведенные из пула, но ещё доигрывающие
-	// текущие потоки. Без учёта они утекли бы вместе с горутиной чтения.
+	// orphans are HTTP/2 connections taken out of the pool but still finishing
+	// their streams. Untracked they would leak along with the read goroutine.
 	orphans map[*conn]struct{}
 
-	// closed под тем же мьютексом, что и пул: иначе запрос, начатый
-	// одновременно с Close, оставил бы соединение без владельца.
+	// closed lives under the same mutex as the pool: otherwise a request started
+	// at the same moment as Close would leave a connection without an owner.
 	closed bool
 
-	// headers — заголовки, добавленные пользователем к сессии. Хранятся
-	// отдельно от профильных, чтобы ResetHeaders вернул чистый отпечаток.
+	// headers are the headers the user added to the session. Kept apart from the
+	// profile's so that ResetHeaders restores the plain fingerprint.
 	headers *sessionHeaders
 
-	// device — телефон, от имени которого идут запросы этой сессии.
+	// device is the phone this session's requests pretend to come from.
 	device profile.Device
-	// acceptCH — подсказки, запрошенные сайтом, по origin. Под тем же
-	// мьютексом, что и пул: заполняется из ответов, читается при сборке.
+	// acceptCH are the hints the site asked for, per origin. Under the same
+	// mutex as the pool: filled from responses, read while building headers.
 	acceptCH map[string]map[string]bool
 
-	// cookies — свой учёт кук для выгрузки: банка отдаёт только пару
-	// «имя-значение» для адреса, а сохранить сессию этого мало.
+	// cookies is our own cookie record for export: the jar yields only the
+	// name-value pair for an address, and that is not enough to save a session.
 	cookies map[string]Cookie
 
-	// altSvc — объявления HTTP/3 по origin вместе с пометкой «сломан».
+	// altSvc holds the HTTP/3 advertisements per origin along with the "broken" mark.
 	altSvc map[string]altSvcEntry
 
-	// roots и clientCerts готовятся один раз при создании сессии: читать
-	// файлы на каждое соединение — лишний ввод-вывод в горячем пути.
+	// roots and clientCerts are prepared once when the session is created:
+	// reading files per connection is wasted I/O on the hot path.
 	roots       *x509.CertPool
 	clientCerts []utls.Certificate
 
 	h3 h3Transport
 }
 
-// New создаёт сессию. Спека профиля проверяется сразу, чтобы ошибка в данных
-// всплыла при создании, а не на первом запросе.
+// New creates a session. The profile spec is checked right away so that a data
+// error surfaces at creation rather than on the first request.
 func New(p *profile.Profile, opts Options) (*Session, error) {
 	if p == nil {
 		return nil, fmt.Errorf("no profile given: a session needs one to build its fingerprint")
@@ -444,8 +444,8 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 		opts.MaxRedirects = DefaultMaxRedirects
 	}
 
-	// Устройство выбирается один раз на сессию. Список из опций
-	// перекрывает профильный: свои телефоны задаются, не трогая профиль.
+	// The device is chosen once per session. A list from the options overrides
+	// the profile's: your own phones can be set without touching the profile.
 	if len(opts.Devices) > 0 {
 		clone := *p
 		clone.Devices = opts.Devices
@@ -457,9 +457,9 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 		if dev, err = p.PickDevice(opts.Device); err != nil {
 			return nil, err
 		}
-		// У профилей, где устройство стоит прямо в User-Agent, строка
-		// пересобирается: иначе подсказка сказала бы одно, а строка рядом
-		// другое — расхождение заметнее, чем одинаковый телефон у всех.
+		// For profiles where the device sits inside the User-Agent, the string is
+		// rebuilt: otherwise the hint would say one thing and the string next to
+		// it another — a mismatch more visible than everyone sharing one phone.
 		if ua := p.UserAgentFor(dev); ua != p.Headers.UserAgent {
 			clone := *p
 			clone.Headers.UserAgent = ua
@@ -479,8 +479,8 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if opts.ForceHTTP1 {
 		s.alpn = []string{"http/1.1"}
 	}
-	// Файлы читаются до первого запроса: ошибка в пути должна вскрываться
-	// при создании сессии, а не на середине работы парсера.
+	// The files are read before the first request: a bad path must surface when
+	// the session is created, not halfway through a scraping run.
 	roots, err := loadRoots(opts.CACert)
 	if err != nil {
 		return nil, err
@@ -498,13 +498,13 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 		}
 		s.jar = jar
 	}
-	// Отсутствие секции http3 в профиле должно вскрываться при создании сессии,
-	// а не на первом запросе.
+	// A missing http3 section in the profile must surface when the session is
+	// created, not on the first request.
 	if opts.HTTP3 && !p.HTTP3.Enabled() {
 		return nil, fmt.Errorf("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
-	// Прокси для QUIC не реализован. Молча пойти напрямую нельзя: это раскрыло
-	// бы реальный адрес, ради сокрытия которого прокси и задавали.
+	// A proxy for QUIC is not implemented. Silently going direct is not an
+	// option: that would reveal the very address the proxy was meant to hide.
 	if opts.HTTP3 && opts.Proxy != "" {
 		return nil, fmt.Errorf("HTTP/3 through a proxy is not supported: QUIC needs " +
 			"CONNECT-UDP (RFC 9298), which no available library implements. " +
@@ -513,10 +513,10 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	return s, nil
 }
 
-// Close закрывает все соединения сессии и запрещает дальнейшее использование.
+// Close closes every connection of the session and forbids further use.
 //
-// Без запрета параллельный запрос успевал создать соединение уже после
-// опустошения пула — и закрыть его было бы некому.
+// Without the ban a parallel request managed to create a connection after the
+// pool was drained — and there would be nobody left to close it.
 func (s *Session) Close() {
 	s.mu.Lock()
 	if s.closed {
@@ -534,13 +534,13 @@ func (s *Session) Close() {
 	for _, list := range conns {
 		closeAll(list)
 	}
-	// Сироты доигрывали текущие потоки; при закрытии сессии ждать их незачем.
+	// The orphans were finishing their streams; when the session closes there is no point waiting.
 	for c := range orphans {
 		c.close()
 	}
 }
 
-// ensureOpen отвергает работу с закрытой сессией.
+// ensureOpen rejects work on a closed session.
 func (s *Session) ensureOpen() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -552,8 +552,8 @@ func (s *Session) ensureOpen() error {
 
 var errSessionClosed = errors.New("session is closed")
 
-// Do выполняет запрос, при необходимости проходя цепочку редиректов,
-// и возвращает тело целиком.
+// Do performs a request, walking the redirect chain when needed, and returns
+// the body whole.
 func (s *Session) Do(r *Request) (*Response, error) {
 	stream, err := s.DoStream(r)
 	if err != nil {
@@ -561,9 +561,9 @@ func (s *Session) Do(r *Request) (*Response, error) {
 	}
 	defer stream.Close()
 
-	// Предел на тело: без него сервер с бесконечным ответом съедает память
-	// процесса целиком. Читаем на байт больше, чтобы отличить «ровно предел»
-	// от «больше предела».
+	// The body limit: without it a server with an endless response eats the
+	// process memory whole. One byte more is read to tell "exactly the limit"
+	// from "over the limit".
 	var reader io.Reader = stream
 	if limit := s.opts.MaxResponseSize; limit > 0 {
 		reader = io.LimitReader(stream, limit+1)
@@ -585,11 +585,11 @@ func (s *Session) Do(r *Request) (*Response, error) {
 	}, nil
 }
 
-// prepare разворачивает multipart-форму в тело запроса.
+// prepare expands a multipart form into the request body.
 //
-// Карта заголовков копируется всегда: при повторе один и тот же *Request
-// проходит здесь дважды, и запись content-type в карту вызывающего исказила бы
-// его запрос, а с ним и отпечаток.
+// The header map is always copied: on a retry the same *Request passes through
+// here twice, and writing content-type into the caller's map would distort
+// their request, and the fingerprint with it.
 func (s *Session) prepare(r *Request) (Request, error) {
 	out := *r
 	out.Headers = make(map[string]string, len(r.Headers))
@@ -607,20 +607,20 @@ func (s *Session) prepare(r *Request) (Request, error) {
 		return out, err
 	}
 	out.Body = body
-	// Границу нельзя задать снаружи: она сгенерирована здесь и должна
-	// совпасть с телом.
+	// The boundary cannot be set from outside: it was generated here and must
+	// match the body.
 	out.Headers["content-type"] = contentType
 	out.Multipart = nil
 	return out, nil
 }
 
-// send выполняет один запрос без учёта редиректов.
+// send performs one request, ignoring redirects.
 //
-// Тело ответа остаётся открытым, и вместе с ним возвращается отмена контекста:
-// вызвать её обязан тот, кто закрывает тело, иначе таймаут продолжит тикать
-// на уже завершённом запросе.
-// Возвращает и само соединение: вызывающий обязан отпустить его через
-// Session.release, когда тело дочитано.
+// The response body stays open, and the context cancel is returned with it:
+// whoever closes the body must call it, or the timeout keeps ticking on a
+// request that has already finished.
+// The connection is returned as well: the caller must release it through
+// Session.release once the body has been read.
 func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.CancelFunc, *conn, error) {
 	u, err := url.Parse(r.URL)
 	if err != nil {
@@ -646,13 +646,13 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		}
 		return nil, nil, nil, err
 	}
-	// Предел живёт в контексте запроса: HTTP/2 читает его сам,
-	// а HTTP/1.1 переносит на дедлайн сокета (см. conn.roundTrip).
+	// The limit lives in the request context: HTTP/2 reads it itself, while
+	// HTTP/1.1 moves it onto the socket deadline (see conn.roundTrip).
 	//
-	// Дедлайн общий на всю цепочку, а не свой у каждого шага: иначе двадцать
-	// редиректов растянулись бы на двадцать таймаутов вместо одного.
-	// Отмена возвращается наружу и вызывается при закрытии тела: до этого
-	// момента чтение должно оставаться под тем же пределом.
+	// One deadline covers the whole chain rather than each step: otherwise twenty
+	// redirects would stretch into twenty timeouts instead of one.
+	// The cancel is returned to the caller and invoked when the body is closed:
+	// until then reading must stay under the same limit.
 	var cancel context.CancelFunc
 	if !deadline.IsZero() {
 		var ctx context.Context
@@ -666,15 +666,15 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if r != nil && r.ConnectTimeout != nil {
 		req = req.WithContext(withConnectLimit(req.Context(), *r.ConnectTimeout))
 	}
-	// Без явного размера транспорт перешёл бы на chunked-кодирование,
-	// которого браузер при отправке файла не использует.
+	// Without an explicit size the transport would switch to chunked encoding,
+	// which a browser does not use when uploading a file.
 	if size >= 0 {
 		req.ContentLength = size
 	}
 
 	fail := func(err error) (*http.Response, context.CancelFunc, *conn, error) {
-		// Тело могло остаться открытым файлом: без закрытия дескриптор течёт,
-		// а с повторами — умножается на число попыток.
+		// The body may still be an open file: without closing it the descriptor
+		// leaks, and with retries it multiplies by the number of attempts.
 		if c, ok := body.(io.Closer); ok {
 			c.Close()
 		}
@@ -684,17 +684,17 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		return nil, nil, nil, err
 	}
 
-	// Ветка HTTP/3 стоит здесь, а не раньше: до создания контекста она
-	// уходила без таймаута вовсе, и зависший запрос висел бы вечно.
-	// Заголовки для неё собирает sendH3 сам: fhttp-запрос ей не нужен.
-	// Автопереход по Alt-Svc действует только на прямые соединения: через
-	// прокси QUIC не проходит, и предлагать его там нечего.
+	// The HTTP/3 branch sits here rather than earlier: before the context existed
+	// it went out with no timeout at all, and a stuck request hung forever.
+	// sendH3 builds its own headers: it needs no fhttp request.
+	// The Alt-Svc upgrade applies to direct connections only: QUIC does not pass
+	// through a proxy, and there is nothing to offer there.
 	forced := r.protocol()
 	viaAltSvc := forced == "" && !s.opts.HTTP3 &&
 		s.proxyForHost(r, u.Host) == "" && s.altSvcH3(u)
 	if forced == ProtoH3 || (forced == "" && s.opts.HTTP3) || viaAltSvc {
-		// Опция сессии проверена при её создании, а требование запроса —
-		// только здесь: до него профиль мог и не понадобиться.
+		// The session option was checked when it was created; a request's demand
+		// only here: before it the profile might never have been needed.
 		if !s.profile.HTTP3.Enabled() {
 			return fail(&fatalError{fmt.Errorf(
 				"protocol=%s: profile %q has no http3 section",
@@ -706,14 +706,14 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		}
 		resp, err := s.sendH3(req.Context(), r, u)
 		if err == nil {
-			// У HTTP/3 своё соединение внутри транспорта, отпускать нечего.
+			// HTTP/3 keeps its own connection inside the transport, nothing to release.
 			return fromStdResponse(resp), cancel, nil, nil
 		}
 		if !viaAltSvc {
 			return fail(err)
 		}
-		// Переход был нашей догадкой по объявлению сайта — откатываемся
-		// на TCP и какое-то время больше не пробуем, как делает браузер.
+		// The upgrade was our guess from the site's advertisement — fall back to
+		// TCP and stop trying for a while, as a browser does.
 		s.markAltSvcBroken(u)
 	}
 
@@ -724,25 +724,25 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	spec := s.newDialSpec(u, s.proxyForHost(r, u.Host), forceH1)
 	c, err := s.conn(req.Context(), u, spec)
 	if err != nil {
-		// Соединения нет — запрос до сервера не дошёл, повтор безопасен.
+		// No connection — the request never reached the server, a retry is safe.
 		return fail(&unprocessedError{err})
 	}
-	// Соединение живое, просто не того протокола: возвращаем его в пул
-	// и падаем. Повтор бессмыслен — сервер согласует то же самое.
+	// The connection is alive, just of the wrong protocol: return it to the pool
+	// and fail. A retry is pointless — the server would negotiate the same.
 	if forced == ProtoH2 && c.proto != "h2" {
 		s.release(c)
 		return fail(&fatalError{fmt.Errorf(
 			"protocol=%s: server negotiated %s. The ALPN list is left intact on purpose: "+
 				"no browser offers h2 alone", ProtoH2, c.proto)})
 	}
-	// Заголовки собираются после выбора соединения: порядок и регистр
-	// HTTP/1.1 зависят от того, что согласовал сервер, а не от опции.
+	// The headers are built after the connection is chosen: HTTP/1.1 order and
+	// case depend on what the server negotiated, not on an option.
 	s.applyHeaders(req, r, u, c.proto == "http/1.1")
 
 	resp, err := c.roundTrip(req.Context(), req)
 	if err != nil {
-		// Соединение больше непригодно. Для HTTP/2 закрываем мягко: жёсткое
-		// закрытие оборвало бы потоки соседних запросов.
+		// The connection is no longer usable. For HTTP/2 close it gently: a hard
+		// close would cut the streams of neighbouring requests.
 		s.release(c)
 		s.evict(c, c.h2 == nil)
 		err = fmt.Errorf("request failed: %w", err)
@@ -762,8 +762,8 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 }
 
 func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, error) {
-	// Предел на установку покрывает и TCP, и рукопожатие TLS: для вызывающего
-	// это одна фаза «пока соединения нет», и делить её незачем.
+	// The connect limit covers both TCP and the TLS handshake: for the caller
+	// this is one phase, "no connection yet", and splitting it serves nobody.
 	dialCtx, done := s.connectContext(ctx)
 	defer done()
 
@@ -772,20 +772,20 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 		return nil, err
 	}
 
-	// Спека строится на каждое соединение: ShuffleChromeTLSExtensions мутирует
-	// слайс на месте, поэтому переиспользование заморозило бы порядок.
+	// The spec is built per connection: ShuffleChromeTLSExtensions mutates the
+	// slice in place, so reusing it would freeze the order.
 	spec, err := profile.BuildSpec(s.profile)
 	if err != nil {
 		raw.Close()
 		return nil, err
 	}
 
-	// ALPN живёт в самой спеке, и ApplyPreset перекрывает Config.NextProtos.
-	// Поэтому ограничение протокола — это правка расширения, а не конфигурации.
-	// Отпечаток при этом меняется законно: браузер без h2 так и выглядит.
+	// ALPN lives inside the spec, and ApplyPreset overrides Config.NextProtos.
+	// So restricting the protocol means editing the extension, not the config.
+	// The fingerprint changes legitimately: a browser without h2 looks like this.
 	//
-	// Признак берётся из dialSpec, а не из опций сессии: он входит в ключ пула,
-	// и h1-соединение WebSocket не подменит собой h2-соединение обычных запросов.
+	// The flag comes from dialSpec rather than from the session options: it is
+	// part of the pool key, so a WebSocket h1 connection cannot replace the h2 one.
 	if ds.forceHTTP1 {
 		if !setALPN(spec, []string{"http/1.1"}) {
 			raw.Close()
@@ -798,10 +798,10 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 		InsecureSkipVerify: s.opts.InsecureSkipVerify,
 		RootCAs:            s.roots,
 		Certificates:       s.clientCerts,
-		// Профили, снятые с возобновлённого соединения, содержат pre_shared_key.
-		// На первом соединении тикета ещё нет, и uTLS по умолчанию отказывается
-		// слать пустое расширение. Браузер в этой ситуации его просто не шлёт —
-		// OmitEmptyPsk воспроизводит именно это поведение.
+		// Profiles captured on a resumed connection contain pre_shared_key.
+		// On a first connection there is no ticket yet, and uTLS refuses by
+		// default to send an empty extension. A browser in that situation simply
+		// does not send it — OmitEmptyPsk reproduces exactly that.
 		OmitEmptyPsk: true,
 	}
 	if len(s.alpn) > 0 {
@@ -813,15 +813,15 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 		raw.Close()
 		return nil, fmt.Errorf("ApplyPreset: %w", err)
 	}
-	// Рукопожатие идёт под тем же пределом, что и TCP: узел, принявший
-	// соединение и замолчавший, иначе съел бы весь бюджет запроса.
+	// The handshake runs under the same limit as TCP: a host that accepted the
+	// connection and went silent would otherwise eat the whole request budget.
 	if err := uconn.HandshakeContext(dialCtx); err != nil {
 		raw.Close()
 		return nil, fmt.Errorf("TLS handshake: %w", err)
 	}
 
-	// Протокол выбрал сервер. Пустой ALPN означает HTTP/1.1 — так ведут себя
-	// профили браузеров, которые h2 не предлагают.
+	// The protocol was chosen by the server. An empty ALPN means HTTP/1.1 — that
+	// is how browser profiles that do not offer h2 behave.
 	switch proto := uconn.ConnectionState().NegotiatedProtocol; proto {
 	case "h2":
 		cc, err := s.transport().NewClientConn(uconn)
@@ -838,7 +838,7 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 	}
 }
 
-// transport собирает HTTP/2-транспорт по профилю.
+// transport builds the HTTP/2 transport from the profile.
 func (s *Session) transport() *http2.Transport {
 	h2 := s.profile.HTTP2
 
@@ -850,26 +850,26 @@ func (s *Session) transport() *http2.Transport {
 		order = append(order, id)
 	}
 
-	// TLSClientConfig не задаём: рукопожатие делает uTLS, а в NewClientConn
-	// передаётся уже установленное соединение.
+	// TLSClientConfig is not set: the handshake is done by uTLS, and
+	// NewClientConn receives an already established connection.
 	tr := &http2.Transport{
 		Settings:          settings,
 		SettingsOrder:     order,
 		ConnectionFlow:    h2.ConnectionWindowUpdate,
 		PseudoHeaderOrder: h2.PseudoOrder,
 	}
-	// Приоритет на HEADERS-кадре.
+	// Priority on the HEADERS frame.
 	//
-	// Значение 0 означает «не отправлять»: так ведёт себя Safari. Нулевой
-	// PriorityParam не выставляет флаг PRIORITY, тогда как nil заставил бы
-	// fhttp подставить свой дефолт (вес 255, exclusive) — он случайно верен
-	// для Chrome и неверен для всех остальных.
+	// A value of 0 means "do not send": that is how Safari behaves. A zero
+	// PriorityParam does not set the PRIORITY flag, whereas nil would make
+	// fhttp substitute its own default (weight 255, exclusive) — which happens
+	// to be right for Chrome and wrong for everyone else.
 	if h2.StreamWeight != nil {
 		if *h2.StreamWeight == 0 {
 			tr.HeaderPriority = &http2.PriorityParam{}
 		} else {
 			excl := h2.StreamExclusive != nil && *h2.StreamExclusive
-			// На проводе вес на единицу меньше заявленного (RFC 7540).
+			// On the wire the weight is one less than declared (RFC 7540).
 			tr.HeaderPriority = &http2.PriorityParam{
 				StreamDep: 0,
 				Exclusive: excl,

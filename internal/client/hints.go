@@ -7,22 +7,22 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// Клиентские подсказки высокой энтропии (User-Agent Client Hints).
+// High-entropy client hints (User-Agent Client Hints).
 //
-// Chrome с версии 110 вырезал из User-Agent модель и версию системы: замер
-// Pixel 7 на Android 17 даёт «Android 10; K» — одну и ту же заглушку у всех
-// телефонов. Настоящее устройство сообщается подсказками sec-ch-ua-model
-// и sec-ch-ua-platform-version, и браузер шлёт их не сразу, а только после
-// того, как сайт их запросил заголовком Accept-CH в ответе.
+// Since version 110 Chrome cut the model and the OS version out of the
+// User-Agent: a Pixel 7 on Android 17 reports "Android 10; K" — the very same
+// placeholder on every phone. The real device is disclosed through the
+// sec-ch-ua-model and sec-ch-ua-platform-version hints, and the browser sends
+// them not right away but only after the site asked with an Accept-CH header.
 //
-// Поэтому «разные телефоны» — это не подстановка в User-Agent (такой строки
-// у современного Chrome не бывает вовсе), а согласованная пара «устройство
-// плюс подсказки», выдаваемая по запросу сайта.
+// So "different phones" is not a substitution in the User-Agent (modern Chrome
+// has no such string at all) but a consistent "device plus hints" pair,
+// handed over when the site asks.
 
-// highEntropyHints — подсказки, которые без Accept-CH не уходят.
+// highEntropyHints are the hints that never go out without Accept-CH.
 //
-// sec-ch-ua, sec-ch-ua-mobile и sec-ch-ua-platform сюда не входят: они низкой
-// энтропии и шлются всегда, поэтому живут в обычном наборе профиля.
+// sec-ch-ua, sec-ch-ua-mobile and sec-ch-ua-platform are not among them: they
+// are low entropy and always sent, so they live in the profile's ordinary set.
 var highEntropyHints = map[string]bool{
 	"sec-ch-ua-arch":              true,
 	"sec-ch-ua-bitness":           true,
@@ -34,8 +34,8 @@ var highEntropyHints = map[string]bool{
 	"sec-ch-ua-wow64":             true,
 }
 
-// originKey — ключ памяти подсказок. Chrome помнит Accept-CH по origin,
-// а не по адресу: запрошенное на главной уходит и в подресурсы.
+// originKey is the key of the hints memory. Chrome remembers Accept-CH per
+// origin rather than per URL: what a landing page asked for also covers subresources.
 func originKey(u *url.URL) string {
 	if u == nil {
 		return ""
@@ -43,11 +43,11 @@ func originKey(u *url.URL) string {
 	return strings.ToLower(u.Scheme + "://" + u.Host)
 }
 
-// noteAcceptCH запоминает запрошенные сайтом подсказки.
+// noteAcceptCH remembers the hints the site asked for.
 //
-// Возвращает true, если ответ пришёл с Critical-CH на подсказки, которых мы
-// в этом запросе не отправляли: Chrome в таком случае повторяет запрос сразу,
-// не дожидаясь следующего.
+// Returns true when the response carried Critical-CH for hints we did not send
+// in this request: Chrome then repeats the request immediately instead of
+// waiting for the next one.
 func (s *Session) noteAcceptCH(u *url.URL, resp map[string][]string) bool {
 	key := originKey(u)
 	if key == "" || !s.profile.ClientHints.Enabled() {
@@ -75,8 +75,8 @@ func (s *Session) noteAcceptCH(u *url.URL, resp map[string][]string) bool {
 			added = true
 		}
 	}
-	// Critical-CH без Accept-CH браузер не выполняет: список критичных
-	// подсказок — подмножество запрошенных.
+	// A browser does not act on Critical-CH without Accept-CH: the critical
+	// list is a subset of the requested one.
 	var criticalNew bool
 	for _, name := range critical {
 		if highEntropyHints[name] && known[name] {
@@ -88,7 +88,7 @@ func (s *Session) noteAcceptCH(u *url.URL, resp map[string][]string) bool {
 	return added && criticalNew
 }
 
-// hintsFor возвращает подсказки, которые сайт уже запросил.
+// hintsFor returns the hints the site has already asked for.
 func (s *Session) hintsFor(u *url.URL) map[string]bool {
 	key := originKey(u)
 	if key == "" {
@@ -106,7 +106,7 @@ func (s *Session) hintsFor(u *url.URL) map[string]bool {
 	return out
 }
 
-// hintList разбирает список имён из заголовка ответа.
+// hintList parses a list of names from a response header.
 func hintList(resp map[string][]string, name string) []string {
 	var out []string
 	for k, vv := range resp {
@@ -125,11 +125,11 @@ func hintList(resp map[string][]string, name string) []string {
 	return out
 }
 
-// hintTemplate строит набор с подсказками для запроса.
+// hintTemplate builds the set with hints for a request.
 //
-// Из шаблона выкидываются подсказки, которых сайт не просил: их относительный
-// порядок при этом сохраняется. Точный порядок Chromium зависит от полного
-// набора имён, поэтому для подмножества он приближается — см. docs/CAPTURE.md.
+// Hints the site did not ask for are dropped from the template, keeping the
+// relative order of the rest. Chromium's exact order depends on the full set of
+// names, so for a subset it is approximated — see docs/CAPTURE.md.
 func (s *Session) hintTemplate(pairs []profile.HeaderPair, want map[string]bool) []profile.HeaderPair {
 	out := make([]profile.HeaderPair, 0, len(pairs))
 	for _, h := range pairs {

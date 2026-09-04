@@ -12,15 +12,15 @@ import (
 	http "github.com/bogdanfinn/fhttp"
 )
 
-// Stream — ответ, тело которого читается по частям.
+// Stream is a response whose body is read in parts.
 //
-// Обычный Do() материализует тело целиком: для мегабайтных загрузок это лишняя
-// память и задержка до первого байта. Stream отдаёт тело потоком, но требует
-// обязательного Close, иначе соединение останется занятым.
-// Redirect — шаг цепочки: чем ответил сервер и куда отправил.
+// An ordinary Do() materialises the body whole: for megabyte downloads that is
+// wasted memory and a delay before the first byte. Stream hands the body over as
+// a stream but requires Close, or the connection stays busy.
+// Redirect is a hop of the chain: what the server answered and where it sent us.
 //
-// Клиент проходит цепочку сам, и без этого вызывающий видел только конечный
-// ответ: понять, был ли переход и через какие адреса, было нельзя.
+// The client walks the chain itself, and without this the caller saw only the
+// final response: whether there was a hop, and through which addresses, was invisible.
 type Redirect struct {
 	Status   int    `json:"status"`
 	URL      string `json:"url"`
@@ -32,26 +32,26 @@ type Stream struct {
 	Headers map[string][]string
 	Proto   string
 	URL     string
-	// History — промежуточные ответы, от первого к последнему.
+	// History holds the intermediate responses, first to last.
 	History []Redirect
 
 	body io.ReadCloser
 
-	// closed атомарный: Close приходит и из GC-потока Python (__del__),
-	// и из явного вызова, а обычный bool дал бы двойное закрытие.
+	// closed is atomic: Close arrives both from Python's GC thread (__del__) and
+	// from an explicit call, and a plain bool would allow a double close.
 	closed atomic.Bool
 
-	// cancel освобождает контекст таймаута. Без него отмена продолжила бы
-	// тикать на уже завершённом запросе — и утекала бы до её срабатывания.
+	// cancel releases the timeout context. Without it the cancellation would keep
+	// ticking on a finished request — and leak until it fired.
 	cancel context.CancelFunc
 
-	// conn и sess нужны, чтобы отпустить соединение ровно тогда, когда тело
-	// дочитано: для HTTP/1.1 до этого момента писать следующий запрос нельзя.
+	// conn and sess are needed to release the connection exactly when the body is
+	// read: for HTTP/1.1 the next request cannot be written before that.
 	conn *conn
 	sess *Session
 }
 
-// Read читает очередную часть тела.
+// Read reads the next part of the body.
 func (s *Stream) Read(p []byte) (int, error) {
 	if s.closed.Load() {
 		return 0, fmt.Errorf("stream is closed")
@@ -59,7 +59,7 @@ func (s *Stream) Read(p []byte) (int, error) {
 	return s.body.Read(p)
 }
 
-// Close освобождает соединение. Повторный вызов безопасен.
+// Close releases the connection. Calling it twice is safe.
 func (s *Stream) Close() error {
 	if !s.closed.CompareAndSwap(false, true) {
 		return nil
@@ -74,16 +74,16 @@ func (s *Stream) Close() error {
 	return err
 }
 
-// DoStream выполняет запрос с повторами и редиректами, возвращая поток
-// вместо готового тела.
+// DoStream performs a request with retries and redirects, returning a stream
+// instead of a ready body.
 //
-// Повтор охватывает всю цепочку редиректов целиком: повторять её середину
-// бессмысленно, потому что промежуточные ответы уже отброшены.
-// DoStream выполняет запрос и отдаёт поток ответа.
+// A retry covers the whole redirect chain: repeating its middle is meaningless,
+// because the intermediate responses are already discarded.
+// DoStream performs the request and returns the response stream.
 //
-// Ответ с Critical-CH повторяется один раз: Chrome в этом случае не ждёт
-// следующего запроса, а сразу переспрашивает с подсказками, которые сайт
-// объявил критичными.
+// A response with Critical-CH is repeated once: Chrome does not wait for the
+// next request in that case but asks again immediately with the hints the site
+// declared critical.
 func (s *Session) DoStream(r *Request) (*Stream, error) {
 	stream, err := s.doStream(r)
 	if err != nil || stream == nil {
@@ -123,21 +123,21 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 		}
 
 		exhausted := attempt >= policy.attempts()
-		// Повтор неидемпотентного метода может создать второй заказ: сервер
-		// мог обработать запрос и не успеть ответить. Разрешение в Methods
-		// снимает запрет для ответов сервера (он ответил, значит, обработал
-		// и приглашает повторить), но не для сетевых сбоев после отправки:
-		// там повтор безопасен, только если запрос заведомо не обрабатывался.
+		// Repeating a non-idempotent method may create a second order: the server
+		// may have processed the request and failed to answer in time. Listing it in
+		// Methods lifts the ban for server responses (it answered, so it processed
+		// the request and invites a retry) but not for network failures after
+		// sending: there a retry is safe only when the request was never processed.
 		forbidden := !policy.allowsMethod(r.Method)
 		if !forbidden && outcome.stream == nil && !isIdempotent(r.Method) && !outcome.unprocessed {
 			forbidden = true
 		}
 
 		if !outcome.retryable || exhausted || forbidden {
-			// Ответ сервера — это результат, а не сбой клиента. Исчерпав
-			// попытки, отдаём последний ответ наружу: так делают curl
-			// и urllib3, и это согласуется с тем, что raise_for_status
-			// здесь тоже добровольный.
+			// A server response is a result, not a client failure. Once the attempts
+			// run out we hand the last response over: curl and urllib3 do the same,
+			// and it fits raise_for_status being voluntary here too.
+			// here as well.
 			if outcome.stream != nil {
 				return outcome.stream, nil
 			}
@@ -151,8 +151,8 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 			}
 			return nil, fmt.Errorf("%w (no time left for another attempt within the %s timeout)", err, limit)
 		}
-		// Сон прерывается дедлайном: иначе на исходе бюджета клиент
-		// просыпается уже за пределом и всё равно бьёт сервер.
+		// The sleep is interrupted by the deadline: otherwise, at the end of the
+		// budget the client wakes past the limit and hits the server anyway.
 		select {
 		case <-time.After(wait):
 		case <-time.After(time.Until(deadline)):
@@ -161,19 +161,19 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 			}
 			return nil, fmt.Errorf("request timed out after %s", limit)
 		}
-		// Удержанный ответ наружу не уйдёт — его сменит следующая попытка.
-		// Раньше он просто терялся вместе с телом, занятостью соединения
-		// и отменой контекста: HTTP/1.1-соединение оставалось «занятым»
-		// навсегда, и каждый следующий запрос к хосту поднимал новый TLS.
+		// A held response never leaves: the next attempt replaces it.
+		// It used to be simply lost together with its body, the connection's busy
+		// count and the context cancellation: an HTTP/1.1 connection stayed "busy"
+		// forever, and every later request to the host raised a new TLS session.
 		outcome.stream.discard()
 	}
 }
 
-// discard дочитывает начало тела и закрывает поток, не отдавая его наружу.
+// discard reads the start of the body and closes the stream without handing it out.
 //
-// Дочитывается не всё: тело нужно только ради переиспользования соединения,
-// и враждебный 503 с гигабайтным телом дренировать целиком незачем — h1Body
-// сам выбросит соединение, если тело не кончилось.
+// Not all of it is read: the body is needed only for connection reuse, and
+// draining a hostile 503 with a gigabyte body is pointless — h1Body throws the
+// connection away itself when the body did not end.
 func (st *Stream) discard() {
 	if st == nil {
 		return
@@ -182,27 +182,27 @@ func (st *Stream) discard() {
 	_ = st.Close()
 }
 
-// attemptOutcome описывает исход попытки.
+// attemptOutcome describes how an attempt ended.
 //
-// stream не nil, когда сервер ответил кодом из списка повторяемых: такой ответ
-// сохраняется целиком, чтобы отдать его наружу, если попытки закончатся.
+// stream is non-nil when the server answered with a retryable code: such a
+// response is kept whole so it can be handed out if the attempts run out.
 //
-// unprocessed означает, что запрос заведомо не дошёл до обработки: не удалось
-// установить соединение либо HTTP/2 отверг поток до обработки (GOAWAY с меньшим
-// last-stream-id, REFUSED_STREAM, непригодное соединение). Только такие сбои
-// безопасно повторять для неидемпотентных методов: сетевая ошибка после
-// отправки не различает «сервер не получил» и «сервер обработал и не ответил».
+// unprocessed means the request certainly never reached processing: the
+// connection could not be established, or HTTP/2 rejected the stream before
+// processing (GOAWAY with a lower last-stream-id, REFUSED_STREAM, an unusable
+// connection). Only such failures are safe to retry for non-idempotent methods:
+// a network error after sending cannot tell "not received" from "processed, no answer".
 type attemptOutcome struct {
 	retryable   bool
 	unprocessed bool
-	header      *http.Response // для чтения Retry-After
-	stream      *Stream        // ответ сервера, если он получен
+	header      *http.Response // for reading Retry-After
+	stream      *Stream        // the server response, when there is one
 }
 
-// attempt выполняет одну попытку: цепочку редиректов целиком.
+// attempt performs one try: the whole redirect chain.
 //
-// Возвращает признак, стоит ли повторять, и ответ, из которого можно
-// прочитать Retry-After.
+// Returns whether a retry is worthwhile and the response Retry-After can be
+// read from.
 func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 	*Stream, attemptOutcome, error) {
 
@@ -213,7 +213,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 	if err != nil {
 		return nil, attemptOutcome{}, err
 	}
-	// Инициатор цепочки: от него считается sec-fetch-site на каждом хопе.
+	// The chain initiator: sec-fetch-site is computed from it on every hop.
 	initiator := current.URL
 	var history []Redirect
 
@@ -226,8 +226,8 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 
 		resp, cancel, used, err := s.send(&current, deadline)
 		if err != nil {
-			// Сетевая ошибка: соединение уже выброшено из пула в send(),
-			// поэтому повтор установит TLS заново.
+			// A network error: send() has already thrown the connection out of the
+			// pool, so the retry will raise TLS anew.
 			var up *unprocessedError
 			return nil, attemptOutcome{
 				retryable:   !isFatal(err),
@@ -235,8 +235,8 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 			}, err
 		}
 
-		// Код ответа, при котором сервер сам приглашает повторить.
-		// Ответ сохраняется целиком: если попытки закончатся, он уйдёт наружу.
+		// A response code the server itself uses to invite a retry.
+		// The response is kept whole: if the attempts run out, it goes to the caller.
 		if policy.attempts() > 0 && policy.allowsStatus(resp.StatusCode) {
 			held := &Stream{
 				Status:  resp.StatusCode,
@@ -265,8 +265,8 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 						Location: location,
 					})
 				case errors.Is(err, errRedirectUnsupported):
-					// Переход невозможен по нашим возможностям, а не по
-					// протоколу: ответ отдаётся как есть, с Location внутри.
+					// The hop is impossible for us rather than by protocol: the
+					// response is handed over as is, with its Location inside.
 				default:
 					drain(resp, cancel)
 					s.release(used)
@@ -275,10 +275,10 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 			}
 		}
 		if next == "" {
-			// Тело здесь уже распаковано: HTTP/2 распаковывает транспорт
-			// fhttp, HTTP/1.1 — conn.roundTrip, HTTP/3 — sendH3. Заголовок
-			// Content-Encoding при этом остаётся, поэтому повторная
-			// распаковка развалилась бы на несовпадении сигнатуры.
+			// The body is already decompressed here: HTTP/2 by the fhttp transport,
+			// HTTP/1.1 by conn.roundTrip, HTTP/3 by sendH3. The Content-Encoding
+			// header stays, so decompressing again would fall apart on a signature
+			// mismatch.
 			return &Stream{
 				Status:  resp.StatusCode,
 				Headers: resp.Header,
@@ -292,8 +292,8 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 			}, attemptOutcome{}, nil
 		}
 
-		// Тело промежуточного ответа дочитывается ограниченно; если оно
-		// не кончилось, соединение переиспользовать нельзя.
+		// The intermediate response body is drained up to a limit; if it did not
+		// end, the connection cannot be reused.
 		if !drain(resp, cancel) {
 			s.evict(used, true)
 		}
@@ -306,18 +306,18 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 	}
 }
 
-// drainLimit — сколько байт тела дочитывается ради переиспользования
-// соединения. Столько же берёт net/http.
+// drainLimit is how many body bytes are read for the sake of connection reuse.
+// net/http takes the same amount.
 //
-// Без предела враждебный 503 с гигабайтным телом вычитывался бы целиком
-// на каждой попытке повтора.
+// Without a limit a hostile 503 with a gigabyte body would be read whole on
+// every retry.
 const drainLimit = 2 << 10
 
-// drain дочитывает начало тела и закрывает его, снимая таймаут запроса.
+// drain reads the start of the body and closes it, clearing the request timeout.
 //
-// Сообщает, кончилось ли тело в пределах лимита. Если нет, соединение
-// переиспользовать нельзя: в сокете остались непрочитанные байты, и следующий
-// запрос разобрал бы ответ из них.
+// Reports whether the body ended within the limit. If it did not, the connection
+// cannot be reused: unread bytes are left in the socket, and the next request
+// would parse its response out of them.
 func drain(resp *http.Response, cancel context.CancelFunc) (drained bool) {
 	n, err := io.Copy(io.Discard, io.LimitReader(resp.Body, drainLimit+1))
 	resp.Body.Close()

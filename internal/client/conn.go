@@ -17,37 +17,37 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// conn — соединение с сервером поверх уже установленного TLS.
+// conn is a connection to a server on top of an established TLS session.
 //
-// Протокол выбирает сервер через ALPN, а список предложений берётся из профиля:
-// у Safari 15 и старых Firefox в ClientHello нет "h2", и навязывать его —
-// значит послать отпечаток, которого у этого браузера не бывает.
+// The protocol is chosen by the server through ALPN, and the offer list comes
+// from the profile: Safari 15 and older Firefox have no "h2" in their
+// ClientHello, and forcing it means sending a fingerprint that browser never has.
 type conn struct {
-	proto string // "h2" или "http/1.1"
+	proto string // "h2" or "http/1.1"
 	spec  dialSpec
 
 	h2 *http2.ClientConn
 
-	// Для HTTP/1.1 запросы по одному соединению строго последовательны:
-	// ответ надо дочитать до конца, прежде чем писать следующий запрос.
-	// Мьютекс сериализует только сам обмен; закрытие сокета его не берёт.
+	// For HTTP/1.1 requests on one connection are strictly sequential: the
+	// response must be read to the end before the next request is written.
+	// The mutex serialises the exchange only; closing the socket does not take it.
 	mu  sync.Mutex
 	raw net.Conn
 	br  *bufio.Reader
 
-	// dead атомарный, чтобы usable() не брал c.mu: тот удерживается на всё
-	// время запроса, и проверка пригодности под ним заморозила бы пул.
+	// dead is atomic so that usable() need not take c.mu: that one is held for
+	// the whole request, and checking usability under it would freeze the pool.
 	dead atomic.Bool
 
-	// busy — сколько запросов держат соединение прямо сейчас.
+	// busy is how many requests hold the connection right now.
 	//
-	// Для HTTP/1.1 это 0 или 1: пока тело не дочитано, следующий запрос писать
-	// нельзя. Раньше roundTrip отпускал мьютекс сразу после чтения заголовков,
-	// и второй запрос писал поверх недочитанного тела, а ответ разбирал
-	// из чужих байт — тихая порча данных.
+	// For HTTP/1.1 that is 0 or 1: until the body is read, the next request
+	// cannot be written. roundTrip used to release the mutex right after reading
+	// the headers, and a second request wrote over an unread body while parsing
+	// its response out of foreign bytes — silent data corruption.
 	busy atomic.Int32
 
-	// pooled и lastUsed читаются и пишутся только под Session.mu.
+	// pooled and lastUsed are read and written only under Session.mu.
 	pooled   bool
 	lastUsed time.Time
 }
@@ -70,8 +70,8 @@ func (c *conn) usable() bool {
 	return true
 }
 
-// canTake сообщает, можно ли выдать соединение ещё одному запросу.
-// HTTP/2 мультиплексирует, HTTP/1.1 — нет.
+// canTake reports whether the connection can serve one more request.
+// HTTP/2 multiplexes, HTTP/1.1 does not.
 func (c *conn) canTake() bool {
 	if c.h2 != nil {
 		return true
@@ -84,8 +84,8 @@ func (c *conn) release() int32 { return c.busy.Add(-1) }
 
 func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response, error) {
 	if c.h2 != nil {
-		// Для HTTP/2 предел задаётся контекстом запроса: соединение общее
-		// для нескольких потоков, и deadline на сокете оборвал бы чужие.
+		// For HTTP/2 the limit comes from the request context: the connection is
+		// shared by several streams, and a socket deadline would cut the others.
 		return c.h2.RoundTrip(req)
 	}
 
@@ -95,9 +95,9 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 		return nil, fmt.Errorf("connection is closed")
 	}
 
-	// В HTTP/1.1 запросы по соединению последовательны, поэтому предел
-	// ставится прямо на сокет. Без него медленный ответ висел бы дольше
-	// заявленного таймаута: проверка между попытками его не ограничивает.
+	// In HTTP/1.1 requests on a connection are sequential, so the limit goes
+	// straight onto the socket. Without it a slow response would hang past the
+	// declared timeout: a check between attempts does not bound it.
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = c.raw.SetDeadline(deadline)
 	}
@@ -111,8 +111,8 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 		c.dead.Store(true)
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
-	// Close: true в ответе означает, что сервер закроет соединение
-	// и переиспользовать его нельзя.
+	// Close: true in the response means the server will close the connection and
+	// it cannot be reused.
 	if resp.Close {
 		c.dead.Store(true)
 	}
@@ -120,18 +120,18 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 		return resp, nil
 	}
 
-	// Тело от ReadResponse при закрытии дочитывает остаток до EOF (transfer.go,
-	// ветка default): так net/http бережёт сокет для следующего запроса.
-	// Transport обходит это обёрткой bodyEOFSignal, а здесь Transport
-	// не используется — и «прочитать килобайт и закрыть» означало скачать
-	// всё тело. Обёртка h1Body отслеживает EOF: недочитанное соединение
-	// дешевле выбросить, чем дренировать.
+	// The body from ReadResponse drains the remainder to EOF on close
+	// (transfer.go, the default branch): that is how net/http saves the socket
+	// for the next request. Transport works around it with a bodyEOFSignal
+	// wrapper, and Transport is not used here — so "read a kilobyte and close"
+	// meant downloading the whole body. The h1Body wrapper tracks EOF: an unread
+	// connection is cheaper to drop than to drain.
 	resp.Body = &h1Body{inner: resp.Body, conn: c, want: resp.ContentLength}
 
-	// Распаковка на пути HTTP/1.1 — своя. У fhttp она живёт в Transport
-	// (persistConn.readLoop) и в транспорте HTTP/2; conn.roundTrip ходит мимо
-	// обоих, и до этой правки клиент отдавал gzip-байты как тело, хотя профиль
-	// объявляет accept-encoding и сервер сжимать вправе.
+	// Decompression on the HTTP/1.1 path is our own. In fhttp it lives in
+	// Transport (persistConn.readLoop) and in the HTTP/2 transport; conn.roundTrip
+	// goes around both, and before this change the client handed gzip bytes back
+	// as the body even though the profile advertises accept-encoding.
 	if ce := resp.Header.Get("Content-Encoding"); ce != "" && req.Method != http.MethodHead {
 		body, err := decompress(resp.Body, ce)
 		if err != nil {
@@ -146,17 +146,17 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 	return resp, nil
 }
 
-// h1Body следит, дошло ли тело HTTP/1.1 до конца.
+// h1Body tracks whether an HTTP/1.1 body reached its end.
 //
-// Полнота определяется либо по EOF, либо по числу прочитанных байт против
-// Content-Length: распаковщики вроде brotli останавливаются на последнем блоке,
-// не запрашивая EOF у нижнего потока, и без счётчика каждый такой ответ
-// выбрасывал бы исправное соединение.
+// Completeness is decided either by EOF or by the number of bytes read against
+// Content-Length: decoders such as brotli stop on the last block without asking
+// the lower stream for EOF, and without the counter every such response would
+// throw away a perfectly good connection.
 type h1Body struct {
 	mu     sync.Mutex
 	inner  io.ReadCloser
 	conn   *conn
-	want   int64 // Content-Length или -1
+	want   int64 // Content-Length, or -1
 	read   int64
 	sawEOF bool
 	closed bool
@@ -186,15 +186,15 @@ func (b *h1Body) Close() error {
 	if complete {
 		return b.inner.Close()
 	}
-	// Недочитанное тело: сокет закрывается первым, иначе inner.Close
-	// дочитывал бы остаток. Ошибка чтения из закрытого сокета ожидаема
-	// и наружу не отдаётся — для вызывающего закрытие прошло штатно.
+	// An unread body: the socket is closed first, otherwise inner.Close would
+	// drain the remainder. A read error from a closed socket is expected and is
+	// not passed on — from the caller's side the close went fine.
 	b.conn.close()
 	_ = b.inner.Close()
 	return nil
 }
 
-// shutdown мягко доигрывает HTTP/2-соединение, дожидаясь текущих потоков.
+// shutdown gracefully finishes an HTTP/2 connection, waiting for its streams.
 func (c *conn) shutdown(ctx context.Context) {
 	if c.h2 != nil {
 		_ = c.h2.Shutdown(ctx)
@@ -203,12 +203,12 @@ func (c *conn) shutdown(ctx context.Context) {
 	c.close()
 }
 
-// close закрывает соединение немедленно.
+// close closes the connection immediately.
 //
-// c.mu здесь не берётся намеренно: net.Conn.Close безопасен из другой
-// горутины и прерывает блокирующее чтение. Раньше close ждал мьютекс,
-// который roundTrip держит до конца ReadResponse, и Session.Close
-// выстаивал очередь за медленным ответом вместо того, чтобы оборвать его.
+// c.mu is deliberately not taken here: net.Conn.Close is safe from another
+// goroutine and interrupts a blocking read. close used to wait for the mutex
+// roundTrip holds until ReadResponse returns, and Session.Close queued up
+// behind a slow response instead of cutting it off.
 func (c *conn) close() {
 	c.dead.Store(true)
 	if c.h2 != nil {
@@ -220,9 +220,9 @@ func (c *conn) close() {
 	}
 }
 
-// setALPN подменяет список протоколов в уже построенной спеке.
-// Сообщает, нашлось ли расширение: промах должен быть ошибкой, а не тихой
-// потерей настройки.
+// setALPN replaces the protocol list in an already built spec.
+// Reports whether the extension was found: a miss must be an error rather than
+// a silently lost setting.
 func setALPN(spec *utls.ClientHelloSpec, protos []string) bool {
 	for _, e := range spec.Extensions {
 		if alpn, ok := e.(*utls.ALPNExtension); ok {
@@ -233,10 +233,10 @@ func setALPN(spec *utls.ClientHelloSpec, protos []string) bool {
 	return false
 }
 
-// alpnFromProfile достаёт список ALPN из профиля.
+// alpnFromProfile takes the ALPN list out of a profile.
 //
-// Для профилей на основе raw_client_hello поле extensions пустое — там ALPN
-// зашит в самих байтах и uTLS выставит его сам при ApplyPreset.
+// For raw_client_hello profiles the extensions field is empty — there ALPN is
+// baked into the bytes and uTLS sets it during ApplyPreset.
 func alpnFromProfile(p *profile.Profile) []string {
 	for _, e := range p.TLS.Extensions {
 		if e.Type == "application_layer_protocol_negotiation" {
