@@ -1,8 +1,11 @@
 package profile
 
 import (
+	"sort"
 	"strings"
 	"testing"
+
+	utls "github.com/refraction-networking/utls"
 )
 
 // Профиль обязан отвергаться, а не молча деградировать: проверки на
@@ -125,5 +128,72 @@ func TestNonGreaseSignatureAlgorithmsUntouched(t *testing.T) {
 	}
 	if !isGREASE(uint16(out[4])) {
 		t.Errorf("0x1a1a — тоже GREASE, его следовало разыграть")
+	}
+}
+
+// Chrome 152 перемешивает порядок trust_anchors на каждое рукопожатие:
+// замер трёх запусков дал один и тот же набор из 32 записей в разном
+// порядке. Постоянная перестановка отличала бы нас от браузера на любой
+// выборке из нескольких соединений.
+func TestTrustAnchorsOrderIsShuffled(t *testing.T) {
+	ids := []string{"11129.9.1", "11129.9.2", "11129.9.3", "44947.2.1",
+		"44947.2.2", "52580.200109.1.1", "52580.200109.1.2", "11129.9.4"}
+	seen := map[string]int{}
+	var first []string
+	for i := 0; i < 64; i++ {
+		ext, err := buildTrustAnchors(ids)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g, ok := ext.(*utls.GenericExtension)
+		if !ok || g.Id != TrustAnchorsID {
+			t.Fatalf("получено %T с номером %v", ext, ok)
+		}
+		got := parseTrustAnchors(g.Data)
+		if len(got) != len(ids) {
+			t.Fatalf("записей %d, ожидалось %d", len(got), len(ids))
+		}
+		if first == nil {
+			first = got
+		}
+		seen[strings.Join(got, ",")]++
+	}
+	if len(seen) < 5 {
+		t.Errorf("за 64 сборки встретилось %d порядков — похоже на постоянный", len(seen))
+	}
+	// Набор обязан сохраняться: перемешивание меняет только порядок.
+	sorted := append([]string(nil), first...)
+	sort.Strings(sorted)
+	want := append([]string(nil), ids...)
+	sort.Strings(want)
+	for i := range want {
+		if sorted[i] != want[i] {
+			t.Fatalf("набор изменился: %v против %v", sorted, want)
+		}
+	}
+}
+
+// Кодирование относительного OID должно переживать круг «в байты и обратно».
+func TestTrustAnchorsRoundTrip(t *testing.T) {
+	ids := []string{"11129.9.13", "52580.200109.1.11", "44947.2.15"}
+	ext, err := buildTrustAnchors(ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := parseTrustAnchors(ext.(*utls.GenericExtension).Data)
+	sort.Strings(got)
+	want := append([]string(nil), ids...)
+	sort.Strings(want)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("получено %v, ожидалось %v", got, want)
+		}
+	}
+}
+
+// Мусор в списке — ошибка профиля, а не тихо пропущенная запись.
+func TestTrustAnchorsRejectsGarbage(t *testing.T) {
+	if _, err := buildTrustAnchors([]string{"11129.9.x"}); err == nil {
+		t.Error("нечисловая часть OID принята")
 	}
 }

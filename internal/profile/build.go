@@ -202,6 +202,12 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 		// ECH не выражается в JSON-кодеке uTLS; строим объект напрямую.
 		return utls.BoringGREASEECH(), nil
 
+	case "trust_anchors":
+		// Список берётся из tls.trust_anchors: он общий и для сырого
+		// ClientHello, где расширение приходит байтами.
+		return nil, fmt.Errorf("trust_anchors задаётся полем tls.trust_anchors, " +
+			"а не элементом списка расширений")
+
 	case "pre_shared_key":
 		// Только для профилей возобновления сессии. Fake-вариант не пытается
 		// подставить настоящий тикет, а воспроизводит форму расширения.

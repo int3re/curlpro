@@ -32,7 +32,11 @@
     ],
     "permute_extensions": true,
     "allow_blunt_mimicry": true,
-    "note": "GREASE в signature_algorithms меняется между запусками браузера: захват записал 0xAAAA, телефон позже слал 0xEAEA. В профиле стоит маркер 2570, значение разыгрывается на каждое соединение. Расширение trust_anchors (0xCA34) uTLS не знает — включён allow_blunt_mimicry"
+    "note": "GREASE в signature_algorithms меняется между запусками браузера: захват записал 0xAAAA, телефон позже слал 0xEAEA. В профиле стоит маркер 2570, значение разыгрывается на каждое соединение. Расширение trust_anchors (0xCA34) uTLS не знает — включён allow_blunt_mimicry",
+    "trust_anchors": {
+      "count": 32,
+      "note": "набор совпал у настольного Chrome 152 и у Chrome на Pixel 7. Порядок браузер перемешивает: три запуска — три перестановки одного набора. То же расширение приходит и в QUIC-рукопожатии"
+    }
   },
   "headers": {
     "navigate_h1": [

@@ -278,8 +278,12 @@ type TLSSpec struct {
 	Extensions         []Extension `json:"extensions,omitempty"`
 
 	SignatureAlgorithms []uint16 `json:"signature_algorithms,omitempty"`
-	ALPN                []string `json:"alpn,omitempty"`
-	PermuteExtensions   *bool    `json:"permute_extensions,omitempty"`
+	// TrustAnchors — идентификаторы корней для расширения 0xCA34 в виде
+	// относительных OID («11129.9.13»). Порядок в профиле не важен: он
+	// разыгрывается заново на каждое соединение, как это делает Chrome.
+	TrustAnchors      []string `json:"trust_anchors,omitempty"`
+	ALPN              []string `json:"alpn,omitempty"`
+	PermuteExtensions *bool    `json:"permute_extensions,omitempty"`
 
 	// AllowBluntMimicry разрешает воспроизводить расширения, которых uTLS
 	// не знает, сырыми байтами из raw_client_hello.
@@ -610,6 +614,9 @@ func merge(dst, src *Profile) {
 	}
 	if len(src.TLS.CompressionMethods) > 0 {
 		dst.TLS.CompressionMethods = src.TLS.CompressionMethods
+	}
+	if src.TLS.TrustAnchors != nil {
+		dst.TLS.TrustAnchors = src.TLS.TrustAnchors
 	}
 	if src.TLS.SignatureAlgorithms != nil {
 		dst.TLS.SignatureAlgorithms = src.TLS.SignatureAlgorithms

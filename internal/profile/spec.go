@@ -151,9 +151,35 @@ func specFromJSON(data []byte) (*utls.ClientHelloSpec, error) {
 	return &spec, nil
 }
 
+// replaceExtWith подменяет расширение с данным номером на своё.
+//
+// Сырой ClientHello приносит незнакомые uTLS расширения как GenericExtension;
+// по номеру их и находим.
+func replaceExtWith(spec *utls.ClientHelloSpec, id uint16, ext utls.TLSExtension) bool {
+	for i, e := range spec.Extensions {
+		if g, ok := e.(*utls.GenericExtension); ok && g.Id == id {
+			spec.Extensions[i] = ext
+			return true
+		}
+	}
+	return false
+}
+
 // applyOverrides правит уже построенную спеку. Так версия браузера описывается
 // дельтой: у месячного бампа Chrome обычно меняются только sigalgs и заголовки.
 func applyOverrides(spec *utls.ClientHelloSpec, t *TLSSpec) error {
+	if len(t.TrustAnchors) > 0 {
+		ext, err := buildTrustAnchors(t.TrustAnchors)
+		if err != nil {
+			return err
+		}
+		// Расширение уже есть в захвате как непрозрачные байты — меняем его
+		// на своё, которое перемешивает порядок на каждое соединение.
+		if !replaceExtWith(spec, TrustAnchorsID, ext) {
+			return fmt.Errorf("trust_anchors задан, но расширения 0x%04x нет в базовой спеке",
+				TrustAnchorsID)
+		}
+	}
 	if len(t.SignatureAlgorithms) > 0 {
 		// GREASE здесь разыгрывается на каждое соединение — см. toSigSchemes.
 		algs := toSigSchemes(t.SignatureAlgorithms)

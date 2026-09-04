@@ -181,8 +181,45 @@ func quicSpec(p *profile.Profile) (*quic.QUICSpec, error) {
 		if err := profile.ApplyQUIC(spec.ClientHelloSpec, &q); err != nil {
 			return nil, err
 		}
+		if err := applyQUICTLS(spec.ClientHelloSpec, p); err != nil {
+			return nil, err
+		}
 	}
 	return &spec, nil
+}
+
+// applyQUICTLS доводит ClientHello паррота до профиля.
+//
+// Паррот uquic описывает Chrome 146, и от Chrome 152 его отличает ровно одно
+// расширение — trust_anchors: замер cmd/quiccapture дал у Chrome 152 набор
+// 0,10,13,16,27,43,45,51,57,17613,51764,65037, у паррота тот же минус 51764.
+// Алгоритмы подписи здесь трогать нельзя: в QUIC Chrome шлёт свой список
+// из девяти записей, без GREASE и без 0x0904 — и он совпал с парротом.
+//
+// Порядок расширений браузер перемешивает и в QUIC: три захвата дали три
+// разные перестановки одного набора. Постоянный порядок был бы приметой.
+func applyQUICTLS(chs *utls.ClientHelloSpec, p *profile.Profile) error {
+	if ids := p.TLS.TrustAnchors; len(ids) > 0 {
+		ext, err := profile.BuildTrustAnchors(ids)
+		if err != nil {
+			return err
+		}
+		replaced := false
+		for i, e := range chs.Extensions {
+			if g, ok := e.(*utls.GenericExtension); ok && g.Id == profile.TrustAnchorsID {
+				chs.Extensions[i] = ext
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			chs.Extensions = append(chs.Extensions, ext)
+		}
+	}
+	if p.TLS.PermuteExtensions == nil || *p.TLS.PermuteExtensions {
+		chs.Extensions = utls.ShuffleChromeTLSExtensions(chs.Extensions)
+	}
+	return nil
 }
 
 func parrotID(name string) (quic.QUICID, error) {
