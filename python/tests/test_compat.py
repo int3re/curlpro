@@ -9,7 +9,6 @@ auth, куки ответа, время запроса, цепочка реди�
 from __future__ import annotations
 
 import http.server
-import os
 import socketserver
 import ssl
 import threading
@@ -222,8 +221,20 @@ def test_max_response_size():
             assert len(s.get(srv.url("/big")).content) == 100_000
 
 
+def _clean_proxy_env(monkeypatch) -> None:
+    """Убирает всё, что могло остаться от машины.
+
+    На раннере GitHub no_proxy выставлен заранее, и тест, не знающий об этом,
+    падал: прокси законно не применялся, а проверка ждала обратного.
+    """
+    for name in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy",
+                 "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"):
+        monkeypatch.delenv(name, raising=False)
+
+
 def test_proxy_from_environment(monkeypatch):
     """Прокси из окружения используется, а NO_PROXY его отменяет."""
+    _clean_proxy_env(monkeypatch)
     with RawHeaderServer(persistent=True) as srv:
         # Заведомо мёртвый прокси: если его взяли, запрос упадёт.
         monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
@@ -237,6 +248,7 @@ def test_proxy_from_environment(monkeypatch):
 
 
 def test_trust_env_can_be_disabled(monkeypatch):
+    _clean_proxy_env(monkeypatch)
     with RawHeaderServer(persistent=True) as srv:
         monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
         with curlpro.Session(verify=False, force_http1=True,
@@ -245,6 +257,7 @@ def test_trust_env_can_be_disabled(monkeypatch):
 
 
 def test_explicit_proxy_beats_environment(monkeypatch):
+    _clean_proxy_env(monkeypatch)
     with RawHeaderServer(persistent=True) as srv:
         monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
         # Пустая строка в запросе означает «идти напрямую».
