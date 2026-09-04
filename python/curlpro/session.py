@@ -13,6 +13,7 @@ from .cookies import Cookies
 from .encoding import detect as detect_encoding
 from .headers import SessionHeaders
 from .profiles import ensure_loaded
+from .proxies import proxy_for as env_proxy
 from .stream import StreamResponse
 from .websocket import WebSocket, connect as ws_connect
 
@@ -447,7 +448,10 @@ class Session:
                     "ca_cert": verify if isinstance(verify, str) else "",
                     "client_cert": cert[0] if cert else "",
                     "client_key": cert[1] if cert else "",
-                    "trust_env": trust_env,
+                    # Окружение читает Python: на Linux нативная часть
+                    # видит его таким, каким оно было при старте процесса,
+                    # и правка os.environ в рантайме до неё не доходит.
+                    "trust_env": False,
                     "max_response_size": int(max_response_size),
                     "timeout_ms": int(timeout * 1000),
                     "proxy": proxy or "",
@@ -475,6 +479,7 @@ class Session:
             ),
         )["session"]
         self.impersonate = impersonate
+        self._trust_env = trust_env
         self._closed = False
         #: Заголовки, добавляемые ко всем запросам сессии. Хранятся отдельно
         #: от профильных, поэтому clear() возвращает чистый отпечаток.
@@ -519,6 +524,11 @@ class Session:
     ) -> Response:
         if self._closed:
             raise RuntimeError("сессия закрыта")
+
+        if proxy is None and self._trust_env:
+            # Явный proxy сильнее окружения; False означает «идти напрямую»
+            # и тоже не перебивается.
+            proxy = env_proxy(url)
 
         meta, body = _request_meta(
             method, url, headers=headers, params=params, auth=auth,

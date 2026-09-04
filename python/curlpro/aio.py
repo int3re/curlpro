@@ -17,6 +17,7 @@ from typing import Any
 
 from ._completions import completions
 from ._ffi import _call, call_with_frame
+from .proxies import proxy_for as env_proxy
 from .session import DEFAULT_PROFILE, Response, Session, _request_meta
 
 
@@ -63,6 +64,8 @@ class AsyncSession:
         if self._session._closed:
             raise RuntimeError("сессия закрыта")
 
+        if kw.get("proxy") is None and self._session._trust_env:
+            kw["proxy"] = env_proxy(url)
         meta, body = _request_meta(method, url, **kw)
         for hook in self._session.hooks["request"]:
             replaced = hook(meta)
