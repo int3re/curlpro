@@ -177,6 +177,19 @@ type Request struct {
 	// then a single request needs a way to bring them back.
 	DefaultHeaders *bool
 
+	// Cookies switches the session cookie jar off for a single request.
+	//
+	// nil keeps the session behaviour. false isolates the request from the jar
+	// in both directions: stored cookies are not sent and Set-Cookie from the
+	// response is not remembered. One-way isolation would be surprising —
+	// "do not use the memory" is easily read as "do not touch it at all".
+	Cookies *bool
+
+	// SessionHeaders switches the headers added to the session off for a single
+	// request. nil keeps them. The profile headers are unaffected: they are
+	// controlled by DefaultHeaders.
+	SessionHeaders *bool
+
 	// Protocol forces the transport for a single request: ProtoHTTP1, ProtoH2 or
 	// ProtoH3. Empty means whatever the session decides: its options, and on
 	// direct connections Alt-Svc as well.
@@ -256,6 +269,25 @@ func (r *Request) protocol() string {
 	return r.Protocol
 }
 
+// useCookies decides whether the jar takes part in this request.
+func (s *Session) useCookies(r *Request) bool {
+	if s.jar == nil {
+		return false
+	}
+	if r != nil && r.Cookies != nil {
+		return *r.Cookies
+	}
+	return true
+}
+
+// useSessionHeaders decides whether the session headers are added.
+func (s *Session) useSessionHeaders(r *Request) bool {
+	if r != nil && r.SessionHeaders != nil {
+		return *r.SessionHeaders
+	}
+	return true
+}
+
 // useDefaultHeaders decides whether to add the profile headers.
 func (s *Session) useDefaultHeaders(r *Request) bool {
 	if r != nil && r.DefaultHeaders != nil {
@@ -329,8 +361,10 @@ func (s *Session) timeout(r *Request) time.Duration {
 	return s.opts.Timeout
 }
 
-// validate checks the request overrides before sending.
-func (r *Request) validate() error {
+// validate checks the request overrides before sending. hasJar says whether the
+// session has a cookie jar: without one, asking for cookies is a mistake worth
+// reporting rather than a silently ignored option.
+func (r *Request) validate(hasJar bool) error {
 	if r == nil {
 		return nil
 	}
@@ -341,6 +375,10 @@ func (r *Request) validate() error {
 	if r.ConnectTimeout != nil && *r.ConnectTimeout <= 0 {
 		return fmt.Errorf("connect timeout must be positive, got %s "+
 			"(leave it unset for no limit)", *r.ConnectTimeout)
+	}
+	if r.Cookies != nil && *r.Cookies && !hasJar {
+		return fmt.Errorf("cookies=true: the session has no cookie jar " +
+			"(create the session with cookies enabled)")
 	}
 	switch r.Protocol {
 	case "", ProtoHTTP1, ProtoH2, ProtoH3:
@@ -752,7 +790,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		return fail(err)
 	}
 
-	if s.jar != nil {
+	if s.useCookies(r) {
 		if cookies := resp.Cookies(); len(cookies) > 0 {
 			s.jar.SetCookies(u, cookies)
 			s.recordCookies(u, cookies)

@@ -111,7 +111,9 @@ func curlpro_free(s *C.char) {
 // 0.10.0: per-request protocol (protocol) and per-request profile headers
 // (default_headers instead of no_default_headers: they had to be switchable
 // on, not only off).
-const Version = "0.10.0"
+// 0.11.0: per-request switches for the session memory — the cookie jar
+// (cookies) and the session headers (session_headers).
+const Version = "0.11.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -336,6 +338,8 @@ type requestJSON struct {
 	Headers        map[string]string `json:"headers"`
 	HeaderOrder    []string          `json:"header_order"`
 	DefaultHeaders *bool             `json:"default_headers"`
+	Cookies        *bool             `json:"cookies"`
+	SessionHeaders *bool             `json:"session_headers"`
 	Protocol       string            `json:"protocol"`
 	Multipart      *multipartJSON    `json:"multipart"`
 	// BodyFile streams a file instead of reading it whole into memory.
@@ -381,6 +385,8 @@ func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 		BodyFile:       r.BodyFile,
 		HeaderOrder:    r.HeaderOrder,
 		DefaultHeaders: r.DefaultHeaders,
+		Cookies:        r.Cookies,
+		SessionHeaders: r.SessionHeaders,
 		Protocol:       r.Protocol,
 	}
 	r.applyOverrides(req)

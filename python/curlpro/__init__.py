@@ -19,6 +19,7 @@ belongs to the browser and is not covered here.
 from __future__ import annotations
 
 from ._ffi import HTTPError, Timeout, CurlProError, WebSocketClosed
+from .expect import Expect, ExpectationFailed
 from .aio import AsyncSession, AsyncStreamResponse, AsyncWebSocket
 from .cookies import Cookie, Cookies
 from .session import Redirect, Response, Session, delete, get, head, options, patch, post, put
@@ -33,6 +34,8 @@ __all__ = [
     "Cookie",
     "Cookies",
     "CurlProError",
+    "Expect",
+    "ExpectationFailed",
     "HTTPError",
     "Redirect",
     "Timeout",

@@ -94,6 +94,8 @@ s.get(url).proto                          # HTTP/3.0 — upgraded via Alt-Svc
 s.get(url, protocol="h2").proto           # HTTP/2.0 — this one stays on TCP
 s.get(url, protocol=3).proto              # HTTP/3.0
 s.get(url, default_headers=False)         # only the headers you passed
+s.get(url, cookies=False)                 # past the jar: not sent, not stored
+s.get(url, session_headers=False)         # without the session's own headers
 ```
 
 `h2` does not trim the ALPN list to a single entry — no browser sends such a
@@ -122,6 +124,50 @@ SOCKS5), retries, streaming upload and download, multipart, `--resolve`-style
 address substitution, and `keep_alive` control.
 
 HTML parsing is deliberately out of scope — pair it with `selectolax` or `lxml`.
+
+## Response expectations
+
+A scraper writes the same checks around every request: the status is the one
+expected, the page carries the marker of a successful login, a captcha did not
+arrive instead of the page. Written by hand they are forgotten one by one — and
+a redirect to a block page looks like "the parser stopped finding data".
+
+```python
+from curlpro import Expect
+
+r = s.get(url, expect=Expect(status=200, body="Dashboard",
+                             not_body="captcha", non_empty=True))
+```
+
+A mismatch raises ``ExpectationFailed`` — a ``CurlProError``, so it is caught
+together with network errors. The message names what did not match:
+``the body contains the forbidden 'captcha' (200 https://example.com/)``.
+
+Checked are the status (``status``, ``not_status``), the body (``body``,
+``not_body``, ``non_empty``, ``json``) and the headers (``headers``,
+``not_headers`` — the substring is searched in the ``name: value`` lines).
+Several values mean "one of" for ``status`` and "all of" for the rest.
+
+Next to the expectations sits the cookie rollback: a failed login must not
+leave the session half authenticated.
+
+```python
+s.post(login, fields=creds, expect=Expect(body="Dashboard"),
+       rollback_cookies=True)          # on failure the jar is as it was
+
+with s.cookies.transaction():          # the same across several requests
+    s.post(login, fields=creds)
+    s.get(account).raise_for_status()
+```
+
+The error hook runs on any request failure — network, timeout, a failed
+expectation — and may replace the exception with one of your own:
+
+```python
+@s.on_error
+def log(exc):
+    logging.warning("request failed: %s", exc)
+```
 
 ## Errors
 

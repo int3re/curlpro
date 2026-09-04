@@ -110,7 +110,10 @@ func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []st
 		if len(h1Order) > 0 {
 			s.addHTTP1Headers(add, host, h1Order)
 		}
-		cookie := s.cookieHeader(u)
+		cookie := ""
+		if s.useCookies(r) {
+			cookie = s.cookieHeader(u)
+		}
 		// On HTTP/1.1 the profile's http1.order defines not only the order but the
 		// set as well: Chrome does not send priority over HTTP/1.1, Firefox does
 		// not send TE (measured on Chrome 152 and Firefox 154), though HTTP/2 has both.
@@ -155,8 +158,10 @@ func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []st
 	// only the value: add() does not move a name that is already there, and the
 	// position in the fingerprint is kept. A new name goes to the end — the same
 	// thing a browser does when fetch() adds a header.
-	for _, h := range s.headers.All() {
-		add(h.Key, h.Value)
+	if s.useSessionHeaders(r) {
+		for _, h := range s.headers.All() {
+			add(h.Key, h.Value)
+		}
 	}
 	// Map key order is non-deterministic while header order is observable, so
 	// the request names are sorted.

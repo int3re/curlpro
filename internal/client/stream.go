@@ -109,7 +109,7 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 	if err := s.ensureOpen(); err != nil {
 		return nil, err
 	}
-	if err := r.validate(); err != nil {
+	if err := r.validate(s.jar != nil); err != nil {
 		return nil, err
 	}
 	limit := s.timeout(r)

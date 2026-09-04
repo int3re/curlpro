@@ -270,7 +270,7 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL) (*nethttp.
 	if err != nil {
 		return nil, explainH3Error(err, s.profile.Name)
 	}
-	if s.jar != nil {
+	if s.useCookies(r) {
 		if cookies := resp.Cookies(); len(cookies) > 0 {
 			fc := toFhttpCookies(cookies)
 			s.jar.SetCookies(u, fc)

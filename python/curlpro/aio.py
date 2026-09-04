@@ -227,9 +227,20 @@ class AsyncSession:
     def on_response(self, fn):  # noqa: ANN001, ANN201
         return self._session.on_response(fn)
 
+    def on_error(self, fn):  # noqa: ANN001, ANN201
+        return self._session.on_error(fn)
+
     async def request(self, method: str, url: str, **kw: Any) -> Response:
+        """Sends a request. Takes the same arguments as :meth:`Session.request`,
+        including ``expect`` and ``rollback_cookies``."""
         if self._session._closed:
             raise RuntimeError("session is closed")
+
+        expect = kw.pop("expect", None)
+        rollback = kw.pop("rollback_cookies", False)
+        # The snapshot is taken before sending: after a failure the jar has
+        # already changed and there is nothing left to copy.
+        saved = self._session.cookies.snapshot() if rollback else None
 
         if kw.get("proxy") is None and self._session._trust_env:
             kw["proxy"] = env_proxy(url)
@@ -239,18 +250,32 @@ class AsyncSession:
             if replaced is not None:
                 meta = replaced
 
-        started = call_with_frame(
-            "curlpro_request_start", self._session._id, body=body, meta=meta
-        )
-        payload, content = await settle(started)
+        try:
+            started = call_with_frame(
+                "curlpro_request_start", self._session._id, body=body, meta=meta
+            )
+            payload, content = await settle(started)
+        except asyncio.CancelledError:
+            # The rollback still applies — the request did not finish — but the
+            # cancellation itself must reach the task loop untouched.
+            if saved is not None:
+                self._session.cookies.restore(saved)
+            raise
+        except BaseException as exc:
+            raise self._session._failed(exc, saved) from None
 
-        return self._session._after(Response(
-            status=payload["status"],
-            proto=payload.get("proto", ""),
-            headers=payload.get("headers") or {},
-            content=content,
-            url=payload.get("url") or url,
-        ))
+        try:
+            return self._session._after(Response(
+                status=payload["status"],
+                proto=payload.get("proto", ""),
+                headers=payload.get("headers") or {},
+                content=content,
+                url=payload.get("url") or url,
+            ), expect)
+        except BaseException as exc:
+            # A failed expectation is a request failure too: the caller was
+            # promised a response of a certain shape and did not get it.
+            raise self._session._failed(exc, saved) from None
 
     async def get(self, url: str, **kw: Any) -> Response:
         return await self.request("GET", url, **kw)

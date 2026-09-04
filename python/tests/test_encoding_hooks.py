@@ -111,7 +111,7 @@ def test_hooks_can_be_given_at_construction():
 
 
 def test_unknown_hook_event_is_rejected():
-    with pytest.raises(ValueError, match="request and response"):
+    with pytest.raises(ValueError, match="request, response and error"):
         curlpro.Session(verify=False, hooks={"before": [print]})
 
 

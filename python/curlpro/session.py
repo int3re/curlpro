@@ -11,6 +11,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 from ._ffi import HTTPError, _call, call_framed, encode
 from .cookies import Cookies
 from .encoding import detect as detect_encoding
+from .expect import Expect, ExpectationFailed
 from .headers import SessionHeaders
 from .profiles import ensure_loaded
 from .proxies import proxy_for as env_proxy
@@ -199,6 +200,8 @@ def _request_meta(
     body_file: str | Any = None,
     header_order: Iterable[str] | None = None,
     default_headers: bool | None = None,
+    cookies: bool | None = None,
+    session_headers: bool | None = None,
     protocol: str | float | None = None,
     timeout: float | tuple[float, float] | None = None,
     allow_redirects: bool | None = None,
@@ -248,6 +251,10 @@ def _request_meta(
         "header_order": list(header_order) if header_order else None,
         # None follows the session; True and False override it either way.
         "default_headers": default_headers,
+        # The session memory: the cookie jar and the session headers. False
+        # isolates the request from them, and for cookies in both directions.
+        "cookies": cookies,
+        "session_headers": session_headers,
         "protocol": _protocol(protocol),
         "multipart": multipart,
         "body_file": body_file or "",
@@ -533,12 +540,17 @@ class Session:
         #: Session cookies: reading, editing, saving and loading from a file.
         self.cookies = Cookies(self._id)
         #: Hooks: "request" runs before sending and receives the request
-        #: description, "response" runs after with the finished response. Both
-        #: may return a replacement; returning None changes nothing.
-        self.hooks: dict[str, list[Callable[..., Any]]] = {"request": [], "response": []}
+        #: description, "response" runs after with the finished response,
+        #: "error" runs when the request fails and receives the exception.
+        #: request and response hooks may return a replacement; an error hook
+        #: may return another exception to raise instead. Returning None
+        #: changes nothing.
+        self.hooks: dict[str, list[Callable[..., Any]]] = {
+            "request": [], "response": [], "error": [],
+        }
         for event, fns in (hooks or {}).items():
             if event not in self.hooks:
-                raise ValueError(f"unknown hook event {event!r}: available events are request and response")
+                raise ValueError(f"unknown hook event {event!r}: available events are request, response and error")
             self.hooks[event].extend(fns)
 
     def request(
@@ -556,6 +568,8 @@ class Session:
         body_file: str | Any = None,
         header_order: Iterable[str] | None = None,
         default_headers: bool | None = None,
+        cookies: bool | None = None,
+        session_headers: bool | None = None,
         protocol: str | float | None = None,
         timeout: float | tuple[float, float] | None = None,
         allow_redirects: bool | None = None,
@@ -568,9 +582,35 @@ class Session:
         respect_retry_after: bool = True,
         proxy: str | bool | None = None,
         mode: str | None = None,
+        expect: "Expect | None" = None,
+        rollback_cookies: bool = False,
     ) -> Response:
+        """Sends a request and returns the response.
+
+        Beyond the familiar requests arguments:
+
+        :param cookies: use the session jar for this request. ``False`` isolates
+            the request in both directions: stored cookies are not sent and
+            ``Set-Cookie`` from the response is not remembered
+        :param session_headers: add the headers set on the session. ``False``
+            leaves only the profile headers and the ones passed here
+        :param default_headers: add the profile headers, overriding the session
+            setting either way
+        :param protocol: force the transport for this request: ``"http1"``,
+            ``"h2"`` or ``"h3"`` (``1.1``, ``2`` and ``3`` also work)
+        :param expect: an :class:`~curlpro.Expect` describing what the response
+            must and must not contain; a mismatch raises
+            :class:`~curlpro.ExpectationFailed`
+        :param rollback_cookies: undo what this request wrote into the jar if it
+            fails — including a failed expectation. A half-finished login is
+            worse than none
+        """
         if self._closed:
             raise RuntimeError("session is closed")
+
+        # The snapshot is taken before sending: after a failure there is nothing
+        # to take it from, and the jar has already changed.
+        saved = self.cookies.snapshot() if rollback_cookies else None
 
         if proxy is None and self._trust_env:
             # An explicit proxy beats the environment; False means "go
@@ -582,6 +622,7 @@ class Session:
             data=data, json_body=json_body,
             files=files, fields=fields, body_file=body_file,
             header_order=header_order, default_headers=default_headers,
+            cookies=cookies, session_headers=session_headers,
             protocol=protocol, timeout=timeout, allow_redirects=allow_redirects,
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,
@@ -594,30 +635,73 @@ class Session:
                 meta = replaced
 
         started = time.perf_counter()
-        payload, content = call_framed("curlpro_request", self._id, body=body, meta=meta)
-        spent = time.perf_counter() - started
-        return self._after(Response(
-            status=payload["status"],
-            proto=payload.get("proto", ""),
-            headers=payload.get("headers") or {},
-            content=content,
-            url=payload.get("url") or url,
-            elapsed=spent,
-            history=[Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
-                     for h in payload.get("history") or []],
-        ))
+        try:
+            payload, content = call_framed("curlpro_request", self._id, body=body, meta=meta)
+            spent = time.perf_counter() - started
+            return self._after(Response(
+                status=payload["status"],
+                proto=payload.get("proto", ""),
+                headers=payload.get("headers") or {},
+                content=content,
+                url=payload.get("url") or url,
+                elapsed=spent,
+                history=[Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
+                         for h in payload.get("history") or []],
+            ), expect)
+        except BaseException as exc:
+            raise self._failed(exc, saved) from None
 
-    def _after(self, response: Response) -> Response:
-        """Runs the response through the hooks."""
+    def _failed(self, exc: BaseException, saved: "list[dict[str, Any]] | None") -> BaseException:
+        """Handles a failed request: rolls the cookies back and runs the hooks.
+
+        The rollback comes first: an error hook may itself go to the network,
+        and it must see the jar the request started with rather than the half
+        of a login the failed request managed to write.
+
+        Returns the exception to raise — a hook may replace it, which is how a
+        library error is turned into one of the caller's own.
+        """
+        if saved is not None:
+            self.cookies.restore(saved)
+        # Cancellation and Ctrl+C are not request failures but control flow:
+        # a hook returning its own exception in their place would swallow the
+        # cancellation, and the task would never stop.
+        if not isinstance(exc, Exception):
+            return exc
+        for hook in self.hooks["error"]:
+            replaced = hook(exc)
+            if isinstance(replaced, BaseException):
+                exc = replaced
+        return exc
+
+    def _after(self, response: Response, expect: "Expect | None" = None) -> Response:
+        """Runs the response through the hooks and the expectations.
+
+        The expectations come last: a hook may replace the response, and it is
+        the replacement the caller receives — so it is the one to check.
+        """
         for hook in self.hooks["response"]:
             replaced = hook(response)
             if replaced is not None:
                 response = replaced
+        if expect is not None:
+            expect.check(response)
         return response
 
     def on_request(self, fn: Callable[..., Any]) -> Callable[..., Any]:
         """Adds a request hook. Works as a decorator too."""
         self.hooks["request"].append(fn)
+        return fn
+
+    def on_error(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+        """Adds an error hook. Works as a decorator too.
+
+        Runs on every request failure: a network error, a timeout, a failed
+        expectation. Handy for logging, metrics and rotating a proxy — and,
+        by returning an exception, for turning a library error into one of
+        the caller's own.
+        """
+        self.hooks["error"].append(fn)
         return fn
 
     def on_response(self, fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -638,6 +722,8 @@ class Session:
         body_file: str | Any = None,
         header_order: Iterable[str] | None = None,
         default_headers: bool | None = None,
+        cookies: bool | None = None,
+        session_headers: bool | None = None,
         protocol: str | float | None = None,
         timeout: float | tuple[float, float] | None = None,
         allow_redirects: bool | None = None,
@@ -665,6 +751,7 @@ class Session:
             method, url, headers=headers, data=data, json_body=json_body,
             files=files, fields=fields, body_file=body_file,
             header_order=header_order, default_headers=default_headers,
+            cookies=cookies, session_headers=session_headers,
             protocol=protocol, timeout=timeout, allow_redirects=allow_redirects,
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,

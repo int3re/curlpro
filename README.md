@@ -73,6 +73,8 @@ with curlpro.Session(retries=3, proxy="socks5://127.0.0.1:1080") as s:
     s.get(url, protocol="h3")             # этот запрос — по QUIC
     s.get(url, protocol=1.1)              # а этот — по HTTP/1.1
     s.get(url, default_headers=False)     # без заголовков профиля, только свои
+    s.get(url, cookies=False)             # мимо банки: не слать и не запоминать
+    s.get(url, session_headers=False)     # без заголовков, добавленных сессии
     s.headers.clear()                     # остаются только профильные
     with s.stream("GET", url, timeout=5) as r:   # те же аргументы, что у request()
         first = next(r.iter_content())    # закрыть, не дочитав, — дёшево
@@ -99,6 +101,50 @@ with curlpro.Session(keep_alive=False) as s:   # своё соединение �
 with curlpro.Session("chrome-152-android", device="random") as s:
     s.get(url)          # sec-ch-ua-model: "SM-S911B" — но только если сайт
                         # запросил подсказки заголовком Accept-CH
+```
+
+## Проверки ответа
+
+Парсер вокруг каждого запроса пишет одно и то же: проверить статус, найти
+на странице признак успеха, убедиться, что вместо страницы не пришла капча.
+Написанные руками, эти проверки забываются по одной — и редирект на страницу
+блокировки выглядит как «парсер перестал находить данные».
+
+```python
+from curlpro import Expect
+
+r = s.get(url, expect=Expect(status=200, body="Личный кабинет",
+                             not_body="captcha", non_empty=True))
+```
+
+Несовпадение поднимает ``ExpectationFailed`` — это ``CurlProError``, значит
+ловится вместе с сетевыми ошибками. Сообщение называет, что именно не сошлось:
+``the body contains the forbidden 'captcha' (200 https://example.com/)``.
+
+Проверяются статус (``status``, ``not_status``), тело (``body``, ``not_body``,
+``non_empty``, ``json``) и заголовки (``headers``, ``not_headers`` — подстрока
+ищется в строках «имя: значение»). Несколько значений у ``status`` означают
+«одно из», у остальных — «все».
+
+Рядом с проверками работает откат кук: неудачный вход не должен оставлять
+сессию наполовину авторизованной.
+
+```python
+s.post(login, fields=creds, expect=Expect(body="Личный кабинет"),
+       rollback_cookies=True)          # не вышло — банка как до запроса
+
+with s.cookies.transaction():          # то же на несколько запросов
+    s.post(login, fields=creds)
+    s.get(account).raise_for_status()
+```
+
+Перехватчик ошибок вызывается на любом сбое запроса — сетевом, таймауте,
+несовпавшем ожидании — и может подменить исключение своим:
+
+```python
+@s.on_error
+def log(exc):
+    logging.warning("запрос не удался: %s", exc)
 ```
 
 ## Ошибки

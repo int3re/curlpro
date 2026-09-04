@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -109,6 +110,41 @@ class Cookies(Mapping[str, str]):
     def clear(self) -> None:
         """Forgets every cookie of the session."""
         _call("curlpro_session_clear_cookies", self._id)
+
+    # -- transactions --------------------------------------------------------
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        """The current cookies as plain records, ready for :meth:`restore`."""
+        return self.export()
+
+    def restore(self, snapshot: list[Mapping[str, Any]]) -> None:
+        """Puts the jar back into the state a snapshot describes.
+
+        The jar is cleared first: without that, restoring would only add, and a
+        cookie the failed request created would survive the rollback.
+        """
+        self.clear()
+        if snapshot:
+            self.load(list(snapshot))
+
+    @contextmanager
+    def transaction(self) -> Iterator["Cookies"]:
+        """Undoes the cookie changes if the block raises.
+
+            with s.cookies.transaction():
+                s.post(login_url, fields=creds)
+                s.get(account_url).raise_for_status()
+
+        A half-finished login is worse than none: the session looks logged in
+        while the server thinks otherwise, and the next run starts from a state
+        nobody planned. On success the changes stay.
+        """
+        saved = self.snapshot()
+        try:
+            yield self
+        except BaseException:
+            self.restore(saved)
+            raise
 
     # -- files ---------------------------------------------------------------
 
