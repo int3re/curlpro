@@ -1,4 +1,4 @@
-"""curlpro — HTTP-клиент с сетевым отпечатком браузера.
+"""curlpro — an HTTP client with a browser's network fingerprint.
 
     import curlpro
 
@@ -6,13 +6,14 @@
     r = curlpro.get("https://example.com", impersonate="chrome-151-windows")
     print(r.status, r.text[:200])
 
-Профиль можно добавить и в рантайме, не дожидаясь релиза библиотеки::
+A profile can also be added at runtime, without waiting for a library
+release::
 
     curlpro.register_profile(json.load(open("chrome-152-windows.json")))
 
-Библиотека воспроизводит сетевой слой: TLS ClientHello, кадры HTTP/2, порядок
-и регистр заголовков. JS-отпечаток (canvas, WebGL, navigator) — уровень
-браузера, здесь его нет.
+The library reproduces the network layer: the TLS ClientHello, HTTP/2 frames,
+header order and case. The JavaScript fingerprint (canvas, WebGL, navigator)
+belongs to the browser and is not covered here.
 """
 
 from __future__ import annotations

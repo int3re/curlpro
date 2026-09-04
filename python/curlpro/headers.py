@@ -1,11 +1,11 @@
-"""Заголовки сессии, добавляемые ко всем последующим запросам.
+"""Session headers, added to every later request.
 
-Хранятся отдельно от заголовков профиля, поэтому ``clear()`` возвращает чистый
-отпечаток браузера, а не обнуляет запросы целиком.
+They are kept apart from the profile's own headers, so ``clear()`` restores
+the plain browser fingerprint instead of stripping requests bare.
 
-Порядок важен: новое имя уходит в конец списка, а переопределение заголовка,
-который есть в профиле, меняет только значение и сохраняет его позицию.
-Перенос профильного заголовка в конец сломал бы отпечаток.
+Order matters: a new name goes to the end of the list, while overriding a
+header the profile already sets changes only its value and keeps its
+position. Moving a profile header to the end would break the fingerprint.
 """
 
 from __future__ import annotations
@@ -16,19 +16,19 @@ from ._ffi import _call
 
 
 class SessionHeaders(MutableMapping[str, str]):
-    """Словареподобный доступ к заголовкам сессии.
+    """Dict-like access to the session headers.
 
-        s.headers["X-Api-Key"] = "secret"   # во всех последующих запросах
+        s.headers["X-Api-Key"] = "secret"   # in every later request
         del s.headers["X-Api-Key"]
-        s.headers.clear()                   # остаются только профильные
+        s.headers.clear()                   # only profile headers remain
     """
 
     __slots__ = ("_session_id", "_cache")
 
     def __init__(self, session_id: int):
         self._session_id = session_id
-        # Значения живут на стороне Go; здесь держим только имена,
-        # чтобы поддержать итерацию и len без лишних вызовов.
+        # The values live on the Go side; only the names are kept here,
+        # enough to support iteration and len without extra calls.
         self._cache: list[str] = []
 
     def __setitem__(self, name: str, value: str) -> None:
@@ -49,8 +49,8 @@ class SessionHeaders(MutableMapping[str, str]):
         self._cache = data["headers"]
 
     def __getitem__(self, name: str) -> str:
-        # Значения не кешируются на стороне Python, чтобы не разойтись
-        # с нативной частью; наличие проверяется по именам.
+        # Values are not cached on the Python side so they cannot drift from
+        # the native ones; presence is checked by name.
         lowered = name.lower()
         for known in self._names():
             if known.lower() == lowered:
@@ -73,9 +73,9 @@ class SessionHeaders(MutableMapping[str, str]):
         return any(k.lower() == lowered for k in self._names())
 
     def clear(self) -> int:
-        """Убирает все заголовки сессии, оставляя заголовки профиля.
+        """Drops every session header, keeping the profile's own.
 
-        Возвращает, сколько было убрано.
+        Returns how many were dropped.
         """
         data = _call("curlpro_session_reset_headers", self._session_id)
         self._cache = []

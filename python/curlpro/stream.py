@@ -1,8 +1,8 @@
-"""Потоковое чтение тела ответа.
+"""Streaming reads of the response body.
 
-Обычный запрос материализует тело целиком; для больших загрузок это лишняя
-память и задержка до первого байта. Поток отдаёт тело частями, но удерживает
-соединение до закрытия — поэтому пользоваться им следует через ``with``.
+An ordinary request materialises the whole body; for large downloads that is
+wasted memory and a delay before the first byte. A stream hands the body over
+in chunks but holds the connection until it is closed — hence ``with``.
 """
 
 from __future__ import annotations
@@ -15,10 +15,10 @@ DEFAULT_CHUNK = 64 * 1024
 
 
 def lines_from(buffer: bytes, chunk: bytes, keepends: bool) -> tuple[bytes, list[bytes]]:
-    """Достаёт из накопленного готовые строки и возвращает остаток.
+    """Pulls complete lines out of what has accumulated, returns the rest.
 
-    Общая для обычного и асинхронного чтения: разойтись двум копиям здесь
-    легко — например, на переводе строки, попавшем на границу частей.
+    Shared by the sync and async readers: two copies would drift apart
+    easily — on a newline landing exactly on a chunk boundary, say.
     """
     buffer += chunk
     lines: list[bytes] = []
@@ -31,7 +31,7 @@ def lines_from(buffer: bytes, chunk: bytes, keepends: bool) -> tuple[bytes, list
 
 
 class StreamResponse:
-    """Ответ с телом, читаемым по частям.
+    """A response whose body is read in chunks.
 
         with session.stream("GET", url) as r:
             for chunk in r.iter_content():
@@ -54,11 +54,11 @@ class StreamResponse:
 
     def iter_lines(self, chunk_size: int = DEFAULT_CHUNK,
                    keepends: bool = False) -> Iterator[bytes]:
-        """Тело построчно, не собирая его целиком.
+        """The body line by line, without collecting it whole.
 
-        Нужно для потоков вида NDJSON, где ответ бесконечен по смыслу
-        и материализовать его нельзя. Разделителем считается перевод
-        строки; последняя строка отдаётся даже без него.
+        Needed for NDJSON-style streams, where the response is endless by
+        design and cannot be materialised. The separator is the newline;
+        the last line is yielded even without one.
         """
         buffer = b""
         for chunk in self.iter_content(chunk_size):
@@ -75,7 +75,7 @@ class StreamResponse:
         return None
 
     def iter_content(self, chunk_size: int = DEFAULT_CHUNK) -> Iterator[bytes]:
-        """Отдаёт тело частями до конца."""
+        """Yields the body in chunks until it ends."""
         if chunk_size <= 0:
             raise ValueError("chunk_size must be positive")
         while True:
@@ -85,7 +85,7 @@ class StreamResponse:
             yield chunk
 
     def read(self) -> bytes:
-        """Дочитывает тело целиком. Удобно, когда поток открыт зря."""
+        """Reads the rest of the body. Handy when the stream was opened in vain."""
         return b"".join(self.iter_content())
 
     def close(self) -> None:
@@ -100,7 +100,7 @@ class StreamResponse:
         self.close()
 
     def __del__(self) -> None:
-        # Незакрытый поток удерживает соединение на стороне Go.
+        # An unclosed stream holds a connection on the Go side.
         try:
             self.close()
         except Exception:

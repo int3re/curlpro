@@ -1,4 +1,4 @@
-"""Сессия и функции уровня модуля в стиле requests."""
+"""The session and the requests-style module-level functions."""
 
 from __future__ import annotations
 
@@ -22,12 +22,12 @@ DEFAULT_PROFILE = "chrome-151-windows"
 
 
 def _proxy_override(proxy: str | bool | None) -> str | None:
-    """Переводит аргумент proxy в значение для нативной части.
+    """Turns the proxy argument into what the native side expects.
 
-    Три состояния, и их приходится различать: ``None`` — наследовать прокси
-    сессии, ``False`` — идти напрямую в обход него, строка — использовать
-    указанный. Одной строкой это не выразить, потому что пустая строка уже
-    занята под «напрямую».
+    Three states, and they have to stay distinct: ``None`` inherits the
+    session proxy, ``False`` goes directly, bypassing it, and a string uses
+    the address given. One string cannot express that, because the empty
+    string already means "directly".
     """
     if proxy is None:
         return None
@@ -48,16 +48,17 @@ def _retry_config(
     max_backoff: float | None,
     respect_retry_after: bool,
 ) -> dict[str, Any] | None:
-    """Собирает политику повторов.
+    """Builds the retry policy.
 
-    ``None`` — «не задано»: у сессии это «без повторов», у запроса —
-    «взять из сессии». Ноль — явное «без повторов»: так запрос может
-    отключить повторы, которые заданы сессии. Раньше ноль схлопывался
-    в ``None`` и отключить их на один запрос было нельзя.
+    ``None`` means "not set": for a session that is "no retries", for a
+    request it is "take the session's". Zero is an explicit "no retries",
+    which is how a request switches off the retries its session configured.
+    Zero used to collapse into ``None``, and turning them off for one request
+    was impossible.
 
-    По умолчанию повторяются только идемпотентные методы: повтор POST может
-    создать второй заказ, потому что сервер мог обработать запрос и не успеть
-    ответить. Разрешить это можно явным списком в ``retry_methods``.
+    Only idempotent methods are retried by default: repeating a POST can
+    create a second order, because the server may have processed the request
+    and failed to answer in time. An explicit ``retry_methods`` list allows it.
     """
     if retries is None:
         return None
@@ -75,12 +76,13 @@ def _build_multipart(
     fields: Mapping[str, str] | None,
     files: Mapping[str, Any] | None,
 ) -> tuple[dict[str, Any], bytes]:
-    """Готовит описание формы и склеенное содержимое файлов.
+    """Prepares the form description and the concatenated file contents.
 
-    Границу формы генерирует нативная часть в стиле профиля: её вид отличает
-    Chrome от Firefox и потому относится к отпечатку, а не к деталям кодирования.
+    The multipart boundary is generated natively in the profile's style: its
+    shape tells Chrome from Firefox, so it belongs to the fingerprint rather
+    than to encoding details.
 
-    Значение ``files`` — либо ``bytes``, либо кортеж
+    A ``files`` value is either ``bytes`` or a tuple
     ``(filename, content)`` / ``(filename, content, content_type)``.
     """
     fields = dict(fields or {})
@@ -120,10 +122,10 @@ def _build_multipart(
 
 
 def _with_params(url: str, params: Mapping[str, Any] | Iterable[tuple[str, Any]] | None) -> str:
-    """Дописывает параметры запроса к адресу.
+    """Appends query parameters to the URL.
 
-    Уже имеющаяся строка запроса сохраняется: в requests так же, и адрес
-    вида "/search?lang=ru" с параметрами не теряет свой lang.
+    An existing query string is kept: requests behaves the same way, and a
+    URL like "/search?lang=ru" does not lose its lang when params are added.
     """
     if not params:
         return url
@@ -148,7 +150,7 @@ def _with_params(url: str, params: Mapping[str, Any] | Iterable[tuple[str, Any]]
 
 
 def _auth_header(auth: tuple[str, str] | str | None) -> str | None:
-    """Базовая авторизация: пара превращается в заголовок, строка идёт как есть."""
+    """Basic auth: a pair becomes a header, a string is passed through as is."""
     if auth is None:
         return None
     if isinstance(auth, str):
@@ -158,7 +160,7 @@ def _auth_header(auth: tuple[str, str] | str | None) -> str | None:
     return "Basic " + token
 
 
-#: Как называют протоколы в жизни. Каноническое значение уходит в ядро.
+#: What people call the protocols. The canonical value goes to the core.
 _PROTOCOLS = {
     "http1": "http1", "http/1.1": "http1", "http1.1": "http1",
     "h1": "http1", "1.1": "http1", "1": "http1",
@@ -168,10 +170,10 @@ _PROTOCOLS = {
 
 
 def _protocol(value: str | float | None) -> str:
-    """Приводит имя протокола к тому, что понимает ядро.
+    """Maps a protocol name onto what the core understands.
 
-    Принимает и число: ``protocol=2`` читается не хуже ``protocol="h2"``,
-    а спрашивают чаще именно так.
+    Numbers are accepted too: ``protocol=2`` reads no worse than
+    ``protocol="h2"``, and that is the form people ask for.
     """
     if value is None:
         return ""
@@ -210,15 +212,15 @@ def _request_meta(
     proxy: str | bool | None = None,
     mode: str | None = None,
 ) -> tuple[dict[str, Any], bytes]:
-    # params и auth — привычные аргументы requests; здесь они превращаются
-    # в адрес со строкой запроса и в обычный заголовок, дальше всё как обычно.
+    # params and auth are the familiar requests arguments; here they turn
+    # into a URL with a query string and an ordinary header, nothing special.
     connect_timeout, timeout = _split_timeout(timeout)
     url = _with_params(url, params)
     if credentials := _auth_header(auth):
         headers = dict(headers or {})
         headers.setdefault("Authorization", credentials)
-    """Собирает кадр запроса. Общий для request() и stream(): раньше у потока
-    была своя урезанная копия без таймаута, прокси, повторов и файлов."""
+    """Builds the request frame. Shared by request() and stream(): the stream
+    used to keep its own cut-down copy without timeout, proxy, retries or files."""
     hdrs = dict(headers or {})
     multipart = None
 
@@ -244,13 +246,13 @@ def _request_meta(
         "url": url,
         "headers": hdrs,
         "header_order": list(header_order) if header_order else None,
-        # None — как у сессии; True и False перебивают её в обе стороны.
+        # None follows the session; True and False override it either way.
         "default_headers": default_headers,
         "protocol": _protocol(protocol),
         "multipart": multipart,
         "body_file": body_file or "",
-        # None означает «взять из сессии»; ноль — осмысленное значение,
-        # поэтому передаётся именно отсутствие, а не подстановка.
+        # None means "take the session's"; zero is a meaningful value, so
+        # absence is what travels, not a substituted default.
         "timeout_ms": None if timeout is None else int(timeout * 1000),
         "connect_timeout_ms": None if connect_timeout is None else int(connect_timeout * 1000),
         "follow_redirects": allow_redirects,
@@ -259,17 +261,17 @@ def _request_meta(
             retries, retry_statuses, retry_methods,
             retry_backoff, retry_max_backoff, respect_retry_after,
         ),
-        # None — взять из сессии, False — идти напрямую в обход
-        # сессионного прокси, строка — использовать указанный.
+        # None takes the session's, False goes directly bypassing the
+        # session proxy, a string uses the address given.
         "proxy": _proxy_override(proxy),
-        # None — режим сессии; "navigate" или "fetch" — явный набор заголовков.
+        # None is the session mode; "navigate" or "fetch" pick a header set.
         "mode": mode or "",
     }
     return meta, data or b""
 
 
 class Redirect:
-    """Шаг цепочки редиректов: куда ответил сервер и каким статусом."""
+    """One hop of a redirect chain: where the server answered and with what status."""
 
     __slots__ = ("status", "url", "location")
 
@@ -283,7 +285,7 @@ class Redirect:
 
 
 class Response:
-    """Ответ сервера."""
+    """A server response."""
 
     __slots__ = ("status", "proto", "headers", "content", "url", "elapsed",
                  "history", "_encoding")
@@ -296,18 +298,18 @@ class Response:
         self.headers = headers
         self.content = content
         self.url = url
-        #: Время запроса целиком, включая редиректы и повторы, в секундах.
+        #: Time of the whole request, redirects and retries included, in seconds.
         self.elapsed = elapsed
-        #: Промежуточные ответы цепочки редиректов, от первого к последнему.
+        #: The intermediate responses of a redirect chain, first to last.
         self.history: list[Redirect] = history or []
         self._encoding: str | None = None
 
     @property
     def cookies(self) -> dict[str, str]:
-        """Куки, установленные этим ответом.
+        """The cookies this response set.
 
-        Именно этим, а не всей сессией: у сессии для этого есть свой
-        ``cookies``, куда попадают в том числе куки прошлых запросов.
+        This response, not the whole session: the session has its own
+        ``cookies``, which also holds cookies from earlier requests.
         """
         out: dict[str, str] = {}
         for name, values in self.headers.items():
@@ -322,11 +324,11 @@ class Response:
 
     @property
     def encoding(self) -> str:
-        """Кодировка тела: из Content-Type, затем BOM, затем сам документ.
+        """Body charset: from Content-Type, then the BOM, then the document.
 
-        Определяется один раз и запоминается. Присваивание перекрывает
-        определённое значение — сайт может объявить кодировку неверно,
-        и тогда решать вызывающему.
+        Detected once and remembered. Assigning to it overrides the detected
+        value — a site may declare the charset wrongly, and then the choice
+        belongs to the caller.
         """
         if self._encoding is None:
             self._encoding = detect_encoding(self.content, self.header("content-type"))
@@ -341,11 +343,11 @@ class Response:
         return self.content.decode(self.encoding, errors="replace")
 
     def json(self) -> Any:
-        """Разбор JSON.
+        """Parses the body as JSON.
 
-        Байты отдаются как есть: json.loads сам распознаёт UTF-8, UTF-16
-        и UTF-32 по RFC 8259. Кодировка из заголовка тут не годится —
-        сайты объявляют в ней что угодно, а тело всё равно UTF-8.
+        The bytes are handed over untouched: json.loads recognises UTF-8,
+        UTF-16 and UTF-32 itself, per RFC 8259. The header charset is no help
+        here — sites declare anything in it while the body is UTF-8 anyway.
         """
         return json.loads(self.content)
 
@@ -354,13 +356,13 @@ class Response:
         return 200 <= self.status < 400
 
     def raise_for_status(self) -> "Response":
-        """Поднимает :class:`HTTPError` при статусе 4xx или 5xx."""
+        """Raises :class:`HTTPError` on a 4xx or 5xx status."""
         if not self.ok:
             raise HTTPError(f"HTTP {self.status} for {self.url}", response=self)
         return self
 
     def header(self, name: str) -> str | None:
-        """Первое значение заголовка без учёта регистра."""
+        """The first value of a header, matched case-insensitively."""
         lowered = name.lower()
         for key, values in self.headers.items():
             if key.lower() == lowered and values:
@@ -372,69 +374,73 @@ class Response:
 
 
 class Session:
-    """Сессия с одним профилем и переиспользованием соединений.
+    """A session with one profile and reused connections.
 
-    :param impersonate: имя профиля
-    :param verify: проверять сертификат сервера. ``True`` — системные корни,
-        путь к файлу PEM — доверять только этому корню, ``False`` — не
-        проверять вовсе
-    :param cert: пара путей ``(сертификат, ключ)`` для взаимной
-        аутентификации (mTLS)
-    :param trust_env: брать прокси из переменных окружения ``HTTPS_PROXY``,
-        ``ALL_PROXY`` с учётом ``NO_PROXY``. Явно заданный ``proxy`` сильнее
-    :param max_response_size: предел размера тела в байтах; 0 — без предела.
-        Без него сервер с бесконечным ответом съедает память процесса
-    :param timeout: предел на запрос целиком, включая редиректы, в секундах.
-        Пара ``(соединение, всего)`` задаёт отдельный предел на установку
-        соединения — разрешение имени, TCP и рукопожатие TLS. Второй элемент
-        у нас означает предел на запрос целиком, а не предел молчания между
-        байтами, как в requests: это строже, и привычное значение подставлять
-        безопасно
-    :param proxy: ``http://``, ``https://`` или ``socks5://``, можно с user:pass
-    :param default_headers: подставлять заголовки профиля. Выключите, чтобы
-        полностью управлять набором и порядком самостоятельно — анти-боты
-        смотрят и на порядок. Без своего ``user-agent`` заголовок не уходит
-        вовсе: подставлять умолчание Go библиотека не станет. Отдельный
-        запрос перебивает это значение в обе стороны
-    :param header_order: желаемый порядок заголовков; не перечисленные идут
-        следом, сохраняя относительный порядок
-    :param allow_redirects: переходить по 3xx
-    :param max_redirects: предел длины цепочки
-    :param cookies: включить cookie-jar, общий для запросов сессии
-    :param force_http1: не предлагать h2, даже если профиль его содержит
-    :param http3: отправлять запросы по QUIC вместо TCP. Профиль обязан
-        описывать секцию ``http3``, иначе сессия не создастся. Это отдельный
-        транспорт, а не вариант ALPN, поэтому выбирается явно
-    :param alt_svc: переходить на HTTP/3, увидев в ответе заголовок
-        ``Alt-Svc``. Так делает браузер: первый запрос к сайту всегда идёт
-        по TCP, а на QUIC он переходит, только увидев объявление. Неудачная
-        попытка откладывает следующую и откатывает запрос на TCP. Требует
-        профиля с секцией ``http3``; через прокси не действует
-    :param resolve: подмена адреса узла: ``{"example.com:443": "10.0.0.7"}``.
-        Имя в SNI и заголовке Host остаётся прежним — меняется только то,
-        куда открывается сокет. Аналог ``--resolve`` у curl: нужен, чтобы
-        попасть на конкретный сервер за балансировщиком. Через прокси
-        не действует: там имя разрешает он сам
-    :param ip_version: ограничить семейство адресов: ``"4"`` или ``"6"``.
-        Нужно там, где у имени есть запись AAAA, а маршрута по IPv6 нет
-    :param keep_alive: переиспользовать соединение между запросами. Включено:
-        так делает браузер, и рукопожатие TLS не повторяется на каждый запрос.
-        ``False`` закрывает соединение сразу после ответа — нужно, когда
-        балансировщик прибивает клиента к одному узлу. Заголовок
-        ``Connection: close`` при этом не отправляется: браузер его не шлёт
-    :param device: телефон, от имени которого идёт сессия: имя из секции
-        ``devices`` профиля или ``"random"``. Современный Chrome вырезал модель
-        из ``User-Agent`` (там у всех ``Android 10; K``), поэтому устройство
-        сообщается подсказками ``sec-ch-ua-model`` и
-        ``sec-ch-ua-platform-version`` — и только после того, как сайт запросил
-        их заголовком ``Accept-CH``. Выбирается один раз на сессию
-    :param devices: свой список устройств вместо профильного; каждый элемент —
-        ``{"name": ..., "model": ..., "platform_version": ...}``
-    :param retries: сколько повторов делать после первой попытки
-    :param mode: набор заголовков: ``"navigate"`` — переход по адресу,
-        ``"fetch"`` — запрос fetch/XHR со страницы, ``"auto"`` — по признакам
-        запроса (метод кроме GET/HEAD/POST, тело не формы, кастомный
-        заголовок означают fetch). У профиля должна быть секция ``fetch``
+    :param impersonate: profile name
+    :param verify: verify the server certificate. ``True`` uses the system
+        roots, a path to a PEM file trusts only that root, ``False`` skips
+        verification entirely
+    :param cert: a ``(certificate, key)`` path pair for mutual TLS
+    :param trust_env: take the proxy from the ``HTTPS_PROXY`` and
+        ``ALL_PROXY`` environment variables, honouring ``NO_PROXY``. An
+        explicit ``proxy`` always wins
+    :param max_response_size: body size limit in bytes; 0 means no limit.
+        Without one, a server with an endless response eats the process memory
+    :param timeout: limit for the whole request including redirects, in
+        seconds. A ``(connect, total)`` pair sets a separate limit on
+        establishing the connection — name resolution, TCP and the TLS
+        handshake. Here the second element caps the whole request rather than
+        the silence between bytes as in requests: that is stricter, so the
+        familiar value is safe to keep
+    :param proxy: ``http://``, ``https://`` or ``socks5://``, user:pass allowed
+    :param default_headers: send the profile's headers. Turn it off to control
+        the set and the order yourself — anti-bot systems look at the order
+        too. Without your own ``user-agent`` no such header is sent at all:
+        the library will not substitute Go's default. An individual request
+        overrides this either way
+    :param header_order: the desired header order; anything not listed follows,
+        keeping its relative order
+    :param allow_redirects: follow 3xx responses
+    :param max_redirects: limit on the length of a redirect chain
+    :param cookies: enable the cookie jar shared by the session's requests
+    :param force_http1: do not offer h2, even when the profile lists it
+    :param http3: send requests over QUIC instead of TCP. The profile must
+        describe an ``http3`` section or the session will not be created.
+        This is a separate transport, not an ALPN variant, so it is explicit
+    :param alt_svc: upgrade to HTTP/3 after seeing an ``Alt-Svc`` header in a
+        response. That is what a browser does: the first request to a site
+        always goes over TCP, and it moves to QUIC only after the
+        advertisement. A failed attempt postpones the next one and falls back
+        to TCP. Requires a profile with an ``http3`` section; does not apply
+        through a proxy
+    :param resolve: address override for a host:
+        ``{"example.com:443": "10.0.0.7"}``. The name in SNI and in the Host
+        header stays the same — only the socket destination changes. The
+        equivalent of curl's ``--resolve``: it is how you reach one specific
+        server behind a balancer. Does not apply through a proxy, which
+        resolves names itself
+    :param ip_version: restrict the address family: ``"4"`` or ``"6"``. Needed
+        where a name has an AAAA record but there is no IPv6 route
+    :param keep_alive: reuse the connection between requests. On by default:
+        that is what a browser does, and the TLS handshake is not repeated per
+        request. ``False`` closes the connection right after the response —
+        useful when a balancer pins a client to one node. No
+        ``Connection: close`` header is sent either way: a browser does not
+        send one
+    :param device: the phone the session pretends to be: a name from the
+        profile's ``devices`` section, or ``"random"``. Modern Chrome cut the
+        model out of ``User-Agent`` (everyone reports ``Android 10; K``), so
+        the device is disclosed through the ``sec-ch-ua-model`` and
+        ``sec-ch-ua-platform-version`` hints — and only after the site asked
+        for them with ``Accept-CH``. Chosen once per session
+    :param devices: your own device list instead of the profile's; each entry
+        is ``{"name": ..., "model": ..., "platform_version": ...}``
+    :param retries: how many retries to make after the first attempt
+    :param mode: which header set to use: ``"navigate"`` for a page load,
+        ``"fetch"`` for a fetch/XHR request from a page, ``"auto"`` to decide
+        from the request itself (a method other than GET/HEAD/POST, a
+        non-form body or a custom header mean fetch). The profile needs a
+        ``fetch`` section
     """
 
     def __init__(
@@ -471,8 +477,8 @@ class Session:
         respect_retry_after: bool = True,
         mode: str = "auto",
     ):
-        # Профили, вложенные в пакет, подгружаются при первом обращении:
-        # после pip install библиотека должна работать без лишних шагов.
+        # The bundled profiles are loaded on first use: after pip install
+        # the library has to work without any extra steps.
         ensure_loaded()
         session_connect, session_total = _split_timeout(timeout)
         self._id = _call(
@@ -480,15 +486,15 @@ class Session:
             encode(
                 {
                     "profile": impersonate,
-                    # verify=True — системные корни, строка — свой корень,
-                    # False — без проверки вовсе.
+                    # verify=True uses the system roots, a string picks one
+                    # root of your own, False skips verification entirely.
                     "insecure_skip_verify": verify is False,
                     "ca_cert": verify if isinstance(verify, str) else "",
                     "client_cert": cert[0] if cert else "",
                     "client_key": cert[1] if cert else "",
-                    # Окружение читает Python: на Linux нативная часть
-                    # видит его таким, каким оно было при старте процесса,
-                    # и правка os.environ в рантайме до неё не доходит.
+                    # Python reads the environment: on Linux the native part
+                    # sees it as it was when the process started, so an
+                    # os.environ change at runtime never reaches it.
                     "trust_env": False,
                     "max_response_size": int(max_response_size),
                     "timeout_ms": int(session_total * 1000) if session_total else 0,
@@ -521,14 +527,14 @@ class Session:
         self.impersonate = impersonate
         self._trust_env = trust_env
         self._closed = False
-        #: Заголовки, добавляемые ко всем запросам сессии. Хранятся отдельно
-        #: от профильных, поэтому clear() возвращает чистый отпечаток.
+        #: Headers added to every request of the session. Kept apart from
+        #: the profile's, so clear() restores the plain fingerprint.
         self.headers = SessionHeaders(self._id)
-        #: Куки сессии: чтение, изменение, сохранение и загрузка из файла.
+        #: Session cookies: reading, editing, saving and loading from a file.
         self.cookies = Cookies(self._id)
-        #: Перехватчики: "request" вызывается перед отправкой и получает
-        #: описание запроса, "response" — после, с готовым ответом. Оба могут
-        #: вернуть замену; вернувший None ничего не меняет.
+        #: Hooks: "request" runs before sending and receives the request
+        #: description, "response" runs after with the finished response. Both
+        #: may return a replacement; returning None changes nothing.
         self.hooks: dict[str, list[Callable[..., Any]]] = {"request": [], "response": []}
         for event, fns in (hooks or {}).items():
             if event not in self.hooks:
@@ -567,8 +573,8 @@ class Session:
             raise RuntimeError("session is closed")
 
         if proxy is None and self._trust_env:
-            # Явный proxy сильнее окружения; False означает «идти напрямую»
-            # и тоже не перебивается.
+            # An explicit proxy beats the environment; False means "go
+            # directly" and is not overridden either.
             proxy = env_proxy(url)
 
         meta, body = _request_meta(
@@ -602,7 +608,7 @@ class Session:
         ))
 
     def _after(self, response: Response) -> Response:
-        """Пропускает ответ через перехватчики."""
+        """Runs the response through the hooks."""
         for hook in self.hooks["response"]:
             replaced = hook(response)
             if replaced is not None:
@@ -610,12 +616,12 @@ class Session:
         return response
 
     def on_request(self, fn: Callable[..., Any]) -> Callable[..., Any]:
-        """Добавляет перехватчик запроса. Годится и как декоратор."""
+        """Adds a request hook. Works as a decorator too."""
         self.hooks["request"].append(fn)
         return fn
 
     def on_response(self, fn: Callable[..., Any]) -> Callable[..., Any]:
-        """Добавляет перехватчик ответа. Годится и как декоратор."""
+        """Adds a response hook. Works as a decorator too."""
         self.hooks["response"].append(fn)
         return fn
 
@@ -645,12 +651,12 @@ class Session:
         proxy: str | bool | None = None,
         mode: str | None = None,
     ) -> "StreamResponse":
-        """Открывает ответ для чтения по частям.
+        """Opens a response for reading in chunks.
 
-        Принимает те же аргументы, что и :meth:`request`. Поток удерживает
-        соединение до закрытия, поэтому использовать его следует через ``with``.
-        Закрытие потока с недочитанным телом выбрасывает соединение, а не
-        дочитывает остаток: прочитать килобайт и закрыть — дёшево.
+        Takes the same arguments as :meth:`request`. The stream holds its
+        connection until closed, so use it through ``with``. Closing a stream
+        with the body unread drops the connection instead of draining the
+        rest: reading a kilobyte and closing is cheap.
         """
         if self._closed:
             raise RuntimeError("session is closed")
@@ -677,13 +683,13 @@ class Session:
         timeout: float | tuple[float, float] = 30.0,
         max_message_size: int = 0,
     ) -> "WebSocket":
-        """Открывает WebSocket с заголовками рукопожатия из профиля.
+        """Opens a WebSocket whose handshake headers come from the profile.
 
-        ``timeout`` ограничивает рукопожатие и ожидание одного сообщения;
-        парой ``(соединение, всего)`` установку соединения можно ограничить
-        отдельно — как и у обычного запроса;
-        ``max_message_size`` — предел принимаемого сообщения в байтах
-        (ноль — 64 МиБ). Соединение держится до закрытия — используйте ``with``.
+        ``timeout`` caps the handshake and the wait for a single message; a
+        ``(connect, total)`` pair caps establishing the connection separately,
+        exactly as for an ordinary request. ``max_message_size`` limits an
+        incoming message in bytes (zero means 64 MiB). The connection is held
+        until closed — use ``with``.
         """
         if self._closed:
             raise RuntimeError("session is closed")
@@ -723,8 +729,8 @@ class Session:
         self.close()
 
     def __del__(self) -> None:
-        # Сессия держит открытые сокеты на стороне Go: без закрытия они
-        # переживут сборку Python-объекта.
+        # The session holds open sockets on the Go side: without closing
+        # they outlive the Python object.
         try:
             self.close()
         except Exception:
@@ -734,7 +740,7 @@ class Session:
 def request(method: str, url: str, *, impersonate: str = DEFAULT_PROFILE,
             verify: bool = True, timeout: float | tuple[float, float] = 30.0, proxy: str | None = None,
             **kw: Any) -> Response:
-    """Одиночный запрос. Для серии запросов используйте Session."""
+    """A one-off request. For a series of them use Session."""
     session_kw = {
         k: kw.pop(k)
         for k in ("default_headers", "header_order", "allow_redirects",

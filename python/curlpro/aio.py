@@ -1,12 +1,13 @@
-"""Асинхронный фасад.
+"""The async facade.
 
-Запросы, потоковое чтение и WebSocket уходят в нативную часть и выполняются
-там горутинами: цикл событий не занят ожиданием, а число одновременных
-операций ограничено соединениями и сервером, а не размером пула потоков.
-Раньше здесь был пул на тридцать два потока, и он же был потолком.
+Requests, streaming reads and WebSockets all go into the native part and run
+there as goroutines: the event loop is never blocked waiting, and the number
+of concurrent operations is bounded by connections and by the server, not by
+the size of a thread pool. There used to be a pool of thirty-two threads
+here, and it was the ceiling.
 
-Единственное, что осталось за циклом событий, — закрытие потока и сокета:
-оно короткое, но ходит в сеть, поэтому уходит в исполнитель по умолчанию.
+The only thing left off the event loop is closing a stream or a socket: it is
+short but it touches the network, so it goes to the default executor.
 """
 
 from __future__ import annotations
@@ -23,16 +24,16 @@ from .stream import DEFAULT_CHUNK, lines_from
 
 
 class _Opener:
-    """Открывает ресурс и по ``async with``, и по ``await``.
+    """Opens a resource both with ``async with`` and with ``await``.
 
-    Открытие — корутина, но чаще результат нужен в блоке с автоматическим
-    закрытием, и ``async with await ...`` читается плохо. Так же устроен
-    aiohttp, поэтому форма привычна.
+    Opening is a coroutine, but the result is usually wanted inside a block
+    that closes it automatically, and ``async with await ...`` reads badly.
+    aiohttp is built the same way, so the shape is familiar.
     """
 
     __slots__ = ("_coro", "_obj")
 
-    def __init__(self, coro):  # noqa: ANN001 — корутина открытия
+    def __init__(self, coro):  # noqa: ANN001 — the opening coroutine
         self._coro = coro
         self._obj: Any = None
 
@@ -48,13 +49,13 @@ class _Opener:
 
 
 class AsyncStreamResponse:
-    """Тело, читаемое частями, без занятого потока.
+    """A body read in chunks without tying up a thread.
 
         async with session.stream("GET", url) as r:
             async for chunk in r.iter_content():
                 out.write(chunk)
 
-    Поток удерживает соединение до закрытия — отсюда ``async with``.
+    The stream holds its connection until closed — hence ``async with``.
     """
 
     __slots__ = ("status", "proto", "headers", "url", "_id", "_closed")
@@ -79,7 +80,7 @@ class AsyncStreamResponse:
         return None
 
     async def read_chunk(self, size: int = DEFAULT_CHUNK) -> bytes:
-        """Читает одну часть. Пустой результат означает конец тела."""
+        """Reads one chunk. An empty result means the body ended."""
         if self._closed:
             raise RuntimeError("stream is closed")
         if size <= 0:
@@ -89,7 +90,7 @@ class AsyncStreamResponse:
         return data
 
     async def iter_content(self, chunk_size: int = DEFAULT_CHUNK) -> AsyncIterator[bytes]:
-        """Отдаёт тело частями до конца."""
+        """Yields the body in chunks until it ends."""
         while True:
             chunk = await self.read_chunk(chunk_size)
             if not chunk:
@@ -98,7 +99,7 @@ class AsyncStreamResponse:
 
     async def iter_lines(self, chunk_size: int = DEFAULT_CHUNK,
                          keepends: bool = False) -> AsyncIterator[bytes]:
-        """Тело построчно, не собирая его целиком."""
+        """The body line by line, without collecting it whole."""
         buffer = b""
         async for chunk in self.iter_content(chunk_size):
             buffer, lines = lines_from(buffer, chunk, keepends)
@@ -108,7 +109,7 @@ class AsyncStreamResponse:
             yield buffer
 
     async def read(self) -> bytes:
-        """Дочитывает тело целиком. Удобно, когда поток открыт зря."""
+        """Reads the rest of the body. Handy when the stream was opened in vain."""
         parts = [chunk async for chunk in self.iter_content()]
         return b"".join(parts)
 
@@ -124,7 +125,7 @@ class AsyncStreamResponse:
 
 
 class AsyncWebSocket:
-    """WebSocket, не занимающий поток ни на приёме, ни на отправке."""
+    """A WebSocket that ties up no thread, neither on receive nor on send."""
 
     __slots__ = ("_id", "_closed")
 
@@ -133,20 +134,20 @@ class AsyncWebSocket:
         self._closed = False
 
     async def send(self, data: str | bytes) -> None:
-        """Отправляет сообщение. Тип кадра выбирается по типу данных."""
+        """Sends a message. The frame type follows the type of the data."""
         binary = not isinstance(data, str)
         payload = data if binary else data.encode("utf-8")
         await self._send(payload, binary=binary, ping=False)
 
     async def ping(self, data: bytes = b"") -> None:
-        """Отправляет ping. Ответный pong обрабатывается внутри recv."""
+        """Sends a ping. The matching pong is handled inside recv."""
         await self._send(data, binary=True, ping=True)
 
     async def recv(self) -> str | bytes:
-        """Читает следующее сообщение.
+        """Reads the next message.
 
-        Текстовые кадры возвращаются как ``str``, двоичные — как ``bytes``:
-        на проводе это разные опкоды, и сервер вправе их различать.
+        Text frames come back as ``str`` and binary ones as ``bytes``: on the
+        wire these are different opcodes, and a server may tell them apart.
         """
         self._check()
         started = _call("curlpro_ws_recv_start", self._id)
@@ -154,7 +155,7 @@ class AsyncWebSocket:
         return data if (meta or {}).get("binary") else data.decode("utf-8")
 
     async def __aiter__(self) -> AsyncIterator[str | bytes]:
-        """Читает сообщения, пока соединение не закроется."""
+        """Reads messages until the connection closes."""
         while True:
             try:
                 yield await self.recv()
@@ -188,13 +189,13 @@ class AsyncWebSocket:
 
 
 class AsyncSession:
-    """Асинхронная сессия поверх той же нативной сессии, что и обычная.
+    """An async session over the same native session as the sync one.
 
-    Принимает те же параметры, что и :class:`~curlpro.Session`.
+    Takes the same parameters as :class:`~curlpro.Session`.
 
-    :param max_workers: не используется. Оставлен, чтобы не ломать вызовы,
-        написанные до перехода на нативную асинхронность: пула потоков
-        больше нет, ждут теперь горутины.
+    :param max_workers: unused. Kept so that calls written before the move to
+        native async keep working: there is no thread pool any more, the
+        waiting is done by goroutines.
     """
 
     def __init__(
@@ -208,8 +209,8 @@ class AsyncSession:
         self.impersonate = impersonate
 
     @property
-    def cookies(self):  # noqa: ANN201 — тип задан в Session
-        """Куки сессии: те же, что у синхронной."""
+    def cookies(self):  # noqa: ANN201 — the type is declared in Session
+        """The session cookies: the same ones the sync session sees."""
         return self._session.cookies
 
     @property
@@ -273,15 +274,15 @@ class AsyncSession:
         return await self.request("OPTIONS", url, **kw)
 
     def stream(self, method: str, url: str, **kw: Any) -> _Opener:
-        """Открывает ответ для чтения по частям.
+        """Opens a response for reading in chunks.
 
             async with session.stream("GET", url) as r:
                 async for chunk in r.iter_content():
                     out.write(chunk)
 
-        Принимает те же аргументы, что и :meth:`request`. Поток удерживает
-        соединение до закрытия, поэтому открывать его следует через
-        ``async with`` — или закрывать вручную, если ``await``.
+        Takes the same arguments as :meth:`request`. The stream holds its
+        connection until closed, so open it with ``async with`` — or close it
+        by hand if you ``await`` it instead.
         """
         return _Opener(self._open_stream(method, url, **kw))
 
@@ -294,10 +295,10 @@ class AsyncSession:
         timeout: float | tuple[float, float] = 30.0,
         max_message_size: int = 0,
     ) -> _Opener:
-        """Открывает WebSocket с заголовками рукопожатия из профиля.
+        """Opens a WebSocket whose handshake headers come from the profile.
 
             async with session.websocket(url) as ws:
-                await ws.send("привет")
+                await ws.send("hello")
                 print(await ws.recv())
         """
         return _Opener(self._open_websocket(
@@ -351,8 +352,8 @@ class AsyncSession:
         return AsyncWebSocket(payload["socket"])
 
     async def close(self) -> None:
-        # Закрытие ходит в сеть — за пределы цикла событий: сессия закрывает
-        # соединения, и на медленной сети это заметное ожидание.
+        # Closing touches the network, so it goes off the event loop: the
+        # session closes its connections, and on a slow link that shows.
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._session.close)
 

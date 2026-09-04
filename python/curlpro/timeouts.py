@@ -1,8 +1,8 @@
-"""Разбор значения ``timeout``.
+"""Parsing of the ``timeout`` value.
 
-Отдельный модуль, потому что пара нужна и запросу, и потоку, и сокету:
-живи она в session.py, websocket.py импортировал бы его в обратную сторону
-и замкнул круг импортов.
+A separate module because the pair is needed by requests, streams and
+sockets alike: living in session.py it would make websocket.py import that
+module back and close an import cycle.
 """
 
 from __future__ import annotations
@@ -11,12 +11,12 @@ from __future__ import annotations
 def split_timeout(
     value: float | tuple[float, float] | None,
 ) -> tuple[float | None, float | None]:
-    """Разбирает timeout: число или пара (соединение, всего).
+    """Splits timeout: a number, or a (connect, total) pair.
 
-    Пара пришла из requests, где второй элемент — предел молчания между
-    байтами. У нас он ограничивает запрос целиком: это строже, а не мягче,
-    поэтому привычное значение подставлять безопасно. Разница названа
-    в документации прямо, чтобы никто не рассчитывал на обратное.
+    The pair comes from requests, where the second element caps the silence
+    between bytes. Here it caps the whole request instead: stricter rather
+    than looser, so the familiar number is safe to keep. The difference is
+    spelled out in the docs so that nobody counts on the other meaning.
     """
     if value is None:
         return None, None

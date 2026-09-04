@@ -1,13 +1,13 @@
-"""Прокси из переменных окружения.
+"""Proxy settings taken from the environment.
 
-Разбор живёт здесь, а не только в нативной части, по неочевидной причине:
-на Linux Go читает окружение таким, каким оно было при старте процесса, и
-``os.environ[...] = ...`` из Python его уже не меняет. На Windows меняет.
-Пользователь Python вправе выставить переменную в рантайме и ожидать, что она
-подействует, поэтому адрес прокси выбирается здесь и передаётся вниз явно.
+The parsing lives here rather than only in the native side for a subtle
+reason: on Linux Go sees the environment as it was when the process started,
+so ``os.environ[...] = ...`` from Python no longer changes it. On Windows it
+does. A Python user may set the variable at runtime and expect it to take
+effect, so the proxy address is picked here and passed down explicitly.
 
-Правила те же, что у curl и requests: HTTPS_PROXY, затем ALL_PROXY; NO_PROXY
-отменяет прокси для перечисленных узлов, «*» — для всех.
+The rules are the ones curl and requests use: HTTPS_PROXY, then ALL_PROXY;
+NO_PROXY excludes the hosts it lists, and "*" excludes everything.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ _PROXY_VARS = ("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")
 
 
 def proxy_for(url: str) -> str | None:
-    """Прокси для адреса или None, если идти напрямую."""
+    """Proxy for this address, or None to go directly."""
     host = urlsplit(url).hostname or ""
     if not host or no_proxy(host):
         return None
@@ -31,7 +31,7 @@ def proxy_for(url: str) -> str | None:
 
 
 def no_proxy(host: str) -> bool:
-    """Исключён ли узел из проксирования по NO_PROXY."""
+    """Whether NO_PROXY excludes this host from proxying."""
     rules = os.environ.get("NO_PROXY") or os.environ.get("no_proxy") or ""
     if not rules:
         return False
@@ -42,8 +42,8 @@ def no_proxy(host: str) -> bool:
             continue
         if rule == "*":
             return True
-        # «.example.com» и «example.com» одинаково покрывают сам домен
-        # и его поддомены — так это понимают curl и requests.
+        # ".example.com" and "example.com" both cover the domain itself
+        # and its subdomains — that is how curl and requests read them.
         rule = rule.lstrip(".")
         if host == rule or host.endswith("." + rule):
             return True

@@ -1,4 +1,4 @@
-"""Управление профилями браузеров."""
+"""Browser profile management."""
 
 from __future__ import annotations
 
@@ -14,18 +14,18 @@ _autoloaded = False
 
 
 def load_profiles(directory: str | Path) -> list[str]:
-    """Загружает все *.json из каталога. Возвращает имена всех известных профилей."""
+    """Loads every *.json in a directory. Returns the names of all known profiles."""
     data = _call("curlpro_profiles_load_dir", str(directory).encode("utf-8"))
     return data["profiles"]
 
 
 def ensure_loaded() -> list[str]:
-    """Подгружает профили, вложенные в пакет, если их ещё не грузили.
+    """Loads the profiles bundled with the package, once.
 
-    Нужно, чтобы после ``pip install`` библиотека работала без дополнительных
-    шагов: колесо содержит и нативную часть, и профили. При запуске из
-    репозитория каталога рядом с пакетом нет — тогда профили загружает
-    вызывающий, как раньше.
+    This is what makes the library work right after ``pip install``: the
+    wheel carries both the native part and the profiles. When running from
+    the repository there is no such directory next to the package, and the
+    caller loads the profiles itself, as before.
     """
     global _autoloaded
     if _autoloaded:
@@ -37,11 +37,11 @@ def ensure_loaded() -> list[str]:
 
 
 def register_profile(profile: dict[str, Any] | str | bytes) -> list[str]:
-    """Регистрирует профиль в рантайме.
+    """Registers a profile at runtime.
 
-    Принимает словарь, строку JSON или байты. Это способ подключить новую
-    версию браузера, не дожидаясь релиза библиотеки и не пересобирая
-    нативную часть — ради него всё и затевалось.
+    Accepts a dict, a JSON string or bytes. This is how a new browser
+    version is added without waiting for a library release and without
+    rebuilding the native part — the whole point of the project.
     """
     if isinstance(profile, dict):
         payload = encode(profile)
@@ -49,24 +49,24 @@ def register_profile(profile: dict[str, Any] | str | bytes) -> list[str]:
         payload = profile.encode("utf-8")
     else:
         payload = profile
-    # Проверяем разбор на стороне Python, чтобы ошибка указывала на строку,
-    # а не приходила из Go общим сообщением.
+    # Parse on the Python side so a syntax error points at the line
+    # instead of arriving from Go as a generic message.
     json.loads(payload)
     data = _call("curlpro_profile_register", payload)
     return data["profiles"]
 
 
 def list_profiles() -> list[str]:
-    """Имена зарегистрированных профилей."""
+    """Names of the registered profiles."""
     return _call("curlpro_profiles_list")["profiles"]
 
 
 class Profile:
-    """Профиль браузера как объект.
+    """A browser profile as an object.
 
-    Профиль — это данные, а не код: под новую версию браузера правится JSON,
-    и пересобирать нативную часть не нужно. Класс добавляет к этим данным
-    привычные операции, не пряча их: :attr:`data` остаётся обычным словарём.
+    A profile is data, not code: a new browser version means editing JSON,
+    not rebuilding the native part. This class adds the usual operations on
+    top without hiding anything: :attr:`data` stays a plain dict.
 
         base = Profile.from_file("profiles/chrome-152-windows.json")
         my = base.derive("chrome-153-windows",
@@ -94,11 +94,11 @@ class Profile:
         return self.data.get("based_on", "")
 
     def derive(self, name: str, **overrides: Any) -> "Profile":
-        """Новый профиль дельтой над этим.
+        """A new profile as a delta over this one.
 
-        Наследование живёт в ядре: дельта хранит только отличия, остальное
-        берётся у предка. Так весь профиль Chrome 110 — это одна строка
-        про перемешивание расширений.
+        Inheritance lives in the core: a delta stores only the differences
+        and the rest comes from the parent. That is how the entire Chrome
+        110 profile boils down to one line about extension shuffling.
         """
         if not self.name:
             raise ValueError("the parent profile has no name, so a delta has nothing to build on")
@@ -107,7 +107,7 @@ class Profile:
         return Profile(data)
 
     def register(self) -> list[str]:
-        """Регистрирует профиль в рантайме и возвращает имена всех известных."""
+        """Registers the profile at runtime and returns every known name."""
         return register_profile(self.data)
 
     def save(self, path: str | Path) -> None:

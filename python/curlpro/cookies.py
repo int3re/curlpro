@@ -1,9 +1,9 @@
-"""Куки сессии: просмотр, изменение, сохранение и загрузка.
+"""Session cookies: reading, editing, saving and loading.
 
-Внутри клиента куки живут в банке, которая наружу отдаёт только пару
-«имя-значение» для конкретного адреса. Здесь они видны целиком — с доменом,
-путём, сроком и флагами, — потому что для парсера главное не прочитать куку,
-а перенести авторизацию в следующий запуск.
+Inside the client cookies live in a jar that only ever hands out the
+name-value pair for one address. Here they are visible in full — domain,
+path, expiry and flags — because for a scraper the point is not reading a
+cookie but carrying the login into the next run.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from ._ffi import _call, encode
 
 
 class Cookie(dict):
-    """Одна кука. Словарь, чтобы её можно было сразу сериализовать."""
+    """A single cookie. A dict, so it can be serialised as it is."""
 
     __slots__ = ()
 
@@ -39,7 +39,7 @@ class Cookie(dict):
 
     @property
     def expires(self) -> int:
-        """Момент истечения в секундах эпохи; 0 — кука сеанса."""
+        """Expiry in epoch seconds; 0 means a session cookie."""
         return int(self.get("expires", 0) or 0)
 
     def __repr__(self) -> str:
@@ -47,14 +47,14 @@ class Cookie(dict):
 
 
 class Cookies(Mapping[str, str]):
-    """Куки сессии.
+    """The session's cookies.
 
-    Ведёт себя как словарь имя-значение — этого хватает для чтения, — но
-    полные записи доступны через :meth:`export` и :meth:`all`.
+    Behaves like a name-value mapping — enough for reading — while the full
+    records stay available through :meth:`export` and :meth:`all`.
 
-        s.cookies["session_id"]          # значение
+        s.cookies["session_id"]          # the value
         s.cookies.set("a", "1", domain="example.com")
-        s.cookies.save("state.json")     # сохранить между запусками
+        s.cookies.save("state.json")     # keep it between runs
         s.cookies.load_file("state.json")
     """
 
@@ -63,15 +63,15 @@ class Cookies(Mapping[str, str]):
     def __init__(self, session_id: int):
         self._id = session_id
 
-    # -- чтение ------------------------------------------------------------
+    # -- reading -----------------------------------------------------------
 
     def all(self) -> list[Cookie]:
-        """Полные записи: домен, путь, срок, флаги."""
+        """The full records: domain, path, expiry, flags."""
         data = _call("curlpro_session_cookies", self._id)
         return [Cookie(c) for c in (data.get("cookies") or [])]
 
     def export(self) -> list[dict[str, Any]]:
-        """То же в виде обычных словарей — для json.dump."""
+        """The same as plain dicts — ready for json.dump."""
         return [dict(c) for c in self.all()]
 
     def __getitem__(self, name: str) -> str:
@@ -90,12 +90,12 @@ class Cookies(Mapping[str, str]):
         items = ", ".join(f"{c.name}={c.value!r}" for c in self.all())
         return f"<Cookies {items}>"
 
-    # -- изменение ---------------------------------------------------------
+    # -- editing -----------------------------------------------------------
 
     def set(self, name: str, value: str, *, domain: str, path: str = "/",
             expires: int = 0, secure: bool = False, http_only: bool = False,
             same_site: str = "") -> None:
-        """Добавить куку. Домен обязателен: без него некому её слать."""
+        """Adds a cookie. The domain is required: without it there is nobody to send it to."""
         self.load([{
             "name": name, "value": value, "domain": domain, "path": path,
             "expires": expires, "secure": secure, "http_only": http_only,
@@ -103,32 +103,32 @@ class Cookies(Mapping[str, str]):
         }])
 
     def load(self, cookies: list[Mapping[str, Any]]) -> None:
-        """Загрузить куки в сессию: они пойдут в подходящие запросы."""
+        """Loads cookies into the session: they will ride along on matching requests."""
         _call("curlpro_session_set_cookies", self._id, encode(list(cookies)))
 
     def clear(self) -> None:
-        """Забыть все куки сессии."""
+        """Forgets every cookie of the session."""
         _call("curlpro_session_clear_cookies", self._id)
 
-    # -- файлы -------------------------------------------------------------
+    # -- files ---------------------------------------------------------------
 
     def save(self, path: str | Path) -> None:
-        """Сохранить куки в файл JSON."""
+        """Saves the cookies into a JSON file."""
         Path(path).write_text(
             json.dumps(self.export(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
 
     def load_file(self, path: str | Path) -> None:
-        """Загрузить куки из файла: JSON или Netscape ``cookies.txt``.
+        """Loads cookies from a file: JSON or Netscape ``cookies.txt``.
 
-        Формат определяется по содержимому, а не по имени: файлы от curl
-        и расширений браузера называются как угодно, а вот начинаются
-        по-разному — JSON со скобки, Netscape с комментария или домена.
+        The format is recognised by content, not by name: files from curl and
+        from browser extensions are called anything, but they start
+        differently — JSON with a bracket, Netscape with a comment or a domain.
 
-        Отсутствие файла — не ошибка: первый запуск парсера начинается
-        с пустой сессии, и проверять это каждый раз в вызывающем коде
-        значит писать один и тот же if.
+        A missing file is not an error: the first run of a scraper starts with
+        an empty session, and checking for that in the calling code every time
+        means writing the same if over and over.
         """
         p = Path(path)
         if not p.exists():
@@ -143,20 +143,20 @@ class Cookies(Mapping[str, str]):
             self.load(data)
 
     def save_netscape(self, path: str | Path) -> None:
-        """Сохранить куки в формате Netscape — том же, что у ``curl -c``.
+        """Saves the cookies in the Netscape format — the one ``curl -c`` writes.
 
-        Формат беднее нашего JSON: в нём нет SameSite, — но его понимают
-        curl, wget, yt-dlp и расширения браузера, и ради переноса сессии
-        в чужой инструмент этой потери обычно не жалко.
+        The format is poorer than our JSON: it has no SameSite. But curl,
+        wget, yt-dlp and browser extensions all read it, and for carrying a
+        session into another tool that loss is usually worth it.
         """
         Path(path).write_text(self.to_netscape(), encoding="utf-8")
 
     def load_netscape(self, path: str | Path) -> None:
-        """Загрузить ``cookies.txt``, не гадая по содержимому.
+        """Loads ``cookies.txt`` without guessing from the content.
 
-        Нужен, когда файл заведомо в этом формате: пустой файл или файл
-        из одних комментариев :meth:`load_file` принял бы за Netscape и так,
-        но явный вызов читается понятнее и падает на JSON, а не молчит.
+        Useful when the file is known to be in that format: :meth:`load_file`
+        would treat an empty or comment-only file as Netscape anyway, but the
+        explicit call reads better and fails on JSON instead of staying quiet.
         """
         p = Path(path)
         if not p.exists():
@@ -166,20 +166,19 @@ class Cookies(Mapping[str, str]):
             self.load(data)
 
     def to_netscape(self) -> str:
-        """Куки в виде текста ``cookies.txt``."""
+        """The cookies as ``cookies.txt`` text."""
         return format_netscape(self.export())
 
 
-# -- формат Netscape -------------------------------------------------------
+# -- the Netscape format ---------------------------------------------------
 #
-# Семь полей через табуляцию: домен, флаг поддоменов, путь, secure, срок,
-# имя, значение. Флаг HttpOnly формат не предусматривает, поэтому curl
-# помечает такие строки префиксом #HttpOnly_ — комментарием для тех, кто
-# про него не знает.
+# Seven tab-separated fields: domain, subdomain flag, path, secure, expiry,
+# name, value. The format has no HttpOnly flag, so curl marks such lines with
+# a #HttpOnly_ prefix — a comment to anyone who does not know about it.
 
 NETSCAPE_HEADER = (
     "# Netscape HTTP Cookie File\n"
-    "# Создан curlpro. Формат тот же, что у curl -c.\n"
+    "# Written by curlpro. Same format as curl -c.\n"
     "\n"
 )
 
@@ -187,15 +186,15 @@ _HTTP_ONLY_PREFIX = "#HttpOnly_"
 
 
 def format_netscape(cookies: list[dict[str, Any]]) -> str:
-    """Собирает текст ``cookies.txt`` из полных записей."""
+    """Builds ``cookies.txt`` text out of full records."""
     lines = [NETSCAPE_HEADER]
     for c in cookies:
         domain = str(c.get("domain", ""))
         if not domain:
             continue
-        # Точка означает «и поддоменам тоже». Наши куки ведут себя именно так:
-        # замер показал, что кука домена example.test уходит и на
-        # sub.example.test, — поэтому домен пишется с точкой, а флаг TRUE.
+        # A leading dot means "subdomains too". Our cookies behave exactly
+        # that way: a measurement showed a cookie for example.test also goes
+        # to sub.example.test — hence the dot and the TRUE flag.
         if not domain.startswith("."):
             domain = "." + domain
         prefix = _HTTP_ONLY_PREFIX if c.get("http_only") else ""
@@ -212,10 +211,11 @@ def format_netscape(cookies: list[dict[str, Any]]) -> str:
 
 
 def parse_netscape(text: str) -> list[dict[str, Any]]:
-    """Разбирает ``cookies.txt``. Ошибка называет номер строки.
+    """Parses ``cookies.txt``. Errors name the line number.
 
-    Молча пропускать кривые строки нельзя: файл обычно один на всю сессию,
-    и потерянная кука выглядит как разлогин, а не как испорченный файл.
+    Broken lines must not be skipped silently: the file usually holds the
+    whole session, and a lost cookie looks like a logout rather than a
+    damaged file.
     """
     out: list[dict[str, Any]] = []
     for number, raw in enumerate(text.splitlines(), start=1):
@@ -229,8 +229,8 @@ def parse_netscape(text: str) -> list[dict[str, Any]]:
             continue
 
         parts = line.split("\t")
-        # Пустое значение в конце строки редакторы срезают вместе
-        # с табуляцией — шесть полей означают куку без значения.
+        # Editors trim an empty trailing value together with its tab,
+        # so six fields mean a cookie with an empty value.
         if len(parts) == 6:
             parts.append("")
         if len(parts) != 7:
@@ -240,7 +240,7 @@ def parse_netscape(text: str) -> list[dict[str, Any]]:
             )
         domain, _subdomains, path, secure, expires, name, value = parts
         try:
-            # Некоторые расширения пишут срок с дробной частью.
+            # Some extensions write the expiry with a fractional part.
             when = int(float(expires or 0))
         except ValueError:
             raise ValueError(f"line {number}: expiry {expires!r} is not a number") from None

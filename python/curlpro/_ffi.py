@@ -1,8 +1,9 @@
-"""Загрузка нативной библиотеки и низкоуровневый вызов через ctypes.
+"""Loading the native library and calling it through ctypes.
 
-Все экспорты возвращают char* с JSON-конвертом ``{"ok":…, "error":…, "code":…, "data":…}``.
-Строка выделена в C и обязана быть освобождена через ``curlpro_free`` — иначе течь.
-Освобождение делает :func:`_call`, поэтому наружу указатели не выдаются.
+Every export returns a char* holding a JSON envelope
+``{"ok":…, "error":…, "code":…, "data":…}``. That string is allocated in C and
+must be released with ``curlpro_free`` or it leaks. :func:`_call` does the
+releasing, which is why no pointer ever escapes this module.
 """
 
 from __future__ import annotations
@@ -17,11 +18,11 @@ from typing import Any
 
 
 class CurlProError(RuntimeError):
-    """Ошибка, пришедшая из нативной части.
+    """An error raised by the native part.
 
-    ``code`` — машинный код, когда нативная часть его знает: ``timeout``,
-    ``session_closed``, ``ws_closed``, ``ws_too_big``, ``ws_protocol``.
-    По тексту ошибки исходы различать нельзя: он для человека.
+    ``code`` is the machine-readable code when the native side knows one:
+    ``timeout``, ``session_closed``, ``ws_closed``, ``ws_too_big``,
+    ``ws_protocol``. Never branch on the message text — it is for humans.
     """
 
     def __init__(self, message: str, code: str | None = None):
@@ -30,19 +31,19 @@ class CurlProError(RuntimeError):
 
 
 class Timeout(CurlProError):
-    """Истёк предел на запрос.
+    """The request ran out of time.
 
-    Отдельным классом, потому что таймаут — единственный исход, который
-    в парсере обрабатывают иначе, чем прочие сетевые ошибки: его повторяют.
+    A class of its own because a timeout is the one outcome a scraper treats
+    differently from other network errors: it retries it.
     """
 
 
 class HTTPError(CurlProError):
-    """Ответ со статусом ошибки; поднимает :meth:`Response.raise_for_status`.
+    """A response with an error status; raised by :meth:`Response.raise_for_status`.
 
-    Раньше там поднимался голый RuntimeError, и отличить его от внутренней
-    поломки было нельзя. ``response`` остаётся под рукой: у ответа с ошибкой
-    обычно есть тело, ради которого его и разбирают.
+    That method used to raise a bare RuntimeError, indistinguishable from an
+    internal failure. ``response`` stays attached: an error response usually
+    carries a body, and that body is the reason to look at it.
     """
 
     def __init__(self, message: str, response=None, code: str | None = None):  # noqa: ANN001
@@ -52,10 +53,10 @@ class HTTPError(CurlProError):
 
 
 class WebSocketClosed(CurlProError):
-    """WebSocket закрыт: сервером кадром Close либо вызывающим.
+    """The WebSocket is closed: by the server's Close frame or by the caller.
 
-    Отдельный класс, чтобы ``for message in ws`` останавливался только на
-    закрытии, а таймаут чтения или ошибка протокола доходили до вызывающего.
+    A class of its own so that ``for message in ws`` stops on a close only,
+    while read timeouts and protocol errors reach the caller.
     """
 
 
@@ -79,14 +80,14 @@ def _library_name() -> str:
 
 
 def _candidates() -> list[Path]:
-    """Пути поиска библиотеки, от явного указания к сборке из исходников."""
+    """Where the library is looked for, from an explicit path to a source build."""
     name = _library_name()
     out: list[Path] = []
     if env := os.environ.get("CURLPRO_LIBRARY"):
         out.append(Path(env))
     here = Path(__file__).resolve().parent
-    out.append(here / "lib" / name)          # уложена в wheel
-    out.append(here.parent.parent / "dist" / name)  # сборка из репозитория
+    out.append(here / "lib" / name)          # packed into the wheel
+    out.append(here.parent.parent / "dist" / name)  # a build from the repository
     return out
 
 
@@ -158,25 +159,26 @@ for _name, _args in (
             f"Rebuild it: .\\build.ps1 (writes to dist/)"
         ) from None
     _fn.argtypes = _args
-    # Именно c_void_p, а не c_char_p: ctypes конвертирует c_char_p в bytes
-    # и теряет исходный указатель, который нужен для curlpro_free.
+    # c_void_p and not c_char_p: ctypes converts c_char_p into bytes and
+    # loses the original pointer, which curlpro_free needs.
     _fn.restype = ctypes.c_void_p
 
-# Ожидание завершений и счётчик в полёте возвращают числа, а не указатели.
-# Блокирующее ожидание ctypes выполняет с отпущенным GIL — на этом и стоит
-# асинхронный путь: поток-приёмник ждёт, не мешая циклу событий.
+# Waiting for completions and counting in-flight calls return numbers, not
+# pointers. ctypes performs the blocking wait with the GIL released, and the
+# async path stands on that: the collector thread waits without blocking the
+# event loop.
 _lib.curlpro_result_wait.argtypes = [ctypes.c_int]
 _lib.curlpro_result_wait.restype = ctypes.c_longlong
 _lib.curlpro_async_pending.argtypes = []
 _lib.curlpro_async_pending.restype = ctypes.c_longlong
 
-# read возвращает число байт, а не указатель: буфер выделяет вызывающий.
+# read returns a byte count, not a pointer: the caller owns the buffer.
 _lib.curlpro_stream_read.argtypes = [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]
 _lib.curlpro_stream_read.restype = ctypes.c_int
 
 
 def stream_read(stream_id: int, size: int) -> bytes:
-    """Читает до size байт. Пустой результат означает конец тела."""
+    """Reads up to size bytes. An empty result means the body ended."""
     buf = ctypes.create_string_buffer(size)
     n = _lib.curlpro_stream_read(stream_id, buf, size)
     if n < 0:
@@ -185,7 +187,7 @@ def stream_read(stream_id: int, size: int) -> bytes:
 
 
 def _call(name: str, *args: Any) -> Any:
-    """Вызывает экспорт, разбирает конверт и освобождает C-строку."""
+    """Calls an export, unwraps the envelope and frees the C string."""
     ptr = getattr(_lib, name)(*args)
     if not ptr:
         raise CurlProError(f"{name}: the native side returned NULL")
@@ -200,17 +202,18 @@ def _call(name: str, *args: Any) -> Any:
     return envelope.get("data")
 
 
-# Минимальная версия нативной части: мажор и минор. Поднимать вместе
-# с lib/curlpro.go, когда Python начинает зависеть от нового экспорта или поля.
+# Minimum version of the native part: major and minor. Raise it together
+# with lib/curlpro.go whenever Python starts depending on a new export or field.
 REQUIRED_VERSION = (0, 10)
 
 
 def _check_version() -> None:
-    """Сверяет версию библиотеки с той, на которую рассчитан этот Python.
+    """Checks the library version against what this Python expects.
 
-    Без проверки рассинхрон нем: обе стороны переживают незнакомые поля JSON,
-    поэтому старая библиотека молча игнорирует новые опции — запрос уходит
-    без них, и это выглядит как ошибка логики, а не как устаревшая сборка.
+    Without the check a mismatch is silent: both sides tolerate unknown JSON
+    fields, so an older library quietly ignores new options — the request
+    goes out without them, and that looks like a logic bug rather than a
+    stale build.
     """
     raw = _call("curlpro_version").get("version", "")
     try:
@@ -230,13 +233,13 @@ def _check_version() -> None:
 _check_version()
 
 
-# Тела запросов и ответов ходят бинарно, отдельно от JSON.
+# Request and response bodies travel as binary, separate from the JSON.
 #
-# Строкой внутри JSON они не только копировались лишний раз: произвольные байты
-# не являются валидным UTF-8, поэтому ответ портился — 10 000 случайных байт
-# возвращались как 18 502 после перекодировки.
+# As a string inside JSON they were not merely copied one extra time:
+# arbitrary bytes are not valid UTF-8, so the response was corrupted — 10,000
+# random bytes came back as 18,502 after the round trip.
 #
-# Формат кадра: [uint32 LE длина JSON][JSON][сырое тело].
+# Frame layout: [uint32 LE JSON length][JSON][raw body].
 _HEADER = 4
 
 
@@ -256,7 +259,7 @@ def _unframe(name: str, raw: bytes) -> tuple[Any, bytes]:
 
 
 def call_framed(name: str, *args: Any, body: bytes = b"", meta: Any) -> tuple[Any, bytes]:
-    """Вызывает экспорт кадрами и возвращает (данные, тело)."""
+    """Calls an export with frames and returns (data, body)."""
     payload = _frame(meta, body)
     out_len = ctypes.c_int(0)
     ptr = getattr(_lib, name)(*args, payload, len(payload), ctypes.byref(out_len))
@@ -270,17 +273,17 @@ def call_framed(name: str, *args: Any, body: bytes = b"", meta: Any) -> tuple[An
 
 
 def call_with_frame(name: str, *args: Any, body: bytes = b"", meta: Any) -> Any:
-    """Кадр на входе, обычный конверт JSON на выходе.
+    """A frame going in, a plain JSON envelope coming back.
 
-    Так устроен запуск асинхронного запроса: тело уходит кадром, а обратно
-    приходит только номер запроса — ответа ещё нет.
+    This is how an async request starts: the body goes out as a frame, and
+    all that returns is the request number — there is no response yet.
     """
     payload = _frame(meta, body)
     return _call(name, *args, payload, len(payload))
 
 
 def call_framed_out(name: str, *args: Any) -> tuple[Any, bytes]:
-    """Как call_framed, но без входного кадра — для вызовов вида recv."""
+    """Like call_framed but without an input frame — for recv-style calls."""
     out_len = ctypes.c_int(0)
     ptr = getattr(_lib, name)(*args, ctypes.byref(out_len))
     if not ptr:

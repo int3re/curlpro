@@ -1,14 +1,14 @@
-"""WebSocket поверх того же TLS-соединения, что и обычные запросы.
+"""WebSocket over the same kind of TLS connection as ordinary requests.
 
-Рукопожатие — обычный HTTP/1.1-запрос с Upgrade, поэтому его заголовки тоже
-часть отпечатка: они собираются по шаблону профиля браузера (секция
-``websocket``), а не из навигационного набора. Расширение permessage-deflate
-объявляется и поддерживается: сжатые сообщения распаковываются, исходящие
-сжимаются, если сервер расширение принял.
+The handshake is a plain HTTP/1.1 request with Upgrade, so its headers are
+part of the fingerprint too: they are built from the profile's ``websocket``
+template rather than from the navigation set. The permessage-deflate
+extension is advertised and supported: incoming messages are inflated and
+outgoing ones are compressed when the server accepted the extension.
 
     with curlpro.Session("chrome-151-windows") as s:
         with s.websocket("wss://echo.websocket.org/") as ws:
-            ws.send("привет")
+            ws.send("hello")
             print(ws.recv())
 """
 
@@ -21,9 +21,9 @@ from .timeouts import split_timeout as _split_timeout
 
 
 class WebSocket:
-    """Установленное WebSocket-соединение.
+    """An established WebSocket connection.
 
-    Соединение держится до закрытия, поэтому пользоваться следует через ``with``.
+    The connection is held until it is closed, so use it through ``with``.
     """
 
     __slots__ = ("_id", "_closed")
@@ -33,7 +33,7 @@ class WebSocket:
         self._closed = False
 
     def send(self, data: str | bytes) -> None:
-        """Отправляет сообщение. Тип кадра выбирается по типу данных."""
+        """Sends a message. The frame type follows the type of the data."""
         self._check()
         binary = not isinstance(data, str)
         payload = data if binary else data.encode("utf-8")
@@ -41,31 +41,33 @@ class WebSocket:
                     meta={"binary": binary, "ping": False})
 
     def ping(self, data: bytes = b"") -> None:
-        """Отправляет ping. Ответный pong обрабатывается внутри recv."""
+        """Sends a ping. The matching pong is handled inside recv."""
         self._check()
         call_framed("curlpro_ws_send", self._id, body=data,
                     meta={"binary": True, "ping": True})
 
     def recv(self) -> str | bytes:
-        """Читает следующее сообщение.
+        """Reads the next message.
 
-        Текстовые кадры возвращаются как ``str``, двоичные — как ``bytes``:
-        на проводе это разные опкоды, и сервер вправе их различать.
+        Text frames come back as ``str`` and binary ones as ``bytes``: on
+        the wire these are different opcodes, and a server is free to tell
+        them apart.
 
-        Закрытие соединения сервером — :class:`WebSocketClosed`; таймаут
-        чтения (``timeout`` секунд тишины) — :class:`CurlProError`
-        с ``code == "timeout"``, соединение при этом живо и читать можно дальше.
+        A close from the server raises :class:`WebSocketClosed`; a read
+        timeout (``timeout`` seconds of silence) raises :class:`CurlProError`
+        with ``code == "timeout"``, and the connection stays alive so
+        reading can continue.
         """
         self._check()
         meta, data = call_framed_out("curlpro_ws_recv", self._id)
         return data if (meta or {}).get("binary") else data.decode("utf-8")
 
     def __iter__(self) -> Iterator[str | bytes]:
-        """Читает сообщения, пока соединение не закроется.
+        """Reads messages until the connection closes.
 
-        Останавливается только на закрытии. Раньше здесь глотался любой сбой,
-        и тридцать секунд тишины на живом соединении выглядели как штатный
-        конец — теперь таймаут и ошибки протокола доходят до вызывающего.
+        It stops on a close and nothing else. This used to swallow every
+        failure, so thirty seconds of silence on a healthy connection looked
+        like a normal end; now timeouts and protocol errors reach the caller.
         """
         while True:
             try:
@@ -89,7 +91,7 @@ class WebSocket:
         self.close()
 
     def __del__(self) -> None:
-        # Незакрытый сокет удерживает соединение на стороне Go.
+        # An unclosed socket holds a connection on the Go side.
         try:
             self.close()
         except Exception:
@@ -121,8 +123,8 @@ def connect(
                 "timeout_ms": int(timeout * 1000) if timeout else 0,
                 "connect_timeout_ms":
                     int(connect_timeout * 1000) if connect_timeout else 0,
-                # Ноль — умолчание нативной части (64 МиБ). Предел нужен:
-                # длину кадра называет сервер.
+                # Zero means the native default (64 MiB). A limit is needed
+                # because the frame length is whatever the server says.
                 "max_message_size": int(max_message_size),
             }
         ),

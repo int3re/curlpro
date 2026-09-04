@@ -1,12 +1,13 @@
-"""Приёмник завершившихся запросов.
+"""Collector of finished native calls.
 
-Асинхронный запрос уходит в горутину, а Python узнаёт о его конце отсюда.
-Поток ровно один на процесс, независимо от числа запросов в полёте: он ждёт
-в нативной части, где ctypes отпускает GIL, поэтому цикл событий не стоит.
+An async request goes into a goroutine, and Python learns that it finished
+from here. There is exactly one thread per process, no matter how many calls
+are in flight: it waits inside the native part, where ctypes releases the
+GIL, so the event loop keeps running.
 
-Забирает результат уже сам цикл событий — вызов быстрый, память копируется
-и всё. Ходить в цикл из чужого потока можно только через call_soon_threadsafe,
-им и будим фьючерс.
+The result itself is picked up by the event loop — that call is quick, just a
+memory copy. Reaching into a loop from another thread is only allowed through
+call_soon_threadsafe, and that is how the future is woken.
 """
 
 from __future__ import annotations
@@ -17,21 +18,21 @@ from typing import Any
 
 from ._ffi import _call, _lib, call_framed_out
 
-# Сколько ждать в одном обращении к нативной части. Пробуждение раз в четверть
-# секунды при простое ничего не стоит, зато поток завершается почти сразу
-# после того, как его перестают использовать.
+# How long a single wait inside the native part lasts. Waking up four times a
+# second while idle costs nothing, and the thread exits almost immediately
+# once nobody uses it any more.
 _WAIT_MS = 250
 
 
 class Completions:
-    """Единый на процесс приёмник результатов."""
+    """The single per-process collector of results."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._waiters: dict[int, tuple[asyncio.AbstractEventLoop, asyncio.Future]] = {}
-        # Результаты, пришедшие раньше своего ожидающего: работа успевает
-        # закончиться между запуском и register — у чтения из потока это
-        # обычное дело, оно занимает микросекунды.
+        # Results that arrived before their waiter: the work can finish
+        # between the start call and register — routine for a stream read,
+        # which takes microseconds.
         self._ready: dict[int, tuple[Any, bytes]] = {}
         self._thread: threading.Thread | None = None
         self._stop = False
@@ -41,8 +42,8 @@ class Completions:
         with self._lock:
             done = self._ready.pop(request_id, None)
             if done is not None:
-                # Регистрируют из цикла событий, поэтому фьючерс можно
-                # выполнить прямо здесь, без call_soon_threadsafe.
+                # Registration happens on the event loop, so the future can
+                # be completed right here, without call_soon_threadsafe.
                 future.set_result(done)
                 return
             self._waiters[request_id] = (loop, future)
@@ -54,7 +55,7 @@ class Completions:
                 self._thread.start()
 
     def forget(self, request_id: int) -> None:
-        """Снимает ожидание: запрос отменён и результат никому не нужен."""
+        """Drops the wait: the call was cancelled and nobody needs its result."""
         with self._lock:
             self._waiters.pop(request_id, None)
             self._ready.pop(request_id, None)
@@ -71,20 +72,20 @@ class Completions:
             with self._lock:
                 entry = self._waiters.pop(rid, None)
                 if entry is None:
-                    # Ожидающего ещё нет. Работа стартует и регистрируется
-                    # двумя шагами, и быстрая — чтение части тела — успевает
-                    # закончиться между ними. Результат откладывается,
-                    # его заберёт register.
+                    # No waiter yet. Work is started and registered in two
+                    # steps, and a fast one — reading a chunk of the body —
+                    # can finish in between. The result is set aside for
+                    # register to pick up.
                     #
-                    # Раньше он здесь выбрасывался, и такой запрос повисал
-                    # навсегда: 24 одновременных потоковых чтения теряли одно.
+                    # It used to be thrown away here, and such a call hung
+                    # forever: 24 concurrent stream reads lost one of them.
                     #
-                    # Забираем под тем же замком: иначе register вклинивается
-                    # между проверкой и откладыванием, и ожидающий с готовым
-                    # результатом расходятся навсегда.
+                    # It is taken under the same lock: otherwise register
+                    # slips between the check and the hand-off, and the
+                    # waiter and its ready result never meet again.
                     #
-                    # Отменённый результат сюда не попадает: отмена снимает
-                    # запрос с учёта в нативной части, и забрать его уже нечем.
+                    # A cancelled result never lands here: cancelling removes
+                    # the call from the native registry, leaving nothing to take.
                     done = _take(rid)
                     if done is not None:
                         self._ready[rid] = done
@@ -93,41 +94,41 @@ class Completions:
             try:
                 loop.call_soon_threadsafe(_settle, future, rid)
             except RuntimeError:
-                # Цикл событий уже закрыт — забирать результат некому.
+                # The event loop is already closed — nobody to hand it to.
                 _take(rid)
 
 
 def _take(request_id: int) -> tuple[Any, bytes] | None:
     try:
         return call_framed_out("curlpro_result_take", request_id)
-    except Exception:  # noqa: BLE001 — результат уже забрали или сессия закрыта
+    except Exception:  # noqa: BLE001 — already taken, or the session is closed
         return None
 
 
 def _settle(future: asyncio.Future, request_id: int) -> None:
-    """Выполняется в цикле событий: забирает результат и будит ожидающего."""
-    if future.done():  # задачу сняли, пока результат ехал
+    """Runs on the event loop: takes the result and wakes the waiter."""
+    if future.done():  # the task was cancelled while the result was on its way
         _take(request_id)
         return
     try:
         payload, content = call_framed_out("curlpro_result_take", request_id)
-    except BaseException as exc:  # noqa: BLE001 — ошибку отдаём ожидающему
+    except BaseException as exc:  # noqa: BLE001 — hand the error to the waiter
         future.set_exception(exc)
         return
     future.set_result((payload, content))
 
 
-#: Один экземпляр на процесс: нативная очередь готовых тоже одна.
+#: One instance per process: the native ready queue is single too.
 completions = Completions()
 
 
 async def settle(started: dict) -> tuple[Any, bytes]:
-    """Ждёт результат уже запущенной работы: запроса, чтения, приёма.
+    """Awaits the result of work already started: a request, a read, a receive.
 
-    Отмена задачи снимает ожидание и отменяет работу в нативной части.
-    Для запроса это освобождает соединение сразу; для чтения из потока
-    и приёма сообщения отменять нечего — то, что уже снято с провода,
-    теряется, поэтому после отмены поток или сокет закрывают.
+    Cancelling the task drops the wait and cancels the work natively. For a
+    request that frees the connection at once; for a stream read or a message
+    receive there is nothing to cancel — whatever was taken off the wire is
+    lost, which is why the stream or socket is closed after a cancellation.
     """
     request_id = int(started["request"])
     loop = asyncio.get_running_loop()
