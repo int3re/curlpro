@@ -8,59 +8,59 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-// Идентификаторы transport parameters, специфичных для Chromium.
-// В RFC их нет: значения приходят из Chromium и меняются между версиями.
+// Identifiers of transport parameters specific to Chromium.
+// The RFC does not list them: the values come from Chromium and change between versions.
 const (
 	tpGoogleInitialRTT        = 12583 // 0x3127
 	tpGoogleConnectionOptions = 12584 // 0x3128
 )
 
-// QUICSpec описывает отличия QUIC-слоя от паррота uquic.
+// QUICSpec describes how the QUIC layer differs from the uquic parrot.
 //
-// Паррот даёт основу — Initial-пакет, длины connection ID, набор параметров, —
-// но три значения в нём расходятся с настоящим Chrome, и все три спорны между
-// реализациями. Поэтому они вынесены в профиль, а не зашиты в код.
+// The parrot provides the base — the Initial packet, connection ID lengths, the
+// parameter set — but three of its values disagree with real Chrome, and all three
+// are disputed between implementations. Hence they live in the profile, not the code.
 type QUICSpec struct {
-	// Parrot — имя паррота uquic, дающего Initial-пакет и длины connection ID:
-	// "chrome146", "chrome115", "firefox116". Пусто — chrome146.
+	// Parrot is the name of the uquic parrot providing the Initial packet and the
+	// connection ID lengths: "chrome146", "chrome115", "firefox116". Empty means chrome146.
 	//
-	// Эта часть отпечатка (фрагментация CRYPTO, номер первого пакета, padding)
-	// в данных не выражается: она живёт в коде uquic.
+	// That part of the fingerprint (CRYPTO fragmentation, first packet number,
+	// padding) cannot be expressed as data: it lives inside the uquic code.
 	Parrot string `json:"parrot,omitempty"`
 
-	// ConnectionOptions — значение google_connection_options (0x3128),
-	// четырёхсимвольные теги QUIC.
+	// ConnectionOptions is the value of google_connection_options (0x3128),
+	// four-character QUIC tags.
 	//
-	// Это параметр Finch, а не константа версии: у одной сборки Chrome
-	// встречаются и "ORIG", и "IW50ORIG". Значение "ORIG" — то, что Chromium
-	// шлёт по умолчанию; uquic зашивает "10AF", azuretls — "B2ON", каждое
-	// из одного захвата.
+	// It is a Finch parameter, not a version constant: one Chrome build sends both
+	// "ORIG" and "IW50ORIG". The value "ORIG" is what Chromium sends by default;
+	// uquic hardcodes "10AF" and azuretls "B2ON", each of them from a single
+	// capture.
 	ConnectionOptions string `json:"connection_options,omitempty"`
 
-	// SendInitialRTT управляет google_initial_rtt (0x3127).
+	// SendInitialRTT controls google_initial_rtt (0x3127).
 	//
-	// uquic шлёт его как «новое в Chrome 146», httpcloak убрал, утверждая,
-	// что реальный Chrome 151 его не шлёт. По умолчанию не шлём.
-	// Указатель: дельта должна уметь выключить то, что включил предок.
+	// uquic sends it as "new in Chrome 146"; httpcloak removed it, claiming that a
+	// real Chrome 151 does not. We do not send it by default.
+	// A pointer: a delta must be able to switch off what its ancestor switched on.
 	SendInitialRTT *bool `json:"send_initial_rtt,omitempty"`
 
-	// LegacyVersionInformationID заставляет использовать черновой ID 0xff73db
-	// вместо RFC-назначенного 0x11 для version_information.
+	// LegacyVersionInformationID forces the draft ID 0xff73db instead of the
+	// RFC-assigned 0x11 for version_information.
 	//
-	// uquic использует черновой; современный Chrome — RFC-назначенный.
-	// Устаревший ID отличает клиента однозначно, поэтому по умолчанию false.
+	// uquic uses the draft one; modern Chrome uses the RFC-assigned one.
+	// The legacy ID identifies a client outright, so the default is false.
 	LegacyVersionInformationID *bool `json:"legacy_version_information_id,omitempty"`
 
-	// GreaseVersionFirst фиксирует порядок в available_versions.
+	// GreaseVersionFirst fixes the order inside available_versions.
 	//
-	// Документация utls ставит GREASE первым, curl-impersonate пишет "1,GREASE".
-	// Захват Chrome 152 показал, что правы оба: позиция случайна на каждом
-	// соединении. Поэтому без явного значения порядок разыгрывается; поле
-	// оставлено для профилей, у которых порядок постоянен.
+	// The utls documentation puts GREASE first, curl-impersonate writes "1,GREASE".
+	// A Chrome 152 capture showed both are right: the position is random per
+	// connection. So without an explicit value the order is drawn at random; the
+	// field is kept for profiles whose order is fixed.
 	GreaseVersionFirst *bool `json:"grease_version_first,omitempty"`
 }
 
-// randomBool — честная монета для розыгрыша порядка версий.
+// randomBool is a fair coin for drawing the version order.
 func randomBool() bool {
 	var b [1]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -69,10 +69,10 @@ func randomBool() bool {
 	return b[0]&1 == 1
 }
 
-// ApplyQUIC правит transport parameters в спеке под профиль.
+// ApplyQUIC edits the transport parameters in a spec to match the profile.
 //
-// Возвращает ошибку, если расширения quic_transport_parameters в спеке нет:
-// молча продолжать нельзя — отпечаток тогда останется парротовым.
+// Returns an error when the spec has no quic_transport_parameters extension:
+// carrying on silently is not an option — the fingerprint would stay the parrot's.
 func ApplyQUIC(spec *utls.ClientHelloSpec, q *QUICSpec) error {
 	if q == nil {
 		q = &QUICSpec{}
@@ -89,7 +89,7 @@ func ApplyQUIC(spec *utls.ClientHelloSpec, q *QUICSpec) error {
 			switch v.Id {
 			case tpGoogleInitialRTT:
 				if q.SendInitialRTT == nil || !*q.SendInitialRTT {
-					continue // Chrome его не шлёт
+					continue // Chrome does not send it
 				}
 			case tpGoogleConnectionOptions:
 				if q.ConnectionOptions != "" {
@@ -102,10 +102,10 @@ func ApplyQUIC(spec *utls.ClientHelloSpec, q *QUICSpec) error {
 			out = append(out, v)
 
 		case *utls.VersionInformation:
-			// Замер Chrome 152 (cmd/quiccapture, три соединения): позиция GREASE
-			// в available_versions случайна — в одном сэмпле версия шла первой,
-			// в двух GREASE. Так разрешилось разногласие utls («GREASE первым»)
-			// и curl-impersonate («1,GREASE»): каждый видел один захват.
+			// Chrome 152 measurement (cmd/quiccapture, three connections): the GREASE
+			// position inside available_versions is random — in one sample the version
+			// came first, in two the GREASE did. That settles the disagreement between
+			// utls ("GREASE first") and curl-impersonate ("1,GREASE"): each saw one capture.
 			// Без явного значения порядок разыгрывается на каждое соединение;
 			// явное true или false фиксирует его.
 			greaseFirst := randomBool()

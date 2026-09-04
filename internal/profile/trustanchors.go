@@ -11,32 +11,32 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-// Расширение trust_anchors (0xCA34), появившееся в Chrome 152.
+// The trust_anchors extension (0xCA34), introduced in Chrome 152.
 //
-// Клиент перечисляет короткие идентификаторы корней, которым доверяет, чтобы
-// сервер выбрал подходящую цепочку и не слал лишние промежуточные сертификаты.
-// На проверку сертификатов это не влияет — только на выбор цепочки.
+// The client lists short identifiers of the roots it trusts so the server can
+// pick a matching chain and skip sending unnecessary intermediates.
+// It does not affect certificate validation — only the choice of chain.
 //
-// Для отпечатка важно, что **порядок идентификаторов Chrome перемешивает**:
-// замер Chrome 152 на трёх запусках дал один и тот же набор из 32 записей
-// в разном порядке. Профиль, воспроизводящий захваченные байты дословно,
-// слал бы одну и ту же перестановку всегда — это отличало бы нас от браузера
-// на любой выборке из нескольких соединений.
+// What matters for the fingerprint is that **Chrome shuffles the identifiers**:
+// measuring Chrome 152 across three runs produced the same set of 32 entries
+// in different orders. A profile replaying captured bytes verbatim would send
+// the same permutation every time, which would tell us apart from the browser
+// on any sample of a few connections.
 
-// TrustAnchorsID — номер расширения (черновик IETF, временный кодпоинт).
+// TrustAnchorsID is the extension number (IETF draft, temporary codepoint).
 const TrustAnchorsID = 51764
 
-// BuildTrustAnchors собирает расширение для внешних сборщиков спеки:
-// QUIC-рукопожатие строится не из нашего TLS-описания, а из паррота uquic,
-// и расширение туда добавляется отдельно.
+// BuildTrustAnchors assembles the extension for external spec builders:
+// the QUIC handshake is built from the uquic parrot rather than from our TLS
+// description, and the extension is added there separately.
 func BuildTrustAnchors(ids []string) (utls.TLSExtension, error) {
 	return buildTrustAnchors(ids)
 }
 
-// buildTrustAnchors собирает расширение из списка относительных OID.
+// buildTrustAnchors assembles the extension from a list of relative OIDs.
 //
-// Порядок разыгрывается заново на каждую сборку спеки, а спека строится
-// на каждое соединение — как это делает и сам браузер.
+// The order is drawn anew on every spec build, and a spec is built for every
+// connection — exactly as the browser does it.
 func buildTrustAnchors(ids []string) (utls.TLSExtension, error) {
 	encoded := make([][]byte, 0, len(ids))
 	for _, id := range ids {
@@ -60,8 +60,8 @@ func buildTrustAnchors(ids []string) (utls.TLSExtension, error) {
 	return &utls.GenericExtension{Id: TrustAnchorsID, Data: data}, nil
 }
 
-// encodeRelativeOID переводит «11129.9.13» в байты: каждое число — base-128
-// с продолжением в старшем бите, как в DER.
+// encodeRelativeOID turns "11129.9.13" into bytes: every number is base-128
+// with a continuation bit in the high position, as in DER.
 func encodeRelativeOID(id string) ([]byte, error) {
 	parts := strings.Split(strings.TrimSpace(id), ".")
 	var out []byte
@@ -93,25 +93,25 @@ func encodeBase128(n uint64) []byte {
 	return buf
 }
 
-// shuffle перемешивает список на месте.
+// shuffle permutes the list in place.
 //
-// Источник случайности криптографический: перемешивание — часть отпечатка,
-// и предсказуемая последовательность здесь так же плоха, как постоянная.
+// The randomness is cryptographic: the shuffle is part of the fingerprint, and
+// a predictable sequence here is just as bad as a constant one.
 func shuffle(items [][]byte) {
 	for i := len(items) - 1; i > 0; i-- {
 		n, err := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
 		if err != nil {
-			return // без случайности оставляем как есть: это лучше паники
+			return // without randomness leave it as is: better than a panic
 		}
 		j := n.Int64()
 		items[i], items[j] = items[j], items[i]
 	}
 }
 
-// parseTrustAnchors читает список из содержимого расширения.
+// parseTrustAnchors reads the list out of the extension payload.
 //
-// Нужен захвату: снятый у браузера ClientHello хранит байты, а профиль
-// должен получить список, который потом перемешивается сам.
+// The capture path needs it: a ClientHello taken from a browser holds bytes,
+// while the profile must receive a list, which is then shuffled on its own.
 func parseTrustAnchors(data []byte) []string {
 	if len(data) < 2 {
 		return nil

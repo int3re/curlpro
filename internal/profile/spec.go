@@ -9,20 +9,20 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-// echExtensionName — имя, под которым ECH записывается в наших профилях.
+// echExtensionName is the name ECH is stored under in our profiles.
 //
-// В uTLS расширение 0xfe0d НЕ реализует UnmarshalJSON и отсутствует в словаре
-// dicttls, поэтому штатный json.Unmarshal на нём падает с
-// "extension name is unknown to the dictionary". Мы вырезаем его из JSON до
-// передачи в uTLS и вставляем обратно на ту же позицию уже готовым объектом.
+// In uTLS extension 0xfe0d does NOT implement UnmarshalJSON and is missing from
+// the dicttls dictionary, so a plain json.Unmarshal fails on it with
+// "extension name is unknown to the dictionary". We cut it out of the JSON
+// before handing it to uTLS and put it back at the same position as an object.
 const echExtensionName = "encrypted_client_hello"
 
-// BuildSpec собирает ClientHelloSpec из профиля.
+// BuildSpec assembles a ClientHelloSpec from a profile.
 //
-// Спека строится заново на КАЖДЫЙ вызов, и это принципиально:
-// ShuffleChromeTLSExtensions мутирует слайс на месте, поэтому переиспользование
-// одной спеки заморозило бы порядок расширений. Постоянный JA3 при заявленном
-// Chrome >=110 — сам по себе детектируемый признак.
+// The spec is rebuilt on EVERY call, and that matters:
+// ShuffleChromeTLSExtensions mutates the slice in place, so reusing one spec
+// would freeze the extension order. A constant JA3 while claiming to be
+// Chrome >= 110 is a detectable trait in itself.
 func BuildSpec(p *Profile) (*utls.ClientHelloSpec, error) {
 	var (
 		spec *utls.ClientHelloSpec
@@ -47,7 +47,7 @@ func BuildSpec(p *Profile) (*utls.ClientHelloSpec, error) {
 		return nil, fmt.Errorf("profile %q: %w", p.Name, err)
 	}
 
-	// По умолчанию перемешиваем: все актуальные Chrome это делают.
+	// Shuffle by default: every current Chrome does.
 	if p.TLS.PermuteExtensions == nil || *p.TLS.PermuteExtensions {
 		spec.Extensions = utls.ShuffleChromeTLSExtensions(spec.Extensions)
 	}
@@ -72,9 +72,9 @@ func specFromRaw(b64 string, blunt bool) (*utls.ClientHelloSpec, error) {
 	return spec, nil
 }
 
-// specFromDeclared строит спеку из нашего декларативного описания.
-// Числовые значения соответствуют корпусу curl-impersonate; словарь имён uTLS
-// здесь не задействован, поэтому ECH и прочие пробелы кодека не мешают.
+// specFromDeclared builds a spec from our declarative description.
+// The numeric values match the curl-impersonate corpus; the uTLS name
+// dictionary is not involved, so ECH and the other codec gaps do not get in the way.
 func specFromDeclared(t *TLSSpec) (*utls.ClientHelloSpec, error) {
 	if len(t.CipherSuites) == 0 {
 		return nil, fmt.Errorf("cipher_suites is empty")
@@ -85,7 +85,7 @@ func specFromDeclared(t *TLSSpec) (*utls.ClientHelloSpec, error) {
 	}
 	comp := t.CompressionMethods
 	if len(comp) == 0 {
-		comp = []uint8{0} // null — единственный, что шлют браузеры
+		comp = []uint8{0} // null is the only one browsers send
 	}
 	return &utls.ClientHelloSpec{
 		CipherSuites:       append([]uint16(nil), t.CipherSuites...),
@@ -94,7 +94,7 @@ func specFromDeclared(t *TLSSpec) (*utls.ClientHelloSpec, error) {
 	}, nil
 }
 
-// specFromJSON грузит декларативную спеку, обходя пробел uTLS вокруг ECH.
+// specFromJSON loads a declarative spec, working around the uTLS gap at ECH.
 func specFromJSON(data []byte) (*utls.ClientHelloSpec, error) {
 	var envelope struct {
 		Extensions []json.RawMessage `json:"extensions"`
@@ -103,7 +103,7 @@ func specFromJSON(data []byte) (*utls.ClientHelloSpec, error) {
 		return nil, fmt.Errorf("client_hello_spec: %w", err)
 	}
 
-	// Запоминаем позиции ECH и убираем их из того, что уйдёт в uTLS.
+	// Remember the ECH positions and remove them from what goes to uTLS.
 	var echAt []int
 	kept := make([]json.RawMessage, 0, len(envelope.Extensions))
 	for i, ext := range envelope.Extensions {
@@ -139,7 +139,7 @@ func specFromJSON(data []byte) (*utls.ClientHelloSpec, error) {
 		return nil, fmt.Errorf("client_hello_spec: %w", err)
 	}
 
-	// Возвращаем ECH на исходные позиции.
+	// Put ECH back where it was.
 	for _, idx := range echAt {
 		if idx > len(spec.Extensions) {
 			idx = len(spec.Extensions)
@@ -151,10 +151,10 @@ func specFromJSON(data []byte) (*utls.ClientHelloSpec, error) {
 	return &spec, nil
 }
 
-// replaceExtWith подменяет расширение с данным номером на своё.
+// replaceExtWith swaps the extension with the given number for one of ours.
 //
-// Сырой ClientHello приносит незнакомые uTLS расширения как GenericExtension;
-// по номеру их и находим.
+// A raw ClientHello brings extensions uTLS does not know as GenericExtension;
+// the number is how they are found.
 func replaceExtWith(spec *utls.ClientHelloSpec, id uint16, ext utls.TLSExtension) bool {
 	for i, e := range spec.Extensions {
 		if g, ok := e.(*utls.GenericExtension); ok && g.Id == id {
@@ -165,23 +165,23 @@ func replaceExtWith(spec *utls.ClientHelloSpec, id uint16, ext utls.TLSExtension
 	return false
 }
 
-// applyOverrides правит уже построенную спеку. Так версия браузера описывается
-// дельтой: у месячного бампа Chrome обычно меняются только sigalgs и заголовки.
+// applyOverrides edits an already built spec. This is how a browser version is
+// described as a delta: a monthly Chrome bump usually changes only sigalgs and headers.
 func applyOverrides(spec *utls.ClientHelloSpec, t *TLSSpec) error {
 	if len(t.TrustAnchors) > 0 {
 		ext, err := buildTrustAnchors(t.TrustAnchors)
 		if err != nil {
 			return err
 		}
-		// Расширение уже есть в захвате как непрозрачные байты — меняем его
-		// на своё, которое перемешивает порядок на каждое соединение.
+		// The extension is already in the capture as opaque bytes — replace
+		// it with ours, which reshuffles the order on every connection.
 		if !replaceExtWith(spec, TrustAnchorsID, ext) {
 			return fmt.Errorf("trust_anchors is set, but extension 0x%04x is missing from the base spec",
 				TrustAnchorsID)
 		}
 	}
 	if len(t.SignatureAlgorithms) > 0 {
-		// GREASE здесь разыгрывается на каждое соединение — см. toSigSchemes.
+		// GREASE here is drawn per connection — see toSigSchemes.
 		algs := toSigSchemes(t.SignatureAlgorithms)
 		if !replaceExt(spec, func(e utls.TLSExtension) bool {
 			x, ok := e.(*utls.SignatureAlgorithmsExtension)
@@ -208,9 +208,9 @@ func applyOverrides(spec *utls.ClientHelloSpec, t *TLSSpec) error {
 	return nil
 }
 
-// replaceExt применяет fn к расширениям спеки и сообщает, нашлось ли хоть одно.
-// Промах должен быть ошибкой, а не тихой потерей настройки — именно так
-// curl-impersonate теряет нестандартный порядок шифров.
+// replaceExt applies fn to the spec's extensions and reports whether any matched.
+// A miss must be an error rather than a silently lost setting — that is exactly
+// how curl-impersonate loses a non-standard cipher order.
 func replaceExt(spec *utls.ClientHelloSpec, fn func(utls.TLSExtension) bool) bool {
 	found := false
 	for _, e := range spec.Extensions {

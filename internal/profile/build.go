@@ -7,17 +7,17 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-// GreaseValue — маркер GREASE в числовых списках профиля (0x0a0a).
-// ApplyPreset заменит его на реальное значение вида 0x?A?A, разное на каждое
-// соединение, но с сохранением позиции — именно так делает BoringSSL.
+// GreaseValue is the GREASE marker in the profile's numeric lists (0x0a0a).
+// ApplyPreset replaces it with a real 0x?A?A value, different per connection
+// but keeping the position — exactly what BoringSSL does.
 const GreaseValue = uint16(utls.GREASE_PLACEHOLDER)
 
-// Extension — расширение ClientHello в декларативном виде.
+// Extension is a ClientHello extension in declarative form.
 //
-// Имена типов совпадают с корпусом curl-impersonate (tests/signatures/*.yaml),
-// чтобы импорт был прямолинейным. Значения — числа, как там же: JSON-кодек uTLS
-// принимает только строковые имена, поэтому мы строим спеку сами и не зависим
-// ни от словаря dicttls, ни от пробелов кодека вокруг ECH.
+// The type names match the curl-impersonate corpus (tests/signatures/*.yaml)
+// to keep the import straightforward. Values are numbers, as they are there:
+// the uTLS JSON codec accepts string names only, so we build the spec ourselves
+// and depend neither on the dicttls dictionary nor on its gaps around ECH.
 type Extension struct {
 	Type string `json:"type"`
 
@@ -30,11 +30,11 @@ type Extension struct {
 	Limit      uint16   `json:"limit,omitempty"`      // record_size_limit
 }
 
-// extensionIDs — номера расширений по имени типа.
+// extensionIDs maps a type name to an extension number.
 //
-// Нужны для вычисления JA3/JA4 из профиля. Брать их сериализацией объекта uTLS
-// нельзя: у padding длина вычисляется только при сборке ClientHello, поэтому до
-// ApplyPreset он сериализуется в нули и подменяет собой server_name.
+// Needed to compute JA3/JA4 from a profile. Serialising the uTLS object is not
+// an option: padding computes its length only while building the ClientHello,
+// so before ApplyPreset it serialises to zeros and masquerades as server_name.
 var extensionIDs = map[string]int{
 	"server_name":                            0,
 	"status_request":                         5,
@@ -60,8 +60,8 @@ var extensionIDs = map[string]int{
 	"renegotiation_info":                     65281,
 }
 
-// ExtensionID возвращает номер расширения по имени типа.
-// Для GREASE и неизвестных типов — false: в JA3/JA4 они не участвуют.
+// ExtensionID returns the extension number for a type name.
+// GREASE and unknown types return false: they take no part in JA3/JA4.
 func ExtensionID(typ string) (int, bool) {
 	if typ == "GREASE" {
 		return 0, false
@@ -73,7 +73,7 @@ func ExtensionID(typ string) (int, bool) {
 	return id, ok
 }
 
-// buildExtensions разворачивает декларативные расширения в объекты uTLS.
+// buildExtensions expands declarative extensions into uTLS objects.
 func buildExtensions(exts []Extension) ([]utls.TLSExtension, error) {
 	out := make([]utls.TLSExtension, 0, len(exts))
 	for i, e := range exts {
@@ -143,7 +143,7 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 		for i, g := range e.Groups {
 			shares[i] = utls.KeyShare{Group: utls.CurveID(g)}
 			if g == GreaseValue {
-				// Chrome шлёт GREASE-долю с однобайтовой нагрузкой.
+				// Chrome sends the GREASE share with a one-byte payload.
 				shares[i].Data = []byte{0}
 			}
 		}
@@ -199,18 +199,18 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 		return &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle}, nil
 
 	case "encrypted_client_hello":
-		// ECH не выражается в JSON-кодеке uTLS; строим объект напрямую.
+		// ECH cannot be expressed in the uTLS JSON codec; build the object directly.
 		return utls.BoringGREASEECH(), nil
 
 	case "trust_anchors":
-		// Список берётся из tls.trust_anchors: он общий и для сырого
-		// ClientHello, где расширение приходит байтами.
+		// The list comes from tls.trust_anchors: it is shared with the raw
+		// ClientHello, where the extension arrives as bytes.
 		return nil, fmt.Errorf("trust_anchors is set through the tls.trust_anchors field, " +
 			"not as an entry in the extension list")
 
 	case "pre_shared_key":
-		// Только для профилей возобновления сессии. Fake-вариант не пытается
-		// подставить настоящий тикет, а воспроизводит форму расширения.
+		// For session-resumption profiles only. The fake variant does not try to
+		// insert a real ticket, it reproduces the shape of the extension.
 		return &utls.FakePreSharedKeyExtension{}, nil
 
 	default:
@@ -218,28 +218,28 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 	}
 }
 
-// isGREASE распознаёт значения RFC 8701: оба байта равны и вида 0x?A.
+// isGREASE recognises RFC 8701 values: both bytes equal and of the form 0x?A.
 func isGREASE(v uint16) bool {
 	return byte(v>>8) == byte(v) && v&0x0f0f == 0x0a0a
 }
 
-// randomGREASE выбирает одно из шестнадцати значений GREASE.
+// randomGREASE picks one of the sixteen GREASE values.
 func randomGREASE() uint16 {
 	var b [1]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return GreaseValue // источник случайности недоступен — берём плейсхолдер
+		return GreaseValue // no randomness available — keep the placeholder
 	}
 	v := uint16(b[0]&0xf0) | 0x0a
 	return v<<8 | v
 }
 
-// toSigSchemes переводит алгоритмы подписи, разыгрывая GREASE.
+// toSigSchemes converts signature algorithms, drawing GREASE at random.
 //
-// Chrome 152 шлёт GREASE первым в signature_algorithms, и значение меняется
-// от запуска к запуску: замер телефона дал 0xEAEA там, где захват записал
-// 0xAAAA. Постоянное значение выдавало бы клиента тому, кто смотрит несколько
-// соединений подряд. ApplyPreset разыгрывает плейсхолдер в шифрах, группах и
-// версиях, но не здесь — замер: четыре соединения дали 0x0A0A без изменений.
+// Chrome 152 sends GREASE first in signature_algorithms, and the value changes
+// between runs: a phone capture recorded 0xEAEA where an earlier one had
+// 0xAAAA. A constant value would give the client away to anyone watching a few
+// connections in a row. ApplyPreset draws the placeholder in ciphers, groups
+// and versions, but not here — measured: four connections kept 0x0A0A.
 func toSigSchemes(in []uint16) []utls.SignatureScheme {
 	out := make([]utls.SignatureScheme, len(in))
 	for i, a := range in {

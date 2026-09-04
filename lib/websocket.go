@@ -15,10 +15,10 @@ import (
 	"github.com/curlpro/curlpro/internal/client"
 )
 
-// WebSocket через FFI.
+// WebSocket over the FFI.
 //
-// Сообщения ходят тем же бинарным кадром, что и тела запросов: текст в UTF-8
-// пережил бы поездку, а двоичные данные — нет.
+// Messages travel in the same binary frame as request bodies: UTF-8 text would
+// survive the trip, binary data would not.
 
 var (
 	socketsMu sync.RWMutex
@@ -34,11 +34,11 @@ type wsConnectJSON struct {
 	MaxMessageSize   int64             `json:"max_message_size"`
 }
 
-// wsRequest достаёт сессию и разбирает конфигурацию.
+// wsRequest finds the session and parses the configuration.
 //
-// Разбор обязан случиться до запуска горутины: cfg указывает в память
-// вызывающего, и она живёт ровно до возврата из экспорта — асинхронное
-// подключение читало оттуда мусор.
+// Parsing must happen before the goroutine starts: cfg points into the caller's
+// memory, which lives exactly until the export returns — the async connect used
+// to read garbage from there.
 func wsRequest(id C.longlong, cfg *C.char) (*client.Session, wsConnectJSON, error) {
 	var c wsConnectJSON
 	sessionsMu.RLock()
@@ -53,7 +53,7 @@ func wsRequest(id C.longlong, cfg *C.char) (*client.Session, wsConnectJSON, erro
 	return sess, c, nil
 }
 
-// wsDial открывает сокет по уже разобранной конфигурации.
+// wsDial opens a socket from an already parsed configuration.
 func wsDial(sess *client.Session, c wsConnectJSON) (*client.WebSocket, error) {
 	return sess.DialWebSocket(c.URL, client.WebSocketOptions{
 		Headers:        c.Headers,
@@ -64,7 +64,7 @@ func wsDial(sess *client.Session, c wsConnectJSON) (*client.WebSocket, error) {
 	})
 }
 
-// registerSocket ставит сокет на учёт и возвращает его номер.
+// registerSocket registers a socket and returns its number.
 func registerSocket(ws *client.WebSocket) int64 {
 	sid := nextID.Add(1)
 	socketsMu.Lock()
@@ -87,11 +87,11 @@ func curlpro_ws_connect(id C.longlong, cfg *C.char) (out *C.char) {
 	return respond(map[string]any{"socket": registerSocket(ws)}, nil)
 }
 
-// curlpro_ws_connect_start открывает сокет, не занимая поток вызывающего.
+// curlpro_ws_connect_start opens a socket without tying up the caller's thread.
 //
-// Рукопожатие — это обычный запрос с апгрейдом, и ждать его в потоке
-// так же расточительно, как ждать ответ. Брошенный результат закрывает
-// сокет: иначе соединение осталось бы висеть до конца жизни процесса.
+// The handshake is an ordinary request with an upgrade, and waiting for it in a
+// thread is as wasteful as waiting for a response. An abandoned result closes
+// the socket: otherwise the connection would hang around for the whole process.
 //
 //export curlpro_ws_connect_start
 func curlpro_ws_connect_start(id C.longlong, cfg *C.char) (out *C.char) {
@@ -117,11 +117,11 @@ func curlpro_ws_connect_start(id C.longlong, cfg *C.char) (out *C.char) {
 	})
 }
 
-// curlpro_ws_recv_start ждёт сообщение в горутине.
+// curlpro_ws_recv_start waits for a message in a goroutine.
 //
-// Отмена только снимает ожидание: сообщение, уже снятое с провода,
-// теряется — вернуть его в сокет нельзя. Поэтому отменять приём стоит
-// лишь вместе с закрытием сокета.
+// Cancelling only drops the wait: a message already taken off the wire is lost,
+// as it cannot be pushed back into the socket. So a receive is worth cancelling
+// only together with closing the socket.
 //
 //export curlpro_ws_recv_start
 func curlpro_ws_recv_start(sid C.longlong) (out *C.char) {
@@ -139,8 +139,8 @@ func curlpro_ws_recv_start(sid C.longlong) (out *C.char) {
 	})
 }
 
-// curlpro_ws_send_start отправляет сообщение в горутине: запись тоже ждёт,
-// когда сеть или получатель не успевают.
+// curlpro_ws_send_start sends a message in a goroutine: writing waits too when
+// the network or the receiver cannot keep up.
 //
 //export curlpro_ws_send_start
 func curlpro_ws_send_start(sid C.longlong, frame *C.char, frameLen C.int) (out *C.char) {
@@ -168,7 +168,7 @@ func curlpro_ws_send_start(sid C.longlong, frame *C.char, frameLen C.int) (out *
 	})
 }
 
-// closeSocket снимает сокет с учёта и закрывает соединение.
+// closeSocket unregisters a socket and closes its connection.
 func closeSocket(sid int64, code uint16, reason string) error {
 	socketsMu.Lock()
 	ws, ok := sockets[sid]
@@ -180,8 +180,8 @@ func closeSocket(sid int64, code uint16, reason string) error {
 	return ws.Close(code, reason)
 }
 
-// curlpro_ws_send принимает кадр [uint32 len JSON][JSON][данные].
-// JSON несёт только признак двоичности — сами данные едут отдельно.
+// curlpro_ws_send takes a frame [uint32 len JSON][JSON][data].
+// The JSON carries only the binary flag — the data itself travels separately.
 //
 //export curlpro_ws_send
 func curlpro_ws_send(sid C.longlong, frame *C.char, frameLen C.int, outLen *C.int) *C.char {

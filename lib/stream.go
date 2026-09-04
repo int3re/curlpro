@@ -17,15 +17,15 @@ import (
 	"github.com/curlpro/curlpro/internal/client"
 )
 
-// Потоковое чтение тела.
+// Streaming reads of the body.
 //
-// Обычный curlpro_request материализует тело целиком — для мегабайтных загрузок
-// это лишняя память и задержка до первого байта. Здесь тело читается частями:
-// open отдаёт метаданные и идентификатор, read наполняет буфер вызывающего,
-// close освобождает соединение.
+// An ordinary curlpro_request materialises the body whole — for megabyte
+// downloads that is wasted memory and a delay before the first byte. Here the
+// body is read in chunks: open returns the metadata and an id, read fills the
+// caller's buffer, close releases the connection.
 //
-// Незакрытый поток удерживает соединение, поэтому close обязателен;
-// в Python это гарантирует контекстный менеджер.
+// An unclosed stream holds its connection, so close is mandatory; in Python
+// the context manager guarantees it.
 
 var (
 	streamsMu sync.RWMutex
@@ -34,12 +34,12 @@ var (
 
 type openStream struct {
 	s *client.Stream
-	// cancel обрывает запрос вместе с телом. Нужен асинхронному пути:
-	// там открытие можно отменить, и брошенный поток надо закрыть.
+	// cancel aborts the request together with its body. The async path needs it:
+	// an open can be cancelled there, and an abandoned stream must be closed.
 	cancel context.CancelFunc
 
-	// err пишется из read и читается из close: вызовы могут прийти из разных
-	// потоков Python, поэтому под мьютексом.
+	// err is written by read and read by close: the calls may come from
+	// different Python threads, hence the mutex.
 	mu  sync.Mutex
 	err error
 }
@@ -56,7 +56,7 @@ func (st *openStream) lastErr() error {
 	return st.err
 }
 
-// streamRequest разбирает кадр и достаёт сессию — общее у обоих открытий.
+// streamRequest parses the frame and finds the session — shared by both opens.
 func streamRequest(id C.longlong, frame *C.char, frameLen C.int) (*client.Session, *client.Request, error) {
 	sessionsMu.RLock()
 	sess, ok := sessions[int64(id)]
@@ -79,7 +79,7 @@ func streamRequest(id C.longlong, frame *C.char, frameLen C.int) (*client.Sessio
 	return sess, req, nil
 }
 
-// registerStream ставит открытый поток на учёт и возвращает его номер.
+// registerStream registers an open stream and returns its number.
 func registerStream(st *client.Stream, cancel context.CancelFunc) int64 {
 	sid := nextID.Add(1)
 	streamsMu.Lock()
@@ -88,7 +88,7 @@ func registerStream(st *client.Stream, cancel context.CancelFunc) int64 {
 	return sid
 }
 
-// streamMeta — то, что вызывающий узнаёт об открытом потоке.
+// streamMeta is what the caller learns about an opened stream.
 func streamMeta(sid int64, st *client.Stream) map[string]any {
 	return map[string]any{
 		"stream":  sid,
@@ -99,11 +99,11 @@ func streamMeta(sid int64, st *client.Stream) map[string]any {
 	}
 }
 
-// curlpro_stream_open_start открывает поток, не занимая поток вызывающего.
+// curlpro_stream_open_start opens a stream without tying up the caller's thread.
 //
-// Отмена до готовности обрывает запрос; если поток успел открыться,
-// его закрывает уборка брошенного результата — иначе соединение осталось бы
-// занятым до конца жизни процесса.
+// Cancelling before it is ready aborts the request; if the stream did open, the
+// abandoned-result cleanup closes it — otherwise the connection would stay busy
+// for the life of the process.
 //
 //export curlpro_stream_open_start
 func curlpro_stream_open_start(id C.longlong, frame *C.char, frameLen C.int) (out *C.char) {
@@ -132,11 +132,11 @@ func curlpro_stream_open_start(id C.longlong, frame *C.char, frameLen C.int) (ou
 	})
 }
 
-// curlpro_stream_read_start читает часть тела в горутине.
+// curlpro_stream_read_start reads a chunk of the body in a goroutine.
 //
-// Отменить чтение нельзя: прочитанные байты уже сняты с соединения,
-// и вернуть их назад некуда. Брошенный результат означает дыру в теле,
-// поэтому после отмены поток закрывают, а не читают дальше.
+// The read cannot be cancelled: the bytes are already off the connection and
+// there is nowhere to put them back. An abandoned result means a hole in the
+// body, so after a cancellation the stream is closed rather than read on.
 //
 //export curlpro_stream_read_start
 func curlpro_stream_read_start(sid C.longlong, bufLen C.int) (out *C.char) {
@@ -158,13 +158,13 @@ func curlpro_stream_read_start(sid C.longlong, bufLen C.int) (out *C.char) {
 			st.setErr(err)
 			return errorFrame(err)
 		}
-		// Конец тела — это n == 0 и eof: пустое чтение без конца
-		// означало бы, что данных пока нет, а такого у нас не бывает.
+		// The end of the body is n == 0 together with eof: an empty read without
+		// eof would mean no data yet, and that never happens here.
 		return buildFrame(map[string]any{"eof": err == io.EOF && n == 0}, buf[:n], nil)
 	})
 }
 
-// closeStream снимает поток с учёта и закрывает соединение.
+// closeStream unregisters a stream and closes its connection.
 func closeStream(sid int64) error {
 	streamsMu.Lock()
 	st, ok := streams[sid]
@@ -199,9 +199,9 @@ func curlpro_stream_open(id C.longlong, frame *C.char, frameLen C.int, outLen *C
 	})
 }
 
-// curlpro_stream_read наполняет буфер вызывающего.
-// Возвращает число прочитанных байт, 0 при конце тела, -1 при ошибке
-// (текст ошибки отдаётся из curlpro_stream_close).
+// curlpro_stream_read fills the caller's buffer.
+// Returns the number of bytes read, 0 at the end of the body, -1 on error
+// (the error text comes from curlpro_stream_close).
 //
 //export curlpro_stream_read
 func curlpro_stream_read(sid C.longlong, buf *C.char, bufLen C.int) (n C.int) {

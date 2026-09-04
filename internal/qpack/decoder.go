@@ -1,12 +1,12 @@
-// Package qpack — декодер QPACK (RFC 9204) с динамической таблицей.
+// Package qpack is a QPACK decoder (RFC 9204) with a dynamic table.
 //
-// github.com/quic-go/qpack умеет только статическую таблицу, а профиль Chrome
-// объявляет SETTINGS_QPACK_MAX_TABLE_CAPACITY = 65536: сервер вправе ей
-// пользоваться, и после первого же ответа с динамическими ссылками декодер
-// quic-go отвечал «expected Required Insert Count to be zero». Занизить
-// объявленную ёмкость — разойтись с Chrome в первом поле SETTINGS; отсюда
-// собственный декодер. Кодировщик остаётся статическим: наши запросы
-// динамической таблицы не используют, что RFC допускает.
+// github.com/quic-go/qpack handles the static table only, while the Chrome
+// profile advertises SETTINGS_QPACK_MAX_TABLE_CAPACITY = 65536: a server is
+// entitled to use it, and after the first response with dynamic references the
+// quic-go decoder answered "expected Required Insert Count to be zero".
+// Lowering the advertised capacity would diverge from Chrome in the very first
+// SETTINGS field, hence a decoder of our own. The encoder stays static: our
+// requests do not use the dynamic table, which the RFC allows.
 package qpack
 
 import (
@@ -20,22 +20,22 @@ import (
 	"golang.org/x/net/http2/hpack"
 )
 
-// HeaderField — тот же тип, что у quic-go/qpack: вендоренный h3 работает с ним.
+// HeaderField is the same type quic-go/qpack uses: the vendored h3 works with it.
 type HeaderField = qpack.HeaderField
 
-// DecodeFunc отдаёт поля по одному; io.EOF означает конец секции.
+// DecodeFunc yields fields one by one; io.EOF marks the end of the section.
 type DecodeFunc = qpack.DecodeFunc
 
 var (
 	errClosed = errors.New("qpack: connection closed")
-	// ErrDecompression — ошибка разбора; соединение обязано закрыться
-	// с QPACK_DECOMPRESSION_FAILED (RFC 9204, 2.2.3).
+	// ErrDecompression is a parse failure; the connection must be closed with
+	// QPACK_DECOMPRESSION_FAILED (RFC 9204, 2.2.3).
 	ErrDecompression = errors.New("qpack: decompression failed")
-	// ErrEncoderStream — ошибка на потоке кодировщика: QPACK_ENCODER_STREAM_ERROR.
+	// ErrEncoderStream is a failure on the encoder stream: QPACK_ENCODER_STREAM_ERROR.
 	ErrEncoderStream = errors.New("qpack: encoder stream error")
 )
 
-const entryOverhead = 32 // RFC 9204, 3.2.1: размер записи — имя + значение + 32
+const entryOverhead = 32 // RFC 9204, 3.2.1: entry size is name + value + 32
 
 type entry struct {
 	name, value string
@@ -43,47 +43,47 @@ type entry struct {
 
 func (e entry) size() uint64 { return uint64(len(e.name)+len(e.value)) + entryOverhead }
 
-// Decoder — декодер одного соединения.
+// Decoder is the decoder of a single connection.
 //
-// Поток кодировщика читает одна горутина (ReadEncoderStream), секции полей
-// декодируют горутины потоков запросов. Секция, ссылающаяся на ещё не
-// полученные записи (Required Insert Count больше числа вставок), ждёт
-// на cond, пока кодировщик их не пришлёт — это и есть «блокированный поток».
+// The encoder stream is read by one goroutine (ReadEncoderStream) while field
+// sections are decoded by the request goroutines. A section referring to
+// entries that have not arrived yet (Required Insert Count above the number of
+// insertions) waits on cond until the encoder sends them — a "blocked stream".
 type Decoder struct {
 	mu   sync.Mutex
 	cond *sync.Cond
 
-	maxCapacity uint64 // наш SETTINGS_QPACK_MAX_TABLE_CAPACITY
-	capacity    uint64 // текущая ёмкость, заданная кодировщиком
+	maxCapacity uint64 // our SETTINGS_QPACK_MAX_TABLE_CAPACITY
+	capacity    uint64 // the current capacity, set by the encoder
 	entries     []entry
-	dropped     uint64 // абсолютный индекс entries[0]: столько записей вытеснено
+	dropped     uint64 // absolute index of entries[0]: how many were evicted
 	size        uint64
-	insertCount uint64 // всего вставок с начала соединения
+	insertCount uint64 // total insertions since the connection began
 
-	// acked — сколько вставок мы подтвердили кодировщику (Section
-	// Acknowledgment или Insert Count Increment). Без подтверждений кодировщик
-	// не смог бы вытеснять записи и застрял бы на заполненной таблице.
+	// acked is how many insertions we confirmed to the encoder (Section
+	// Acknowledgment or Insert Count Increment). Without acknowledgements the
+	// encoder could not evict entries and would stall on a full table.
 	acked uint64
 
-	decoderStream io.Writer // наш поток декодера, может быть nil в тестах
+	decoderStream io.Writer // our decoder stream, may be nil in tests
 	closeErr      error
 }
 
-// NewDecoder создаёт декодер с объявленной ёмкостью таблицы.
+// NewDecoder creates a decoder with the advertised table capacity.
 func NewDecoder(maxCapacity uint64) *Decoder {
 	d := &Decoder{maxCapacity: maxCapacity}
 	d.cond = sync.NewCond(&d.mu)
 	return d
 }
 
-// SetDecoderStream задаёт поток, в который уходят инструкции декодера.
+// SetDecoderStream sets the stream the decoder instructions are written to.
 func (d *Decoder) SetDecoderStream(w io.Writer) {
 	d.mu.Lock()
 	d.decoderStream = w
 	d.mu.Unlock()
 }
 
-// Close будит заблокированные секции с ошибкой: соединения больше нет.
+// Close wakes blocked sections with an error: the connection is gone.
 func (d *Decoder) Close(err error) {
 	if err == nil {
 		err = errClosed
@@ -97,10 +97,10 @@ func (d *Decoder) Close(err error) {
 }
 
 // ---------------------------------------------------------------------------
-// Поток кодировщика (сервер → мы)
+// The encoder stream (server -> us)
 // ---------------------------------------------------------------------------
 
-// ReadEncoderStream читает инструкции кодировщика до конца потока.
+// ReadEncoderStream reads encoder instructions until the stream ends.
 func (d *Decoder) ReadEncoderStream(r io.Reader) error {
 	br := &byteReader{r: bufio.NewReader(r)}
 	for {
@@ -111,15 +111,15 @@ func (d *Decoder) ReadEncoderStream(r io.Reader) error {
 			d.Close(err)
 			return err
 		}
-		// Подтверждение — по границе порции, а не на каждую вставку:
-		// пока в буфере есть байты, кодировщик ещё не всё сказал.
+		// The acknowledgement follows a batch rather than every insertion:
+		// while bytes remain in the buffer the encoder has not finished.
 		if br.r.Buffered() == 0 {
 			d.AcknowledgeInserts()
 		}
 	}
 }
 
-// readInstruction разбирает одну инструкцию (RFC 9204, 4.3).
+// readInstruction parses one instruction (RFC 9204, 4.3).
 func (d *Decoder) readInstruction(br *byteReader) error {
 	b, err := br.peek()
 	if err != nil {
@@ -202,8 +202,8 @@ func wrapEnc(err error) error {
 	return fmt.Errorf("%w: %v", ErrEncoderStream, err)
 }
 
-// relativeLocked разрешает относительный индекс потока кодировщика:
-// 0 — самая свежая запись.
+// relativeLocked resolves a relative index on the encoder stream:
+// 0 is the most recent entry.
 func (d *Decoder) relativeLocked(rel uint64) (entry, bool) {
 	if rel >= uint64(len(d.entries)) {
 		return entry{}, false
@@ -211,7 +211,7 @@ func (d *Decoder) relativeLocked(rel uint64) (entry, bool) {
 	return d.entries[len(d.entries)-1-int(rel)], true
 }
 
-// insertLocked добавляет запись, вытесняя старые под ёмкость.
+// insertLocked adds an entry, evicting older ones to fit the capacity.
 func (d *Decoder) insertLocked(e entry) error {
 	if e.size() > d.capacity {
 		return fmt.Errorf("%w: a %d byte entry does not fit a table of %d", ErrEncoderStream, e.size(), d.capacity)
@@ -224,7 +224,7 @@ func (d *Decoder) insertLocked(e entry) error {
 	return nil
 }
 
-// evictLocked освобождает место под need байт.
+// evictLocked frees room for need bytes.
 func (d *Decoder) evictLocked(need uint64) {
 	for len(d.entries) > 0 && d.size+need > d.capacity {
 		d.size -= d.entries[0].size()
@@ -233,9 +233,9 @@ func (d *Decoder) evictLocked(need uint64) {
 	}
 }
 
-// AcknowledgeInserts сообщает кодировщику о полученных вставках (Insert Count
-// Increment). Вызывается после порции инструкций: подтверждать каждую по
-// отдельности незачем.
+// AcknowledgeInserts tells the encoder about received insertions (Insert Count
+// Increment). Called after a batch of instructions: acknowledging each one
+// separately would be pointless.
 func (d *Decoder) AcknowledgeInserts() {
 	d.mu.Lock()
 	n := d.insertCount - d.acked
@@ -250,13 +250,13 @@ func (d *Decoder) AcknowledgeInserts() {
 }
 
 // ---------------------------------------------------------------------------
-// Секции полей (заголовки ответа)
+// Field sections (response headers)
 // ---------------------------------------------------------------------------
 
-// Decode разбирает секцию полей потока streamID и отдаёт поля по одному.
+// Decode parses the field section of stream streamID and yields fields one by one.
 //
-// Секция декодируется целиком здесь, а не лениво: ожидание вставок
-// кодировщика должно случиться до того, как вызывающий начнёт разбор.
+// The section is decoded whole here rather than lazily: waiting for the
+// encoder's insertions must happen before the caller starts reading.
 func (d *Decoder) Decode(streamID uint64, block []byte) DecodeFunc {
 	fields, err := d.decodeSection(streamID, block)
 	i := 0
@@ -297,7 +297,7 @@ func (d *Decoder) decodeSection(streamID uint64, block []byte) ([]HeaderField, e
 	}
 
 	d.mu.Lock()
-	// Блокированный поток: записи, на которые ссылается секция, ещё в пути.
+	// Blocked stream: the entries this section refers to are still in flight.
 	for d.insertCount < ric && d.closeErr == nil {
 		d.cond.Wait()
 	}
@@ -316,8 +316,8 @@ func (d *Decoder) decodeSection(streamID uint64, block []byte) ([]HeaderField, e
 	return fields, nil
 }
 
-// decodeRequiredInsertCount восстанавливает Required Insert Count из
-// закодированного значения (RFC 9204, 4.5.1.1).
+// decodeRequiredInsertCount restores the Required Insert Count from its encoded
+// value (RFC 9204, 4.5.1.1).
 func (d *Decoder) decodeRequiredInsertCount(block []byte) (uint64, []byte, error) {
 	enc, rest, err := readInt(8, block)
 	if err != nil {
@@ -349,7 +349,7 @@ func (d *Decoder) decodeRequiredInsertCount(block []byte) (uint64, []byte, error
 	return ric, rest, nil
 }
 
-// parseFieldsLocked разбирает представления полей (RFC 9204, 4.5.2–4.5.6).
+// parseFieldsLocked parses field representations (RFC 9204, 4.5.2-4.5.6).
 func (d *Decoder) parseFieldsLocked(p []byte, base uint64) ([]HeaderField, error) {
 	var out []HeaderField
 	for len(p) > 0 {
@@ -428,8 +428,8 @@ func (d *Decoder) parseFieldsLocked(p []byte, base uint64) ([]HeaderField, error
 	return out, nil
 }
 
-// absoluteLocked переводит индекс секции в запись таблицы: относительный
-// считается назад от Base, post-base — вперёд от него.
+// absoluteLocked turns a section index into a table entry: a relative index
+// counts back from Base, a post-base one counts forward from it.
 func (d *Decoder) absoluteLocked(base, index uint64, postBase bool) (HeaderField, error) {
 	var abs uint64
 	if postBase {
@@ -458,11 +458,11 @@ func staticAt(index uint64) (HeaderField, error) {
 }
 
 // ---------------------------------------------------------------------------
-// Поток декодера (мы → сервер)
+// The decoder stream (us -> server)
 // ---------------------------------------------------------------------------
 
-// sectionAck подтверждает секцию (RFC 9204, 4.4.1): обязательна для каждой
-// секции с ненулевым Required Insert Count.
+// sectionAck acknowledges a section (RFC 9204, 4.4.1): mandatory for every
+// section with a non-zero Required Insert Count.
 func (d *Decoder) sectionAck(streamID, ric uint64) {
 	d.mu.Lock()
 	if ric > d.acked {
@@ -475,8 +475,8 @@ func (d *Decoder) sectionAck(streamID, ric uint64) {
 	}
 }
 
-// CancelStream сообщает кодировщику, что поток сброшен до разбора секции
-// (Stream Cancellation, RFC 9204, 4.4.2): иначе он вечно ждал бы подтверждения.
+// CancelStream tells the encoder the stream was reset before its section was
+// parsed (Stream Cancellation, RFC 9204, 4.4.2): otherwise it would wait forever.
 func (d *Decoder) CancelStream(streamID uint64) {
 	d.mu.Lock()
 	w := d.decoderStream
@@ -487,7 +487,7 @@ func (d *Decoder) CancelStream(streamID uint64) {
 }
 
 // ---------------------------------------------------------------------------
-// Примитивы: целые с префиксом и строки (RFC 7541, 5.1 и 5.2)
+// Primitives: prefixed integers and strings (RFC 7541, 5.1 and 5.2)
 // ---------------------------------------------------------------------------
 
 func appendInt(dst []byte, first byte, n uint, i uint64) []byte {
@@ -532,7 +532,7 @@ func readInt(n uint, p []byte) (uint64, []byte, error) {
 	}
 }
 
-// readString читает строку с флагом Хаффмана в бите перед n-битной длиной.
+// readString reads a string whose Huffman flag sits in the bit before the n-bit length.
 func readString(n uint, p []byte) (string, []byte, error) {
 	if len(p) == 0 {
 		return "", p, io.ErrUnexpectedEOF
@@ -554,8 +554,8 @@ func readString(n uint, p []byte) (string, []byte, error) {
 	return string(raw), rest, nil
 }
 
-// byteReader — чтение примитивов из потока по одному байту: инструкции
-// кодировщика приходят непрерывным потоком без границ.
+// byteReader reads primitives from a stream one byte at a time: encoder
+// instructions arrive as a continuous stream without boundaries.
 type byteReader struct {
 	r    *bufio.Reader
 	buf  [1]byte

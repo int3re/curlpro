@@ -11,7 +11,7 @@ import (
 	"github.com/curlpro/curlpro/internal/client"
 )
 
-// lookupSession находит сессию по идентификатору.
+// lookupSession finds a session by its identifier.
 func lookupSession(id C.longlong) (*client.Session, error) {
 	sessionsMu.RLock()
 	defer sessionsMu.RUnlock()
@@ -22,10 +22,10 @@ func lookupSession(id C.longlong) (*client.Session, error) {
 	return s, nil
 }
 
-// Управление заголовками сессии.
+// Session header management.
 //
-// Заголовки хранятся отдельно от профильных, поэтому сброс возвращает чистый
-// отпечаток браузера, а не обнуляет всё.
+// The headers are stored apart from the profile's, so a reset restores the
+// plain browser fingerprint instead of clearing everything.
 
 //export curlpro_session_set_header
 func curlpro_session_set_header(id C.longlong, name, value *C.char) (out *C.char) {
@@ -49,8 +49,8 @@ func curlpro_session_remove_header(id C.longlong, name *C.char) (out *C.char) {
 	if err != nil {
 		return respond(nil, err)
 	}
-	// Промах сообщается наружу: молчаливое удаление несуществующего скрыло бы
-	// опечатку в имени.
+	// A miss is reported: silently removing a header that is not there would
+	// hide a typo in the name.
 	removed := s.RemoveHeader(C.GoString(name))
 	return respond(map[string]any{"removed": removed, "headers": s.Headers()}, nil)
 }

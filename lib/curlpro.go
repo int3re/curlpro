@@ -1,18 +1,18 @@
-// Command curlpro — C-shared библиотека: точка входа для биндингов.
+// Command curlpro is the C-shared library: the entry point for bindings.
 //
-// Обмен идёт JSON-строками через char*: это медленнее структур, но избавляет
-// от синхронизации C-заголовка с каждым биндингом. Набор экспортов намеренно
-// узкий — расширять по мере надобности.
+// The exchange happens through JSON strings passed as char*: slower than
+// structs, but it removes the need to keep a C header in sync with every
+// binding. The export set is deliberately narrow — widen it when needed.
 //
-// Владение памятью: каждая строка, возвращённая библиотекой, выделена в C
-// и должна быть освобождена вызовом curlpro_free. Вызывающая сторона обязана
-// освободить её, иначе течь.
+// Memory ownership: every string returned by the library is allocated in C
+// and must be released with curlpro_free. The caller has to do it,
+// otherwise it leaks.
 //
-// Паника внутри экспорта фатальна для процесса, который загрузил библиотеку:
-// у cgo нет обработчика, который перевёл бы её в исключение Python. Поэтому
-// каждый экспорт ловит recover и отдаёт конверт с ошибкой.
+// A panic inside an export is fatal to the process that loaded the library:
+// cgo has no handler that would turn it into a Python exception. That is why
+// every export catches recover and returns an error envelope.
 //
-// Сборка:
+// Build:
 //
 //	go build -buildmode=c-shared -o dist/curlpro.dll ./lib
 package main
@@ -44,11 +44,11 @@ var (
 	nextID     atomic.Int64
 )
 
-// result — единый конверт ответа. Биндинг всегда получает валидный JSON
-// и разбирает ошибку из поля error, а не из кода возврата.
+// result is the single response envelope. A binding always receives valid
+// JSON and reads the failure from the error field, not from a return code.
 //
-// code — машинный код ошибки (client.ErrorCode), когда он известен: по тексту
-// Python не мог отличить «сервер закрыл WebSocket» от таймаута чтения.
+// code is the machine-readable error code (client.ErrorCode) when known: from
+// the text alone Python could not tell a server close from a read timeout.
 type result struct {
 	OK    bool            `json:"ok"`
 	Error string          `json:"error,omitempty"`
@@ -76,7 +76,7 @@ func respond(data any, err error) *C.char {
 	return C.CString(string(out))
 }
 
-// recoverInto превращает панику экспорта в конверт с ошибкой.
+// recoverInto turns a panic inside an export into an error envelope.
 func recoverInto(out **C.char) {
 	if r := recover(); r != nil {
 		*out = respond(nil, fmt.Errorf("internal library error: %v", r))
@@ -90,27 +90,27 @@ func curlpro_free(s *C.char) {
 	}
 }
 
-// Version — версия нативной части.
+// Version is the version of the native part.
 //
-// Мажор и минор образуют ABI: Python требует минимум (REQUIRED_VERSION
-// в _ffi.py) и отказывается работать со старой библиотекой. Минор поднимается,
-// когда Python начинает зависеть от нового экспорта или поля конфигурации —
-// иначе старая DLL молча игнорирует незнакомое поле, и опция вроде
-// follow_redirects=False просто не действует.
+// Major and minor form the ABI: Python requires a minimum (REQUIRED_VERSION
+// in _ffi.py) and refuses to work with an older library. The minor is raised
+// whenever Python starts depending on a new export or configuration field —
+// otherwise an old DLL silently ignores the unknown field and an option like
+// follow_redirects=False simply has no effect.
 //
-// 0.3.0: поле code в конверте, max_message_size у WebSocket, объект retry
-// с нулём попыток означает «без повторов», а не «взять из сессии».
-// 0.4.0: mode (навигация или fetch) и keep_alive у сессии.
-// 0.5.0: device и devices — подсказки высокой энтропии по Accept-CH.
-// 0.6.0: выгрузка, загрузка и очистка кук.
-// 0.7.0: асинхронный запуск запросов, resolve и ip_version.
-// 0.8.0: alt_svc, свой CA, клиентские сертификаты, trust_env, предел тела,
-// история редиректов в ответе.
-// 0.9.0: отдельный предел на установку соединения (connect_timeout_ms),
-// асинхронные открытие потока, чтение части тела и работа с WebSocket.
-// 0.10.0: протокол на запрос (protocol) и заголовки профиля на запрос
-// (default_headers вместо no_default_headers: нужно было включать, а не
-// только выключать).
+// 0.3.0: the code field in the envelope, max_message_size for WebSocket, and a
+// retry object with zero attempts meaning "no retries" rather than "ask the session".
+// 0.4.0: mode (navigation or fetch) and keep_alive on the session.
+// 0.5.0: device and devices — high-entropy hints driven by Accept-CH.
+// 0.6.0: exporting, importing and clearing cookies.
+// 0.7.0: asynchronous request start, resolve and ip_version.
+// 0.8.0: alt_svc, a custom CA, client certificates, trust_env, a body limit
+// and the redirect history in the response.
+// 0.9.0: a separate limit on establishing a connection (connect_timeout_ms),
+// plus async stream open, chunk read and WebSocket work.
+// 0.10.0: per-request protocol (protocol) and per-request profile headers
+// (default_headers instead of no_default_headers: they had to be switchable
+// on, not only off).
 const Version = "0.10.0"
 
 //export curlpro_version
@@ -128,10 +128,10 @@ func curlpro_profiles_load_dir(dir *C.char) (out *C.char) {
 	return respond(map[string]any{"profiles": registry.Names()}, nil)
 }
 
-// curlpro_profile_register регистрирует профиль из JSON в рантайме.
+// curlpro_profile_register registers a profile from JSON at runtime.
 //
-// Это ключевая возможность библиотеки: новую версию браузера можно подключить,
-// не дожидаясь релиза и не пересобирая нативную часть.
+// This is the library's central feature: a new browser version can be added
+// without waiting for a release and without rebuilding the native part.
 //
 //export curlpro_profile_register
 func curlpro_profile_register(data *C.char) (out *C.char) {
@@ -168,24 +168,24 @@ type sessionConfig struct {
 	ClientKey          string   `json:"client_key"`
 	TrustEnv           bool     `json:"trust_env"`
 	MaxResponseSize    int64    `json:"max_response_size"`
-	// AltSvc: указатель, потому что отсутствие поля означает «включено».
+	// AltSvc is a pointer because a missing field means "enabled".
 	AltSvc    *bool             `json:"alt_svc"`
 	Resolve   map[string]string `json:"resolve"`
 	IPVersion string            `json:"ip_version"`
-	// KeepAlive: указатель, потому что отсутствие поля означает «включено».
-	// Старый Python со свежей DLL не должен молча получить пересоздание
-	// соединения на каждый запрос.
+	// KeepAlive is a pointer because a missing field means "enabled".
+	// An old Python with a fresh DLL must not silently end up reopening a
+	// connection for every request.
 	KeepAlive *bool      `json:"keep_alive"`
 	Retry     *retryJSON `json:"retry"`
-	// Mode: "navigate", "fetch" или "auto" (пусто) — см. client.Options.Mode.
+	// Mode: "navigate", "fetch" or "auto" (empty) — see client.Options.Mode.
 	Mode string `json:"mode"`
-	// Device — имя устройства из секции devices профиля либо "random".
+	// Device is a device name from the profile's devices section, or "random".
 	Device string `json:"device"`
-	// Devices переопределяет список устройств профиля.
+	// Devices overrides the profile's device list.
 	Devices []profile.Device `json:"devices"`
 }
 
-// retryJSON описывает политику повторов.
+// retryJSON describes the retry policy.
 type retryJSON struct {
 	Attempts          int      `json:"attempts"`
 	Statuses          []int    `json:"statuses"`
@@ -195,9 +195,9 @@ type retryJSON struct {
 	RespectRetryAfter bool     `json:"respect_retry_after"`
 }
 
-// toPolicy переводит JSON в политику. Отсутствие объекта (null) — «взять
-// из сессии»; объект с нулём попыток — «без повторов». Раньше ноль
-// схлопывался в nil, и запрос не мог отключить повторы, заданные сессии.
+// toPolicy turns JSON into a policy. A missing object (null) means "take the
+// session's"; an object with zero attempts means "no retries". Zero used to
+// collapse into nil, and a request could not switch off the session's retries.
 func (r *retryJSON) toPolicy() *client.RetryPolicy {
 	if r == nil {
 		return nil
@@ -266,11 +266,11 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 	return respond(map[string]any{"session": id}, nil)
 }
 
-// curlpro_session_cookies отдаёт куки сессии.
+// curlpro_session_cookies returns the session cookies.
 //
-// Банка внутри клиента наружу не выведена: там только пара «имя-значение»
-// для конкретного адреса. Здесь — полные записи с доменом, путём и сроком,
-// чтобы сессию можно было сохранить и продолжить в другом запуске.
+// The jar inside the client is not exposed: it only yields the name-value pair
+// for one address. Here the records are complete, with domain, path and expiry,
+// so a session can be saved and continued in another run.
 //
 //export curlpro_session_cookies
 func curlpro_session_cookies(id C.longlong) (out *C.char) {
@@ -282,7 +282,7 @@ func curlpro_session_cookies(id C.longlong) (out *C.char) {
 	return respond(map[string]any{"cookies": s.Cookies()}, nil)
 }
 
-// curlpro_session_set_cookies загружает куки в сессию.
+// curlpro_session_set_cookies loads cookies into the session.
 //
 //export curlpro_session_set_cookies
 func curlpro_session_set_cookies(id C.longlong, data *C.char) (out *C.char) {
@@ -301,7 +301,7 @@ func curlpro_session_set_cookies(id C.longlong, data *C.char) (out *C.char) {
 	return respond(map[string]any{"cookies": s.Cookies()}, nil)
 }
 
-// curlpro_session_clear_cookies забывает все куки сессии.
+// curlpro_session_clear_cookies forgets every cookie of the session.
 //
 //export curlpro_session_clear_cookies
 func curlpro_session_clear_cookies(id C.longlong) (out *C.char) {
@@ -338,23 +338,23 @@ type requestJSON struct {
 	DefaultHeaders *bool             `json:"default_headers"`
 	Protocol       string            `json:"protocol"`
 	Multipart      *multipartJSON    `json:"multipart"`
-	// BodyFile отправляет файл потоком, не читая его целиком в память.
+	// BodyFile streams a file instead of reading it whole into memory.
 	BodyFile string `json:"body_file"`
 
-	// Переопределения сессионных настроек. Указатели отличают «не задано»
-	// от «задано в ноль»: для таймаута и редиректов это разные вещи.
+	// Per-request overrides of session settings. Pointers tell "not set" from
+	// "set to zero": for a timeout and for redirects those differ.
 	TimeoutMS        *int       `json:"timeout_ms"`
 	ConnectTimeoutMS *int       `json:"connect_timeout_ms"`
 	FollowRedirects  *bool      `json:"follow_redirects"`
 	MaxRedirects     *int       `json:"max_redirects"`
 	Retry            *retryJSON `json:"retry"`
-	// Proxy: null — взять из сессии, "" — идти напрямую в обход сессионного.
+	// Proxy: null takes the session's, "" goes directly, bypassing it.
 	Proxy *string `json:"proxy"`
-	// Mode переопределяет режим набора заголовков для одного запроса.
+	// Mode overrides the header set for a single request.
 	Mode string `json:"mode"`
 }
 
-// applyOverrides переносит переопределения запроса в client.Request.
+// applyOverrides copies the request overrides into client.Request.
 func (r requestJSON) applyOverrides(req *client.Request) {
 	if r.TimeoutMS != nil {
 		d := time.Duration(*r.TimeoutMS) * time.Millisecond
@@ -371,7 +371,7 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 	req.Mode = r.Mode
 }
 
-// toRequest собирает client.Request из кадра.
+// toRequest builds a client.Request out of a frame.
 func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 	req := &client.Request{
 		Method:         r.Method,
@@ -395,8 +395,8 @@ func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 	return req, nil
 }
 
-// multipartJSON описывает форму. Содержимое файлов едет не здесь, а в бинарной
-// части кадра: длины перечислены в file_sizes, порядок совпадает с files.
+// multipartJSON describes the form. File contents travel in the binary part of
+// the frame instead: their lengths are listed in file_sizes, in the files order.
 type multipartJSON struct {
 	Fields    map[string]string `json:"fields"`
 	Order     []string          `json:"order"`
@@ -410,7 +410,7 @@ type fileJSON struct {
 	ContentType string `json:"content_type"`
 }
 
-// splitFiles режет бинарную часть кадра на содержимое файлов по заявленным длинам.
+// splitFiles cuts the binary part of a frame into file contents by declared length.
 func splitFiles(m *multipartJSON, blob []byte) (*client.MultipartForm, error) {
 	form := &client.MultipartForm{
 		Fields: m.Fields,
@@ -446,13 +446,13 @@ type responseJSON struct {
 	History []client.Redirect   `json:"history,omitempty"`
 }
 
-// Тела передаются в бинарном виде, отдельно от JSON.
+// Bodies travel as binary, separately from the JSON.
 //
-// Раньше тело ехало строкой внутри JSON, и это не просто замедляло обмен:
-// произвольные байты — не валидный UTF-8, поэтому ответ портился. Запрос
-// 10 000 случайных байт возвращал 18 502 — данные раздувались при перекодировке.
+// A body used to ride as a string inside the JSON, which was not merely slow:
+// arbitrary bytes are not valid UTF-8, so the response was corrupted. A request
+// for 10,000 random bytes returned 18,502 — the data grew during re-encoding.
 //
-// Формат кадра: [uint32 LE длина JSON][JSON][сырое тело].
+// Frame layout: [uint32 LE JSON length][JSON][raw body].
 const frameHeaderLen = 4
 
 func encodeFrame(meta any, body []byte) (*C.char, C.int) {
@@ -482,7 +482,7 @@ func decodeFrame(p *C.char, n C.int) (meta []byte, body []byte, err error) {
 	return raw[frameHeaderLen : frameHeaderLen+metaLen], raw[frameHeaderLen+metaLen:], nil
 }
 
-// respondFrame — аналог respond для ответов с телом.
+// respondFrame is respond's counterpart for responses that carry a body.
 func respondFrame(data any, body []byte, err error) (*C.char, C.int) {
 	var r result
 	if err != nil {
@@ -502,8 +502,8 @@ func respondFrame(data any, body []byte, err error) (*C.char, C.int) {
 	return encodeFrame(r, body)
 }
 
-// framed выполняет тело экспорта с кадровым ответом: пишет длину в outLen
-// и переводит панику в конверт с ошибкой.
+// framed runs an export body with a framed response: it writes the length into
+// outLen and turns a panic into an error envelope.
 func framed(outLen *C.int, f func() (*C.char, C.int)) (out *C.char) {
 	var n C.int
 	defer func() {
@@ -518,8 +518,8 @@ func framed(outLen *C.int, f func() (*C.char, C.int)) (out *C.char) {
 	return out
 }
 
-// curlpro_request принимает и возвращает кадр [uint32 len JSON][JSON][тело].
-// Длина возвращаемого кадра пишется в outLen; освобождать через curlpro_free.
+// curlpro_request takes and returns a frame [uint32 len JSON][JSON][body].
+// The returned frame length is written to outLen; free it with curlpro_free.
 //
 //export curlpro_request
 func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int) *C.char {

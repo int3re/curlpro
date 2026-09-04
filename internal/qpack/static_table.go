@@ -1,10 +1,10 @@
 package qpack
 
-// Статическая таблица QPACK (RFC 9204, приложение A).
+// The QPACK static table (RFC 9204, appendix A).
 //
-// Скопирована из github.com/quic-go/qpack (лицензия MIT): содержимое задано
-// стандартом, а собственная копия избавляет от зависимости на неэкспортируемую
-// таблицу чужого пакета.
+// Copied from github.com/quic-go/qpack (MIT licence): the content is fixed by
+// the standard, and a copy of our own removes a dependency on another
+// package's unexported table.
 
 var staticTableEntries = [...]HeaderField{
 	{Name: ":authority"},
