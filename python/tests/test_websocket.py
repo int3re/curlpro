@@ -93,13 +93,13 @@ def test_close_is_idempotent():
         sock = s.websocket(ECHO)
         sock.close()
         sock.close()
-        with pytest.raises(RuntimeError, match="закрыт"):
+        with pytest.raises(RuntimeError, match="closed"):
             sock.send("уже поздно")
 
 
 def test_requires_wss():
     with curlpro.Session() as s:
-        with pytest.raises(curlpro.CurlProError, match="только wss"):
+        with pytest.raises(curlpro.CurlProError, match="only wss"):
             s.websocket("ws://echo.websocket.org/")
 
 

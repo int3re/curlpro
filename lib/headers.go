@@ -17,7 +17,7 @@ func lookupSession(id C.longlong) (*client.Session, error) {
 	defer sessionsMu.RUnlock()
 	s, ok := sessions[int64(id)]
 	if !ok {
-		return nil, fmt.Errorf("сессия %d не найдена", int64(id))
+		return nil, fmt.Errorf("session %d not found", int64(id))
 	}
 	return s, nil
 }
@@ -36,7 +36,7 @@ func curlpro_session_set_header(id C.longlong, name, value *C.char) (out *C.char
 	}
 	key := C.GoString(name)
 	if key == "" {
-		return respond(nil, fmt.Errorf("пустое имя заголовка"))
+		return respond(nil, fmt.Errorf("header name is empty"))
 	}
 	s.SetHeader(key, C.GoString(value))
 	return respond(map[string]any{"headers": s.Headers()}, nil)

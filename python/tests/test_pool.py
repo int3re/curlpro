@@ -89,7 +89,7 @@ def test_closed_session_rejects_requests(srv):
     s = session()
     s.get(srv.url("/c"))
     s.close()
-    with pytest.raises(RuntimeError, match="закрыта"):
+    with pytest.raises(RuntimeError, match="closed"):
         s.get(srv.url("/c"))
 
 

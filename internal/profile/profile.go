@@ -159,7 +159,7 @@ func quoteHint(v string) string {
 // между запросами не меняет.
 func (p *Profile) PickDevice(name string) (Device, error) {
 	if len(p.Devices) == 0 {
-		return Device{}, fmt.Errorf("профиль %q не описывает устройств (секция devices)", p.Name)
+		return Device{}, fmt.Errorf("profile %q describes no devices (devices section)", p.Name)
 	}
 	if name == "" || strings.EqualFold(name, "random") {
 		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(p.Devices))))
@@ -173,7 +173,7 @@ func (p *Profile) PickDevice(name string) (Device, error) {
 			return d, nil
 		}
 	}
-	return Device{}, fmt.Errorf("устройство %q не найдено в профиле %q", name, p.Name)
+	return Device{}, fmt.Errorf("device %q not found in profile %q", name, p.Name)
 }
 
 // WebSocketSpec задаёт заголовки рукопожатия WebSocket в порядке и регистре
@@ -442,7 +442,7 @@ func NewRegistry() *Registry {
 func (r *Registry) LoadFS(fsys fs.FS, dir string) error {
 	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
-		return fmt.Errorf("чтение каталога профилей %s: %w", dir, err)
+		return fmt.Errorf("reading profile directory %s: %w", dir, err)
 	}
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
@@ -450,7 +450,7 @@ func (r *Registry) LoadFS(fsys fs.FS, dir string) error {
 		}
 		b, err := fs.ReadFile(fsys, path.Join(dir, e.Name()))
 		if err != nil {
-			return fmt.Errorf("чтение %s: %w", e.Name(), err)
+			return fmt.Errorf("reading %s: %w", e.Name(), err)
 		}
 		if err := r.Register(b); err != nil {
 			return fmt.Errorf("%s: %w", e.Name(), err)
@@ -465,10 +465,10 @@ func (r *Registry) Register(data []byte) error {
 	dec := json.NewDecoder(strings.NewReader(string(data)))
 	dec.DisallowUnknownFields() // опечатка в поле не должна молча терять настройку
 	if err := dec.Decode(&p); err != nil {
-		return fmt.Errorf("разбор профиля: %w", err)
+		return fmt.Errorf("parsing profile: %w", err)
 	}
 	if p.Name == "" {
-		return fmt.Errorf("у профиля отсутствует name")
+		return fmt.Errorf("profile has no name")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -504,7 +504,7 @@ func (r *Registry) Resolve(name string) (*Profile, error) {
 	}
 	out.Name = name
 	if err := out.validate(); err != nil {
-		return nil, fmt.Errorf("профиль %q: %w", name, err)
+		return nil, fmt.Errorf("profile %q: %w", name, err)
 	}
 	return out, nil
 }
@@ -515,8 +515,8 @@ func (r *Registry) Resolve(name string) (*Profile, error) {
 // поле, если его задал предок.
 func (p *Profile) validate() error {
 	if p.TLS.RawClientHello == "" && len(p.TLS.ClientHelloSpec) == 0 && len(p.TLS.Extensions) == 0 {
-		return fmt.Errorf("не задан источник ClientHello " +
-			"(raw_client_hello, extensions или client_hello_spec) ни в нём, ни в предках")
+		return fmt.Errorf("no ClientHello source " +
+			"(raw_client_hello, extensions or client_hello_spec) in the profile or its ancestors")
 	}
 	// Умолчания здесь нет намеренно. Перемешивание верно для Chrome >= 110
 	// и неверно для Firefox, Safari и старых Chrome; профиль без поля раньше
@@ -524,8 +524,8 @@ func (p *Profile) validate() error {
 	// на каждом соединении — чего локальный validate не видит, потому что
 	// JA4 к порядку нечувствителен.
 	if p.TLS.PermuteExtensions == nil {
-		return fmt.Errorf("не задан tls.permute_extensions: укажите true для Chrome >= 110 " +
-			"и false для остальных браузеров — угадывать библиотека не будет")
+		return fmt.Errorf("tls.permute_extensions is not set: use true for Chrome >= 110 " +
+			"and false for every other browser; the library will not guess")
 	}
 	// pre_shared_key бывает только в захвате возобновлённой сессии. На свежем
 	// соединении тикета нет, uTLS шлёт пустое расширение — а клиент выбрасывает
@@ -534,14 +534,14 @@ func (p *Profile) validate() error {
 	// корпуса, и заметить это удалось только при разборе долгов (STAGE16).
 	for _, e := range p.TLS.Extensions {
 		if e.Type == "pre_shared_key" {
-			return fmt.Errorf("расширение pre_shared_key бывает только при возобновлении " +
-				"сессии: снимите профиль на свежем соединении, там на этом месте padding")
+			return fmt.Errorf("the pre_shared_key extension only appears on a resumed session: " +
+				"recapture the profile on a fresh connection, where padding sits in its place")
 		}
 	}
 	// На проводе вес на единицу меньше и укладывается в байт (RFC 7540):
 	// значение сверх 256 молча оборачивалось бы при приведении к uint8.
 	if w := p.HTTP2.StreamWeight; w != nil && *w > 256 {
-		return fmt.Errorf("http2.stream_weight %d вне диапазона 0..256", *w)
+		return fmt.Errorf("http2.stream_weight %d is out of the 0..256 range", *w)
 	}
 	// Порядок SETTINGS обязан покрывать все настройки: непокрытая ушла бы
 	// в конец по возрастанию идентификатора, то есть не туда, куда её шлёт
@@ -553,7 +553,7 @@ func (p *Profile) validate() error {
 		}
 		for _, st := range p.HTTP3.Settings {
 			if !listed[st.ID] {
-				return fmt.Errorf("http3.settings_order не содержит настройку %d", st.ID)
+				return fmt.Errorf("http3.settings_order does not list setting %d", st.ID)
 			}
 		}
 	}
@@ -566,7 +566,7 @@ func (r *Registry) chain(name string) ([]*Profile, error) {
 	seen := map[string]bool{}
 	for cur := name; cur != ""; {
 		if seen[cur] {
-			return nil, fmt.Errorf("цикл в based_on: %s -> %s",
+			return nil, fmt.Errorf("based_on cycle: %s -> %s",
 				strings.Join(namesOf(out), " -> "), cur)
 		}
 		seen[cur] = true
@@ -574,14 +574,14 @@ func (r *Registry) chain(name string) ([]*Profile, error) {
 		p, ok := r.raw[cur]
 		if !ok {
 			if len(out) == 0 {
-				return nil, fmt.Errorf("профиль %q не найден", cur)
+				return nil, fmt.Errorf("profile %q not found", cur)
 			}
-			return nil, fmt.Errorf("профиль %q ссылается на несуществующий based_on %q",
+			return nil, fmt.Errorf("profile %q refers to a missing based_on %q",
 				out[len(out)-1].Name, cur)
 		}
 		out = append(out, p)
 		if len(out) > maxInheritDepth {
-			return nil, fmt.Errorf("цепочка based_on глубже %d — вероятна ошибка в данных",
+			return nil, fmt.Errorf("based_on chain is deeper than %d, which usually means a data error",
 				maxInheritDepth)
 		}
 		cur = p.BasedOn

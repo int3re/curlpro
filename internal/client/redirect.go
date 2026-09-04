@@ -23,17 +23,17 @@ func isRedirect(code int) bool {
 // errRedirectUnsupported означает, что переход возможен по протоколу, но не
 // по возможностям клиента (Location ведёт на http://). Такой ответ отдаётся
 // вызывающему как есть: 301 с Location полезнее исключения.
-var errRedirectUnsupported = errors.New("редирект вне https не поддерживается")
+var errRedirectUnsupported = errors.New("redirect outside https is not supported")
 
 // redirectTarget разрешает Location относительно текущего URL.
 func redirectTarget(current, location string) (string, error) {
 	base, err := url.Parse(current)
 	if err != nil {
-		return "", fmt.Errorf("разбор текущего URL: %w", err)
+		return "", fmt.Errorf("parsing current URL: %w", err)
 	}
 	loc, err := url.Parse(location)
 	if err != nil {
-		return "", fmt.Errorf("разбор Location %q: %w", location, err)
+		return "", fmt.Errorf("parsing Location %q: %w", location, err)
 	}
 	next := base.ResolveReference(loc)
 	if next.Scheme != "https" {

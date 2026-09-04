@@ -62,7 +62,7 @@ def test_redirects_disabled():
 
 def test_redirect_limit():
     with curlpro.Session(max_redirects=2) as s:
-        with pytest.raises(curlpro.CurlProError, match="предел редиректов"):
+        with pytest.raises(curlpro.CurlProError, match="too many redirects"):
             s.get("https://httpbin.org/redirect/5")
 
 

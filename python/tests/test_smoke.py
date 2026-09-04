@@ -89,5 +89,5 @@ def test_register_profile_at_runtime():
 
 
 def test_error_surfaces_from_native():
-    with pytest.raises(curlpro.CurlProError, match="не найден"):
+    with pytest.raises(curlpro.CurlProError, match="not found"):
         curlpro.Session("no-such-profile")

@@ -37,14 +37,14 @@ func BuildSpec(p *Profile) (*utls.ClientHelloSpec, error) {
 	case len(p.TLS.ClientHelloSpec) > 0:
 		spec, err = specFromJSON(p.TLS.ClientHelloSpec)
 	default:
-		return nil, fmt.Errorf("профиль %q: нет источника ClientHello", p.Name)
+		return nil, fmt.Errorf("profile %q: no ClientHello source", p.Name)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("профиль %q: %w", p.Name, err)
+		return nil, fmt.Errorf("profile %q: %w", p.Name, err)
 	}
 
 	if err := applyOverrides(spec, &p.TLS); err != nil {
-		return nil, fmt.Errorf("профиль %q: %w", p.Name, err)
+		return nil, fmt.Errorf("profile %q: %w", p.Name, err)
 	}
 
 	// По умолчанию перемешиваем: все актуальные Chrome это делают.
@@ -57,17 +57,17 @@ func BuildSpec(p *Profile) (*utls.ClientHelloSpec, error) {
 func specFromRaw(b64 string, blunt bool) (*utls.ClientHelloSpec, error) {
 	raw, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
-		return nil, fmt.Errorf("raw_client_hello: некорректный base64: %w", err)
+		return nil, fmt.Errorf("raw_client_hello: invalid base64: %w", err)
 	}
 	fp := &utls.Fingerprinter{AllowBluntMimicry: blunt}
 	spec, err := fp.RawClientHello(raw)
 	if err != nil {
 		if strings.Contains(err.Error(), "unsupported extension") && !blunt {
-			return nil, fmt.Errorf("разбор захваченного ClientHello: %w "+
-				"(расширение неизвестно uTLS; если оно статическое, задайте "+
-				"tls.allow_blunt_mimicry: true, и оно уйдёт сырыми байтами)", err)
+			return nil, fmt.Errorf("parsing the captured ClientHello: %w "+
+				"(uTLS does not know this extension; if it is static, set "+
+				"tls.allow_blunt_mimicry: true and it will be sent as raw bytes)", err)
 		}
-		return nil, fmt.Errorf("разбор захваченного ClientHello: %w", err)
+		return nil, fmt.Errorf("parsing the captured ClientHello: %w", err)
 	}
 	return spec, nil
 }
@@ -77,7 +77,7 @@ func specFromRaw(b64 string, blunt bool) (*utls.ClientHelloSpec, error) {
 // здесь не задействован, поэтому ECH и прочие пробелы кодека не мешают.
 func specFromDeclared(t *TLSSpec) (*utls.ClientHelloSpec, error) {
 	if len(t.CipherSuites) == 0 {
-		return nil, fmt.Errorf("не заданы cipher_suites")
+		return nil, fmt.Errorf("cipher_suites is empty")
 	}
 	exts, err := buildExtensions(t.Extensions)
 	if err != nil {
@@ -176,7 +176,7 @@ func applyOverrides(spec *utls.ClientHelloSpec, t *TLSSpec) error {
 		// Расширение уже есть в захвате как непрозрачные байты — меняем его
 		// на своё, которое перемешивает порядок на каждое соединение.
 		if !replaceExtWith(spec, TrustAnchorsID, ext) {
-			return fmt.Errorf("trust_anchors задан, но расширения 0x%04x нет в базовой спеке",
+			return fmt.Errorf("trust_anchors is set, but extension 0x%04x is missing from the base spec",
 				TrustAnchorsID)
 		}
 	}
@@ -190,7 +190,7 @@ func applyOverrides(spec *utls.ClientHelloSpec, t *TLSSpec) error {
 			}
 			return ok
 		}) {
-			return fmt.Errorf("signature_algorithms задан, но расширения 0x000d нет в базовой спеке")
+			return fmt.Errorf("signature_algorithms is set, but extension 0x000d is missing from the base spec")
 		}
 	}
 
@@ -202,7 +202,7 @@ func applyOverrides(spec *utls.ClientHelloSpec, t *TLSSpec) error {
 			}
 			return ok
 		}) {
-			return fmt.Errorf("alpn задан, но расширения 0x0010 нет в базовой спеке")
+			return fmt.Errorf("alpn is set, but extension 0x0010 is missing from the base spec")
 		}
 	}
 	return nil

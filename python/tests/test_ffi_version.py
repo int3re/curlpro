@@ -30,7 +30,7 @@ def test_current_library_satisfies_requirement():
 def test_old_library_rejected():
     older = f"{_ffi.REQUIRED_VERSION[0]}.{_ffi.REQUIRED_VERSION[1] - 1}.0"
     with _with_version(older):
-        with pytest.raises(_ffi.CurlProError, match="старее требуемой"):
+        with pytest.raises(_ffi.CurlProError, match="older than the required"):
             _ffi._check_version()
 
 
@@ -43,5 +43,5 @@ def test_newer_library_accepted():
 
 def test_unreadable_version_reported():
     with _with_version("не-версия"):
-        with pytest.raises(_ffi.CurlProError, match="нечитаемую версию"):
+        with pytest.raises(_ffi.CurlProError, match="unreadable version"):
             _ffi._check_version()

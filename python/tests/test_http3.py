@@ -71,7 +71,7 @@ def test_ja4_marks_quic_transport():
 
 def test_http3_requires_profile_support():
     """Профиль без секции http3 не должен молча уходить на TCP."""
-    with pytest.raises(curlpro.CurlProError, match="не описывает HTTP/3"):
+    with pytest.raises(curlpro.CurlProError, match="no http3 section"):
         curlpro.Session("firefox-144-macos", http3=True)
 
 

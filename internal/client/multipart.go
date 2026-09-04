@@ -49,14 +49,14 @@ func generateBoundary(style string) (string, error) {
 		return "---------------------------" + suffix, nil
 
 	default:
-		return "", fmt.Errorf("неизвестный стиль границы формы %q (ожидался webkit или firefox)", style)
+		return "", fmt.Errorf("unknown multipart boundary style %q (expected webkit or firefox)", style)
 	}
 }
 
 func randomFrom(alphabet string, n int) (string, error) {
 	buf := make([]byte, n)
 	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("генерация границы формы: %w", err)
+		return "", fmt.Errorf("generating multipart boundary: %w", err)
 	}
 	out := make([]byte, n)
 	for i, b := range buf {

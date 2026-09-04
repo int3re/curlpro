@@ -91,5 +91,5 @@ def test_boundary_is_unique_per_request():
 
 def test_multipart_conflicts_with_data():
     with curlpro.Session() as s:
-        with pytest.raises(ValueError, match="несовместим"):
+        with pytest.raises(ValueError, match="cannot be combined"):
             s.post(URL, fields={"a": "1"}, data=b"x")

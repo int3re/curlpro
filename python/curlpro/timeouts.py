@@ -22,7 +22,7 @@ def split_timeout(
         return None, None
     if isinstance(value, (tuple, list)):
         if len(value) != 2:
-            raise ValueError("timeout как пара — это (соединение, всего)")
+            raise ValueError("timeout as a pair is (connect, total)")
         connect, total = value
         return (
             float(connect) if connect else None,

@@ -34,9 +34,9 @@ def _proxy_override(proxy: str | bool | None) -> str | None:
     if proxy is False:
         return ""
     if proxy is True:
-        raise ValueError("proxy=True бессмысленно: укажите адрес или False")
+        raise ValueError("proxy=True is meaningless: pass an address or False")
     if not isinstance(proxy, str):
-        raise TypeError(f"proxy должен быть строкой, False или None, получено {type(proxy).__name__}")
+        raise TypeError(f"proxy must be a string, False or None, got {type(proxy).__name__}")
     return proxy
 
 
@@ -98,9 +98,9 @@ def _build_multipart(
             elif len(value) == 3:
                 filename, content, content_type = value
             else:
-                raise ValueError(f"files[{field!r}]: ожидался кортеж из 2 или 3 элементов")
+                raise ValueError(f"files[{field!r}]: expected a tuple of 2 or 3 items")
         else:
-            raise TypeError(f"files[{field!r}]: ожидались bytes или кортеж")
+            raise TypeError(f"files[{field!r}]: expected bytes or a tuple")
 
         if isinstance(content, str):
             content = content.encode("utf-8")
@@ -178,7 +178,7 @@ def _protocol(value: str | float | None) -> str:
     key = str(value).strip().lower()
     if key not in _PROTOCOLS:
         raise ValueError(
-            f"protocol={value!r}: допустимы http1 (1.1), h2 (2) и h3 (3)"
+            f"protocol={value!r}: use http1 (1.1), h2 (2) or h3 (3)"
         )
     return _PROTOCOLS[key]
 
@@ -224,15 +224,15 @@ def _request_meta(
 
     if body_file is not None:
         if data is not None or json_body is not None or files or fields:
-            raise ValueError("body_file несовместим с data, json_body и multipart")
+            raise ValueError("body_file cannot be combined with data, json_body or multipart")
         body_file = str(body_file)
     elif files or fields:
         if data is not None or json_body is not None:
-            raise ValueError("multipart несовместим с data и json_body")
+            raise ValueError("multipart cannot be combined with data or json_body")
         multipart, data = _build_multipart(fields, files)
     elif json_body is not None:
         if data is not None:
-            raise ValueError("укажите либо data, либо json_body, не оба")
+            raise ValueError("pass either data or json_body, not both")
         data = encode(json_body)
         hdrs.setdefault("content-type", "application/json")
 
@@ -356,7 +356,7 @@ class Response:
     def raise_for_status(self) -> "Response":
         """Поднимает :class:`HTTPError` при статусе 4xx или 5xx."""
         if not self.ok:
-            raise HTTPError(f"HTTP {self.status} для {self.url}", response=self)
+            raise HTTPError(f"HTTP {self.status} for {self.url}", response=self)
         return self
 
     def header(self, name: str) -> str | None:
@@ -532,7 +532,7 @@ class Session:
         self.hooks: dict[str, list[Callable[..., Any]]] = {"request": [], "response": []}
         for event, fns in (hooks or {}).items():
             if event not in self.hooks:
-                raise ValueError(f"неизвестное событие {event!r}: есть request и response")
+                raise ValueError(f"unknown hook event {event!r}: available events are request and response")
             self.hooks[event].extend(fns)
 
     def request(
@@ -564,7 +564,7 @@ class Session:
         mode: str | None = None,
     ) -> Response:
         if self._closed:
-            raise RuntimeError("сессия закрыта")
+            raise RuntimeError("session is closed")
 
         if proxy is None and self._trust_env:
             # Явный proxy сильнее окружения; False означает «идти напрямую»
@@ -653,7 +653,7 @@ class Session:
         дочитывает остаток: прочитать килобайт и закрыть — дёшево.
         """
         if self._closed:
-            raise RuntimeError("сессия закрыта")
+            raise RuntimeError("session is closed")
 
         meta, body = _request_meta(
             method, url, headers=headers, data=data, json_body=json_body,
@@ -686,7 +686,7 @@ class Session:
         (ноль — 64 МиБ). Соединение держится до закрытия — используйте ``with``.
         """
         if self._closed:
-            raise RuntimeError("сессия закрыта")
+            raise RuntimeError("session is closed")
         return ws_connect(self._id, url, headers=headers, subprotocols=subprotocols,
                           timeout=timeout, max_message_size=max_message_size)
 

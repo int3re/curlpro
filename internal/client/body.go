@@ -16,19 +16,19 @@ import (
 func requestBody(r *Request) (io.Reader, int64, error) {
 	switch {
 	case r.BodyFile != "" && len(r.Body) > 0:
-		return nil, 0, fmt.Errorf("заданы одновременно Body и BodyFile")
+		return nil, 0, fmt.Errorf("request has both Body and BodyFile set: pass exactly one")
 
 	case r.BodyFile != "":
 		f, err := os.Open(r.BodyFile)
 		if err != nil {
-			return nil, 0, fmt.Errorf("тело запроса: %w", err)
+			return nil, 0, fmt.Errorf("request body: %w", err)
 		}
 		size := r.BodySize
 		if size <= 0 {
 			st, err := f.Stat()
 			if err != nil {
 				f.Close()
-				return nil, 0, fmt.Errorf("тело запроса: %w", err)
+				return nil, 0, fmt.Errorf("request body: %w", err)
 			}
 			size = st.Size()
 		}

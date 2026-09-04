@@ -64,22 +64,22 @@ func TestResolveErrors(t *testing.T) {
 				`{"name":"a","based_on":"b","tls":{},"http2":{},"headers":{}}`,
 				`{"name":"b","based_on":"a","tls":{},"http2":{},"headers":{}}`,
 			},
-			resolve: "a", want: "цикл",
+			resolve: "a", want: "based_on cycle",
 		},
 		{
 			name:    "обрыв цепочки",
 			profs:   []string{`{"name":"a","based_on":"missing","tls":{},"http2":{},"headers":{}}`},
-			resolve: "a", want: "несуществующий based_on",
+			resolve: "a", want: "missing based_on",
 		},
 		{
 			name:    "профиль не найден",
 			profs:   nil,
-			resolve: "nope", want: "не найден",
+			resolve: "nope", want: "not found",
 		},
 		{
 			name:    "нет источника ClientHello",
 			profs:   []string{`{"name":"a","tls":{},"http2":{},"headers":{}}`},
-			resolve: "a", want: "не задан источник ClientHello",
+			resolve: "a", want: "no ClientHello source",
 		},
 	}
 	for _, tc := range cases {

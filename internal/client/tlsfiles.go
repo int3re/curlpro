@@ -27,11 +27,11 @@ func loadRoots(path string) (*x509.CertPool, error) {
 	}
 	pem, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("корневой сертификат: %w", err)
+		return nil, fmt.Errorf("CA certificate: %w", err)
 	}
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(pem) {
-		return nil, fmt.Errorf("в %s нет ни одного сертификата PEM", path)
+		return nil, fmt.Errorf("%s holds no PEM certificate", path)
 	}
 	return pool, nil
 }
@@ -42,11 +42,11 @@ func loadClientCert(certPath, keyPath string) ([]utls.Certificate, error) {
 		return nil, nil
 	}
 	if certPath == "" || keyPath == "" {
-		return nil, fmt.Errorf("для mTLS нужны оба файла: сертификат и ключ")
+		return nil, fmt.Errorf("mTLS needs both files: the client certificate and its key")
 	}
 	cert, err := utls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
-		return nil, fmt.Errorf("клиентский сертификат: %w", err)
+		return nil, fmt.Errorf("client certificate: %w", err)
 	}
 	return []utls.Certificate{cert}, nil
 }

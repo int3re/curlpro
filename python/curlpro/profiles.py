@@ -78,7 +78,7 @@ class Profile:
 
     def __init__(self, data: dict[str, Any]):
         if not isinstance(data, dict):
-            raise TypeError("профиль — словарь с полями JSON")
+            raise TypeError("a profile is a dict of JSON fields")
         self.data = data
 
     @classmethod
@@ -101,7 +101,7 @@ class Profile:
         про перемешивание расширений.
         """
         if not self.name:
-            raise ValueError("у профиля-предка нет имени: дельта не на что опереться")
+            raise ValueError("the parent profile has no name, so a delta has nothing to build on")
         data: dict[str, Any] = {"name": name, "based_on": self.name}
         data.update(overrides)
         return Profile(data)
@@ -117,5 +117,5 @@ class Profile:
         )
 
     def __repr__(self) -> str:
-        base = f" на основе {self.based_on}" if self.based_on else ""
-        return f"<Profile {self.name or 'без имени'}{base}>"
+        base = f" based on {self.based_on}" if self.based_on else ""
+        return f"<Profile {self.name or 'unnamed'}{base}>"

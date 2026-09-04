@@ -69,7 +69,7 @@ func (s *Session) http3() (*h3.Transport, error) {
 
 func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports) (*h3.Transport, error) {
 	if !p.HTTP3.Enabled() {
-		return nil, fmt.Errorf("профиль %q не описывает HTTP/3", p.Name)
+		return nil, fmt.Errorf("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
 
 	// Настройки 0x06 и 0x33 задаются не напрямую, а через поля транспорта —
@@ -154,13 +154,13 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports) (*h3
 // ничего, и без подсказки причину искать долго.
 func explainH3Error(err error, profileName string) error {
 	if strings.Contains(err.Error(), "Required Insert Count") {
-		return fmt.Errorf("h3: сервер использовал динамическую таблицу QPACK, "+
-			"которая не поддерживается декодером.\n"+
-			"Профиль %q объявляет ненулевую ёмкость (SETTINGS 0x01), как это делает Chrome, "+
-			"и сервер вправе ей воспользоваться.\n"+
-			"Обход: профиль-дельта с \"http3\": {\"settings\": [{\"id\": 1, \"value\": 0}]} — "+
-			"ценой расхождения отпечатка в первом же поле SETTINGS.\n"+
-			"Исходная ошибка: %w", profileName, err)
+		return fmt.Errorf("h3: the server used the QPACK dynamic table, which this decoder "+
+			"does not support.\n"+
+			"Profile %q advertises a non-zero capacity (SETTINGS 0x01) exactly as Chrome does, "+
+			"so the server is entitled to use it.\n"+
+			"Workaround: a delta profile with \"http3\": {\"settings\": [{\"id\": 1, \"value\": 0}]} — "+
+			"at the cost of a fingerprint mismatch in the very first SETTINGS field.\n"+
+			"Underlying error: %w", profileName, err)
 	}
 	return fmt.Errorf("h3: %w", err)
 }
@@ -174,7 +174,7 @@ func quicSpec(p *profile.Profile) (*quic.QUICSpec, error) {
 	}
 	spec, err := quic.QUICID2Spec(id)
 	if err != nil {
-		return nil, fmt.Errorf("паррот %q: %w", p.QUIC.Parrot, err)
+		return nil, fmt.Errorf("QUIC parrot %q: %w", p.QUIC.Parrot, err)
 	}
 	if spec.ClientHelloSpec != nil {
 		q := p.QUIC
@@ -231,8 +231,8 @@ func parrotID(name string) (quic.QUICID, error) {
 	case "firefox116":
 		return quic.QUICFirefox_116A, nil
 	default:
-		return quic.QUICID{}, fmt.Errorf("неизвестный паррот QUIC %q "+
-			"(доступны chrome146, chrome115, firefox116)", name)
+		return quic.QUICID{}, fmt.Errorf("unknown QUIC parrot %q "+
+			"(available: chrome146, chrome115, firefox116)", name)
 	}
 }
 

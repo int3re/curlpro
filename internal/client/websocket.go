@@ -98,7 +98,7 @@ type WebSocketOptions struct {
 }
 
 // errWSClosed — соединение закрыто: сервером или вызывающим.
-var errWSClosed = errors.New("соединение закрыто")
+var errWSClosed = errors.New("connection closed")
 
 // DialWebSocket выполняет рукопожатие и возвращает соединение.
 //
@@ -110,14 +110,14 @@ func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocke
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, fmt.Errorf("разбор URL: %w", err)
+		return nil, fmt.Errorf("parsing URL: %w", err)
 	}
 	switch u.Scheme {
 	case "wss":
 		u.Scheme = "https"
 	case "https":
 	default:
-		return nil, fmt.Errorf("поддерживается только wss://, получено %q", u.Scheme)
+		return nil, fmt.Errorf("only wss:// is supported, got scheme %q", u.Scheme)
 	}
 
 	timeout := opts.Timeout
@@ -156,17 +156,17 @@ func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocke
 	resp, err := c.roundTrip(ctx, req)
 	if err != nil {
 		c.close()
-		return nil, fmt.Errorf("рукопожатие: %w", err)
+		return nil, fmt.Errorf("websocket handshake: %w", err)
 	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		resp.Body.Close()
 		c.close()
-		return nil, fmt.Errorf("сервер ответил %s вместо 101", resp.Status)
+		return nil, fmt.Errorf("server answered %s instead of 101 Switching Protocols", resp.Status)
 	}
 	if got, want := resp.Header.Get("Sec-WebSocket-Accept"), acceptKey(key); got != want {
 		resp.Body.Close()
 		c.close()
-		return nil, fmt.Errorf("неверный Sec-WebSocket-Accept: %q, ожидался %q", got, want)
+		return nil, fmt.Errorf("bad Sec-WebSocket-Accept: got %q, want %q", got, want)
 	}
 	deflate, err := parseDeflate(resp.Header.Get("Sec-WebSocket-Extensions"))
 	if err != nil {
@@ -312,7 +312,7 @@ func (s *Session) dialHTTP1(ctx context.Context, u *url.URL) (*conn, error) {
 	}
 	if c.proto != "http/1.1" {
 		c.close()
-		return nil, fmt.Errorf("сервер согласовал %s, а для WebSocket нужен http/1.1", c.proto)
+		return nil, fmt.Errorf("server negotiated %s, but WebSocket needs http/1.1", c.proto)
 	}
 	return c, nil
 }
@@ -320,7 +320,7 @@ func (s *Session) dialHTTP1(ctx context.Context, u *url.URL) (*conn, error) {
 func websocketKey() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("ключ рукопожатия: %w", err)
+		return "", fmt.Errorf("generating handshake key: %w", err)
 	}
 	return base64.StdEncoding.EncodeToString(b[:]), nil
 }
@@ -383,7 +383,7 @@ func parseDeflate(header string) (*permessageDeflate, error) {
 		parts := strings.Split(ext, ";")
 		if strings.TrimSpace(parts[0]) != "permessage-deflate" {
 			return nil, withCode(CodeWSProtocol,
-				fmt.Errorf("сервер согласовал расширение %q, которое не предлагалось", strings.TrimSpace(parts[0])))
+				fmt.Errorf("server negotiated extension %q that was never offered", strings.TrimSpace(parts[0])))
 		}
 		d := &permessageDeflate{clientBits: 15}
 		for _, p := range parts[1:] {
@@ -402,13 +402,13 @@ func parseDeflate(header string) (*permessageDeflate, error) {
 					bits, err := strconv.Atoi(value)
 					if err != nil || bits < 8 || bits > 15 {
 						return nil, withCode(CodeWSProtocol,
-							fmt.Errorf("permessage-deflate: некорректный client_max_window_bits %q", value))
+							fmt.Errorf("permessage-deflate: invalid client_max_window_bits %q", value))
 					}
 					d.clientBits = bits
 				}
 			default:
 				return nil, withCode(CodeWSProtocol,
-					fmt.Errorf("permessage-deflate: неизвестный параметр %q", name))
+					fmt.Errorf("permessage-deflate: unknown parameter %q", name))
 			}
 		}
 		return d, nil
@@ -431,7 +431,7 @@ func (d *permessageDeflate) inflate(compressed []byte, limit int64) ([]byte, err
 		return nil, withCode(CodeWSProtocol, fmt.Errorf("permessage-deflate: %w", err))
 	}
 	if int64(len(out)) > limit {
-		return nil, withCode(CodeWSTooBig, fmt.Errorf("сообщение больше предела %d байт после распаковки", limit))
+		return nil, withCode(CodeWSTooBig, fmt.Errorf("message is larger than the %d byte limit after decompression", limit))
 	}
 	if !d.serverNoContext {
 		d.window = append(d.window, out...)
@@ -500,7 +500,7 @@ func (ws *WebSocket) Send(binary bool, data []byte) error {
 		compressed, err := ws.deflate.compress(data)
 		ws.writeMx.Unlock()
 		if err != nil {
-			return fmt.Errorf("сжатие сообщения: %w", err)
+			return fmt.Errorf("compressing message: %w", err)
 		}
 		return ws.writeFrame(op, compressed, true)
 	}
@@ -547,7 +547,7 @@ func (ws *WebSocket) writeFrame(opcode byte, payload []byte, compressed bool) er
 
 	var mask [4]byte
 	if _, err := rand.Read(mask[:]); err != nil {
-		return fmt.Errorf("маска кадра: %w", err)
+		return fmt.Errorf("generating frame mask: %w", err)
 	}
 	head = append(head, mask[:]...)
 	for i := 0; i < n; i++ {
@@ -555,7 +555,7 @@ func (ws *WebSocket) writeFrame(opcode byte, payload []byte, compressed bool) er
 	}
 
 	if _, err := ws.conn.Write(head); err != nil {
-		return fmt.Errorf("отправка кадра: %w", err)
+		return fmt.Errorf("sending frame: %w", err)
 	}
 	return nil
 }
@@ -599,27 +599,27 @@ func (ws *WebSocket) Recv() (*Message, error) {
 			// вызывающего выходил по нему, не закрыв сокет: соединение жило
 			// до конца процесса.
 			ws.closeWith(fr.payload[:min(len(fr.payload), 2)])
-			return nil, withCode(CodeWSClosed, fmt.Errorf("соединение закрыто сервером: %d %s", code, reason))
+			return nil, withCode(CodeWSClosed, fmt.Errorf("connection closed by server: %d %s", code, reason))
 		case opText, opBinary:
 			if len(buf) > 0 || msgOp != 0 {
-				return nil, ws.fail(CodeWSProtocol, fmt.Errorf("новый кадр данных посреди фрагментированного сообщения"))
+				return nil, ws.fail(CodeWSProtocol, fmt.Errorf("new data frame in the middle of a fragmented message"))
 			}
 			msgOp = fr.opcode
 			compressed = fr.rsv1
 			if compressed && ws.deflate == nil {
-				return nil, ws.fail(CodeWSProtocol, fmt.Errorf("сжатый кадр без согласованного permessage-deflate"))
+				return nil, ws.fail(CodeWSProtocol, fmt.Errorf("compressed frame without negotiated permessage-deflate"))
 			}
 			buf = append(buf, fr.payload...)
 		case opContinuation:
 			if msgOp == 0 {
-				return nil, ws.fail(CodeWSProtocol, fmt.Errorf("продолжение без начала сообщения"))
+				return nil, ws.fail(CodeWSProtocol, fmt.Errorf("continuation frame with no message to continue"))
 			}
 			if fr.rsv1 {
-				return nil, ws.fail(CodeWSProtocol, fmt.Errorf("RSV1 на кадре продолжения"))
+				return nil, ws.fail(CodeWSProtocol, fmt.Errorf("RSV1 set on a continuation frame"))
 			}
 			buf = append(buf, fr.payload...)
 		default:
-			return nil, ws.fail(CodeWSProtocol, fmt.Errorf("неизвестный опкод 0x%X", fr.opcode))
+			return nil, ws.fail(CodeWSProtocol, fmt.Errorf("unknown opcode 0x%X", fr.opcode))
 		}
 
 		if fr.fin {
@@ -657,7 +657,7 @@ type frame struct {
 func (ws *WebSocket) readFrame(have int64) (frame, error) {
 	var head [2]byte
 	if _, err := io.ReadFull(ws.br, head[:]); err != nil {
-		return frame{}, fmt.Errorf("чтение кадра: %w", err)
+		return frame{}, fmt.Errorf("reading frame: %w", err)
 	}
 	fr := frame{
 		fin:    head[0]&0x80 != 0,
@@ -685,7 +685,7 @@ func (ws *WebSocket) readFrame(have int64) (frame, error) {
 	if length > uint64(ws.maxMessage) || have+int64(length) > ws.maxMessage {
 		ws.closeWith(closePayload(1009))
 		return frame{}, withCode(CodeWSTooBig,
-			fmt.Errorf("сообщение больше предела %d байт", ws.maxMessage))
+			fmt.Errorf("message is larger than the %d byte limit", ws.maxMessage))
 	}
 
 	var mask [4]byte
@@ -699,7 +699,7 @@ func (ws *WebSocket) readFrame(have int64) (frame, error) {
 	if length > 0 {
 		fr.payload = make([]byte, length)
 		if _, err := io.ReadFull(ws.br, fr.payload); err != nil {
-			return frame{}, fmt.Errorf("чтение полезной нагрузки: %w", err)
+			return frame{}, fmt.Errorf("reading frame payload: %w", err)
 		}
 		if masked {
 			for i := range fr.payload {

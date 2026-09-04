@@ -33,7 +33,7 @@ class SessionHeaders(MutableMapping[str, str]):
 
     def __setitem__(self, name: str, value: str) -> None:
         if not isinstance(value, str):
-            raise TypeError(f"значение заголовка должно быть строкой, получено {type(value).__name__}")
+            raise TypeError(f"header value must be a string, got {type(value).__name__}")
         data = _call(
             "curlpro_session_set_header",
             self._session_id,
@@ -55,8 +55,8 @@ class SessionHeaders(MutableMapping[str, str]):
         for known in self._names():
             if known.lower() == lowered:
                 raise KeyError(
-                    f"{name}: значения заголовков сессии не читаются обратно, "
-                    "доступны только имена"
+                    f"{name}: session header values cannot be read back, "
+                    "only their names are available"
                 )
         raise KeyError(name)
 

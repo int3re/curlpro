@@ -92,7 +92,7 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.dead.Load() {
-		return nil, fmt.Errorf("соединение закрыто")
+		return nil, fmt.Errorf("connection is closed")
 	}
 
 	// В HTTP/1.1 запросы по соединению последовательны, поэтому предел
@@ -104,12 +104,12 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 
 	if err := req.Write(c.raw); err != nil {
 		c.dead.Store(true)
-		return nil, fmt.Errorf("отправка запроса: %w", err)
+		return nil, fmt.Errorf("sending request: %w", err)
 	}
 	resp, err := http.ReadResponse(c.br, req)
 	if err != nil {
 		c.dead.Store(true)
-		return nil, fmt.Errorf("чтение ответа: %w", err)
+		return nil, fmt.Errorf("reading response: %w", err)
 	}
 	// Close: true в ответе означает, что сервер закроет соединение
 	// и переиспользовать его нельзя.

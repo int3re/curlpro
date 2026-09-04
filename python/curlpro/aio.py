@@ -81,9 +81,9 @@ class AsyncStreamResponse:
     async def read_chunk(self, size: int = DEFAULT_CHUNK) -> bytes:
         """Читает одну часть. Пустой результат означает конец тела."""
         if self._closed:
-            raise RuntimeError("поток закрыт")
+            raise RuntimeError("stream is closed")
         if size <= 0:
-            raise ValueError("размер части должен быть положительным")
+            raise ValueError("chunk size must be positive")
         started = _call("curlpro_stream_read_start", self._id, size)
         _meta, data = await settle(started)
         return data
@@ -120,7 +120,7 @@ class AsyncStreamResponse:
         await loop.run_in_executor(None, _call, "curlpro_stream_close", self._id)
 
     def __repr__(self) -> str:
-        return f"<AsyncStreamResponse {self.status} {self.proto} поток {self._id}>"
+        return f"<AsyncStreamResponse {self.status} {self.proto} stream {self._id}>"
 
 
 class AsyncWebSocket:
@@ -180,10 +180,10 @@ class AsyncWebSocket:
 
     def _check(self) -> None:
         if self._closed:
-            raise RuntimeError("сокет закрыт")
+            raise RuntimeError("socket is closed")
 
     def __repr__(self) -> str:
-        state = "закрыт" if self._closed else "открыт"
+        state = "closed" if self._closed else "open"
         return f"<AsyncWebSocket {self._id} {state}>"
 
 
@@ -228,7 +228,7 @@ class AsyncSession:
 
     async def request(self, method: str, url: str, **kw: Any) -> Response:
         if self._session._closed:
-            raise RuntimeError("сессия закрыта")
+            raise RuntimeError("session is closed")
 
         if kw.get("proxy") is None and self._session._trust_env:
             kw["proxy"] = env_proxy(url)
@@ -307,7 +307,7 @@ class AsyncSession:
 
     async def _open_stream(self, method: str, url: str, **kw: Any) -> AsyncStreamResponse:
         if self._session._closed:
-            raise RuntimeError("сессия закрыта")
+            raise RuntimeError("session is closed")
         if kw.get("proxy") is None and self._session._trust_env:
             kw["proxy"] = env_proxy(url)
         meta, body = _request_meta(method, url, **kw)
@@ -332,7 +332,7 @@ class AsyncSession:
         max_message_size: int,
     ) -> AsyncWebSocket:
         if self._session._closed:
-            raise RuntimeError("сессия закрыта")
+            raise RuntimeError("session is closed")
         connect_timeout, total = _split_timeout(timeout)
         started = _call(
             "curlpro_ws_connect_start",

@@ -335,21 +335,21 @@ func (r *Request) validate() error {
 		return nil
 	}
 	if r.Timeout != nil && *r.Timeout <= 0 {
-		return fmt.Errorf("timeout должен быть положительным, получено %s "+
-			"(чтобы не ограничивать, не задавайте его вовсе)", *r.Timeout)
+		return fmt.Errorf("timeout must be positive, got %s "+
+			"(leave it unset for no limit)", *r.Timeout)
 	}
 	if r.ConnectTimeout != nil && *r.ConnectTimeout <= 0 {
-		return fmt.Errorf("connect timeout должен быть положительным, получено %s "+
-			"(чтобы не ограничивать, не задавайте его вовсе)", *r.ConnectTimeout)
+		return fmt.Errorf("connect timeout must be positive, got %s "+
+			"(leave it unset for no limit)", *r.ConnectTimeout)
 	}
 	switch r.Protocol {
 	case "", ProtoHTTP1, ProtoH2, ProtoH3:
 	default:
-		return fmt.Errorf("protocol %q: допустимы %q, %q и %q",
+		return fmt.Errorf("unknown protocol %q: use %q, %q or %q",
 			r.Protocol, ProtoHTTP1, ProtoH2, ProtoH3)
 	}
 	if r.MaxRedirects != nil && *r.MaxRedirects < 0 {
-		return fmt.Errorf("max_redirects не может быть отрицательным, получено %d",
+		return fmt.Errorf("max_redirects cannot be negative, got %d",
 			*r.MaxRedirects)
 	}
 	return nil
@@ -429,13 +429,13 @@ type Session struct {
 // всплыла при создании, а не на первом запросе.
 func New(p *profile.Profile, opts Options) (*Session, error) {
 	if p == nil {
-		return nil, fmt.Errorf("профиль не задан")
+		return nil, fmt.Errorf("no profile given: a session needs one to build its fingerprint")
 	}
 	if _, err := profile.BuildSpec(p); err != nil {
 		return nil, err
 	}
 	if opts.Timeout < 0 {
-		return nil, fmt.Errorf("timeout не может быть отрицательным, получено %s", opts.Timeout)
+		return nil, fmt.Errorf("timeout cannot be negative, got %s", opts.Timeout)
 	}
 	if opts.Timeout == 0 {
 		opts.Timeout = 30 * time.Second
@@ -501,14 +501,14 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	// Отсутствие секции http3 в профиле должно вскрываться при создании сессии,
 	// а не на первом запросе.
 	if opts.HTTP3 && !p.HTTP3.Enabled() {
-		return nil, fmt.Errorf("профиль %q не описывает HTTP/3", p.Name)
+		return nil, fmt.Errorf("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
 	// Прокси для QUIC не реализован. Молча пойти напрямую нельзя: это раскрыло
 	// бы реальный адрес, ради сокрытия которого прокси и задавали.
 	if opts.HTTP3 && opts.Proxy != "" {
-		return nil, fmt.Errorf("прокси для HTTP/3 не поддерживается: QUIC требует " +
-			"CONNECT-UDP (RFC 9298), которого нет ни в одной доступной библиотеке. " +
-			"Уберите http3 или прокси")
+		return nil, fmt.Errorf("HTTP/3 through a proxy is not supported: QUIC needs " +
+			"CONNECT-UDP (RFC 9298), which no available library implements. " +
+			"Drop either http3 or the proxy")
 	}
 	return s, nil
 }
@@ -550,7 +550,7 @@ func (s *Session) ensureOpen() error {
 	return nil
 }
 
-var errSessionClosed = errors.New("сессия закрыта")
+var errSessionClosed = errors.New("session is closed")
 
 // Do выполняет запрос, при необходимости проходя цепочку редиректов,
 // и возвращает тело целиком.
@@ -570,10 +570,10 @@ func (s *Session) Do(r *Request) (*Response, error) {
 	}
 	data, err := io.ReadAll(reader)
 	if err != nil {
-		return nil, fmt.Errorf("чтение ответа: %w", err)
+		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 	if limit := s.opts.MaxResponseSize; limit > 0 && int64(len(data)) > limit {
-		return nil, fmt.Errorf("тело ответа больше предела %d байт", limit)
+		return nil, fmt.Errorf("response body is larger than the max_response_size limit of %d bytes", limit)
 	}
 	return &Response{
 		History: stream.History,
@@ -600,7 +600,7 @@ func (s *Session) prepare(r *Request) (Request, error) {
 		return out, nil
 	}
 	if len(out.Body) > 0 {
-		return out, fmt.Errorf("заданы одновременно Body и Multipart")
+		return out, fmt.Errorf("request has both Body and Multipart set: pass exactly one")
 	}
 	body, contentType, err := encodeMultipart(out.Multipart, s.profile.FormBoundaryStyle())
 	if err != nil {
@@ -624,10 +624,10 @@ func (s *Session) prepare(r *Request) (Request, error) {
 func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.CancelFunc, *conn, error) {
 	u, err := url.Parse(r.URL)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("разбор URL: %w", err)
+		return nil, nil, nil, fmt.Errorf("parsing URL: %w", err)
 	}
 	if u.Scheme != "https" {
-		return nil, nil, nil, fmt.Errorf("поддерживается только https, получено %q", u.Scheme)
+		return nil, nil, nil, fmt.Errorf("only https is supported, got scheme %q", u.Scheme)
 	}
 
 	method := r.Method
@@ -697,12 +697,12 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		// только здесь: до него профиль мог и не понадобиться.
 		if !s.profile.HTTP3.Enabled() {
 			return fail(&fatalError{fmt.Errorf(
-				"protocol=%s: профиль %q не описывает секцию http3",
+				"protocol=%s: profile %q has no http3 section",
 				ProtoH3, s.profile.Name)})
 		}
 		if s.proxyForHost(r, u.Host) != "" {
-			return fail(&fatalError{fmt.Errorf("прокси для HTTP/3 не поддерживается " +
-				"(QUIC требует CONNECT-UDP, RFC 9298)")})
+			return fail(&fatalError{fmt.Errorf("HTTP/3 through a proxy is not supported " +
+				"(QUIC needs CONNECT-UDP, RFC 9298)")})
 		}
 		resp, err := s.sendH3(req.Context(), r, u)
 		if err == nil {
@@ -732,8 +732,8 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if forced == ProtoH2 && c.proto != "h2" {
 		s.release(c)
 		return fail(&fatalError{fmt.Errorf(
-			"protocol=%s: сервер согласовал %s. Список ALPN при этом не урезается: "+
-				"набора из одного h2 не шлёт ни один браузер", ProtoH2, c.proto)})
+			"protocol=%s: server negotiated %s. The ALPN list is left intact on purpose: "+
+				"no browser offers h2 alone", ProtoH2, c.proto)})
 	}
 	// Заголовки собираются после выбора соединения: порядок и регистр
 	// HTTP/1.1 зависят от того, что согласовал сервер, а не от опции.
@@ -745,7 +745,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		// закрытие оборвало бы потоки соседних запросов.
 		s.release(c)
 		s.evict(c, c.h2 == nil)
-		err = fmt.Errorf("запрос: %w", err)
+		err = fmt.Errorf("request failed: %w", err)
 		if c.h2 != nil && h2Unprocessed(err) {
 			return fail(&unprocessedError{err})
 		}
@@ -789,7 +789,7 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 	if ds.forceHTTP1 {
 		if !setALPN(spec, []string{"http/1.1"}) {
 			raw.Close()
-			return nil, fmt.Errorf("force_http1: в профиле %q нет расширения ALPN", s.profile.Name)
+			return nil, fmt.Errorf("force_http1: profile %q has no ALPN extension to restrict", s.profile.Name)
 		}
 	}
 
@@ -834,7 +834,7 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 		return newH1Conn(uconn, ds), nil
 	default:
 		uconn.Close()
-		return nil, fmt.Errorf("сервер согласовал %q — протокол не поддерживается", proto)
+		return nil, fmt.Errorf("server negotiated %q, which is not supported", proto)
 	}
 }
 

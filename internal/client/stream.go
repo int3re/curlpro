@@ -54,7 +54,7 @@ type Stream struct {
 // Read читает очередную часть тела.
 func (s *Stream) Read(p []byte) (int, error) {
 	if s.closed.Load() {
-		return 0, fmt.Errorf("поток закрыт")
+		return 0, fmt.Errorf("stream is closed")
 	}
 	return s.body.Read(p)
 }
@@ -149,7 +149,7 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 			if outcome.stream != nil {
 				return outcome.stream, nil
 			}
-			return nil, fmt.Errorf("%w (повтор не укладывается в таймаут %s)", err, limit)
+			return nil, fmt.Errorf("%w (no time left for another attempt within the %s timeout)", err, limit)
 		}
 		// Сон прерывается дедлайном: иначе на исходе бюджета клиент
 		// просыпается уже за пределом и всё равно бьёт сервер.
@@ -159,7 +159,7 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 			if outcome.stream != nil {
 				return outcome.stream, nil
 			}
-			return nil, fmt.Errorf("таймаут запроса (%s)", limit)
+			return nil, fmt.Errorf("request timed out after %s", limit)
 		}
 		// Удержанный ответ наружу не уйдёт — его сменит следующая попытка.
 		// Раньше он просто терялся вместе с телом, занятостью соединения
@@ -221,7 +221,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 
 	for hop := 0; ; hop++ {
 		if time.Now().After(deadline) {
-			return nil, attemptOutcome{}, fmt.Errorf("таймаут запроса (%s)", limit)
+			return nil, attemptOutcome{}, fmt.Errorf("request timed out after %s", limit)
 		}
 
 		resp, cancel, used, err := s.send(&current, deadline)
@@ -249,7 +249,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 				sess:    s,
 			}
 			return nil, attemptOutcome{retryable: true, header: resp, stream: held},
-				fmt.Errorf("сервер ответил %s", resp.Status)
+				fmt.Errorf("server returned %s", resp.Status)
 		}
 
 		next := ""
@@ -300,7 +300,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 		s.release(used)
 
 		if hop >= maxHops {
-			return nil, attemptOutcome{}, fmt.Errorf("превышен предел редиректов (%d)", maxHops)
+			return nil, attemptOutcome{}, fmt.Errorf("too many redirects (limit %d)", maxHops)
 		}
 		current = s.nextRequest(&current, next, resp.StatusCode, initiator)
 	}

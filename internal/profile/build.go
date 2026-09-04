@@ -79,7 +79,7 @@ func buildExtensions(exts []Extension) ([]utls.TLSExtension, error) {
 	for i, e := range exts {
 		ext, err := buildExtension(e)
 		if err != nil {
-			return nil, fmt.Errorf("расширение #%d (%s): %w", i, e.Type, err)
+			return nil, fmt.Errorf("extension #%d (%s): %w", i, e.Type, err)
 		}
 		out = append(out, ext)
 	}
@@ -205,8 +205,8 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 	case "trust_anchors":
 		// Список берётся из tls.trust_anchors: он общий и для сырого
 		// ClientHello, где расширение приходит байтами.
-		return nil, fmt.Errorf("trust_anchors задаётся полем tls.trust_anchors, " +
-			"а не элементом списка расширений")
+		return nil, fmt.Errorf("trust_anchors is set through the tls.trust_anchors field, " +
+			"not as an entry in the extension list")
 
 	case "pre_shared_key":
 		// Только для профилей возобновления сессии. Fake-вариант не пытается
@@ -214,7 +214,7 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 		return &utls.FakePreSharedKeyExtension{}, nil
 
 	default:
-		return nil, fmt.Errorf("неизвестный тип расширения %q — добавьте его в buildExtension", e.Type)
+		return nil, fmt.Errorf("unknown extension type %q: add it to buildExtension", e.Type)
 	}
 }
 
@@ -252,5 +252,5 @@ func toSigSchemes(in []uint16) []utls.SignatureScheme {
 }
 
 func errMissing(field string) error {
-	return fmt.Errorf("не заполнено поле %q", field)
+	return fmt.Errorf("required field %q is empty", field)
 }

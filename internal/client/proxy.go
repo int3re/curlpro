@@ -37,7 +37,7 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, er
 
 	pu, err := url.Parse(proxy)
 	if err != nil {
-		return nil, fmt.Errorf("разбор адреса прокси: %w", err)
+		return nil, fmt.Errorf("parsing proxy address: %w", err)
 	}
 
 	switch strings.ToLower(pu.Scheme) {
@@ -46,7 +46,7 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, er
 	case "http", "https", "":
 		return dialHTTPProxy(ctx, d, pu, addr, s.profile.Headers.UserAgent)
 	default:
-		return nil, fmt.Errorf("схема прокси %q не поддерживается (нужна http, https или socks5)", pu.Scheme)
+		return nil, fmt.Errorf("unsupported proxy scheme %q (use http, https or socks5)", pu.Scheme)
 	}
 }
 
@@ -155,13 +155,13 @@ func dialProxyConn(ctx context.Context, d *net.Dialer, pu *url.URL) (net.Conn, e
 	}
 	conn, err := d.DialContext(ctx, "tcp", host)
 	if err != nil {
-		return nil, fmt.Errorf("соединение с прокси: %w", err)
+		return nil, fmt.Errorf("connecting to proxy: %w", err)
 	}
 	if strings.EqualFold(pu.Scheme, "https") {
 		tconn := tls.Client(conn, &tls.Config{ServerName: pu.Hostname()})
 		if err := tconn.HandshakeContext(ctx); err != nil {
 			conn.Close()
-			return nil, fmt.Errorf("TLS до прокси: %w", err)
+			return nil, fmt.Errorf("TLS handshake with proxy: %w", err)
 		}
 		conn = tconn
 	}
@@ -179,9 +179,9 @@ type needAuthError struct {
 
 func (e needAuthError) Error() string {
 	if e.scheme != "" {
-		return "прокси требует авторизацию (" + e.scheme + ")"
+		return "proxy requires authentication (" + e.scheme + ")"
 	}
-	return "прокси требует авторизацию"
+	return "proxy requires authentication"
 }
 
 func defaultProxyPort(scheme string) string {
@@ -227,7 +227,7 @@ func connectProxy(conn net.Conn, pu *url.URL, target, userAgent string, withAuth
 	br := bufio.NewReader(conn)
 	resp, err := http.ReadResponse(br, req)
 	if err != nil {
-		return fmt.Errorf("ответ прокси: %w", err)
+		return fmt.Errorf("reading proxy response: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusProxyAuthRequired && !withAuth {
@@ -241,12 +241,12 @@ func connectProxy(conn net.Conn, pu *url.URL, target, userAgent string, withAuth
 		}
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("прокси вернул %s", resp.Status)
+		return fmt.Errorf("proxy refused CONNECT with %s", resp.Status)
 	}
 	// Прокси не должен слать тело до CONNECT-ответа; если в буфере что-то
 	// осталось, дальнейший TLS-разбор пойдёт по мусору.
 	if br.Buffered() > 0 {
-		return fmt.Errorf("прокси прислал %d лишних байт после CONNECT", br.Buffered())
+		return fmt.Errorf("proxy sent %d unexpected bytes after CONNECT", br.Buffered())
 	}
 	return nil
 }

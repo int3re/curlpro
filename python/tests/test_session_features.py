@@ -150,7 +150,7 @@ def test_timeout_covers_whole_redirect_chain(srv):
 
 def test_zero_timeout_rejected(srv):
     with session() as s:
-        with pytest.raises(curlpro.CurlProError, match="положительным"):
+        with pytest.raises(curlpro.CurlProError, match="must be positive"):
             s.get(srv.url("/ok"), timeout=0)
 
 
@@ -215,7 +215,7 @@ def test_proxy_can_be_overridden_per_request(srv):
 
 def test_proxy_true_rejected():
     with session() as s:
-        with pytest.raises(ValueError, match="бессмысленно"):
+        with pytest.raises(ValueError, match="meaningless"):
             s.get("https://example.com", proxy=True)
 
 

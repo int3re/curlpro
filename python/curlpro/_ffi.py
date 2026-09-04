@@ -61,7 +61,7 @@ class WebSocketClosed(CurlProError):
 
 def _raise(envelope: dict, name: str) -> None:
     code = envelope.get("code")
-    message = envelope.get("error") or f"{name}: неизвестная ошибка"
+    message = envelope.get("error") or f"{name}: unknown error"
     if code == "ws_closed":
         raise WebSocketClosed(message, code)
     if code == "timeout":
@@ -97,12 +97,12 @@ def _load() -> ctypes.CDLL:
             return ctypes.CDLL(str(path))
         tried.append(str(path))
     raise CurlProError(
-        "нативная библиотека не найдена. Искали:\n  "
+        "native library not found. Looked in:\n  "
         + "\n  ".join(tried)
-        + "\nСоберите её: go build -buildmode=c-shared -o dist/"
+        + "\nBuild it: go build -buildmode=c-shared -o dist/"
         + _library_name()
         + " ./lib\n"
-        + "или укажите путь в переменной окружения CURLPRO_LIBRARY"
+        + "or point CURLPRO_LIBRARY at an existing build"
     )
 
 
@@ -154,8 +154,8 @@ for _name, _args in (
         _fn = getattr(_lib, _name)
     except AttributeError:
         raise CurlProError(
-            f"в библиотеке нет экспорта {_name}: она собрана из старой ревизии.\n"
-            f"Пересоберите: .\\build.ps1 (кладёт в dist/)"
+            f"the library exports no {_name}: it was built from an older revision.\n"
+            f"Rebuild it: .\\build.ps1 (writes to dist/)"
         ) from None
     _fn.argtypes = _args
     # Именно c_void_p, а не c_char_p: ctypes конвертирует c_char_p в bytes
@@ -180,7 +180,7 @@ def stream_read(stream_id: int, size: int) -> bytes:
     buf = ctypes.create_string_buffer(size)
     n = _lib.curlpro_stream_read(stream_id, buf, size)
     if n < 0:
-        raise CurlProError("ошибка чтения потока")
+        raise CurlProError("stream read failed")
     return buf.raw[:n]
 
 
@@ -188,7 +188,7 @@ def _call(name: str, *args: Any) -> Any:
     """Вызывает экспорт, разбирает конверт и освобождает C-строку."""
     ptr = getattr(_lib, name)(*args)
     if not ptr:
-        raise CurlProError(f"{name}: нативная часть вернула NULL")
+        raise CurlProError(f"{name}: the native side returned NULL")
     try:
         raw = ctypes.string_at(ptr).decode("utf-8")
     finally:
@@ -216,14 +216,14 @@ def _check_version() -> None:
     try:
         got = tuple(int(p) for p in raw.split(".")[:2])
     except ValueError:
-        raise CurlProError(f"библиотека вернула нечитаемую версию {raw!r}") from None
+        raise CurlProError(f"the library reported an unreadable version {raw!r}") from None
 
     if got < REQUIRED_VERSION:
         want = ".".join(str(p) for p in REQUIRED_VERSION)
         raise CurlProError(
-            f"библиотека версии {raw} старее требуемой {want}.x — "
-            f"часть опций она молча проигнорирует.\n"
-            f"Пересоберите: .\\build.ps1 (кладёт в dist/)"
+            f"library version {raw} is older than the required {want}.x, "
+            f"so some options would be silently ignored.\n"
+            f"Rebuild it: .\\build.ps1 (writes to dist/)"
         )
 
 
@@ -247,7 +247,7 @@ def _frame(meta: Any, body: bytes = b"") -> bytes:
 
 def _unframe(name: str, raw: bytes) -> tuple[Any, bytes]:
     if len(raw) < _HEADER:
-        raise CurlProError(f"{name}: кадр короче заголовка ({len(raw)} байт)")
+        raise CurlProError(f"{name}: frame is shorter than its header ({len(raw)} bytes)")
     meta_len = int.from_bytes(raw[:_HEADER], "little")
     envelope = json.loads(raw[_HEADER : _HEADER + meta_len])
     if not envelope.get("ok"):
@@ -261,7 +261,7 @@ def call_framed(name: str, *args: Any, body: bytes = b"", meta: Any) -> tuple[An
     out_len = ctypes.c_int(0)
     ptr = getattr(_lib, name)(*args, payload, len(payload), ctypes.byref(out_len))
     if not ptr:
-        raise CurlProError(f"{name}: нативная часть вернула NULL")
+        raise CurlProError(f"{name}: the native side returned NULL")
     try:
         raw = ctypes.string_at(ptr, out_len.value)
     finally:
@@ -284,7 +284,7 @@ def call_framed_out(name: str, *args: Any) -> tuple[Any, bytes]:
     out_len = ctypes.c_int(0)
     ptr = getattr(_lib, name)(*args, ctypes.byref(out_len))
     if not ptr:
-        raise CurlProError(f"{name}: нативная часть вернула NULL")
+        raise CurlProError(f"{name}: the native side returned NULL")
     try:
         raw = ctypes.string_at(ptr, out_len.value)
     finally:

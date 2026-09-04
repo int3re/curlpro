@@ -68,12 +68,12 @@ func encodeRelativeOID(id string) ([]byte, error) {
 	for _, p := range parts {
 		n, err := strconv.ParseUint(p, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("trust_anchors: %q не относительный OID", id)
+			return nil, fmt.Errorf("trust_anchors: %q is not a relative OID", id)
 		}
 		out = append(out, encodeBase128(n)...)
 	}
 	if len(out) == 0 || len(out) > 255 {
-		return nil, fmt.Errorf("trust_anchors: длина записи %q вне диапазона", id)
+		return nil, fmt.Errorf("trust_anchors: entry %q is out of range", id)
 	}
 	return out, nil
 }

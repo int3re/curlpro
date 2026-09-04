@@ -27,12 +27,12 @@ type HeaderField = qpack.HeaderField
 type DecodeFunc = qpack.DecodeFunc
 
 var (
-	errClosed = errors.New("qpack: соединение закрыто")
+	errClosed = errors.New("qpack: connection closed")
 	// ErrDecompression — ошибка разбора; соединение обязано закрыться
 	// с QPACK_DECOMPRESSION_FAILED (RFC 9204, 2.2.3).
-	ErrDecompression = errors.New("qpack: ошибка декомпрессии")
+	ErrDecompression = errors.New("qpack: decompression failed")
 	// ErrEncoderStream — ошибка на потоке кодировщика: QPACK_ENCODER_STREAM_ERROR.
-	ErrEncoderStream = errors.New("qpack: ошибка потока кодировщика")
+	ErrEncoderStream = errors.New("qpack: encoder stream error")
 )
 
 const entryOverhead = 32 // RFC 9204, 3.2.1: размер записи — имя + значение + 32
@@ -141,13 +141,13 @@ func (d *Decoder) readInstruction(br *byteReader) error {
 		var name string
 		if static {
 			if index >= uint64(len(staticTableEntries)) {
-				return fmt.Errorf("%w: статический индекс %d", ErrEncoderStream, index)
+				return fmt.Errorf("%w: static index %d", ErrEncoderStream, index)
 			}
 			name = staticTableEntries[index].Name
 		} else {
 			e, ok := d.relativeLocked(index)
 			if !ok {
-				return fmt.Errorf("%w: относительный индекс %d", ErrEncoderStream, index)
+				return fmt.Errorf("%w: relative index %d", ErrEncoderStream, index)
 			}
 			name = e.name
 		}
@@ -174,7 +174,7 @@ func (d *Decoder) readInstruction(br *byteReader) error {
 		d.mu.Lock()
 		defer d.mu.Unlock()
 		if capacity > d.maxCapacity {
-			return fmt.Errorf("%w: ёмкость %d больше объявленной %d", ErrEncoderStream, capacity, d.maxCapacity)
+			return fmt.Errorf("%w: capacity %d exceeds the advertised %d", ErrEncoderStream, capacity, d.maxCapacity)
 		}
 		d.capacity = capacity
 		d.evictLocked(0)
@@ -189,7 +189,7 @@ func (d *Decoder) readInstruction(br *byteReader) error {
 		defer d.mu.Unlock()
 		e, ok := d.relativeLocked(index)
 		if !ok {
-			return fmt.Errorf("%w: дубликат индекса %d", ErrEncoderStream, index)
+			return fmt.Errorf("%w: duplicate of index %d", ErrEncoderStream, index)
 		}
 		return d.insertLocked(e)
 	}
@@ -214,7 +214,7 @@ func (d *Decoder) relativeLocked(rel uint64) (entry, bool) {
 // insertLocked добавляет запись, вытесняя старые под ёмкость.
 func (d *Decoder) insertLocked(e entry) error {
 	if e.size() > d.capacity {
-		return fmt.Errorf("%w: запись %d байт не помещается в таблицу %d", ErrEncoderStream, e.size(), d.capacity)
+		return fmt.Errorf("%w: a %d byte entry does not fit a table of %d", ErrEncoderStream, e.size(), d.capacity)
 	}
 	d.evictLocked(e.size())
 	d.entries = append(d.entries, e)
@@ -279,7 +279,7 @@ func (d *Decoder) decodeSection(streamID uint64, block []byte) ([]HeaderField, e
 		return nil, err
 	}
 	if len(rest) == 0 {
-		return nil, fmt.Errorf("%w: нет Base", ErrDecompression)
+		return nil, fmt.Errorf("%w: missing Base", ErrDecompression)
 	}
 	sign := rest[0]&0x80 != 0
 	delta, rest, err := readInt(7, rest)
@@ -289,7 +289,7 @@ func (d *Decoder) decodeSection(streamID uint64, block []byte) ([]HeaderField, e
 	var base uint64
 	if sign {
 		if delta+1 > ric {
-			return nil, fmt.Errorf("%w: Base ниже нуля", ErrDecompression)
+			return nil, fmt.Errorf("%w: Base is negative", ErrDecompression)
 		}
 		base = ric - delta - 1
 	} else {
@@ -332,19 +332,19 @@ func (d *Decoder) decodeRequiredInsertCount(block []byte) (uint64, []byte, error
 	d.mu.Unlock()
 	fullRange := 2 * maxEntries
 	if enc > fullRange {
-		return 0, nil, fmt.Errorf("%w: Required Insert Count %d вне диапазона", ErrDecompression, enc)
+		return 0, nil, fmt.Errorf("%w: Required Insert Count %d is out of range", ErrDecompression, enc)
 	}
 	maxValue := total + maxEntries
 	maxWrapped := (maxValue / fullRange) * fullRange
 	ric := maxWrapped + enc - 1
 	if ric > maxValue {
 		if ric <= fullRange {
-			return 0, nil, fmt.Errorf("%w: Required Insert Count %d вне диапазона", ErrDecompression, enc)
+			return 0, nil, fmt.Errorf("%w: Required Insert Count %d is out of range", ErrDecompression, enc)
 		}
 		ric -= fullRange
 	}
 	if ric == 0 {
-		return 0, nil, fmt.Errorf("%w: Required Insert Count равен нулю после декодирования", ErrDecompression)
+		return 0, nil, fmt.Errorf("%w: Required Insert Count decoded to zero", ErrDecompression)
 	}
 	return ric, rest, nil
 }
@@ -436,15 +436,15 @@ func (d *Decoder) absoluteLocked(base, index uint64, postBase bool) (HeaderField
 		abs = base + index
 	} else {
 		if index+1 > base {
-			return HeaderField{}, fmt.Errorf("%w: относительный индекс %d при Base %d", ErrDecompression, index, base)
+			return HeaderField{}, fmt.Errorf("%w: relative index %d with Base %d", ErrDecompression, index, base)
 		}
 		abs = base - 1 - index
 	}
 	if abs >= d.insertCount {
-		return HeaderField{}, fmt.Errorf("%w: ссылка на невставленную запись %d", ErrDecompression, abs)
+		return HeaderField{}, fmt.Errorf("%w: reference to entry %d, which is not inserted yet", ErrDecompression, abs)
 	}
 	if abs < d.dropped {
-		return HeaderField{}, fmt.Errorf("%w: ссылка на вытесненную запись %d", ErrDecompression, abs)
+		return HeaderField{}, fmt.Errorf("%w: reference to entry %d, which has been evicted", ErrDecompression, abs)
 	}
 	e := d.entries[abs-d.dropped]
 	return HeaderField{Name: e.name, Value: e.value}, nil
@@ -452,7 +452,7 @@ func (d *Decoder) absoluteLocked(base, index uint64, postBase bool) (HeaderField
 
 func staticAt(index uint64) (HeaderField, error) {
 	if index >= uint64(len(staticTableEntries)) {
-		return HeaderField{}, fmt.Errorf("%w: статический индекс %d", ErrDecompression, index)
+		return HeaderField{}, fmt.Errorf("%w: static index %d", ErrDecompression, index)
 	}
 	return staticTableEntries[index], nil
 }
@@ -527,7 +527,7 @@ func readInt(n uint, p []byte) (uint64, []byte, error) {
 		}
 		m += 7
 		if m > 62 {
-			return 0, p, errors.New("переполнение целого")
+			return 0, p, errors.New("integer overflow")
 		}
 	}
 }
@@ -600,7 +600,7 @@ func (br *byteReader) readInt(n uint) (uint64, error) {
 		}
 		m += 7
 		if m > 62 {
-			return 0, errors.New("переполнение целого")
+			return 0, errors.New("integer overflow")
 		}
 	}
 }

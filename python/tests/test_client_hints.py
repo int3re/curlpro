@@ -183,7 +183,7 @@ def test_own_device_list_overrides_the_profile():
 
 
 def test_unknown_device_is_an_error():
-    with pytest.raises(curlpro.CurlProError, match="устройство"):
+    with pytest.raises(curlpro.CurlProError, match="device"):
         curlpro.Session("chrome-152-android", device="Nokia 3310")
 
 

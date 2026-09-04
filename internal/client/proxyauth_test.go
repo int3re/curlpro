@@ -168,7 +168,7 @@ func TestConnectWithoutCredentialsReportsChallenge(t *testing.T) {
 	if err == nil {
 		t.Fatal("ожидалась ошибка авторизации")
 	}
-	if !strings.Contains(err.Error(), "авторизацию") {
+	if !strings.Contains(err.Error(), "requires authentication") {
 		t.Errorf("ошибка не называет причину: %v", err)
 	}
 }

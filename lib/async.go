@@ -106,7 +106,7 @@ func curlpro_request_start(id C.longlong, frame *C.char, frameLen C.int) (out *C
 	}
 	var r requestJSON
 	if err := json.Unmarshal(meta, &r); err != nil {
-		return respond(nil, fmt.Errorf("разбор запроса: %w", err))
+		return respond(nil, fmt.Errorf("parsing request: %w", err))
 	}
 	req, err := r.toRequest(body)
 	if err != nil {
@@ -165,10 +165,10 @@ func curlpro_result_take(rid C.longlong, outLen *C.int) *C.char {
 		asyncMu.Unlock()
 
 		if !ok {
-			return respondFrame(nil, nil, fmt.Errorf("запрос %d не найден", int64(rid)))
+			return respondFrame(nil, nil, fmt.Errorf("request %d not found", int64(rid)))
 		}
 		if !call.done {
-			return respondFrame(nil, nil, fmt.Errorf("запрос %d ещё не завершён", int64(rid)))
+			return respondFrame(nil, nil, fmt.Errorf("request %d has not finished yet", int64(rid)))
 		}
 		return frameBytes(call.frame)
 	})
@@ -248,7 +248,7 @@ func buildFrame(data any, body []byte, err error) []byte {
 		if data != nil {
 			enc, mErr := json.Marshal(data)
 			if mErr != nil {
-				r.OK, r.Error, body = false, "сериализация ответа: "+mErr.Error(), nil
+				r.OK, r.Error, body = false, "encoding response: "+mErr.Error(), nil
 			} else {
 				r.Data = enc
 			}
@@ -256,7 +256,7 @@ func buildFrame(data any, body []byte, err error) []byte {
 	}
 	js, mErr := json.Marshal(r)
 	if mErr != nil {
-		js, _ = json.Marshal(result{Error: "сериализация: " + mErr.Error()})
+		js, _ = json.Marshal(result{Error: "encoding: " + mErr.Error()})
 		body = nil
 	}
 	out := make([]byte, frameHeaderLen+len(js)+len(body))

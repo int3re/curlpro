@@ -66,7 +66,7 @@ func respond(data any, err error) *C.char {
 		if data != nil {
 			enc, mErr := json.Marshal(data)
 			if mErr != nil {
-				r.OK, r.Error = false, "сериализация ответа: "+mErr.Error()
+				r.OK, r.Error = false, "encoding response: "+mErr.Error()
 			} else {
 				r.Data = enc
 			}
@@ -79,7 +79,7 @@ func respond(data any, err error) *C.char {
 // recoverInto превращает панику экспорта в конверт с ошибкой.
 func recoverInto(out **C.char) {
 	if r := recover(); r != nil {
-		*out = respond(nil, fmt.Errorf("внутренняя ошибка библиотеки: %v", r))
+		*out = respond(nil, fmt.Errorf("internal library error: %v", r))
 	}
 }
 
@@ -221,7 +221,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 	defer recoverInto(&out)
 	var c sessionConfig
 	if err := json.Unmarshal([]byte(C.GoString(cfg)), &c); err != nil {
-		return respond(nil, fmt.Errorf("разбор конфигурации: %w", err))
+		return respond(nil, fmt.Errorf("parsing configuration: %w", err))
 	}
 	p, err := registry.Resolve(c.Profile)
 	if err != nil {
@@ -293,7 +293,7 @@ func curlpro_session_set_cookies(id C.longlong, data *C.char) (out *C.char) {
 	}
 	var cs []client.Cookie
 	if err := json.Unmarshal([]byte(C.GoString(data)), &cs); err != nil {
-		return respond(nil, fmt.Errorf("разбор кук: %w", err))
+		return respond(nil, fmt.Errorf("parsing cookies: %w", err))
 	}
 	if err := s.SetCookies(cs); err != nil {
 		return respond(nil, err)
@@ -324,7 +324,7 @@ func curlpro_session_close(id C.longlong) (out *C.char) {
 	delete(sessions, int64(id))
 	sessionsMu.Unlock()
 	if !ok {
-		return respond(nil, fmt.Errorf("сессия %d не найдена", int64(id)))
+		return respond(nil, fmt.Errorf("session %d not found", int64(id)))
 	}
 	s.Close()
 	return respond(nil, nil)
@@ -418,13 +418,13 @@ func splitFiles(m *multipartJSON, blob []byte) (*client.MultipartForm, error) {
 		Files:  make([]client.FormFile, 0, len(m.Files)),
 	}
 	if len(m.Files) != len(m.FileSizes) {
-		return nil, fmt.Errorf("описано %d файлов, но %d длин", len(m.Files), len(m.FileSizes))
+		return nil, fmt.Errorf("multipart describes %d files but %d lengths", len(m.Files), len(m.FileSizes))
 	}
 	offset := 0
 	for i, f := range m.Files {
 		size := m.FileSizes[i]
 		if size < 0 || offset+size > len(blob) {
-			return nil, fmt.Errorf("файл %q выходит за границы данных", f.Filename)
+			return nil, fmt.Errorf("file %q runs past the end of the frame data", f.Filename)
 		}
 		form.Files = append(form.Files, client.FormFile{
 			Field:       f.Field,
@@ -458,7 +458,7 @@ const frameHeaderLen = 4
 func encodeFrame(meta any, body []byte) (*C.char, C.int) {
 	js, err := json.Marshal(meta)
 	if err != nil {
-		js, _ = json.Marshal(result{Error: "сериализация: " + err.Error()})
+		js, _ = json.Marshal(result{Error: "encoding: " + err.Error()})
 	}
 	total := frameHeaderLen + len(js) + len(body)
 
@@ -472,12 +472,12 @@ func encodeFrame(meta any, body []byte) (*C.char, C.int) {
 
 func decodeFrame(p *C.char, n C.int) (meta []byte, body []byte, err error) {
 	if n < frameHeaderLen {
-		return nil, nil, fmt.Errorf("кадр короче заголовка: %d байт", int(n))
+		return nil, nil, fmt.Errorf("frame is shorter than its header: %d bytes", int(n))
 	}
 	raw := C.GoBytes(unsafe.Pointer(p), n)
 	metaLen := int(binary.LittleEndian.Uint32(raw[:frameHeaderLen]))
 	if frameHeaderLen+metaLen > len(raw) {
-		return nil, nil, fmt.Errorf("длина JSON (%d) выходит за кадр (%d)", metaLen, len(raw))
+		return nil, nil, fmt.Errorf("JSON length (%d) runs past the frame (%d)", metaLen, len(raw))
 	}
 	return raw[frameHeaderLen : frameHeaderLen+metaLen], raw[frameHeaderLen+metaLen:], nil
 }
@@ -494,7 +494,7 @@ func respondFrame(data any, body []byte, err error) (*C.char, C.int) {
 	if data != nil {
 		enc, mErr := json.Marshal(data)
 		if mErr != nil {
-			r.OK, r.Error = false, "сериализация ответа: "+mErr.Error()
+			r.OK, r.Error = false, "encoding response: "+mErr.Error()
 			return encodeFrame(r, nil)
 		}
 		r.Data = enc
@@ -508,7 +508,7 @@ func framed(outLen *C.int, f func() (*C.char, C.int)) (out *C.char) {
 	var n C.int
 	defer func() {
 		if r := recover(); r != nil {
-			out, n = respondFrame(nil, nil, fmt.Errorf("внутренняя ошибка библиотеки: %v", r))
+			out, n = respondFrame(nil, nil, fmt.Errorf("internal library error: %v", r))
 		}
 		if outLen != nil {
 			*outLen = n
@@ -528,7 +528,7 @@ func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int
 		s, ok := sessions[int64(id)]
 		sessionsMu.RUnlock()
 		if !ok {
-			return respondFrame(nil, nil, fmt.Errorf("сессия %d не найдена", int64(id)))
+			return respondFrame(nil, nil, fmt.Errorf("session %d not found", int64(id)))
 		}
 
 		meta, body, err := decodeFrame(frame, frameLen)
@@ -537,7 +537,7 @@ func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int
 		}
 		var r requestJSON
 		if err := json.Unmarshal(meta, &r); err != nil {
-			return respondFrame(nil, nil, fmt.Errorf("разбор запроса: %w", err))
+			return respondFrame(nil, nil, fmt.Errorf("parsing request: %w", err))
 		}
 		req, err := r.toRequest(body)
 		if err != nil {

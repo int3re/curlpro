@@ -44,7 +44,7 @@ func decompress(body io.ReadCloser, encoding string) (io.ReadCloser, error) {
 			codecs = append(codecs, tok)
 		default:
 			body.Close()
-			return nil, fmt.Errorf("неизвестная кодировка ответа %q", encoding)
+			return nil, fmt.Errorf("unsupported content encoding %q", encoding)
 		}
 	}
 	for i := len(codecs) - 1; i >= 0; i-- {
@@ -121,7 +121,7 @@ func openDecoder(codec string, src io.Reader) (io.Reader, io.Closer, error) {
 		return zr, closerFunc(zr.Close), nil
 
 	default:
-		return nil, nil, fmt.Errorf("неизвестная кодировка ответа %q", codec)
+		return nil, nil, fmt.Errorf("unsupported content encoding %q", codec)
 	}
 }
 

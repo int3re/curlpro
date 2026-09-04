@@ -43,7 +43,7 @@ class Cookie(dict):
         return int(self.get("expires", 0) or 0)
 
     def __repr__(self) -> str:
-        return f"<Cookie {self.name}={self.value!r} для {self.domain}{self.path}>"
+        return f"<Cookie {self.name}={self.value!r} for {self.domain}{self.path}>"
 
 
 class Cookies(Mapping[str, str]):
@@ -235,15 +235,15 @@ def parse_netscape(text: str) -> list[dict[str, Any]]:
             parts.append("")
         if len(parts) != 7:
             raise ValueError(
-                f"строка {number}: полей {len(parts)}, а в формате Netscape их семь "
-                f"(домен, поддомены, путь, secure, срок, имя, значение)"
+                f"line {number}: {len(parts)} fields, but the Netscape format has seven "
+                f"(domain, subdomains, path, secure, expiry, name, value)"
             )
         domain, _subdomains, path, secure, expires, name, value = parts
         try:
             # Некоторые расширения пишут срок с дробной частью.
             when = int(float(expires or 0))
         except ValueError:
-            raise ValueError(f"строка {number}: срок {expires!r} — не число") from None
+            raise ValueError(f"line {number}: expiry {expires!r} is not a number") from None
 
         out.append({
             "name": name,

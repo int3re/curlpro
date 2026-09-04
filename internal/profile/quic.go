@@ -79,7 +79,7 @@ func ApplyQUIC(spec *utls.ClientHelloSpec, q *QUICSpec) error {
 	}
 	ext := findQUICParams(spec)
 	if ext == nil {
-		return fmt.Errorf("в спеке нет расширения quic_transport_parameters (57)")
+		return fmt.Errorf("the spec has no quic_transport_parameters extension (57)")
 	}
 
 	out := make(utls.TransportParameters, 0, len(ext.TransportParameters))

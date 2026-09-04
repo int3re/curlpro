@@ -80,7 +80,7 @@ class WebSocket:
 
     def _check(self) -> None:
         if self._closed:
-            raise RuntimeError("сокет закрыт")
+            raise RuntimeError("socket is closed")
 
     def __enter__(self) -> "WebSocket":
         return self
@@ -96,7 +96,7 @@ class WebSocket:
             pass
 
     def __repr__(self) -> str:
-        state = "закрыт" if self._closed else "открыт"
+        state = "closed" if self._closed else "open"
         return f"<WebSocket {self._id} {state}>"
 
 

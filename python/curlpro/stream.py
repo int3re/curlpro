@@ -77,7 +77,7 @@ class StreamResponse:
     def iter_content(self, chunk_size: int = DEFAULT_CHUNK) -> Iterator[bytes]:
         """Отдаёт тело частями до конца."""
         if chunk_size <= 0:
-            raise ValueError("chunk_size должен быть положительным")
+            raise ValueError("chunk_size must be positive")
         while True:
             chunk = stream_read(self._id, chunk_size)
             if not chunk:
@@ -107,4 +107,4 @@ class StreamResponse:
             pass
 
     def __repr__(self) -> str:
-        return f"<StreamResponse {self.status} {self.proto} поток {self._id}>"
+        return f"<StreamResponse {self.status} {self.proto} stream {self._id}>"

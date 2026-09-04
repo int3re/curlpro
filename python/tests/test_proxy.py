@@ -116,6 +116,6 @@ def test_fingerprint_survives_proxy():
 
 
 def test_unknown_proxy_scheme_is_rejected():
-    with pytest.raises(curlpro.CurlProError, match="не поддерживается"):
+    with pytest.raises(curlpro.CurlProError, match="unsupported proxy scheme"):
         with curlpro.Session(proxy="ftp://127.0.0.1:21") as s:
             s.get(TARGET)

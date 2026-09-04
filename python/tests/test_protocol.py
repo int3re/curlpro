@@ -58,7 +58,7 @@ def test_h3_needs_the_profile_section(server):
 def test_h3_through_proxy_is_refused(server):
     """QUIC через CONNECT не ходит; молча пойти напрямую — раскрыть адрес."""
     with curlpro.Session(verify=False, proxy="http://127.0.0.1:9") as s:
-        with pytest.raises(curlpro.CurlProError, match="прокси"):
+        with pytest.raises(curlpro.CurlProError, match="proxy"):
             s.get(server.url, protocol="h3")
 
 

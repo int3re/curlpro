@@ -160,11 +160,11 @@ func (s *Session) Cookies() []Cookie {
 // следующую выгрузку. Домен обязателен: без него непонятно, кому куку слать.
 func (s *Session) SetCookies(cs []Cookie) error {
 	if s.jar == nil {
-		return fmt.Errorf("cookie-jar выключен у этой сессии")
+		return fmt.Errorf("cookie jar is disabled for this session")
 	}
 	for _, c := range cs {
 		if c.Name == "" || c.Domain == "" {
-			return fmt.Errorf("кука без имени или домена: %+v", c)
+			return fmt.Errorf("cookie needs both a name and a domain: %+v", c)
 		}
 		path := c.Path
 		if path == "" {

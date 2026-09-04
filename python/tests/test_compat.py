@@ -200,7 +200,7 @@ def test_own_ca_is_trusted():
 
 
 def test_missing_ca_file_fails_at_session_creation():
-    with pytest.raises(curlpro.CurlProError, match="корневой сертификат"):
+    with pytest.raises(curlpro.CurlProError, match="CA certificate"):
         curlpro.Session(verify="нет-такого-файла.pem")
 
 
@@ -213,7 +213,7 @@ def test_max_response_size():
     with SmallServer() as srv:
         with curlpro.Session(verify=False, force_http1=True,
                              max_response_size=10_000) as s:
-            with pytest.raises(curlpro.CurlProError, match="больше предела"):
+            with pytest.raises(curlpro.CurlProError, match="larger than the max_response_size"):
                 s.get(srv.url("/big"))
 
         with curlpro.Session(verify=False, force_http1=True,

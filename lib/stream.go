@@ -62,7 +62,7 @@ func streamRequest(id C.longlong, frame *C.char, frameLen C.int) (*client.Sessio
 	sess, ok := sessions[int64(id)]
 	sessionsMu.RUnlock()
 	if !ok {
-		return nil, nil, fmt.Errorf("сессия %d не найдена", int64(id))
+		return nil, nil, fmt.Errorf("session %d not found", int64(id))
 	}
 	meta, body, err := decodeFrame(frame, frameLen)
 	if err != nil {
@@ -70,7 +70,7 @@ func streamRequest(id C.longlong, frame *C.char, frameLen C.int) (*client.Sessio
 	}
 	var r requestJSON
 	if err := json.Unmarshal(meta, &r); err != nil {
-		return nil, nil, fmt.Errorf("разбор запроса: %w", err)
+		return nil, nil, fmt.Errorf("parsing request: %w", err)
 	}
 	req, err := r.toRequest(body)
 	if err != nil {
@@ -145,10 +145,10 @@ func curlpro_stream_read_start(sid C.longlong, bufLen C.int) (out *C.char) {
 	st, ok := streams[int64(sid)]
 	streamsMu.RUnlock()
 	if !ok {
-		return respond(nil, fmt.Errorf("поток %d не найден", int64(sid)))
+		return respond(nil, fmt.Errorf("stream %d not found", int64(sid)))
 	}
 	if bufLen <= 0 {
-		return respond(nil, fmt.Errorf("размер буфера должен быть положительным"))
+		return respond(nil, fmt.Errorf("buffer size must be positive"))
 	}
 
 	return startAsync(nil, nil, func(int64) []byte {
@@ -171,7 +171,7 @@ func closeStream(sid int64) error {
 	delete(streams, sid)
 	streamsMu.Unlock()
 	if !ok {
-		return fmt.Errorf("поток %d не найден", sid)
+		return fmt.Errorf("stream %d not found", sid)
 	}
 	if st.cancel != nil {
 		st.cancel()
@@ -213,7 +213,7 @@ func curlpro_stream_read(sid C.longlong, buf *C.char, bufLen C.int) (n C.int) {
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			st.setErr(fmt.Errorf("внутренняя ошибка библиотеки: %v", r))
+			st.setErr(fmt.Errorf("internal library error: %v", r))
 			n = -1
 		}
 	}()

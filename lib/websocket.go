@@ -45,10 +45,10 @@ func wsRequest(id C.longlong, cfg *C.char) (*client.Session, wsConnectJSON, erro
 	sess, ok := sessions[int64(id)]
 	sessionsMu.RUnlock()
 	if !ok {
-		return nil, c, fmt.Errorf("сессия %d не найдена", int64(id))
+		return nil, c, fmt.Errorf("session %d not found", int64(id))
 	}
 	if err := json.Unmarshal([]byte(C.GoString(cfg)), &c); err != nil {
-		return nil, c, fmt.Errorf("разбор конфигурации: %w", err)
+		return nil, c, fmt.Errorf("parsing configuration: %w", err)
 	}
 	return sess, c, nil
 }
@@ -128,7 +128,7 @@ func curlpro_ws_recv_start(sid C.longlong) (out *C.char) {
 	defer recoverInto(&out)
 	ws, ok := lookupSocket(sid)
 	if !ok {
-		return respond(nil, fmt.Errorf("сокет %d не найден", int64(sid)))
+		return respond(nil, fmt.Errorf("socket %d not found", int64(sid)))
 	}
 	return startAsync(nil, nil, func(int64) []byte {
 		msg, err := ws.Recv()
@@ -147,7 +147,7 @@ func curlpro_ws_send_start(sid C.longlong, frame *C.char, frameLen C.int) (out *
 	defer recoverInto(&out)
 	ws, ok := lookupSocket(sid)
 	if !ok {
-		return respond(nil, fmt.Errorf("сокет %d не найден", int64(sid)))
+		return respond(nil, fmt.Errorf("socket %d not found", int64(sid)))
 	}
 	meta, data, err := decodeFrame(frame, frameLen)
 	if err != nil {
@@ -175,7 +175,7 @@ func closeSocket(sid int64, code uint16, reason string) error {
 	delete(sockets, sid)
 	socketsMu.Unlock()
 	if !ok {
-		return fmt.Errorf("сокет %d не найден", sid)
+		return fmt.Errorf("socket %d not found", sid)
 	}
 	return ws.Close(code, reason)
 }
@@ -188,7 +188,7 @@ func curlpro_ws_send(sid C.longlong, frame *C.char, frameLen C.int, outLen *C.in
 	return framed(outLen, func() (*C.char, C.int) {
 		ws, ok := lookupSocket(sid)
 		if !ok {
-			return respondFrame(nil, nil, fmt.Errorf("сокет %d не найден", int64(sid)))
+			return respondFrame(nil, nil, fmt.Errorf("socket %d not found", int64(sid)))
 		}
 		meta, data, err := decodeFrame(frame, frameLen)
 		if err != nil {
@@ -216,7 +216,7 @@ func curlpro_ws_recv(sid C.longlong, outLen *C.int) *C.char {
 	return framed(outLen, func() (*C.char, C.int) {
 		ws, ok := lookupSocket(sid)
 		if !ok {
-			return respondFrame(nil, nil, fmt.Errorf("сокет %d не найден", int64(sid)))
+			return respondFrame(nil, nil, fmt.Errorf("socket %d not found", int64(sid)))
 		}
 		msg, err := ws.Recv()
 		if err != nil {

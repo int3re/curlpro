@@ -111,7 +111,7 @@ def test_hooks_can_be_given_at_construction():
 
 
 def test_unknown_hook_event_is_rejected():
-    with pytest.raises(ValueError, match="request и response"):
+    with pytest.raises(ValueError, match="request and response"):
         curlpro.Session(verify=False, hooks={"before": [print]})
 
 
@@ -137,5 +137,5 @@ def test_profile_saves_to_file(tmp_path):
 
 
 def test_profile_without_name_cannot_be_a_parent():
-    with pytest.raises(ValueError, match="дельта"):
+    with pytest.raises(ValueError, match="delta"):
         curlpro.Profile({"headers": {}}).derive("x")

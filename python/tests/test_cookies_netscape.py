@@ -50,10 +50,10 @@ def test_missing_value_column_is_an_empty_value():
 
 
 def test_broken_line_names_its_number():
-    with pytest.raises(ValueError, match="строка 2"):
+    with pytest.raises(ValueError, match="line 2"):
         parse_netscape(".a.com\tTRUE\t/\tFALSE\t0\tn\tv\nмусор\n")
 
-    with pytest.raises(ValueError, match="срок"):
+    with pytest.raises(ValueError, match="expiry"):
         parse_netscape(".a.com\tTRUE\t/\tFALSE\tзавтра\tn\tv")
 
 
