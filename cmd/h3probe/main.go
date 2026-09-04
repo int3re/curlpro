@@ -1,8 +1,8 @@
-// Command h3probe проверяет отпечаток HTTP/3 профиля против оракула.
+// Command h3probe checks a profile's HTTP/3 fingerprint against an oracle.
 //
-// Оракулов два, и они покрывают разное: quic.browserleaks.com показывает
-// H3-слой и JA4, fp.impersonate.pro — ещё и разобранные transport parameters,
-// то есть QUIC-слой.
+// There are two oracles and they cover different things: quic.browserleaks.com
+// shows the H3 layer and JA4, fp.impersonate.pro also shows parsed transport
+// parameters, that is, the QUIC layer.
 package main
 
 import (
@@ -16,18 +16,18 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// Эталон Chrome 144 с quic.browserleaks.com.
+// The Chrome 144 baseline from quic.browserleaks.com.
 const chromeH3 = "1:65536;6:262144;7:100;51:1;GREASE|GREASE|984832|m,a,s,p"
 
 func main() {
-	dir := flag.String("profiles", "profiles", "каталог профилей")
-	name := flag.String("profile", "chrome-151-windows", "имя профиля")
-	target := flag.String("url", "https://quic.browserleaks.com/fp", "адрес оракула")
-	n := flag.Int("n", 1, "число запросов")
+	dir := flag.String("profiles", "profiles", "profile directory")
+	name := flag.String("profile", "chrome-151-windows", "profile name")
+	target := flag.String("url", "https://quic.browserleaks.com/fp", "oracle address")
+	n := flag.Int("n", 1, "number of requests")
 	flag.Parse()
 
 	if err := run(*dir, *name, *target, *n); err != nil {
-		fmt.Fprintln(os.Stderr, "ошибка:", err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
@@ -42,11 +42,11 @@ func run(dir, name, target string, n int) error {
 		return err
 	}
 	if !p.HTTP3.Enabled() {
-		return fmt.Errorf("профиль %q не описывает HTTP/3", name)
+		return fmt.Errorf("profile %q has no http3 section", name)
 	}
 
-	fmt.Printf("профиль: %s, паррот QUIC: %s\n", p.Name, orDefault(p.QUIC.Parrot, "chrome146"))
-	fmt.Printf("SETTINGS: %v, GREASE-кадр: %v, PRIORITY_UPDATE: %d\n\n",
+	fmt.Printf("profile: %s, QUIC parrot: %s\n", p.Name, orDefault(p.QUIC.Parrot, "chrome146"))
+	fmt.Printf("SETTINGS: %v, GREASE frame: %v, PRIORITY_UPDATE: %d\n\n",
 		p.HTTP3.SettingsOrder, p.HTTP3.SendsGreaseFrame(), p.HTTP3.PriorityParamValue())
 
 	sess, err := client.New(p, client.Options{
@@ -67,7 +67,7 @@ func run(dir, name, target string, n int) error {
 			return err
 		}
 		if resp.Status != 200 {
-			return fmt.Errorf("оракул ответил %d", resp.Status)
+			return fmt.Errorf("the oracle answered %d", resp.Status)
 		}
 
 		var echo struct {
@@ -82,7 +82,7 @@ func run(dir, name, target string, n int) error {
 			} `json:"quic"`
 		}
 		if err := json.Unmarshal(resp.Body, &echo); err != nil {
-			return fmt.Errorf("разбор ответа (%.200s): %w", resp.Body, err)
+			return fmt.Errorf("parsing the reply (%.200s): %w", resp.Body, err)
 		}
 
 		if i == 0 {
@@ -106,13 +106,13 @@ func run(dir, name, target string, n int) error {
 	for text, count := range seen {
 		fmt.Printf("h3_text (x%d): %s\n", count, text)
 		if text == chromeH3 {
-			fmt.Println("СОВПАЛО: отпечаток HTTP/3 идентичен Chrome")
+			fmt.Println("MATCH: the HTTP/3 fingerprint is identical to Chrome")
 		} else {
-			fmt.Printf("РАСХОД с Chrome: %s\n", chromeH3)
+			fmt.Printf("DIVERGED from Chrome: %s\n", chromeH3)
 		}
 	}
 	if len(seen) > 1 {
-		fmt.Printf("ВНИМАНИЕ: отпечаток нестабилен, вариантов %d\n", len(seen))
+		fmt.Printf("WARNING: the fingerprint is unstable, %d variants\n", len(seen))
 	}
 	return nil
 }

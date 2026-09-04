@@ -1,15 +1,15 @@
-// Command quiccapture снимает QUIC Initial живого браузера.
+// Command quiccapture captures the QUIC Initial of a live browser.
 //
-// Паррот uquic задаёт кодом то, чего нет в данных: длины connection ID,
-// номер и длину первого пакета, число Initial-датаграмм, порядок transport
-// parameters. Оракулы отдают это в нормализованном виде (perk), а порядок
-// version_information utls и curl-impersonate описывают противоположно.
-// Снять надо с провода.
+// The uquic parrot fixes in code what the data does not carry: connection ID
+// lengths, the number and size of the first packet, the count of Initial
+// datagrams, the transport parameter order. Oracles report those normalised
+// (perk), and utls and curl-impersonate describe the version_information order
+// in opposite ways. It has to be taken off the wire.
 //
-// Утилита слушает UDP, расшифровывает Initial по RFC 9001 (ключи выводятся
-// из DCID, сервер для этого не нужен), собирает ClientHello из CRYPTO-кадров
-// и печатает transport parameters в порядке провода. Браузер запускается
-// с --origin-to-force-quic-on, чтобы он пошёл по QUIC сразу, без Alt-Svc.
+// The tool listens on UDP, decrypts the Initial per RFC 9001 (the keys derive
+// from the DCID, no server needed), assembles the ClientHello from CRYPTO frames
+// and prints the transport parameters in wire order. The browser is launched
+// with --origin-to-force-quic-on so it goes over QUIC at once, without Alt-Svc.
 package main
 
 import (
@@ -35,21 +35,21 @@ import (
 )
 
 func main() {
-	listen := flag.String("listen", "localhost:4433", "адрес UDP, куда браузер пошлёт Initial")
-	browser := flag.String("browser", "", "путь к браузеру (по умолчанию ищется Chrome)")
-	samples := flag.Int("samples", 3, "сколько соединений снять")
-	timeout := flag.Duration("timeout", 12*time.Second, "сколько ждать один сэмпл")
-	manual := flag.Bool("manual", false, "не запускать браузер: открыть адрес вручную")
-	out := flag.String("json", "", "куда сохранить сырые сэмплы (JSON)")
+	listen := flag.String("listen", "localhost:4433", "UDP address the browser will send its Initial to")
+	browser := flag.String("browser", "", "path to the browser (Chrome is looked up by default)")
+	samples := flag.Int("samples", 3, "how many connections to capture")
+	timeout := flag.Duration("timeout", 12*time.Second, "how long to wait for one sample")
+	manual := flag.Bool("manual", false, "do not launch a browser: open the address yourself")
+	out := flag.String("json", "", "where to save the raw samples (JSON)")
 	flag.Parse()
 
 	if err := run(*listen, *browser, *samples, *timeout, *manual, *out); err != nil {
-		fmt.Fprintln(os.Stderr, "ошибка:", err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-// sample — один разобранный Initial-обмен.
+// sample is one parsed Initial exchange.
 type sample struct {
 	Browser        string   `json:"browser"`
 	Version        string   `json:"quic_version"`
@@ -71,9 +71,9 @@ func run(listen, browser string, samples int, timeout time.Duration, manual bool
 	if err != nil {
 		return err
 	}
-	// localhost у браузера может разрешиться и в ::1, и в 127.0.0.1 —
-	// Chrome на Windows предпочитает ::1, а системный резолвер Go отдаёт
-	// не всегда оба адреса. Поэтому loopback слушается явно на обоих.
+	// For a browser localhost may resolve to ::1 as well as to 127.0.0.1 —
+	// Chrome on Windows prefers ::1, and the Go system resolver does not always
+	// return both. So loopback is listened on explicitly on both.
 	var conns []*net.UDPConn
 	var bound []string
 	for _, addr := range resolveAll(host, port) {
@@ -86,14 +86,14 @@ func run(listen, browser string, samples int, timeout time.Duration, manual bool
 		defer c.Close()
 	}
 	if len(conns) == 0 {
-		return fmt.Errorf("не удалось слушать %s", listen)
+		return fmt.Errorf("could not listen on %s", listen)
 	}
-	fmt.Printf("слушаю UDP %s; браузер получит https://%s/\n\n", strings.Join(bound, ", "), listen)
+	fmt.Printf("listening on UDP %s; the browser will get https://%s/\n\n", strings.Join(bound, ", "), listen)
 
 	if !manual && browser == "" {
 		browser = defaultBrowser()
 		if browser == "" {
-			return errors.New("браузер не найден — укажите -browser или -manual")
+			return errors.New("browser not found — pass -browser or -manual")
 		}
 	}
 
@@ -103,14 +103,14 @@ func run(listen, browser string, samples int, timeout time.Duration, manual bool
 		if !manual {
 			stop = launch(browser, listen)
 		} else {
-			fmt.Printf("откройте в браузере https://%s/ (сэмпл %d из %d)\n", listen, i+1, samples)
+			fmt.Printf("open https://%s/ in a browser (sample %d of %d)\n", listen, i+1, samples)
 		}
 		s, err := captureOne(conns, timeout)
 		if stop != nil {
 			stop()
 		}
 		if err != nil {
-			fmt.Printf("сэмпл %d: %v\n", i+1, err)
+			fmt.Printf("sample %d: %v\n", i+1, err)
 			continue
 		}
 		s.Browser = filepath.Base(browser)
@@ -119,7 +119,7 @@ func run(listen, browser string, samples int, timeout time.Duration, manual bool
 		time.Sleep(500 * time.Millisecond)
 	}
 	if len(results) == 0 {
-		return errors.New("ни одного сэмпла")
+		return errors.New("no samples at all")
 	}
 	printSummary(results)
 	if out != "" {
@@ -127,7 +127,7 @@ func run(listen, browser string, samples int, timeout time.Duration, manual bool
 		if err := os.WriteFile(out, data, 0o644); err != nil {
 			return err
 		}
-		fmt.Printf("\nсырые сэмплы: %s\n", out)
+		fmt.Printf("\nraw samples: %s\n", out)
 	}
 	return nil
 }
@@ -166,14 +166,14 @@ func defaultBrowser() string {
 	return ""
 }
 
-// launch запускает браузер в свежем профиле и возвращает функцию остановки.
+// launch starts the browser in a fresh profile and returns a stop function.
 func launch(browser, origin string) func() {
 	dir, err := os.MkdirTemp("", "curlpro-quic-")
 	if err != nil {
 		return func() {}
 	}
-	// headless: слой QUIC у безголового Chrome тот же, а окно с ошибкой
-	// сертификата (рукопожатие никто не завершает) только мешает.
+	// headless: the QUIC layer of headless Chrome is the same, and a window with a
+	// certificate error (nobody completes the handshake) only gets in the way.
 	cmd := exec.Command(browser,
 		"--headless=new",
 		"--user-data-dir="+dir,
@@ -184,13 +184,13 @@ func launch(browser, origin string) func() {
 		"https://"+origin+"/",
 	)
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintln(os.Stderr, "запуск браузера:", err)
+		fmt.Fprintln(os.Stderr, "launching the browser:", err)
 		os.RemoveAll(dir)
 		return func() {}
 	}
 	return func() {
-		// Дерево целиком: у браузера отдельный процесс сетевого сервиса,
-		// и без него следующий запуск с новым профилем стартует медленнее.
+		// The whole tree: the browser runs a separate network service process, and
+		// without it the next launch with a new profile starts more slowly.
 		if runtime.GOOS == "windows" {
 			_ = exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprint(cmd.Process.Pid)).Run()
 		}
@@ -201,7 +201,7 @@ func launch(browser, origin string) func() {
 	}
 }
 
-// captureOne читает датаграммы, пока не соберёт ClientHello первого соединения.
+// captureOne reads datagrams until the ClientHello of the first connection is complete.
 func captureOne(conns []*net.UDPConn, timeout time.Duration) (sample, error) {
 	type dgram struct {
 		data []byte
@@ -224,7 +224,7 @@ func captureOne(conns []*net.UDPConn, timeout time.Duration) (sample, error) {
 
 	var s sample
 	var dcid []byte
-	var crypto []frag // CRYPTO-кадры как есть; склейка учитывает наложения
+	var crypto []frag // CRYPTO frames as they are; the join accounts for overlaps
 	seenPN := map[uint64]bool{}
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
@@ -237,7 +237,7 @@ func captureOne(conns []*net.UDPConn, timeout time.Duration) (sample, error) {
 			}
 			counted := false
 			for _, p := range pkts {
-				if p.typ != 0 { // не Initial: 0-RTT и прочее пропускаем
+				if p.typ != 0 { // not an Initial: 0-RTT and the rest are skipped
 					continue
 				}
 				if dcid == nil {
@@ -245,7 +245,7 @@ func captureOne(conns []*net.UDPConn, timeout time.Duration) (sample, error) {
 					s.Version = fmt.Sprintf("0x%08x", p.version)
 					s.DCIDLen, s.SCIDLen, s.TokenLen = len(p.dcid), len(p.scid), len(p.token)
 				} else if string(p.dcid) != string(dcid) {
-					continue // другое соединение (повторная попытка браузера)
+					continue // another connection (a browser retry)
 				}
 				if !counted {
 					s.Datagrams = append(s.Datagrams, len(d.data))
@@ -253,19 +253,19 @@ func captureOne(conns []*net.UDPConn, timeout time.Duration) (sample, error) {
 				}
 				pn, pnLen, frames, err := decryptInitial(p, dcid)
 				if err != nil {
-					s.Frames = append(s.Frames, "ошибка: "+err.Error())
+					s.Frames = append(s.Frames, "error: "+err.Error())
 					continue
 				}
 				if seenPN[pn] {
-					continue // ретрансмиссия
+					continue // a retransmission
 				}
 				seenPN[pn] = true
 				s.PacketNumbers = append(s.PacketNumbers, pn)
 				s.PNLengths = append(s.PNLengths, pnLen)
 				summary, err := walkFrames(frames, &crypto)
-				s.Frames = append(s.Frames, fmt.Sprintf("pn=%d (%d байт, датаграмма %d): %s", pn, len(p.raw), len(d.data), summary))
+				s.Frames = append(s.Frames, fmt.Sprintf("pn=%d (%d bytes, datagram %d): %s", pn, len(p.raw), len(d.data), summary))
 				if err != nil {
-					s.Frames = append(s.Frames, "кадры: "+err.Error())
+					s.Frames = append(s.Frames, "frames: "+err.Error())
 				}
 			}
 			if hello := assemble(crypto); hello != nil {
@@ -278,47 +278,47 @@ func captureOne(conns []*net.UDPConn, timeout time.Duration) (sample, error) {
 			}
 		case <-timer.C:
 			if dcid == nil {
-				return s, errors.New("браузер не прислал ни одного Initial")
+				return s, errors.New("the browser sent no Initial at all")
 			}
-			return s, fmt.Errorf("ClientHello не собрался: получено %d байт CRYPTO", cryptoLen(crypto))
+			return s, fmt.Errorf("the ClientHello did not assemble: %d CRYPTO bytes received", cryptoLen(crypto))
 		}
 	}
 }
 
-// packet — заголовок одного long-header пакета из датаграммы.
+// packet is the header of one long-header packet inside a datagram.
 type packet struct {
 	typ      byte // 0 Initial, 1 0-RTT, 2 Handshake, 3 Retry
 	version  uint32
 	dcid     []byte
 	scid     []byte
 	token    []byte
-	raw      []byte // весь пакет, от первого байта до конца полезной нагрузки
+	raw      []byte // the whole packet, from the first byte to the end of the payload
 	pnOffset int
 }
 
-// splitPackets режет датаграмму на склеенные пакеты.
+// splitPackets cuts a datagram into the packets glued into it.
 func splitPackets(data []byte) ([]packet, error) {
 	var out []packet
 	for len(data) > 0 {
 		if data[0]&0x80 == 0 {
-			break // short header — не наш случай
+			break // short header — not our case
 		}
 		if len(data) < 6 {
-			return out, errors.New("короткий заголовок")
+			return out, errors.New("short header")
 		}
 		p := packet{typ: (data[0] >> 4) & 0x03, version: binary.BigEndian.Uint32(data[1:5])}
 		i := 5
 		dl := int(data[i])
 		i++
 		if i+dl > len(data) {
-			return out, errors.New("DCID за пределами")
+			return out, errors.New("DCID out of bounds")
 		}
 		p.dcid = data[i : i+dl]
 		i += dl
 		sl := int(data[i])
 		i++
 		if i+sl > len(data) {
-			return out, errors.New("SCID за пределами")
+			return out, errors.New("SCID out of bounds")
 		}
 		p.scid = data[i : i+sl]
 		i += sl
@@ -329,7 +329,7 @@ func splitPackets(data []byte) ([]packet, error) {
 			}
 			i += n
 			if i+int(tl) > len(data) {
-				return out, errors.New("token за пределами")
+				return out, errors.New("token out of bounds")
 			}
 			p.token = data[i : i+int(tl)]
 			i += int(tl)
@@ -347,7 +347,7 @@ func splitPackets(data []byte) ([]packet, error) {
 		p.pnOffset = i
 		end := i + int(length)
 		if end > len(data) {
-			return out, errors.New("пакет длиннее датаграммы")
+			return out, errors.New("the packet is longer than the datagram")
 		}
 		p.raw = data[:end]
 		out = append(out, p)
@@ -369,7 +369,7 @@ func mustHex(s string) []byte {
 	return b
 }
 
-// decryptInitial снимает защиту заголовка и расшифровывает полезную нагрузку.
+// decryptInitial removes the header protection and decrypts the payload.
 func decryptInitial(p packet, dcid []byte) (pn uint64, pnLen int, payload []byte, err error) {
 	salt, prefix := saltV1, "quic "
 	if p.version == 0x6b3343cf {
@@ -387,7 +387,7 @@ func decryptInitial(p packet, dcid []byte) (pn uint64, pnLen int, payload []byte
 	raw := append([]byte(nil), p.raw...)
 	sampleAt := p.pnOffset + 4
 	if sampleAt+16 > len(raw) {
-		return 0, 0, nil, errors.New("нет места для sample")
+		return 0, 0, nil, errors.New("no room for the sample")
 	}
 	block, err := aes.NewCipher(hp)
 	if err != nil {
@@ -429,7 +429,7 @@ func mustAES(key []byte) cipher.Block {
 	return b
 }
 
-// expandLabel — HKDF-Expand-Label из TLS 1.3 (RFC 8446, 7.1).
+// expandLabel is HKDF-Expand-Label from TLS 1.3 (RFC 8446, 7.1).
 func expandLabel(secret []byte, label string, length int) []byte {
 	full := "tls13 " + label
 	info := make([]byte, 0, 4+len(full))
@@ -444,9 +444,9 @@ func expandLabel(secret []byte, label string, length int) []byte {
 	return out
 }
 
-// walkFrames разбирает кадры Initial: CRYPTO складывается по смещениям,
-// остальное считается для отчёта.
-// frag — один CRYPTO-кадр.
+// walkFrames parses the Initial frames: CRYPTO is collected by offset, the rest
+// is counted for the report.
+// frag is one CRYPTO frame.
 type frag struct {
 	off  uint64
 	data []byte
@@ -458,7 +458,7 @@ func walkFrames(payload []byte, crypto *[]frag) (string, error) {
 	for len(payload) > 0 {
 		typ, n := readVarint(payload)
 		if n == 0 {
-			return describe(counts, cryptoParts), errors.New("тип кадра")
+			return describe(counts, cryptoParts), errors.New("frame type")
 		}
 		payload = payload[n:]
 		switch {
@@ -495,7 +495,7 @@ func walkFrames(payload []byte, crypto *[]frag) (string, error) {
 			length, n2 := readVarint(payload[n1:])
 			payload = payload[n1+n2:]
 			if int(length) > len(payload) {
-				return describe(counts, cryptoParts), errors.New("CRYPTO за пределами")
+				return describe(counts, cryptoParts), errors.New("CRYPTO out of bounds")
 			}
 			*crypto = append(*crypto, frag{off: off, data: append([]byte(nil), payload[:length]...)})
 			cryptoParts = append(cryptoParts, fmt.Sprintf("CRYPTO[%d+%d]", off, length))
@@ -504,7 +504,7 @@ func walkFrames(payload []byte, crypto *[]frag) (string, error) {
 			counts["CONNECTION_CLOSE"]++
 			payload = nil
 		default:
-			return describe(counts, cryptoParts), fmt.Errorf("неожиданный кадр 0x%x", typ)
+			return describe(counts, cryptoParts), fmt.Errorf("unexpected frame 0x%x", typ)
 		}
 	}
 	return describe(counts, cryptoParts), nil
@@ -531,11 +531,11 @@ func cryptoLen(crypto []frag) int {
 	return n
 }
 
-// assemble склеивает CRYPTO-данные, если они образуют полное сообщение.
+// assemble joins the CRYPTO data when it forms a complete message.
 //
-// Фрагменты кладутся побайтно по смещениям: ретрансмиссия Initial у Chrome
-// режет CRYPTO заново, случайными границами, и куски перекрываются — сборка
-// по началу фрагмента давала сдвинутое сообщение.
+// Fragments are placed byte by byte at their offsets: a Chrome Initial
+// retransmission re-cuts CRYPTO at random boundaries and the pieces overlap —
+// assembling by fragment start produced a shifted message.
 func assemble(crypto []frag) []byte {
 	var buf []byte
 	var have []bool
@@ -560,20 +560,20 @@ func assemble(crypto []frag) []byte {
 	}
 	for i := 0; i < need; i++ {
 		if !have[i] {
-			return nil // дыра: пакет ещё не пришёл
+			return nil // a hole: that packet has not arrived yet
 		}
 	}
 	return buf[:need]
 }
 
-// parseClientHello достаёт шифры, расширения и transport parameters.
+// parseClientHello extracts the ciphers, extensions and transport parameters.
 func parseClientHello(hello []byte, s *sample) error {
 	if hello[0] != 1 {
-		return fmt.Errorf("ожидался ClientHello, тип %d", hello[0])
+		return fmt.Errorf("expected a ClientHello, type %d", hello[0])
 	}
 	b := hello[4:]
 	if len(b) < 34 {
-		return errors.New("короткий ClientHello")
+		return errors.New("short ClientHello")
 	}
 	b = b[34:] // version + random
 	sid := int(b[0])
@@ -590,7 +590,7 @@ func parseClientHello(hello []byte, s *sample) error {
 	extLen := int(binary.BigEndian.Uint16(b))
 	b = b[2:]
 	if extLen > len(b) {
-		return errors.New("расширения за пределами")
+		return errors.New("extensions out of bounds")
 	}
 	b = b[:extLen]
 	for len(b) >= 4 {
@@ -598,7 +598,7 @@ func parseClientHello(hello []byte, s *sample) error {
 		l := int(binary.BigEndian.Uint16(b[2:]))
 		b = b[4:]
 		if l > len(b) {
-			return errors.New("расширение за пределами")
+			return errors.New("extension out of bounds")
 		}
 		data := b[:l]
 		b = b[l:]
@@ -617,7 +617,7 @@ func hexOrGrease(v uint16) string {
 	return fmt.Sprintf("%d", v)
 }
 
-// parseTransportParameters печатает параметры в порядке провода.
+// parseTransportParameters prints the parameters in wire order.
 func parseTransportParameters(b []byte) []string {
 	var out []string
 	for len(b) > 0 {
@@ -639,7 +639,7 @@ func parseTransportParameters(b []byte) []string {
 
 func describeTP(id uint64, val []byte) string {
 	if id >= 27 && (id-27)%31 == 0 {
-		return fmt.Sprintf("GREASE(%d):%d байт", id, len(val))
+		return fmt.Sprintf("GREASE(%d):%d bytes", id, len(val))
 	}
 	switch id {
 	case 0x11:
@@ -660,7 +660,7 @@ func describeTP(id uint64, val []byte) string {
 	case 0x3127:
 		return fmt.Sprintf("12583 google_initial_rtt: %x", val)
 	case 0x0f:
-		return fmt.Sprintf("15 initial_source_connection_id: %d байт", len(val))
+		return fmt.Sprintf("15 initial_source_connection_id: %d bytes", len(val))
 	case 0x20:
 		v, _ := readVarint(val)
 		return fmt.Sprintf("32 max_datagram_frame_size: %d", v)
@@ -701,14 +701,14 @@ func readVarint(b []byte) (uint64, int) {
 }
 
 func printSample(i int, s sample) {
-	fmt.Printf("=== сэмпл %d (%s, QUIC %s) ===\n", i, s.Browser, s.Version)
-	fmt.Printf("датаграммы: %v; DCID %d, SCID %d, token %d байт; номера пакетов %v (длина поля %v)\n",
+	fmt.Printf("=== sample %d (%s, QUIC %s) ===\n", i, s.Browser, s.Version)
+	fmt.Printf("datagrams: %v; DCID %d, SCID %d, token %d bytes; packet numbers %v (field length %v)\n",
 		s.Datagrams, s.DCIDLen, s.SCIDLen, s.TokenLen, s.PacketNumbers, s.PNLengths)
 	for _, f := range s.Frames {
 		fmt.Println("  ", f)
 	}
-	fmt.Printf("шифры: %s\n", strings.Join(s.CipherSuites, " "))
-	fmt.Printf("расширения: %s\n", strings.Join(s.Extensions, " "))
+	fmt.Printf("ciphers: %s\n", strings.Join(s.CipherSuites, " "))
+	fmt.Printf("extensions: %s\n", strings.Join(s.Extensions, " "))
 	fmt.Println("transport parameters:")
 	for _, t := range s.Transport {
 		fmt.Println("  ", t)
@@ -727,6 +727,6 @@ func printSummary(results []sample) {
 		tpOrders[strings.Join(ids, ",")] = true
 		extOrders[strings.Join(s.Extensions, ",")] = true
 	}
-	fmt.Printf("итого: сэмплов %d; различных порядков transport parameters %d; различных порядков расширений %d\n",
+	fmt.Printf("total: %d samples; distinct transport parameter orders %d; distinct extension orders %d\n",
 		len(results), len(tpOrders), len(extOrders))
 }

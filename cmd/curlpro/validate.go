@@ -15,45 +15,45 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// baseline — записанный отпечаток профиля.
+// baseline is a recorded profile fingerprint.
 //
-// Для 23 профилей из 44 в корпусе curl-impersonate нет эталонных хешей,
-// и проверить их против чего-то внешнего невозможно. Тогда работает вторая
-// линия: снятый однажды отпечаток фиксируется, и последующие прогоны ловят
-// регрессии в нашем собственном коде.
+// For 23 of the 44 profiles the curl-impersonate corpus has no reference
+// hashes, and there is nothing external to check them against. Then the second
+// line of defence works: the fingerprint captured once is pinned, and later
+// runs catch regressions in our own code.
 type baseline struct {
 	Profile string `json:"profile"`
 	Oracle  string `json:"oracle"`
 
-	// JA4 — множество допустимых значений, а не одно.
+	// JA4 is a set of allowed values rather than one.
 	//
-	// У профилей с расширением padding отпечаток законно колеблется: BoringSSL
-	// добавляет padding, только когда длина ClientHello попадает в диапазон
-	// 256–511, а тело второго GREASE бывает пустым или в один байт — этого
-	// достаточно, чтобы перейти границу. Chrome ведёт себя так же, поэтому
-	// фиксировать единственное значение было бы ошибкой.
+	// For profiles with the padding extension the fingerprint legitimately
+	// fluctuates: BoringSSL adds padding only when the ClientHello length falls
+	// into the 256-511 range, and the second GREASE payload is either empty or one
+	// byte — enough to cross the boundary. Chrome behaves the same way, so pinning
+	// a single value would be a mistake.
 	JA4 []string `json:"ja4"`
 
-	// JA3N — тоже множество: у профилей с padding колеблется и он. Первый
-	// же прогон в CI это и показал, когда JA4 уже был списком, а JA3N нет.
-	// Старые эталоны со строкой читаются как список из одного значения.
+	// JA3N is a set too: it fluctuates for padding profiles as well. The very
+	// first CI run showed it, back when JA4 was already a list and JA3N was not.
+	// Old baselines holding a string are read as a one-element list.
 	JA3N      stringSet `json:"ja3n,omitempty"`
 	Akamai    string    `json:"akamai,omitempty"`
 	Recorded  string    `json:"recorded"`
 	UserAgent string    `json:"user_agent,omitempty"`
 }
 
-// anyJA4 отключает сверку отпечатка для оракула, который считает его иначе.
+// anyJA4 disables the fingerprint check for an oracle that computes it differently.
 //
-// Стенд fingerproxy включает GREASE из signature_algorithms в хеш JA4, а
-// значение GREASE разыгрывается на каждое соединение — у профилей Chrome 152
-// это даёт шестнадцать законных значений. Публичный оракул считает по
-// спецификации, GREASE игнорирует, и там отпечаток стабилен: сверять эти
-// профили нужно по reference/baselines, а локально — по остальным полям.
+// The fingerproxy stand includes the GREASE from signature_algorithms in the
+// JA4 hash, and the GREASE value is drawn per connection — for Chrome 152
+// profiles that gives sixteen legitimate values. A public oracle follows the
+// specification, ignores GREASE, and its fingerprint is stable: those profiles
+// are checked against reference/baselines, and locally by the other fields.
 const anyJA4 = "*"
 
-// stringSet читается и как строка, и как список: формат эталона менялся,
-// а перезаписывать разом все файлы ради этого незачем.
+// stringSet reads both as a string and as a list: the baseline format changed,
+// and rewriting every file at once for that is not worth it.
 type stringSet []string
 
 func (s *stringSet) UnmarshalJSON(data []byte) error {
@@ -74,8 +74,8 @@ func (s *stringSet) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// newSet заворачивает значение, пропуская пустое: локальный стенд JA3N
-// не отдаёт вовсе, и пустая строка в наборе ломала бы сверку.
+// newSet wraps a value, skipping an empty one: the local stand does not report
+// JA3N at all, and an empty string in the set would break the comparison.
 func newSet(v string) stringSet {
 	if v == "" {
 		return nil
@@ -92,7 +92,7 @@ func (s stringSet) has(v string) bool {
 	return false
 }
 
-// with добавляет значение, сохраняя порядок и не плодя дубликатов.
+// with adds a value, keeping the order and avoiding duplicates.
 func (s stringSet) with(v string) stringSet {
 	if v == "" || s.has(v) {
 		return s
@@ -111,7 +111,7 @@ func (b baseline) allows(ja4 string) bool {
 	return false
 }
 
-// oracleReply покрывает форматы browserleaks и локального echo-server.
+// oracleReply covers the browserleaks format and the local echo-server one.
 type oracleReply struct {
 	JA4        string `json:"ja4"`
 	JA3        string `json:"ja3"`
@@ -125,7 +125,7 @@ func (r oracleReply) ja3n() string {
 	if r.JA3NHash != "" {
 		return r.JA3NHash
 	}
-	return "" // echo-server отдаёт нестабильный ja3, сверять его бессмысленно
+	return "" // the echo-server ja3 is unstable, comparing it is pointless
 }
 
 func (r oracleReply) akamai() string {
@@ -137,19 +137,19 @@ func (r oracleReply) akamai() string {
 
 func runValidate(args []string) error {
 	fs := flag.NewFlagSet("validate", flag.ExitOnError)
-	dir := fs.String("profiles", "profiles", "каталог профилей")
-	refDir := fs.String("baselines", "reference/baselines", "каталог записанных отпечатков")
-	oracle := fs.String("oracle", "https://tls.browserleaks.com/json", "URL оракула")
-	only := fs.String("only", "", "подстрока для отбора профилей")
-	update := fs.Bool("update", false, "записать отпечатки как новый эталон")
-	insecure := fs.Bool("insecure", false, "не проверять сертификат (для локального стенда)")
-	timeout := fs.Duration("timeout", 30*time.Second, "предел на профиль")
-	pause := fs.Duration("pause", 300*time.Millisecond, "пауза между профилями")
+	dir := fs.String("profiles", "profiles", "profile directory")
+	refDir := fs.String("baselines", "reference/baselines", "directory of recorded fingerprints")
+	oracle := fs.String("oracle", "https://tls.browserleaks.com/json", "oracle URL")
+	only := fs.String("only", "", "substring filter for profiles")
+	update := fs.Bool("update", false, "record the fingerprints as the new baseline")
+	insecure := fs.Bool("insecure", false, "skip certificate verification (for a local stand)")
+	timeout := fs.Duration("timeout", 30*time.Second, "limit per profile")
+	pause := fs.Duration("pause", 300*time.Millisecond, "pause between profiles")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `curlpro validate — сверка отпечатков профилей с эталоном
+		fmt.Fprint(os.Stderr, `curlpro validate — compare profile fingerprints with the baseline
 
-Без -update расхождение считается ошибкой. С -update отпечатки перезаписываются:
-делать это следует осознанно, убедившись, что изменение ожидаемо.
+Without -update a divergence is an error. With -update the fingerprints are
+rewritten: do that deliberately, once the change is known to be expected.
 
 `)
 		fs.PrintDefaults()
@@ -167,7 +167,7 @@ func runValidate(args []string) error {
 		names = filterNames(names, *only)
 	}
 	if len(names) == 0 {
-		return fmt.Errorf("не выбрано ни одного профиля")
+		return fmt.Errorf("no profile selected")
 	}
 
 	if *update {
@@ -176,7 +176,7 @@ func runValidate(args []string) error {
 		}
 	}
 
-	fmt.Printf("оракул: %s\nпрофилей: %d\n\n", *oracle, len(names))
+	fmt.Printf("oracle: %s\nprofiles: %d\n\n", *oracle, len(names))
 
 	var ok, recorded, mismatched, failed int
 	for i, name := range names {
@@ -187,23 +187,23 @@ func runValidate(args []string) error {
 		switch {
 		case err != nil:
 			failed++
-			fmt.Printf("  ОШИБКА   %-24s %v\n", name, err)
+			fmt.Printf("  ERROR    %-24s %v\n", name, err)
 		case status == "match":
 			ok++
-			fmt.Printf("  ok       %-24s отпечаток совпал\n", name)
+			fmt.Printf("  ok       %-24s fingerprint matches\n", name)
 		case status == "recorded":
 			recorded++
-			fmt.Printf("  записан  %-24s эталона не было\n", name)
+			fmt.Printf("  written  %-24s there was no baseline\n", name)
 		default:
 			mismatched++
-			fmt.Printf("  РАСХОД   %-24s %s\n", name, status)
+			fmt.Printf("  DIVERGED %-24s %s\n", name, status)
 		}
 	}
 
-	fmt.Printf("\nсовпало: %d, записано: %d, расхождений: %d, ошибок: %d\n",
+	fmt.Printf("\nmatched: %d, written: %d, diverged: %d, errors: %d\n",
 		ok, recorded, mismatched, failed)
 	if mismatched > 0 || failed > 0 {
-		return fmt.Errorf("проверка не пройдена")
+		return fmt.Errorf("validation failed")
 	}
 	return nil
 }
@@ -220,9 +220,9 @@ func validateOne(reg *profile.Registry, name, oracle, refDir string,
 		DefaultHeaders:     true,
 		FollowRedirects:    true,
 		InsecureSkipVerify: insecure,
-		// Повторы берутся из клиента, а не пишутся здесь циклом: собственный
-		// цикл поверх клиентского давал бы девять запросов вместо трёх
-		// и не соблюдал общий бюджет времени.
+		// Retries come from the client rather than from a loop here: our own loop
+		// on top of the client's would make nine requests instead of three and
+		// would ignore the shared time budget.
 		Retry: &client.RetryPolicy{
 			Attempts:          2,
 			Backoff:           time.Second,
@@ -234,22 +234,22 @@ func validateOne(reg *profile.Registry, name, oracle, refDir string,
 	}
 	defer sess.Close()
 
-	// Внешние оракулы срываются на серии запросов, а прогон по 44 профилям —
-	// именно серия. Повторы делает сам клиент (см. Retry выше).
+	// External oracles break down under a series of requests, and a run over 44
+	// profiles is exactly that. The client does the retrying (see Retry above).
 	resp, err := sess.Do(&client.Request{Method: "GET", URL: oracle})
 	if err != nil {
 		return "", err
 	}
 	if resp.Status != 200 {
-		return "", fmt.Errorf("оракул ответил %d", resp.Status)
+		return "", fmt.Errorf("the oracle answered %d", resp.Status)
 	}
 
 	var reply oracleReply
 	if err := json.Unmarshal(resp.Body, &reply); err != nil {
-		return "", fmt.Errorf("разбор ответа оракула: %w", err)
+		return "", fmt.Errorf("parsing the oracle response: %w", err)
 	}
 	if reply.JA4 == "" {
-		return "", fmt.Errorf("оракул не вернул ja4")
+		return "", fmt.Errorf("the oracle returned no ja4")
 	}
 
 	got := baseline{
@@ -274,7 +274,7 @@ func validateOne(reg *profile.Registry, name, oracle, refDir string,
 	}
 
 	if old == nil {
-		// Новый профиль только фиксируется: сравнивать пока не с чем.
+		// A new profile is merely recorded: there is nothing to compare with yet.
 		return "recorded", writeBaseline(path, got)
 	}
 
@@ -285,11 +285,11 @@ func validateOne(reg *profile.Registry, name, oracle, refDir string,
 	}
 
 	if update {
-		// Пополняем набор, а не затираем: у профилей с padding отпечаток
-		// законно колеблется между несколькими значениями. Пополнять нужно
-		// при любом расхождении, а не только по JA4: раньше расхождение
-		// одного JA3N записать было нельзя вовсе, и прогон в CI падал на нём
-		// каждый раз, когда выпадал второй вариант.
+		// The set is extended rather than overwritten: for padding profiles the
+		// fingerprint legitimately fluctuates between several values. Extending
+		// must happen on any divergence, not only on JA4: a JA3N-only divergence
+		// could not be recorded at all before, and the CI run failed on it every
+		// time the second variant came up.
 		merged := *old
 		if !knownJA4 {
 			merged.JA4 = append(append([]string{}, old.JA4...), got.JA4[0])
@@ -306,20 +306,20 @@ func validateOne(reg *profile.Registry, name, oracle, refDir string,
 		return diff, nil
 	}
 
-	return fmt.Sprintf("JA4 %s не входит в [%s]",
+	return fmt.Sprintf("JA4 %s is not in [%s]",
 		got.JA4[0], strings.Join(old.JA4, " ")), nil
 }
 
-// detailUnsupported выставляется, когда оракул не отдаёт /json/detail.
+// detailUnsupported is set when the oracle does not serve /json/detail.
 var detailUnsupported atomic.Bool
 
-// checkExtensionOrder сверяет перемешивание расширений с permute_extensions.
+// checkExtensionOrder compares the extension shuffling with permute_extensions.
 //
-// JA4 к порядку нечувствителен, а JA3N с локального оракула не сравнивается,
-// поэтому профиль, тасующий расширения вопреки браузеру, проходил validate.
-// Два свежих соединения: у Chrome >= 110 порядок обязан отличаться,
-// у остальных — совпадать. Нужен оракул с /json/detail (echo-server);
-// иначе проверка молча пропускается.
+// JA4 is insensitive to the order, and JA3N from a local oracle is not
+// compared, so a profile shuffling extensions against its browser used to pass
+// validate. Two fresh connections: for Chrome >= 110 the order must differ, for
+// the rest it must match. An oracle with /json/detail is required
+// (echo-server); otherwise the check is silently skipped.
 func checkExtensionOrder(p *profile.Profile, oracle string, insecure bool, timeout time.Duration) (string, error) {
 	if !strings.HasSuffix(oracle, "/json") || detailUnsupported.Load() {
 		return "", nil
@@ -337,8 +337,8 @@ func checkExtensionOrder(p *profile.Profile, oracle string, insecure bool, timeo
 		resp, err := sess.Do(&client.Request{Method: "GET", URL: oracle + "/detail"})
 		sess.Close()
 		if err != nil || resp.Status != 200 {
-			// Публичный оракул /detail не отдаёт: запоминаем и не тратим
-			// на него по два запроса на каждый профиль — серия и так рвётся.
+			// The public oracle serves no /detail: remember that and stop spending
+			// two requests per profile on it — the series is fragile as it is.
 			detailUnsupported.Store(true)
 			return "", nil
 		}
@@ -355,9 +355,9 @@ func checkExtensionOrder(p *profile.Profile, oracle string, insecure bool, timeo
 	stable := orders[0] == orders[1]
 	switch {
 	case permute && stable:
-		return "расширения не перемешиваются, хотя permute_extensions=true", nil
+		return "extensions are not shuffled, though permute_extensions=true", nil
 	case !permute && !stable:
-		return "порядок расширений плавает, хотя permute_extensions=false", nil
+		return "the extension order drifts, though permute_extensions=false", nil
 	}
 	return "", nil
 }
@@ -390,8 +390,8 @@ func readBaseline(path string) (*baseline, error) {
 }
 
 func writeBaseline(path string, b baseline) error {
-	// Время записи ставится здесь, а не в структуре по умолчанию: так
-	// в файле видно, когда отпечаток был снят.
+	// The timestamp is set here rather than as a struct default: that way the
+	// file shows when the fingerprint was captured.
 	b.Recorded = time.Now().UTC().Format(time.RFC3339)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

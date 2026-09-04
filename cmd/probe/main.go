@@ -1,7 +1,7 @@
-// Command probe воспроизводит профиль браузера и сверяет отпечаток с эталоном.
+// Command probe reproduces a browser profile and compares the fingerprint with a baseline.
 //
-// Профиль грузится из JSON, а не зашит в код: смысл проекта в том, чтобы новая
-// версия браузера добавлялась правкой данных.
+// The profile is loaded from JSON rather than baked into the code: the point of
+// the project is that a new browser version is added by editing data.
 package main
 
 import (
@@ -20,7 +20,7 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// echoResponse — ответ fingerproxy echo-server на /json.
+// echoResponse is the fingerproxy echo-server reply to /json.
 type echoResponse struct {
 	JA3   string `json:"ja3"`
 	JA4   string `json:"ja4"`
@@ -28,15 +28,15 @@ type echoResponse struct {
 }
 
 func main() {
-	dir := flag.String("profiles", "profiles", "каталог с профилями")
-	name := flag.String("profile", "chrome-151-windows", "имя профиля")
-	refPath := flag.String("ref", "reference/chrome-151-windows.json", "эталон для сверки")
-	addr := flag.String("addr", "localhost:8443", "адрес echo-server")
-	n := flag.Int("n", 1, "число соединений")
+	dir := flag.String("profiles", "profiles", "directory with profiles")
+	name := flag.String("profile", "chrome-151-windows", "profile name")
+	refPath := flag.String("ref", "reference/chrome-151-windows.json", "baseline to compare with")
+	addr := flag.String("addr", "localhost:8443", "echo-server address")
+	n := flag.Int("n", 1, "number of connections")
 	flag.Parse()
 
 	if err := run(*dir, *name, *refPath, *addr, *n); err != nil {
-		fmt.Fprintln(os.Stderr, "ошибка:", err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
@@ -46,13 +46,13 @@ func run(dir, name, refPath, addr string, n int) error {
 	if err := reg.LoadFS(os.DirFS("."), dir); err != nil {
 		return err
 	}
-	fmt.Printf("профилей загружено: %d %v\n", len(reg.Names()), reg.Names())
+	fmt.Printf("profiles loaded: %d %v\n", len(reg.Names()), reg.Names())
 
 	p, err := reg.Resolve(name)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("профиль: %s (%d заголовков)\n", p.Name, len(p.Headers.Order))
+	fmt.Printf("profile: %s (%d headers)\n", p.Name, len(p.Headers.Order))
 
 	var wantJA4 string
 	if refPath != "" {
@@ -64,7 +64,7 @@ func run(dir, name, refPath, addr string, n int) error {
 			}
 			if json.Unmarshal(b, &ref) == nil && len(ref.Captured.JA4) > 0 {
 				wantJA4 = ref.Captured.JA4[0]
-				fmt.Printf("ожидаем JA4: %s\n", wantJA4)
+				fmt.Printf("expecting JA4: %s\n", wantJA4)
 			}
 		}
 	}
@@ -72,7 +72,7 @@ func run(dir, name, refPath, addr string, n int) error {
 
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
-		return fmt.Errorf("разбор адреса: %w", err)
+		return fmt.Errorf("parsing the address: %w", err)
 	}
 
 	ja3seen, ja4seen := map[string]int{}, map[string]int{}
@@ -87,13 +87,13 @@ func run(dir, name, refPath, addr string, n int) error {
 		lastH2 = echo.HTTP2
 	}
 
-	fmt.Printf("соединений: %d\n", n)
-	fmt.Printf("уникальных JA3: %d\n", len(ja3seen))
+	fmt.Printf("connections: %d\n", n)
+	fmt.Printf("unique JA3: %d\n", len(ja3seen))
 	if p.HTTP2.StreamWeight == nil {
-		// Корпус curl-impersonate не записывает priority с HEADERS-кадра, а fhttp
-		// в его отсутствие подставляет собственный дефолт. Секция PRIORITY ниже
-		// принадлежит библиотеке, а не профилю, и для Firefox/Safari она неверна.
-		fmt.Println("ВНИМАНИЕ: профиль не задаёт stream_weight — PRIORITY взят из умолчания fhttp")
+		// The curl-impersonate corpus does not record the priority from the HEADERS
+		// frame, and in its absence fhttp substitutes its own default. The PRIORITY
+		// section below belongs to the library, not the profile, and for Firefox/Safari it is wrong.
+		fmt.Println("WARNING: the profile sets no stream_weight — PRIORITY came from the fhttp default")
 	}
 	for h := range ja4seen {
 		fmt.Printf("JA4: %s\n", h)
@@ -106,20 +106,20 @@ func run(dir, name, refPath, addr string, n int) error {
 	fmt.Println()
 	for got := range ja4seen {
 		if got != wantJA4 {
-			return fmt.Errorf("JA4 разошёлся:\n  ожидали %s\n  получили %s", wantJA4, got)
+			return fmt.Errorf("JA4 diverged:\n  expected %s\n  got      %s", wantJA4, got)
 		}
 	}
-	fmt.Println("СОВПАЛО: JA4 идентичен эталону")
+	fmt.Println("MATCH: JA4 is identical to the baseline")
 	if n > 1 && len(ja3seen) == 1 {
-		fmt.Println("ВНИМАНИЕ: JA3 постоянен — расширения не перемешиваются")
+		fmt.Println("WARNING: JA3 is constant — the extensions are not shuffled")
 	}
 	return nil
 }
 
 func probe(p *profile.Profile, addr, host string) (*echoResponse, error) {
-	// Спека строится заново на каждое соединение: ShuffleChromeTLSExtensions
-	// мутирует слайс на месте, а замороженный порядок расширений сам по себе
-	// отличает нас от настоящего Chrome.
+	// The spec is rebuilt for every connection: ShuffleChromeTLSExtensions
+	// mutates the slice in place, and a frozen extension order sets us apart from
+	// real Chrome all by itself.
 	spec, err := profile.BuildSpec(p)
 	if err != nil {
 		return nil, err
@@ -133,7 +133,7 @@ func probe(p *profile.Profile, addr, host string) (*echoResponse, error) {
 
 	uconn := utls.UClient(tcp, &utls.Config{
 		ServerName:         host,
-		InsecureSkipVerify: true, // стенд использует самоподписанный сертификат
+		InsecureSkipVerify: true, // the stand uses a self-signed certificate
 	}, utls.HelloCustom)
 	if err := uconn.ApplyPreset(spec); err != nil {
 		return nil, fmt.Errorf("ApplyPreset: %w", err)
@@ -142,7 +142,7 @@ func probe(p *profile.Profile, addr, host string) (*echoResponse, error) {
 		return nil, fmt.Errorf("TLS handshake: %w", err)
 	}
 	if alpn := uconn.ConnectionState().NegotiatedProtocol; alpn != "h2" {
-		return nil, fmt.Errorf("ожидался h2, согласован %q", alpn)
+		return nil, fmt.Errorf("expected h2, negotiated %q", alpn)
 	}
 
 	body, err := fetch(uconn, host, p)
@@ -151,13 +151,13 @@ func probe(p *profile.Profile, addr, host string) (*echoResponse, error) {
 	}
 	var echo echoResponse
 	if err := json.Unmarshal(body, &echo); err != nil {
-		return nil, fmt.Errorf("разбор ответа (%.200s): %w", body, err)
+		return nil, fmt.Errorf("parsing the reply (%.200s): %w", body, err)
 	}
 	return &echo, nil
 }
 
-// fetch выполняет GET /json поверх установленного TLS-соединения,
-// настраивая HTTP/2 строго по профилю.
+// fetch performs GET /json over an established TLS connection, configuring
+// HTTP/2 strictly from the profile.
 func fetch(conn net.Conn, host string, p *profile.Profile) ([]byte, error) {
 	req, err := http.NewRequest("GET", "https://"+host+"/json", nil)
 	if err != nil {
@@ -186,8 +186,8 @@ func fetch(conn net.Conn, host string, p *profile.Profile) ([]byte, error) {
 		ConnectionFlow:    p.HTTP2.ConnectionWindowUpdate,
 		PseudoHeaderOrder: p.HTTP2.PseudoOrder,
 	}
-	// Chrome ставит priority на HEADERS-кадре. На проводе вес на единицу меньше
-	// заявленного (RFC 7540), поэтому здесь вычитаем.
+	// Chrome sets priority on the HEADERS frame. On the wire the weight is one
+	// less than declared (RFC 7540), hence the subtraction.
 	if p.HTTP2.StreamWeight != nil {
 		excl := p.HTTP2.StreamExclusive != nil && *p.HTTP2.StreamExclusive
 		tr.HeaderPriority = &http2.PriorityParam{

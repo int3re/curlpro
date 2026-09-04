@@ -12,8 +12,8 @@ import (
 
 func runList(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ExitOnError)
-	dir := fs.String("profiles", "profiles", "каталог профилей")
-	only := fs.String("only", "", "подстрока для отбора")
+	dir := fs.String("profiles", "profiles", "profile directory")
+	only := fs.String("only", "", "substring filter")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -30,30 +30,30 @@ func runList(args []string) error {
 	for _, n := range names {
 		p, err := reg.Resolve(n)
 		if err != nil {
-			fmt.Printf("%-24s ОШИБКА: %v\n", n, err)
+			fmt.Printf("%-24s ERROR: %v\n", n, err)
 			continue
 		}
 		source := "extensions"
 		if p.TLS.RawClientHello != "" {
 			source = "raw"
 		}
-		fmt.Printf("%-24s %-11s расширений:%-3d заголовков:%-3d h2:%d\n",
+		fmt.Printf("%-24s %-11s extensions:%-3d headers:%-3d h2:%d\n",
 			n, source, len(p.TLS.Extensions), len(p.Headers.Order), len(p.HTTP2.Settings))
 	}
-	fmt.Printf("\nвсего: %d\n", len(names))
+	fmt.Printf("\ntotal: %d\n", len(names))
 	return nil
 }
 
-// runDiff показывает, чем два профиля различаются.
+// runDiff shows how two profiles differ.
 //
-// Основной сценарий — понять, что изменилось между версиями браузера:
-// у месячного бампа Chrome обычно расходятся только sigalgs и заголовки,
-// и это видно сразу.
+// The main use is understanding what changed between browser versions: for a
+// monthly Chrome bump usually only the sigalgs and the headers diverge, and
+// that shows up immediately.
 func runDiff(args []string) error {
 	fs := flag.NewFlagSet("diff", flag.ExitOnError)
-	dir := fs.String("profiles", "profiles", "каталог профилей")
+	dir := fs.String("profiles", "profiles", "profile directory")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "curlpro diff [флаги] <профиль-а> <профиль-б>\n\n")
+		fmt.Fprint(os.Stderr, "curlpro diff [flags] <profile-a> <profile-b>\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -61,7 +61,7 @@ func runDiff(args []string) error {
 	}
 	if fs.NArg() != 2 {
 		fs.Usage()
-		return fmt.Errorf("нужно ровно два имени профиля")
+		return fmt.Errorf("exactly two profile names are required")
 	}
 
 	reg := profile.NewRegistry()
@@ -81,18 +81,18 @@ func runDiff(args []string) error {
 
 	changed := 0
 	changed += diffLine("user-agent", a.Headers.UserAgent, b.Headers.UserAgent)
-	changed += diffSet("расширения", extTypes(a), extTypes(b))
-	changed += diffSeq("шифры", numsToStr(a.TLS.CipherSuites), numsToStr(b.TLS.CipherSuites))
+	changed += diffSet("extensions", extTypes(a), extTypes(b))
+	changed += diffSeq("ciphers", numsToStr(a.TLS.CipherSuites), numsToStr(b.TLS.CipherSuites))
 	changed += diffSeq("sigalgs", sigAlgs(a), sigAlgs(b))
-	changed += diffSeq("группы", groups(a), groups(b))
+	changed += diffSeq("groups", groups(a), groups(b))
 	changed += diffSeq("h2 settings", settings(a), settings(b))
-	changed += diffSeq("порядок заголовков", headerKeys(a), headerKeys(b))
+	changed += diffSeq("header order", headerKeys(a), headerKeys(b))
 	changed += diffLine("h2 window", fmt.Sprint(a.HTTP2.ConnectionWindowUpdate),
 		fmt.Sprint(b.HTTP2.ConnectionWindowUpdate))
-	changed += diffSeq("псевдо-заголовки", a.HTTP2.PseudoOrder, b.HTTP2.PseudoOrder)
+	changed += diffSeq("pseudo-headers", a.HTTP2.PseudoOrder, b.HTTP2.PseudoOrder)
 
 	if changed == 0 {
-		fmt.Println("профили совпадают по всем сравниваемым полям")
+		fmt.Println("the profiles match on every compared field")
 	}
 	return nil
 }
@@ -114,8 +114,8 @@ func diffSeq(label string, a, b []string) int {
 	return 1
 }
 
-// diffSet сравнивает как множества: порядок расширений у Chrome перемешивается
-// на каждом соединении, поэтому сравнивать его последовательностью бессмысленно.
+// diffSet compares as sets: Chrome shuffles the extension order on every
+// connection, so comparing it as a sequence is meaningless.
 func diffSet(label string, a, b []string) int {
 	as, bs := append([]string(nil), a...), append([]string(nil), b...)
 	sort.Strings(as)

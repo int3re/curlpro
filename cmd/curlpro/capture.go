@@ -18,8 +18,8 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// echoDetail — структура ответа fingerproxy echo-server на /json/detail.
-// Разбираем только то, что нужно для профиля.
+// echoDetail is the shape of the fingerproxy echo-server reply to /json/detail.
+// Only what the profile needs is parsed.
 type echoDetail struct {
 	Metadata struct {
 		ClientHelloRecord string `json:"ClientHelloRecord"`
@@ -51,7 +51,7 @@ type echoDetail struct {
 	} `json:"ja4"`
 }
 
-// path возвращает :path запроса — по нему отделяется навигация от favicon.
+// path returns the request's :path — it separates navigation from the favicon.
 func (d echoDetail) path() string {
 	for _, h := range d.Metadata.HTTP2Frames.Headers {
 		if h.Name == ":path" {
@@ -63,9 +63,9 @@ func (d echoDetail) path() string {
 
 func isGREASE(v int) bool { return v&0x0f0f == 0x0a0a }
 
-// extensionOrder сводит список расширений к строке для сравнения порядка.
-// Значения GREASE случайны на каждом соединении, но позиции их стабильны,
-// поэтому они заменяются одним маркером, а не вырезаются.
+// extensionOrder reduces the extension list to a string for order comparison.
+// GREASE values are random per connection while their positions are stable, so
+// they are replaced by a single marker rather than cut out.
 func extensionOrder(exts []int) string {
 	norm := make([]int, len(exts))
 	for i, e := range exts {
@@ -78,29 +78,29 @@ func extensionOrder(exts []int) string {
 }
 
 func runCapture(args []string) error {
-	fs := newFlagSet("capture", `curlpro capture — снятие эталонного отпечатка браузера
+	fs := newFlagSet("capture", `curlpro capture — capture a reference browser fingerprint
 
-Поднимает локальный стенд, открывает в браузере страницу и собирает несколько
-сэмплов. Одного мало: Chrome >=110 перемешивает расширения на каждом соединении,
-и профиль по единственному захвату зафиксировал бы случайную перестановку.
+Starts a local stand, opens a page in the browser and collects several samples.
+One is not enough: Chrome >= 110 shuffles extensions on every connection, and a
+profile from a single capture would pin a random permutation.
 
 `)
-	name := fs.String("name", "", "имя профиля (обязательно)")
-	samples := fs.Int("samples", 5, "сколько соединений собрать")
-	addr := fs.String("addr", "localhost:8443", "адрес стенда")
-	server := fs.String("server", "", "путь к echo-server (по умолчанию ищется в tools/)")
-	certDir := fs.String("certs", "capture/certs", "каталог с tls.crt и tls.key")
-	out := fs.String("out", "profiles", "каталог для профиля")
-	basedOn := fs.String("based-on", "", "профиль-предок: записать дельту (tls и headers), а не полный профиль")
-	browser := fs.String("browser", "", "путь к браузеру (по умолчанию Chrome)")
-	manual := fs.Bool("manual", false, "не запускать браузер: открыть страницу вручную")
-	wait := fs.Duration("wait", 90*time.Second, "сколько ждать сэмплы в ручном режиме")
+	name := fs.String("name", "", "profile name (required)")
+	samples := fs.Int("samples", 5, "how many connections to collect")
+	addr := fs.String("addr", "localhost:8443", "stand address")
+	server := fs.String("server", "", "path to echo-server (looked up in tools/ by default)")
+	certDir := fs.String("certs", "capture/certs", "directory holding tls.crt and tls.key")
+	out := fs.String("out", "profiles", "directory for the profile")
+	basedOn := fs.String("based-on", "", "parent profile: write a delta (tls and headers) instead of a full profile")
+	browser := fs.String("browser", "", "path to the browser (Chrome by default)")
+	manual := fs.Bool("manual", false, "do not launch a browser: open the page yourself")
+	wait := fs.Duration("wait", 90*time.Second, "how long to wait for samples in manual mode")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *name == "" {
 		fs.Usage()
-		return fmt.Errorf("не задано -name")
+		return fmt.Errorf("-name is required")
 	}
 
 	bin, err := findEchoServer(*server)
@@ -110,19 +110,19 @@ func runCapture(args []string) error {
 	crt, key := filepath.Join(*certDir, "tls.crt"), filepath.Join(*certDir, "tls.key")
 	for _, f := range []string{crt, key} {
 		if _, err := os.Stat(f); err != nil {
-			return fmt.Errorf("нет %s — сгенерируйте сертификат, см. docs/CAPTURE.md", f)
+			return fmt.Errorf("%s is missing — generate the certificate, see docs/CAPTURE.md", f)
 		}
 	}
 
-	fmt.Printf("стенд:    %s на %s\n", filepath.Base(bin), *addr)
-	fmt.Printf("сэмплов:  %d\n\n", *samples)
+	fmt.Printf("stand:    %s on %s\n", filepath.Base(bin), *addr)
+	fmt.Printf("samples:  %d\n\n", *samples)
 
 	details, err := collect(bin, *addr, crt, key, *samples, *browser, *manual, *wait)
 	if err != nil {
 		return err
 	}
 	if len(details) < *samples {
-		return fmt.Errorf("собрано %d сэмплов из %d — недостаточно для нормализации",
+		return fmt.Errorf("collected %d samples out of %d — not enough to normalise",
 			len(details), *samples)
 	}
 
@@ -148,16 +148,16 @@ func runCapture(args []string) error {
 		return err
 	}
 
-	fmt.Printf("\nпрофиль записан: %s\n", path)
-	fmt.Printf("проверить: curlpro validate -only %s -oracle https://%s/json -insecure\n",
+	fmt.Printf("\nprofile written: %s\n", path)
+	fmt.Printf("verify with: curlpro validate -only %s -oracle https://%s/json -insecure\n",
 		*name, *addr)
 	return nil
 }
 
-// toDelta оставляет в профиле только то, что захват вправе переопределить:
-// TLS и заголовки. Секции http1, http3, quic и websocket захват не снимает
-// (стенд видит TCP и HTTP/2), и полный профиль записал бы их пустыми —
-// а дельта наследует их от предка. http2 остаётся, только если отличается.
+// toDelta keeps in the profile only what a capture may override: TLS and
+// headers. The http1, http3, quic and websocket sections are not captured (the
+// stand sees TCP and HTTP/2), and a full profile would write them empty — while
+// a delta inherits them from the parent. http2 stays only when it differs.
 func toDelta(p *profile.Profile, basedOn, dir string) (*profile.Profile, error) {
 	reg := profile.NewRegistry()
 	if err := reg.LoadFS(os.DirFS(dir), "."); err != nil {
@@ -165,7 +165,7 @@ func toDelta(p *profile.Profile, basedOn, dir string) (*profile.Profile, error) 
 	}
 	base, err := reg.Resolve(basedOn)
 	if err != nil {
-		return nil, fmt.Errorf("предок: %w", err)
+		return nil, fmt.Errorf("parent: %w", err)
 	}
 	delta := &profile.Profile{
 		Name:    p.Name,
@@ -179,7 +179,7 @@ func toDelta(p *profile.Profile, basedOn, dir string) (*profile.Profile, error) 
 	return delta, nil
 }
 
-// collect поднимает стенд, приводит браузер и собирает сэмплы из его вывода.
+// collect starts the stand, drives the browser and collects samples from its output.
 func collect(bin, addr, crt, key string, want int, browser string,
 	manual bool, wait time.Duration) ([]echoDetail, error) {
 
@@ -191,7 +191,7 @@ func collect(bin, addr, crt, key string, want int, browser string,
 	}
 	cmd.Stderr = cmd.Stdout
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("запуск стенда: %w", err)
+		return nil, fmt.Errorf("starting the stand: %w", err)
 	}
 	defer func() {
 		_ = cmd.Process.Kill()
@@ -200,11 +200,11 @@ func collect(bin, addr, crt, key string, want int, browser string,
 
 	found := make(chan echoDetail, want*4)
 	go scanDetails(stdout, found)
-	time.Sleep(500 * time.Millisecond) // дать серверу подняться
+	time.Sleep(500 * time.Millisecond) // let the server come up
 
 	url := "https://" + addr + "/json/detail"
 	if manual {
-		fmt.Printf("откройте в браузере %d раз:\n  %s\n\n", want, url)
+		fmt.Printf("open it in a browser %d times:\n  %s\n\n", want, url)
 	} else {
 		go driveBrowser(browser, url, want)
 	}
@@ -214,13 +214,13 @@ func collect(bin, addr, crt, key string, want int, browser string,
 	for len(details) < want {
 		select {
 		case d := <-found:
-			// favicon приходит по тому же соединению, но с другими заголовками:
-			// брать его в профиль значит записать не тот набор sec-fetch-*.
+			// The favicon arrives on the same connection but with different headers:
+			// taking it into the profile means recording the wrong sec-fetch-* set.
 			if d.path() != "/json/detail" {
 				continue
 			}
 			details = append(details, d)
-			fmt.Printf("  сэмпл %d/%d\n", len(details), want)
+			fmt.Printf("  sample %d/%d\n", len(details), want)
 		case <-deadline:
 			return details, nil
 		}
@@ -230,7 +230,7 @@ func collect(bin, addr, crt, key string, want int, browser string,
 
 func scanDetails(r io.Reader, out chan<- echoDetail) {
 	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 1<<20), 1<<22) // detail-строки длинные
+	sc.Buffer(make([]byte, 1<<20), 1<<22) // detail lines are long
 	for sc.Scan() {
 		line := sc.Text()
 		i := strings.Index(line, "detail: {")
@@ -244,17 +244,17 @@ func scanDetails(r io.Reader, out chan<- echoDetail) {
 	}
 }
 
-// driveBrowser открывает страницу нужное число раз, каждый раз в новом профиле,
-// чтобы гарантированно получить новое TLS-соединение.
+// driveBrowser opens the page the required number of times, each time in a new
+// browser profile, to guarantee a fresh TLS connection.
 func driveBrowser(path, url string, times int) {
 	if path == "" {
 		path = defaultBrowser()
 	}
 	if path == "" {
-		fmt.Fprintln(os.Stderr, "браузер не найден — используйте -manual")
+		fmt.Fprintln(os.Stderr, "browser not found — use -manual")
 		return
 	}
-	for i := 0; i < times+2; i++ { // с запасом: часть заходов уйдёт на favicon
+	for i := 0; i < times+2; i++ { // with a margin: some visits go to the favicon
 		dir, err := os.MkdirTemp("", "curlpro-capture-")
 		if err != nil {
 			return
@@ -300,7 +300,7 @@ func defaultBrowser() string {
 func findEchoServer(explicit string) (string, error) {
 	if explicit != "" {
 		if _, err := os.Stat(explicit); err != nil {
-			return "", fmt.Errorf("не найден %s", explicit)
+			return "", fmt.Errorf("%s not found", explicit)
 		}
 		return explicit, nil
 	}
@@ -310,17 +310,17 @@ func findEchoServer(explicit string) (string, error) {
 			return m, nil
 		}
 	}
-	return "", fmt.Errorf("echo-server не найден в tools/ — скачайте из релизов " +
-		"github.com/wi1dcard/fingerproxy или укажите -server")
+	return "", fmt.Errorf("echo-server not found in tools/ — download it from the releases at " +
+		"github.com/wi1dcard/fingerproxy or pass -server")
 }
 
-// buildProfile сводит сэмплы в один профиль.
+// buildProfile folds the samples into one profile.
 //
-// Значения GREASE вырезаются: они случайны на каждом соединении. Позиции при
-// этом сохраняются самим фактом, что расширение осталось в списке.
+// GREASE values are cut out: they are random per connection. The positions
+// survive by the very fact that the extension stayed in the list.
 func buildProfile(name string, details []echoDetail) (*profile.Profile, error) {
-	// Наборы расширений без GREASE обязаны совпасть: расхождение означает,
-	// что сэмплы сняты с разных клиентов или версий.
+	// The extension sets without GREASE must match: a divergence means the samples
+	// were captured from different clients or versions.
 	sets := map[string]bool{}
 	for _, d := range details {
 		var clean []int
@@ -333,21 +333,21 @@ func buildProfile(name string, details []echoDetail) (*profile.Profile, error) {
 		sets[fmt.Sprint(clean)] = true
 	}
 	if len(sets) != 1 {
-		return nil, fmt.Errorf("наборы расширений расходятся (%d вариантов) — "+
-			"сэмплы сняты с разных браузеров", len(sets))
+		return nil, fmt.Errorf("the extension sets diverge (%d variants) — "+
+			"the samples come from different browsers", len(sets))
 	}
 
 	first := details[0]
 	raw, err := base64.StdEncoding.DecodeString(first.Metadata.ClientHelloRecord)
 	if err != nil || len(raw) < 5 {
-		return nil, fmt.Errorf("некорректный ClientHello в сэмпле")
+		return nil, fmt.Errorf("malformed ClientHello in a sample")
 	}
 
-	// permute_extensions выводится из сэмплов, а не пишется константой:
-	// раньше capture ставил true всегда, и снятый Firefox или Safari получал
-	// профиль, тасующий расширения на каждом соединении.
+	// permute_extensions is derived from the samples rather than written as a
+	// constant: capture used to set true always, and a captured Firefox or Safari
+	// ended up with a profile shuffling extensions on every connection.
 	if len(details) < 2 {
-		return nil, fmt.Errorf("нужно не меньше двух сэмплов, чтобы определить permute_extensions")
+		return nil, fmt.Errorf("at least two samples are needed to determine permute_extensions")
 	}
 	orders := map[string]bool{}
 	for _, d := range details {
@@ -363,16 +363,16 @@ func buildProfile(name string, details []echoDetail) (*profile.Profile, error) {
 			PermuteExtensions:   boolPtr(permute),
 		},
 	}
-	// Расширение, неизвестное uTLS (trust_anchors у Chrome 152), роняет
-	// сборку спеки. Включаем воспроизведение сырыми байтами только когда
-	// без него нельзя: так профиль честно показывает, что в нём есть
-	// нечто, чего библиотека не понимает.
+	// An extension uTLS does not know (trust_anchors in Chrome 152) breaks the
+	// spec build. Reproduction as raw bytes is enabled only when there is no way
+	// around it: that way the profile honestly shows it contains something the
+	// library does not understand.
 	if _, err := profile.BuildSpec(p); err != nil && strings.Contains(err.Error(), "unsupported extension") {
 		p.TLS.AllowBluntMimicry = boolPtr(true)
 		if _, err := profile.BuildSpec(p); err != nil {
 			return nil, err
 		}
-		fmt.Printf("  в ClientHello есть расширение, неизвестное uTLS: включён allow_blunt_mimicry\n")
+		fmt.Printf("  the ClientHello has an extension unknown to uTLS: allow_blunt_mimicry enabled\n")
 	}
 
 	frames := first.Metadata.HTTP2Frames
@@ -399,7 +399,7 @@ func buildProfile(name string, details []echoDetail) (*profile.Profile, error) {
 	}
 	p.Headers.Order = withSlots(p.Headers.Order, p.Headers.UserAgent)
 
-	// Приоритет с HEADERS-кадра: на проводе вес на единицу меньше (RFC 7540).
+	// Priority from the HEADERS frame: on the wire the weight is one less (RFC 7540).
 	for _, pr := range frames.Priorities {
 		if pr.StreamId == 1 {
 			w := pr.Weight + 1
@@ -410,20 +410,20 @@ func buildProfile(name string, details []echoDetail) (*profile.Profile, error) {
 		}
 	}
 
-	fmt.Printf("\nсобрано: %d сэмплов, расширений %d, заголовков %d, ClientHello %d байт\n",
+	fmt.Printf("\ncollected: %d samples, %d extensions, %d headers, ClientHello %d bytes\n",
 		len(details), len(first.JA3.AllExtensions), len(p.Headers.Order), len(raw))
 	return p, nil
 }
 
 func boolPtr(b bool) *bool { return &b }
 
-// withSlots добавляет к захваченному порядку слоты, которых в навигационном
-// GET не бывает: cookie и заголовки тела.
+// withSlots adds to the captured order the slots a navigational GET never has:
+// cookie and the body headers.
 //
-// Позиции сняты живыми браузерами (docs/STAGE15-RESULTS.md): у Chromium
-// content-length идёт первым, content-type перед user-agent, origin после
-// него; у Firefox все три — после accept-encoding. cookie у обоих стоит
-// перед priority.
+// The positions were captured from live browsers (docs/STAGE15-RESULTS.md): in
+// Chromium content-length comes first, content-type before user-agent and
+// origin after it; in Firefox all three follow accept-encoding. In both, cookie
+// sits before priority.
 func withSlots(order []profile.HeaderPair, userAgent string) []profile.HeaderPair {
 	has := func(name string) bool {
 		for _, h := range order {

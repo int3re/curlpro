@@ -11,31 +11,31 @@ import (
 	"strings"
 )
 
-// Схлопывание профилей в цепочки based_on.
+// Folding profiles into based_on chains.
 //
-// Импорт корпуса даёт самодостаточные профили, и они сильно дублируют друг
-// друга: у Chrome 98–116 и Edge 98–101 ClientHello вообще один и тот же.
-// Схлопывание оставляет в потомке только то, чем он отличается от предка,
-// и тогда видно, что реально меняется между версиями браузера.
+// Importing the corpus yields self-contained profiles, and they duplicate one
+// another heavily: Chrome 98-116 and Edge 98-101 share the very same ClientHello.
+// Folding leaves in a child only what differs from its parent, and then it is
+// visible what actually changes between browser versions.
 //
-// Отпечаток при этом не меняется: Resolve собирает профиль обратно.
+// The fingerprint does not change: Resolve puts the profile back together.
 
 func runCollapse(args []string) error {
-	fs := newFlagSet("collapse", `curlpro collapse — свести профили в цепочки based_on
+	fs := newFlagSet("collapse", `curlpro collapse — fold profiles into based_on chains
 
-Профили с одинаковым ClientHello группируются, в группе выбирается базовый,
-остальные переписываются как дельта поверх него.
+Profiles with an identical ClientHello are grouped, one of the group becomes the
+base and the rest are rewritten as deltas on top of it.
 
 `)
-	dir := fs.String("profiles", "profiles", "каталог профилей")
-	apply := fs.Bool("apply", false, "записать изменения (без флага — только показать)")
+	dir := fs.String("profiles", "profiles", "profile directory")
+	apply := fs.Bool("apply", false, "write the changes (without the flag: dry run)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	files, err := filepath.Glob(filepath.Join(*dir, "*.json"))
 	if err != nil || len(files) == 0 {
-		return fmt.Errorf("профили не найдены в %s", *dir)
+		return fmt.Errorf("no profiles found in %s", *dir)
 	}
 	sort.Strings(files)
 
@@ -50,15 +50,15 @@ func runCollapse(args []string) error {
 			return fmt.Errorf("%s: %w", filepath.Base(f), err)
 		}
 		name := strings.TrimSuffix(filepath.Base(f), ".json")
-		// Уже схлопнутые пропускаем: повторный проход мог бы построить
-		// цепочку поверх цепочки и запутать наследование.
+		// Already folded ones are skipped: a second pass could build a chain on
+		// top of a chain and confuse the inheritance.
 		if _, ok := m["based_on"]; ok {
 			continue
 		}
 		raw[name] = m
 	}
 	if len(raw) == 0 {
-		fmt.Println("нечего схлопывать: все профили уже наследуются")
+		fmt.Println("nothing to fold: every profile already inherits")
 		return nil
 	}
 
@@ -70,7 +70,7 @@ func runCollapse(args []string) error {
 			continue
 		}
 		base := pickBase(names)
-		fmt.Printf("\nбаза: %s\n", base)
+		fmt.Printf("\nbase: %s\n", base)
 		for _, name := range names {
 			if name == base {
 				continue
@@ -84,7 +84,7 @@ func runCollapse(args []string) error {
 			saved += before - after
 			touched++
 
-			fmt.Printf("  %-24s %5d → %-5d байт, отличия: %s\n",
+			fmt.Printf("  %-24s %5d -> %-5d bytes, differences: %s\n",
 				name, before, after, describeKeys(delta))
 
 			if *apply {
@@ -100,17 +100,17 @@ func runCollapse(args []string) error {
 		}
 	}
 
-	fmt.Printf("\nсхлопнуто профилей: %d, экономия: %d байт\n", touched, saved)
+	fmt.Printf("\nprofiles folded: %d, saved: %d bytes\n", touched, saved)
 	if !*apply {
-		fmt.Println("(показ без записи; добавьте -apply)")
+		fmt.Println("(dry run; add -apply)")
 	} else {
-		fmt.Println("проверьте: curlpro validate -oracle ... -baselines ...")
+		fmt.Println("verify with: curlpro validate -oracle ... -baselines ...")
 	}
 	return nil
 }
 
-// groupByClientHello объединяет профили с одинаковым описанием ClientHello.
-// Заголовки и настройки HTTP/2 при этом могут различаться — они и станут дельтой.
+// groupByClientHello groups profiles sharing one ClientHello description.
+// Headers and HTTP/2 settings may still differ — those become the delta.
 func groupByClientHello(raw map[string]map[string]any) [][]string {
 	byKey := map[string][]string{}
 	for name, m := range raw {
@@ -128,7 +128,7 @@ func groupByClientHello(raw map[string]map[string]any) [][]string {
 		sort.Strings(names)
 		out = append(out, names)
 	}
-	// Устойчивый порядок вывода: большие группы первыми.
+	// A stable output order: the largest groups first.
 	sort.Slice(out, func(i, j int) bool {
 		if len(out[i]) != len(out[j]) {
 			return len(out[i]) > len(out[j])
@@ -138,8 +138,8 @@ func groupByClientHello(raw map[string]map[string]any) [][]string {
 	return out
 }
 
-// pickBase выбирает базовый профиль группы — с наименьшей версией.
-// Так цепочка читается естественно: от старой версии к новым.
+// pickBase picks the group's base profile — the one with the lowest version.
+// That way the chain reads naturally: from the older version to the newer ones.
 func pickBase(names []string) string {
 	best, bestVer := names[0], versionOf(names[0])
 	for _, n := range names[1:] {
@@ -162,11 +162,11 @@ func versionOf(name string) float64 {
 	return v
 }
 
-// diffProfile оставляет только те поля потомка, которыми он отличается от базы.
+// diffProfile keeps only the fields where a child differs from its base.
 //
-// Сравнение поверхностное по секциям: если хоть что-то внутри tls отличается,
-// секция переносится целиком. Частичное наследование внутри секции сделало бы
-// профиль нечитаемым — пришлось бы держать в голове, что откуда пришло.
+// The comparison is shallow, per section: if anything inside tls differs, the
+// whole section is carried over. Partial inheritance inside a section would
+// make the profile unreadable — you would have to track what came from where.
 func diffProfile(base, child map[string]any) map[string]any {
 	out := map[string]any{}
 	for key, cv := range child {
@@ -177,8 +177,8 @@ func diffProfile(base, child map[string]any) map[string]any {
 			continue
 		}
 		if key == "tls" {
-			// ClientHello совпадает по построению группы, значит переносить
-			// нужно лишь то, что реально разошлось.
+			// The ClientHello matches by construction of the group, so only what
+			// actually diverged needs carrying over.
 			if sub := diffSection(base["tls"], cv); len(sub) > 0 {
 				out[key] = sub
 			}
@@ -221,7 +221,7 @@ func describeKeys(delta map[string]any) string {
 	}
 	sort.Strings(keys)
 	if len(keys) == 0 {
-		return "нет (полный дубликат)"
+		return "none (an exact duplicate)"
 	}
 	return strings.Join(keys, " ")
 }

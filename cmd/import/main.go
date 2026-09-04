@@ -1,8 +1,8 @@
-// Command import переводит сигнатуры curl-impersonate в профили curlPro.
+// Command import converts curl-impersonate signatures into curlPro profiles.
 //
-// Каждый импортированный профиль сразу проверяется: из построенной спеки
-// вычисляется JA3N и сверяется с ja3n_hash, записанным в самом YAML.
-// Импорт без проверки бессмыслен — молча испорченный профиль хуже отсутствующего.
+// Every imported profile is checked right away: JA3N is computed from the built
+// spec and compared with the ja3n_hash recorded in the YAML itself.
+// An unchecked import is pointless — a silently broken profile is worse than none.
 package main
 
 import (
@@ -22,7 +22,7 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// signature — интересующая нас часть tests/signatures/*.yaml.
+// signature is the part of tests/signatures/*.yaml we care about.
 type signature struct {
 	Browser struct {
 		Name    string `yaml:"name"`
@@ -83,8 +83,8 @@ type keyShare struct {
 	Group yamlNum `yaml:"group"`
 }
 
-// yamlNum — число, которое в корпусе может быть записано как литерал GREASE
-// или как символьная константа версии TLS.
+// yamlNum is a number the corpus may write either as a GREASE literal or as a
+// symbolic TLS version constant.
 type yamlNum uint16
 
 func (n *yamlNum) UnmarshalYAML(node *yaml.Node) error {
@@ -107,39 +107,39 @@ func (n *yamlNum) UnmarshalYAML(node *yaml.Node) error {
 	}
 	v, err := strconv.ParseUint(node.Value, 10, 16)
 	if err != nil {
-		return fmt.Errorf("не число и не известная константа: %q", node.Value)
+		return fmt.Errorf("neither a number nor a known constant: %q", node.Value)
 	}
 	*n = yamlNum(v)
 	return nil
 }
 
 func main() {
-	src := flag.String("src", "corpus/signatures", "каталог с сигнатурами curl-impersonate")
-	dst := flag.String("dst", "profiles", "каталог профилей")
-	verbose := flag.Bool("v", false, "печатать причину пропуска")
+	src := flag.String("src", "corpus/signatures", "directory with curl-impersonate signatures")
+	dst := flag.String("dst", "profiles", "profile directory")
+	verbose := flag.Bool("v", false, "print the reason for skipping")
 	flag.Parse()
 
 	files, err := filepath.Glob(filepath.Join(*src, "*.yaml"))
 	if err != nil || len(files) == 0 {
-		fmt.Fprintf(os.Stderr, "нет сигнатур в %s\n", *src)
+		fmt.Fprintf(os.Stderr, "no signatures in %s\n", *src)
 		os.Exit(1)
 	}
 	sort.Strings(files)
 
-	// Первый проход: разобрать всё и раздать неконфликтующие имена.
+	// First pass: parse everything and hand out non-conflicting names.
 	sigs := make(map[string]*signature, len(files))
 	var failed int
 	for _, f := range files {
 		raw, err := os.ReadFile(f)
 		if err != nil {
 			failed++
-			fmt.Printf("  ОШИБКА   %-40s %v\n", filepath.Base(f), err)
+			fmt.Printf("  ERROR    %-40s %v\n", filepath.Base(f), err)
 			continue
 		}
 		var sig signature
 		if err := yaml.Unmarshal(raw, &sig); err != nil {
 			failed++
-			fmt.Printf("  ОШИБКА   %-40s разбор YAML: %v\n", filepath.Base(f), err)
+			fmt.Printf("  ERROR    %-40s parsing YAML: %v\n", filepath.Base(f), err)
 			continue
 		}
 		sigs[f] = &sig
@@ -157,30 +157,30 @@ func main() {
 		switch {
 		case err != nil:
 			failed++
-			fmt.Printf("  ОШИБКА   %-40s %v\n", filepath.Base(f), err)
+			fmt.Printf("  ERROR    %-40s %v\n", filepath.Base(f), err)
 		case status == "verified":
 			ok++
 			verified++
-			fmt.Printf("  ok       %-40s JA3N совпал\n", name)
+			fmt.Printf("  ok       %-40s JA3N matches\n", name)
 		case status == "unverified":
 			ok++
 			noRef++
 			if *verbose {
-				fmt.Printf("  ok       %-40s без third_party — не с чем сверять\n", name)
+				fmt.Printf("  ok       %-40s no third_party — nothing to compare with\n", name)
 			}
 		default:
 			ok++
 			suspect = append(suspect, name)
-			fmt.Printf("  СВЕРКА   %-40s %s\n", name, status)
+			fmt.Printf("  COMPARE  %-40s %s\n", name, status)
 		}
 	}
 
-	fmt.Printf("\nимпортировано: %d\n", ok)
-	fmt.Printf("  сверено по JA3N:        %d\n", verified)
-	fmt.Printf("  нет эталона в корпусе:  %d\n", noRef)
-	fmt.Printf("  корпус несогласован:    %d %v\n", len(suspect), suspect)
+	fmt.Printf("\nimported: %d\n", ok)
+	fmt.Printf("  verified by JA3N:       %d\n", verified)
+	fmt.Printf("  no baseline in corpus:  %d\n", noRef)
+	fmt.Printf("  corpus inconsistent:    %d %v\n", len(suspect), suspect)
 	if failed > 0 {
-		fmt.Printf("ошибок импорта: %d\n", failed)
+		fmt.Printf("import errors: %d\n", failed)
 		os.Exit(1)
 	}
 }
@@ -191,9 +191,9 @@ func convert(path, dstDir string, sig *signature, name string) (_, status string
 		return name, "", err
 	}
 
-	// Спека должна собираться в любом случае — это проверка самих данных.
+	// The spec must build in any case — this is a check of the data itself.
 	if _, err := profile.BuildSpec(p); err != nil {
-		return name, "", fmt.Errorf("сборка спеки: %w", err)
+		return name, "", fmt.Errorf("building the spec: %w", err)
 	}
 
 	status = "unverified"
@@ -203,11 +203,11 @@ func convert(path, dstDir string, sig *signature, name string) (_, status string
 		case sig.ThirdParty.JA3NHash:
 			status = "verified"
 		default:
-			// Часть файлов корпуса внутренне несогласована: tls_client_hello и
-			// third_party сняты с разных соединений или разных сборок браузера.
-			// Профиль при этом валиден — источником истины считаем extensions,
-			// поэтому записываем его, но помечаем расхождение.
-			status = fmt.Sprintf("корпус несогласован\n      из extensions: %s\n      из ja3n_text:  %s",
+			// Some corpus files are internally inconsistent: tls_client_hello and
+			// third_party were captured from different connections or browser builds.
+			// The profile is still valid — extensions are taken as the source of truth,
+			// so it is written, but the divergence is flagged.
+			status = fmt.Sprintf("corpus inconsistent\n      from extensions: %s\n      from ja3n_text:  %s",
 				text, sig.ThirdParty.JA3NText)
 		}
 	}
@@ -222,12 +222,12 @@ func convert(path, dstDir string, sig *signature, name string) (_, status string
 	return name, status, os.WriteFile(filepath.Join(dstDir, name+".json"), append(enc, '\n'), 0o644)
 }
 
-// profileName собирает имя вида browser-version-os.
+// profileName builds a name of the form browser-version-os.
 //
-// depth задаёт, сколько компонентов версии включать. Мажорной версии обычно
-// достаточно, но Safari 18.0 и 18.4 — разные отпечатки, а 26.0 и 26.0.1
-// различаются только патчем. Поэтому имена назначаются в два прохода:
-// при коллизии глубина растёт, пока имена не разойдутся.
+// depth says how many version components to include. The major version is
+// usually enough, but Safari 18.0 and 18.4 are different fingerprints, while
+// 26.0 and 26.0.1 differ only in the patch. So names are assigned in two
+// passes: on a collision the depth grows until the names diverge.
 func profileName(path string, sig *signature, depth int) string {
 	base := strings.TrimSuffix(filepath.Base(path), ".yaml")
 	browser := strings.SplitN(base, "_", 2)[0]
@@ -257,9 +257,9 @@ func profileName(path string, sig *signature, depth int) string {
 	return fmt.Sprintf("%s-%s-%s", browser, ver, os_)
 }
 
-// assignNames раздаёт уникальные имена, углубляя версию при коллизиях.
-// Молчаливая перезапись профиля недопустима: это потеря данных, которую
-// невозможно заметить по итоговому счётчику.
+// assignNames hands out unique names, deepening the version on collisions.
+// Silently overwriting a profile is unacceptable: that is data loss impossible
+// to notice from the final counters.
 func assignNames(sigs map[string]*signature) map[string]string {
 	names := make(map[string]string, len(sigs))
 	paths := make([]string, 0, len(sigs))
@@ -287,7 +287,7 @@ func assignNames(sigs map[string]*signature) map[string]string {
 		}
 		paths = left
 	}
-	// Не разошлись даже на полной версии — берём имя файла, оно уникально.
+	// Still identical even at the full version — take the file name, it is unique.
 	for _, p := range paths {
 		if _, ok := names[p]; !ok {
 			names[p] = strings.TrimSuffix(filepath.Base(p), ".yaml")
@@ -391,9 +391,9 @@ func fillHTTP2(p *profile.Profile, sig *signature) {
 	}
 }
 
-// ja3n считает нормализованный JA3 по декларативному профилю: расширения
-// отсортированы, GREASE вырезан. Именно эта форма устойчива к перемешиванию
-// расширений в Chrome >=110, и только её имеет смысл сверять с корпусом.
+// ja3n computes the normalised JA3 from a declarative profile: extensions
+// sorted, GREASE removed. That form is the one resistant to Chrome >= 110
+// extension shuffling, and the only one worth comparing with the corpus.
 func ja3n(t *profile.TLSSpec) (hash, text string) {
 	var ciphers, exts, curves, points []string
 
@@ -408,8 +408,8 @@ func ja3n(t *profile.TLSSpec) (hash, text string) {
 		if !ok {
 			continue
 		}
-		// pre_shared_key появляется только при возобновлении сессии и делает
-		// отпечаток нестабильным, поэтому в JA3 его не учитывают.
+		// pre_shared_key appears only on session resumption and makes the
+		// fingerprint unstable, so JA3 does not count it.
 		if e.Type == "pre_shared_key" {
 			continue
 		}

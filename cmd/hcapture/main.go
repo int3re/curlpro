@@ -1,19 +1,19 @@
-// Command hcapture — стенд, записывающий порядок заголовков живого браузера
-// на HTTP/2 и HTTP/3.
+// Command hcapture is the stand that records the header order of a live
+// browser over HTTP/2 and HTTP/3.
 //
-// Зачем свой сервер. Публичные оракулы имена нормализуют, а порядок HTTP/3
-// не показывает ни один: до этого стенда порядок заголовков в HTTP/3 не
-// наблюдался ничем, и профиль верили на слово. Здесь HEADERS-кадр разбирается
-// как пришёл: HPACK для HTTP/2, свой QPACK-декодер для HTTP/3.
+// Why a server of our own. Public oracles normalise the names, and not one of
+// them shows the HTTP/3 order: before this stand the header order in HTTP/3 was
+// observable by nothing, and the profile was taken on trust. Here the HEADERS
+// frame is parsed as it arrived: HPACK for HTTP/2, our own QPACK decoder for HTTP/3.
 //
-// Запуск (браузер поднимается сам, безголовым):
+// Running it (the browser starts itself, headless):
 //
 //	go run ./cmd/hcapture -auto               # HTTP/2
-//	go run ./cmd/hcapture -auto -h3           # HTTP/3, Chrome форсируется на QUIC
-//	go run ./cmd/hcapture -h3                 # без браузера: открыть адрес руками
+//	go run ./cmd/hcapture -auto -h3           # HTTP/3, Chrome is forced onto QUIC
+//	go run ./cmd/hcapture -h3                 # no browser: open the address yourself
 //
-// Страница сама делает fetch, XHR и переход по ссылке, поэтому за один запуск
-// снимаются оба набора заголовков — навигационный и fetch.
+// The page itself performs a fetch, an XHR and a link navigation, so one run
+// captures both header sets — the navigational one and the fetch one.
 package main
 
 import (
@@ -51,20 +51,20 @@ import (
 )
 
 func main() {
-	listen := flag.String("listen", "localhost:8443", "адрес стенда")
-	h3 := flag.Bool("h3", false, "поднять QUIC и увести браузер на HTTP/3")
-	browser := flag.String("browser", "", "путь к Chrome; пусто — не запускать, ждать вручную")
-	auto := flag.Bool("auto", false, "запустить браузер, найденный по обычным путям")
-	timeout := flag.Duration("timeout", 25*time.Second, "сколько ждать запросов")
-	out := flag.String("json", "", "файл для записи снятого")
-	certs := flag.String("certs", "capture/certs", "каталог с tls.crt и tls.key")
+	listen := flag.String("listen", "localhost:8443", "stand address")
+	h3 := flag.Bool("h3", false, "bring up QUIC and move the browser onto HTTP/3")
+	browser := flag.String("browser", "", "path to Chrome; empty means do not launch, wait instead")
+	auto := flag.Bool("auto", false, "launch the browser found in the usual places")
+	timeout := flag.Duration("timeout", 25*time.Second, "how long to wait for requests")
+	out := flag.String("json", "", "file to write the capture to")
+	certs := flag.String("certs", "capture/certs", "directory holding tls.crt and tls.key")
 	flag.Parse()
 
 	certFile = *certs + "/tls.crt"
 	keyFile = *certs + "/tls.key"
-	// Alt-Svc — единственный способ увести на QUIC браузер, которому нельзя
-	// передать --origin-to-force-quic-on: на Android ключи запуска недоступны.
-	// Браузер переходит на HTTP/3 со следующего запроса после этого заголовка.
+	// Alt-Svc is the only way to move a browser onto QUIC when
+	// --origin-to-force-quic-on cannot be passed: on Android there are no launch
+	// flags. The browser switches to HTTP/3 from the request after this header.
 	if *h3 {
 		if _, port, err := net.SplitHostPort(*listen); err == nil {
 			altSvc = `h3=":` + port + `"; ma=86400`
@@ -80,8 +80,8 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	// TCP слушается всегда: браузер сначала ходит по TCP и только по
-	// Alt-Svc или принудительному ключу переходит на QUIC.
+	// TCP is always listened on: the browser goes over TCP first and only moves
+	// to QUIC on Alt-Svc or a forcing flag.
 	if err := s.listenTCP(*listen, &wg); err != nil {
 		fmt.Fprintln(os.Stderr, "TCP:", err)
 		os.Exit(1)
@@ -95,12 +95,12 @@ func main() {
 	if path != "" {
 		stop = launch(path, *listen, *h3)
 	} else {
-		fmt.Fprintf(os.Stderr, "откройте https://%s/ в браузере\n", *listen)
+		fmt.Fprintf(os.Stderr, "open https://%s/ in a browser\n", *listen)
 		stop = func() {}
 	}
 
-	// Стенд живёт до таймаута: страница успевает сделать все запросы,
-	// а последний переход по ссылке приходит уже под конец.
+	// The stand lives until the timeout: the page manages all its requests, and
+	// the final link navigation arrives towards the end.
 	time.Sleep(*timeout)
 	stop()
 	s.closeAll()
@@ -109,7 +109,7 @@ func main() {
 	s.report(*out)
 }
 
-// record — один запрос в порядке провода.
+// record is one request in wire order.
 type record struct {
 	Proto   string   `json:"proto"`
 	Method  string   `json:"method"`
@@ -124,13 +124,13 @@ type srv struct {
 	closers []io.Closer
 }
 
-// note записывает наблюдение, не связанное с отдельным запросом.
+// note records an observation not tied to a particular request.
 func (s *srv) note(text string) {
 	s.mu.Lock()
 	for _, n := range s.notes {
 		if n == text {
 			s.mu.Unlock()
-			return // одно и то же повторяется на каждом соединении
+			return // the same thing repeats on every connection
 		}
 	}
 	s.notes = append(s.notes, text)
@@ -142,7 +142,7 @@ func (s *srv) add(r record) {
 	s.mu.Lock()
 	s.records = append(s.records, r)
 	s.mu.Unlock()
-	fmt.Fprintf(os.Stderr, "%s %s %s (%d заголовков)\n", r.Proto, r.Method, r.Path, len(r.Headers))
+	fmt.Fprintf(os.Stderr, "%s %s %s (%d headers)\n", r.Proto, r.Method, r.Path, len(r.Headers))
 }
 
 func (s *srv) track(c io.Closer) {
@@ -161,7 +161,7 @@ func (s *srv) closeAll() {
 }
 
 // ---------------------------------------------------------------------------
-// Содержимое: страница сама вызывает fetch, XHR и переходит по ссылке.
+// The content: the page itself calls fetch, XHR and follows a link.
 // ---------------------------------------------------------------------------
 
 const page = `<!doctype html><meta charset=utf-8><title>hcapture</title>
@@ -186,13 +186,13 @@ const log = m => { document.getElementById('out').textContent += m + "\n"; };
     });
     log('xhr-post');
     setTimeout(() => { location.href = '/second'; }, 300);
-  } catch (e) { log('ошибка ' + e); }
+		} catch (e) { log('error ' + e); }
 })();
 </script>`
 
 const second = `<!doctype html><meta charset=utf-8><title>second</title><body>ok`
 
-// route возвращает тело ответа и его тип.
+// route returns the response body and its type.
 func route(path string) (string, string) {
 	switch path {
 	case "/":
@@ -208,14 +208,14 @@ func route(path string) (string, string) {
 // HTTP/2
 // ---------------------------------------------------------------------------
 
-// acceptCH — подсказки высокой энтропии, которые стенд запрашивает.
-// Critical-CH заставляет браузер повторить запрос сразу, а не со следующего.
+// acceptCH are the high-entropy hints the stand asks for.
+// Critical-CH makes the browser repeat the request at once instead of the next one.
 const acceptCH = "sec-ch-ua-arch, sec-ch-ua-bitness, sec-ch-ua-full-version-list, sec-ch-ua-model, sec-ch-ua-platform-version, sec-ch-ua-wow64, sec-ch-ua-form-factors, sec-ch-ua-full-version"
 
 var (
 	certFile = "capture/certs/tls.crt"
 	keyFile  = "capture/certs/tls.key"
-	// altSvc непустой, когда поднят QUIC: объявляем поддержку HTTP/3.
+	// altSvc is non-empty when QUIC is up: it advertises HTTP/3 support.
 	altSvc string
 )
 
@@ -262,8 +262,8 @@ func (s *srv) serveConn(c *tls.Conn) {
 	}
 }
 
-// serveH2 разбирает кадры вручную: net/http порядок заголовков теряет,
-// а именно он здесь и снимается.
+// serveH2 parses the frames by hand: net/http loses the header order, and that
+// is exactly what is being captured here.
 func (s *srv) serveH2(c net.Conn) {
 	const preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 	buf := make([]byte, len(preface))
@@ -341,8 +341,8 @@ func (s *srv) respondH2(fr *http2.Framer, id uint32, path string) {
 		_ = enc.WriteField(hpack.HeaderField{Name: "alt-svc", Value: altSvc})
 	}
 	if path == "/" {
-		// Кука ставится на первой странице, чтобы следующие запросы показали
-		// её позицию: в профиле cookie — слот, поставленный по догадке.
+		// The cookie is set on the first page so that later requests show its
+		// position: in the profile cookie is a slot placed on a guess.
 		_ = enc.WriteField(hpack.HeaderField{Name: "set-cookie", Value: "hc=1; path=/"})
 	}
 	_ = fr.WriteHeaders(http2.HeadersFrameParam{
@@ -368,11 +368,11 @@ const (
 	qpackBlockedStreams   = 16
 )
 
-// listenQUIC поднимает слушателя на каждом адресе, в который разрешается host.
+// listenQUIC brings up a listener on every address the host resolves to.
 //
-// Один адрес недостаточен: Chrome ходит на localhost по ::1, и слушатель
-// только на 127.0.0.1 не получает ни одной датаграммы — на этом уже
-// потерян один прогон при снятии QUIC ClientHello.
+// One address is not enough: Chrome reaches localhost over ::1, and a listener
+// bound only to 127.0.0.1 receives no datagram at all — one run was already
+// lost that way while capturing the QUIC ClientHello.
 func (s *srv) listenQUIC(addr string, wg *sync.WaitGroup) error {
 	cert, err := utls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
@@ -409,19 +409,19 @@ func (s *srv) listenQUIC(addr string, wg *sync.WaitGroup) error {
 					fmt.Fprintf(os.Stderr, "QUIC %s: %v\n", ln.Addr(), err)
 					return
 				}
-				fmt.Fprintf(os.Stderr, "QUIC соединение с %s\n", conn.RemoteAddr())
+				fmt.Fprintf(os.Stderr, "QUIC connection from %s\n", conn.RemoteAddr())
 				go s.serveH3Conn(conn)
 			}
 		}(ln)
 	}
 	if started == 0 {
-		return fmt.Errorf("не удалось занять %s ни по одному адресу", addr)
+		return fmt.Errorf("could not bind %s on any address", addr)
 	}
 	return nil
 }
 
-// countingPC считает принятые датаграммы: без него «браузер не пришёл»
-// и «пришёл, но рукопожатие не сложилось» неразличимы.
+// countingPC counts the datagrams received: without it "the browser never came"
+// and "it came but the handshake failed" are indistinguishable.
 type countingPC struct {
 	*net.UDPConn
 	n  atomic.Int64
@@ -431,10 +431,10 @@ type countingPC struct {
 func (c *countingPC) WriteTo(b []byte, addr net.Addr) (int, error) {
 	n, err := c.UDPConn.WriteTo(b, addr)
 	if k := c.wr.Add(1); k <= 12 {
-		fmt.Fprintf(os.Stderr, "QUIC → %d: %d байт, %s\n", k, len(b), describePacket(b))
+		fmt.Fprintf(os.Stderr, "QUIC -> %d: %d bytes, %s\n", k, len(b), describePacket(b))
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "QUIC: ошибка отправки к %s: %v\n", addr, err)
+		fmt.Fprintf(os.Stderr, "QUIC: send error to %s: %v\n", addr, err)
 	}
 	return n, err
 }
@@ -443,30 +443,30 @@ func (c *countingPC) ReadFrom(b []byte) (int, net.Addr, error) {
 	n, addr, err := c.UDPConn.ReadFrom(b)
 	if err == nil {
 		if k := c.n.Add(1); k <= 12 {
-			fmt.Fprintf(os.Stderr, "QUIC ← %d: %d байт от %s, %s\n", k, n, addr, describePacket(b[:n]))
+			fmt.Fprintf(os.Stderr, "QUIC <- %d: %d bytes from %s, %s\n", k, n, addr, describePacket(b[:n]))
 		}
 	}
 	return n, addr, err
 }
 
-// describePacket читает открытую часть заголовка QUIC.
+// describePacket reads the cleartext part of a QUIC header.
 //
-// Версия и тип пакета не зашифрованы, и по ним видно главное: договорились
-// ли стороны о версии вообще и до какой стадии дошло рукопожатие.
+// The version and the packet type are not encrypted, and they show the main
+// things: whether the sides agreed on a version and how far the handshake got.
 func describePacket(b []byte) string {
 	if len(b) < 1 {
-		return "пусто"
+		return "empty"
 	}
 	if b[0]&0x80 == 0 {
-		return "короткий заголовок (1-RTT)"
+		return "short header (1-RTT)"
 	}
 	if len(b) < 7 {
-		return "длинный заголовок, обрезан"
+		return "long header, truncated"
 	}
 	ver := binary.BigEndian.Uint32(b[1:5])
 	kinds := map[byte]string{0: "Initial", 1: "0-RTT", 2: "Handshake", 3: "Retry"}
 	kind := kinds[(b[0]&0x30)>>4]
-	name := fmt.Sprintf("версия 0x%08x", ver)
+	name := fmt.Sprintf("version 0x%08x", ver)
 	switch ver {
 	case 0:
 		return "Version Negotiation"
@@ -478,9 +478,9 @@ func describePacket(b []byte) string {
 	if kind == "" {
 		kind = "?"
 	}
-	// Идентификаторы соединения не зашифрованы. Ответ сервера обязан идти
-	// с DCID, равным SCID клиента: расхождение здесь означало бы, что клиент
-	// наш пакет просто не признает своим.
+	// Connection identifiers are not encrypted. The server reply must carry a
+	// DCID equal to the client's SCID: a mismatch here would mean the client
+	// simply does not recognise our packet as its own.
 	cids := ""
 	if len(b) > 5 {
 		dl := int(b[5])
@@ -496,7 +496,7 @@ func describePacket(b []byte) string {
 	return name + ", " + kind + cids
 }
 
-// resolveAll разворачивает host во все его адреса.
+// resolveAll expands a host into all of its addresses.
 func resolveAll(host, port string) []*net.UDPAddr {
 	var ips []net.IP
 	if host == "localhost" {
@@ -519,9 +519,9 @@ func resolveAll(host, port string) []*net.UDPAddr {
 
 func (s *srv) serveH3Conn(conn *quic.Conn) {
 	dec := cqpack.NewDecoder(qpackMaxTableCapacity)
-	defer dec.Close(errors.New("соединение закрыто"))
+	defer dec.Close(errors.New("connection closed"))
 
-	// Контрольный поток с SETTINGS: без него Chrome закрывает соединение.
+	// The control stream with SETTINGS: without it Chrome closes the connection.
 	if ctl, err := conn.OpenUniStream(); err == nil {
 		var b []byte
 		b = quicvarint.Append(b, h3StreamControl)
@@ -571,8 +571,8 @@ func (s *srv) serveH3Uni(str *quic.ReceiveStream, dec *cqpack.Decoder) {
 	}
 	switch t {
 	case h3StreamEncoder:
-		// Поток кодировщика питает динамическую таблицу: без него
-		// ссылки на неё в HEADERS не разворачиваются.
+		// The encoder stream feeds the dynamic table: without it the references
+		// to it inside HEADERS do not expand.
 		_ = dec.ReadEncoderStream(str)
 	case h3StreamControl:
 		s.readControlStream(r)
@@ -581,11 +581,11 @@ func (s *srv) serveH3Uni(str *quic.ReceiveStream, dec *cqpack.Decoder) {
 	}
 }
 
-// readControlStream записывает кадры управляющего потока клиента.
+// readControlStream records the frames of the client's control stream.
 //
-// Здесь живёт отпечаток слоя HTTP/3: порядок SETTINGS, GREASE-кадр
-// и PRIORITY_UPDATE. Публичные оракулы отдают его строкой perk, но своего
-// браузера на телефоне ей не проверить — сюда он приходит как есть.
+// The HTTP/3-layer fingerprint lives here: the SETTINGS order, the GREASE frame
+// and PRIORITY_UPDATE. Public oracles report it as a perk string, but your own
+// browser on a phone cannot be checked against it — here it arrives as it is.
 func (s *srv) readControlStream(r quicvarint.Reader) {
 	for {
 		t, err := quicvarint.Read(r)
@@ -601,9 +601,9 @@ func (s *srv) readControlStream(r quicvarint.Reader) {
 			return
 		}
 		if t != h3FrameSettings {
-			// GREASE-кадры и PRIORITY_UPDATE различаются только типом:
-			// содержимое для отпечатка не нужно, а тип — нужен.
-			s.note(fmt.Sprintf("кадр управляющего потока: тип %d (0x%x), длина %d", t, t, n))
+			// GREASE frames and PRIORITY_UPDATE differ only by type: the payload is
+			// not needed for the fingerprint, the type is.
+			s.note(fmt.Sprintf("control stream frame: type %d (0x%x), length %d", t, t, n))
 			continue
 		}
 		var pairs []string
@@ -620,7 +620,7 @@ func (s *srv) readControlStream(r quicvarint.Reader) {
 			}
 			pairs = append(pairs, fmt.Sprintf("%d:%d", id, val))
 		}
-		s.note("SETTINGS клиента: " + strings.Join(pairs, ";"))
+		s.note("client SETTINGS: " + strings.Join(pairs, ";"))
 	}
 }
 
@@ -642,7 +642,7 @@ func (s *srv) serveH3Stream(str *quic.Stream, dec *cqpack.Decoder) {
 			break
 		}
 		if t != h3FrameHeaders {
-			continue // DATA и всё прочее для порядка заголовков не нужны
+			continue // DATA and everything else is irrelevant to the header order
 		}
 		out := record{Proto: "h3"}
 		next := dec.Decode(uint64(str.StreamID()), payload)
@@ -695,11 +695,11 @@ func (s *srv) serveH3Stream(str *quic.Stream, dec *cqpack.Decoder) {
 }
 
 // ---------------------------------------------------------------------------
-// Браузер и отчёт
+// The browser and the report
 // ---------------------------------------------------------------------------
 
-// spkiHash — SHA-256 от SubjectPublicKeyInfo сертификата в base64,
-// в том виде, какого ждёт --ignore-certificate-errors-spki-list.
+// spkiHash is the base64 SHA-256 of the certificate's SubjectPublicKeyInfo,
+// in the form --ignore-certificate-errors-spki-list expects.
 func spkiHash(path string) (string, error) {
 	pemData, err := os.ReadFile(path)
 	if err != nil {
@@ -707,7 +707,7 @@ func spkiHash(path string) (string, error) {
 	}
 	block, _ := pem.Decode(pemData)
 	if block == nil {
-		return "", errors.New("сертификат не разобран")
+		return "", errors.New("the certificate did not parse")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
@@ -731,10 +731,10 @@ func defaultBrowser() string {
 	return ""
 }
 
-// launch запускает браузер в свежем профиле и возвращает функцию остановки.
+// launch starts the browser in a fresh profile and returns a stop function.
 //
-// headless: сетевой слой у безголового Chrome тот же, а окно с ошибкой
-// сертификата пришлось бы закрывать руками.
+// headless: the network layer of headless Chrome is the same, while a window
+// with a certificate error would have to be dismissed by hand.
 func launch(browser, origin string, h3 bool) func() {
 	dir, err := os.MkdirTemp("", "curlpro-hcap-")
 	if err != nil {
@@ -749,19 +749,19 @@ func launch(browser, origin string, h3 bool) func() {
 	}
 	if h3 {
 		args = append(args, "--enable-quic", "--origin-to-force-quic-on="+origin)
-		// --ignore-certificate-errors на путь QUIC не распространяется:
-		// датаграммы Chrome шлёт, но рукопожатие молча бросает. Отпечаток
-		// открытого ключа стенда снимает именно эту проверку.
+		// --ignore-certificate-errors does not extend to the QUIC path: Chrome
+		// sends the datagrams but silently abandons the handshake. The stand's
+		// public key fingerprint is what lifts that particular check.
 		if h, err := spkiHash(certFile); err == nil {
 			args = append(args, "--ignore-certificate-errors-spki-list="+h)
 		} else {
-			fmt.Fprintln(os.Stderr, "отпечаток ключа:", err)
+			fmt.Fprintln(os.Stderr, "key fingerprint:", err)
 		}
 	}
 	args = append(args, "https://"+origin+"/")
 	cmd := exec.Command(browser, args...)
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintln(os.Stderr, "запуск браузера:", err)
+		fmt.Fprintln(os.Stderr, "launching the browser:", err)
 		os.RemoveAll(dir)
 		return func() {}
 	}
@@ -788,7 +788,7 @@ func (s *srv) report(out string) {
 		fmt.Println(n)
 	}
 	if len(recs) == 0 {
-		fmt.Println("ни одного запроса не снято")
+		fmt.Println("no request was captured")
 		return
 	}
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].Path < recs[j].Path })
@@ -805,9 +805,9 @@ func (s *srv) report(out string) {
 	if out != "" {
 		b, _ := json.MarshalIndent(recs, "", "  ")
 		if err := os.WriteFile(out, b, 0o644); err != nil {
-			fmt.Fprintln(os.Stderr, "запись:", err)
+			fmt.Fprintln(os.Stderr, "writing:", err)
 		} else {
-			fmt.Printf("\nзаписано в %s\n", out)
+			fmt.Printf("\nwritten to %s\n", out)
 		}
 	}
 }

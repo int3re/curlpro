@@ -1,8 +1,8 @@
-// Command curlpro — инструменты сопровождения профилей.
+// Command curlpro provides the profile maintenance tools.
 //
-//	curlpro validate   прогнать профили через оракула и сверить отпечаток
-//	curlpro diff       сравнить два профиля по составу
-//	curlpro list       перечислить профили
+//	curlpro validate   run profiles through an oracle and compare fingerprints
+//	curlpro diff       compare two profiles field by field
+//	curlpro list       list the profiles
 package main
 
 import (
@@ -33,31 +33,31 @@ func main() {
 		usage()
 		return
 	default:
-		fmt.Fprintf(os.Stderr, "неизвестная команда %q\n\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", os.Args[1])
 		usage()
 		os.Exit(2)
 	}
 
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "ошибка:", err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `curlpro — инструменты сопровождения профилей
+	fmt.Fprint(os.Stderr, `curlpro — profile maintenance tools
 
-  capture    снять отпечаток браузера и собрать профиль
-  collapse   свести профили в цепочки based_on, оставив только различия
-  validate   прогнать профили через оракула и сверить отпечаток с эталоном
-  diff       сравнить два профиля по составу расширений и настроек
-  list       перечислить профили
+  capture    capture a browser fingerprint and build a profile
+  collapse   fold profiles into based_on chains, keeping only the differences
+  validate   run profiles through an oracle and compare with the baseline
+  diff       compare two profiles by extensions and settings
+  list       list the profiles
 
-Подробности: curlpro <команда> -h
+Details: curlpro <command> -h
 `)
 }
 
-// newFlagSet создаёт набор флагов с описанием команды в справке.
+// newFlagSet creates a flag set with the command description in its help.
 func newFlagSet(name, description string) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ExitOnError)
 	fs.Usage = func() {
