@@ -113,7 +113,7 @@ func (s *Session) effectiveHeader(r *Request, name string) string {
 			return h.Value
 		}
 	}
-	if s.opts.DefaultHeaders && !r.NoDefaultHeaders {
+	if s.useDefaultHeaders(r) {
 		for _, h := range s.template(r).pairs {
 			if strings.EqualFold(h.Key, name) {
 				return h.Value

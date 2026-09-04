@@ -240,7 +240,8 @@ func TestNoDefaultHeadersDropsProfile(t *testing.T) {
 	s := testSession(t, chromeLike(), profile.HTTP1Spec{})
 	s.headers.Set("X-Only", "1")
 
-	got := names(s.buildHeaders(&Request{NoDefaultHeaders: true},
+	off := false
+	got := names(s.buildHeaders(&Request{DefaultHeaders: &off},
 		mustURL(t, "https://example.com/"), "example.com", nil))
 
 	if len(got) != 1 || got[0] != "x-only" {

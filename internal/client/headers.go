@@ -79,7 +79,7 @@ type headerKV struct{ Key, Value string }
 // h1Order непуст только для HTTP/1.1: там добавляются Host и Connection,
 // которых в HTTP/2 не бывает, и берётся заданный профилем регистр.
 func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []string) []headerKV {
-	useDefaults := s.opts.DefaultHeaders && !r.NoDefaultHeaders
+	useDefaults := s.useDefaultHeaders(r)
 	tpl := s.template(r)
 
 	out := make([]headerKV, 0, 16)

@@ -108,7 +108,10 @@ func curlpro_free(s *C.char) {
 // история редиректов в ответе.
 // 0.9.0: отдельный предел на установку соединения (connect_timeout_ms),
 // асинхронные открытие потока, чтение части тела и работа с WebSocket.
-const Version = "0.9.0"
+// 0.10.0: протокол на запрос (protocol) и заголовки профиля на запрос
+// (default_headers вместо no_default_headers: нужно было включать, а не
+// только выключать).
+const Version = "0.10.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -328,12 +331,13 @@ func curlpro_session_close(id C.longlong) (out *C.char) {
 }
 
 type requestJSON struct {
-	Method           string            `json:"method"`
-	URL              string            `json:"url"`
-	Headers          map[string]string `json:"headers"`
-	HeaderOrder      []string          `json:"header_order"`
-	NoDefaultHeaders bool              `json:"no_default_headers"`
-	Multipart        *multipartJSON    `json:"multipart"`
+	Method         string            `json:"method"`
+	URL            string            `json:"url"`
+	Headers        map[string]string `json:"headers"`
+	HeaderOrder    []string          `json:"header_order"`
+	DefaultHeaders *bool             `json:"default_headers"`
+	Protocol       string            `json:"protocol"`
+	Multipart      *multipartJSON    `json:"multipart"`
 	// BodyFile отправляет файл потоком, не читая его целиком в память.
 	BodyFile string `json:"body_file"`
 
@@ -370,13 +374,14 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 // toRequest собирает client.Request из кадра.
 func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 	req := &client.Request{
-		Method:           r.Method,
-		URL:              r.URL,
-		Headers:          r.Headers,
-		Body:             body,
-		BodyFile:         r.BodyFile,
-		HeaderOrder:      r.HeaderOrder,
-		NoDefaultHeaders: r.NoDefaultHeaders,
+		Method:         r.Method,
+		URL:            r.URL,
+		Headers:        r.Headers,
+		Body:           body,
+		BodyFile:       r.BodyFile,
+		HeaderOrder:    r.HeaderOrder,
+		DefaultHeaders: r.DefaultHeaders,
+		Protocol:       r.Protocol,
 	}
 	r.applyOverrides(req)
 	if r.Multipart != nil {

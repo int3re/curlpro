@@ -70,9 +70,25 @@ with curlpro.Session(retries=3, proxy="socks5://127.0.0.1:1080") as s:
     s.get(url, proxy=False)               # в обход прокси сессии
     s.get(url, retries=0)                 # без повторов, хотя у сессии они есть
     s.get(url, mode="navigate")           # набор перехода по адресу, не fetch
+    s.get(url, protocol="h3")             # этот запрос — по QUIC
+    s.get(url, protocol=1.1)              # а этот — по HTTP/1.1
+    s.get(url, default_headers=False)     # без заголовков профиля, только свои
     s.headers.clear()                     # остаются только профильные
     with s.stream("GET", url, timeout=5) as r:   # те же аргументы, что у request()
         first = next(r.iter_content())    # закрыть, не дочитав, — дёшево
+
+# Протокол выбирается на каждый запрос: `1.1`/`http1`, `2`/`h2`, `3`/`h3`.
+# Указание сильнее и опций сессии, и перехода по Alt-Svc. Замер против
+# cloudflare-quic.com в одной сессии:
+with curlpro.Session("chrome-151-windows") as s:
+    s.get(url).proto                      # HTTP/2.0 — первый запрос
+    s.get(url).proto                      # HTTP/3.0 — перешли по Alt-Svc
+    s.get(url, protocol="h2").proto       # HTTP/2.0 — но этот остался на TCP
+    s.get(url, protocol=3).proto          # HTTP/3.0
+
+# h2 при этом не урезает список ALPN до одного значения: такого не шлёт
+# ни один браузер. Если сервер согласовал http/1.1, запрос падает с ошибкой,
+# а не уезжает молча не по тому протоколу.
 
 # Соединение между запросами переиспользуется — так делает браузер, и TLS
 # не пересогласовывается заново. Выключается на сессии:

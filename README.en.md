@@ -84,6 +84,22 @@ bytes — stricter, so the familiar number is safe to keep.
 s.get(url, timeout=(3, 30))               # 3 s to connect, 30 s in total
 ```
 
+The transport is picked per request — `1.1`/`http1`, `2`/`h2`, `3`/`h3` — and
+the choice beats both the session options and an Alt-Svc upgrade. Measured
+against cloudflare-quic.com inside one session:
+
+```python
+s.get(url).proto                          # HTTP/2.0 — first request
+s.get(url).proto                          # HTTP/3.0 — upgraded via Alt-Svc
+s.get(url, protocol="h2").proto           # HTTP/2.0 — this one stays on TCP
+s.get(url, protocol=3).proto              # HTTP/3.0
+s.get(url, default_headers=False)         # only the headers you passed
+```
+
+`h2` does not trim the ALPN list to a single entry — no browser sends such a
+list. If the server negotiates http/1.1, the request fails with a clear error
+instead of silently going over the wrong protocol.
+
 Async is native — a request becomes a goroutine, and one helper thread serves
 the whole process. 128 requests of 0.3 s each take 0.37 s instead of the 1.27 s
 a 32-thread pool needed:

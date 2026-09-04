@@ -229,7 +229,10 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 			// Сетевая ошибка: соединение уже выброшено из пула в send(),
 			// поэтому повтор установит TLS заново.
 			var up *unprocessedError
-			return nil, attemptOutcome{retryable: true, unprocessed: errors.As(err, &up)}, err
+			return nil, attemptOutcome{
+				retryable:   !isFatal(err),
+				unprocessed: errors.As(err, &up),
+			}, err
 		}
 
 		// Код ответа, при котором сервер сам приглашает повторить.

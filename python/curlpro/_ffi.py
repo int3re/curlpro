@@ -202,7 +202,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Минимальная версия нативной части: мажор и минор. Поднимать вместе
 # с lib/curlpro.go, когда Python начинает зависеть от нового экспорта или поля.
-REQUIRED_VERSION = (0, 9)
+REQUIRED_VERSION = (0, 10)
 
 
 def _check_version() -> None:

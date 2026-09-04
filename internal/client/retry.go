@@ -106,6 +106,21 @@ type unprocessedError struct{ err error }
 func (e *unprocessedError) Error() string { return e.err.Error() }
 func (e *unprocessedError) Unwrap() error { return e.err }
 
+// fatalError помечает сбой, который повтор не исправит: сервер согласовал
+// не тот протокол, которого потребовал вызывающий, или профиль не описывает
+// затребованный транспорт. Со второй попытки будет ровно то же самое,
+// а при retries=3 это три лишних рукопожатия.
+type fatalError struct{ err error }
+
+func (e *fatalError) Error() string { return e.err.Error() }
+func (e *fatalError) Unwrap() error { return e.err }
+
+// isFatal сообщает, что повторять нечего.
+func isFatal(err error) bool {
+	var fe *fatalError
+	return errors.As(err, &fe)
+}
+
 // h2Unprocessed распознаёт ошибки HTTP/2, при которых поток не обрабатывался.
 //
 // Тот же набор, что у net/http canRetryError: непригодное соединение (запрос

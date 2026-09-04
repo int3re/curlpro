@@ -170,8 +170,20 @@ type Request struct {
 
 	// HeaderOrder переопределяет порядок для одного запроса.
 	HeaderOrder []string
-	// NoDefaultHeaders отключает заголовки профиля для одного запроса.
-	NoDefaultHeaders bool
+	// DefaultHeaders включает или отключает заголовки профиля для одного
+	// запроса. nil — как задано у сессии.
+	//
+	// Указатель, а не bool: сессия может отключить их целиком, и тогда
+	// отдельному запросу нужен способ вернуть их обратно.
+	DefaultHeaders *bool
+
+	// Protocol насильно задаёт транспорт для одного запроса: ProtoHTTP1,
+	// ProtoH2 или ProtoH3. Пусто — как решает сессия: её опции, а на прямых
+	// соединениях ещё и Alt-Svc.
+	//
+	// Указание сильнее и того и другого: вызывающий просит протокол,
+	// а не совета.
+	Protocol string
 
 	// Переопределения сессионных настроек на один запрос.
 	// nil означает «взять из сессии» — это отличает «не задано» от «задано
@@ -222,6 +234,34 @@ func (r *Request) context() context.Context {
 		return r.Ctx
 	}
 	return context.Background()
+}
+
+// Значения Request.Protocol.
+//
+// h2 не урезает список ALPN до одного значения: набор из единственного h2
+// не шлёт ни один браузер, и подделка отпечатка на этом бы и кончилась.
+// Поэтому h2 означает «не уходить в QUIC и не соглашаться на HTTP/1.1»:
+// если сервер согласовал http/1.1, запрос падает с внятной ошибкой.
+const (
+	ProtoHTTP1 = "http1"
+	ProtoH2    = "h2"
+	ProtoH3    = "h3"
+)
+
+// protocol возвращает затребованный запросом транспорт.
+func (r *Request) protocol() string {
+	if r == nil {
+		return ""
+	}
+	return r.Protocol
+}
+
+// useDefaultHeaders решает, добавлять ли заголовки профиля.
+func (s *Session) useDefaultHeaders(r *Request) bool {
+	if r != nil && r.DefaultHeaders != nil {
+		return *r.DefaultHeaders
+	}
+	return s.opts.DefaultHeaders
 }
 
 // proxyFor возвращает адрес прокси для запроса.
@@ -301,6 +341,12 @@ func (r *Request) validate() error {
 	if r.ConnectTimeout != nil && *r.ConnectTimeout <= 0 {
 		return fmt.Errorf("connect timeout должен быть положительным, получено %s "+
 			"(чтобы не ограничивать, не задавайте его вовсе)", *r.ConnectTimeout)
+	}
+	switch r.Protocol {
+	case "", ProtoHTTP1, ProtoH2, ProtoH3:
+	default:
+		return fmt.Errorf("protocol %q: допустимы %q, %q и %q",
+			r.Protocol, ProtoHTTP1, ProtoH2, ProtoH3)
 	}
 	if r.MaxRedirects != nil && *r.MaxRedirects < 0 {
 		return fmt.Errorf("max_redirects не может быть отрицательным, получено %d",
@@ -643,11 +689,20 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// Заголовки для неё собирает sendH3 сам: fhttp-запрос ей не нужен.
 	// Автопереход по Alt-Svc действует только на прямые соединения: через
 	// прокси QUIC не проходит, и предлагать его там нечего.
-	viaAltSvc := !s.opts.HTTP3 && s.proxyForHost(r, u.Host) == "" && s.altSvcH3(u)
-	if s.opts.HTTP3 || viaAltSvc {
-		if r.Proxy != nil && *r.Proxy != "" {
-			return fail(fmt.Errorf("прокси для HTTP/3 не поддерживается " +
-				"(QUIC требует CONNECT-UDP, RFC 9298)"))
+	forced := r.protocol()
+	viaAltSvc := forced == "" && !s.opts.HTTP3 &&
+		s.proxyForHost(r, u.Host) == "" && s.altSvcH3(u)
+	if forced == ProtoH3 || (forced == "" && s.opts.HTTP3) || viaAltSvc {
+		// Опция сессии проверена при её создании, а требование запроса —
+		// только здесь: до него профиль мог и не понадобиться.
+		if !s.profile.HTTP3.Enabled() {
+			return fail(&fatalError{fmt.Errorf(
+				"protocol=%s: профиль %q не описывает секцию http3",
+				ProtoH3, s.profile.Name)})
+		}
+		if s.proxyForHost(r, u.Host) != "" {
+			return fail(&fatalError{fmt.Errorf("прокси для HTTP/3 не поддерживается " +
+				"(QUIC требует CONNECT-UDP, RFC 9298)")})
 		}
 		resp, err := s.sendH3(req.Context(), r, u)
 		if err == nil {
@@ -662,11 +717,23 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		s.markAltSvcBroken(u)
 	}
 
-	spec := s.newDialSpec(u, s.proxyForHost(r, u.Host), s.opts.ForceHTTP1)
+	forceH1 := s.opts.ForceHTTP1
+	if forced != "" {
+		forceH1 = forced == ProtoHTTP1
+	}
+	spec := s.newDialSpec(u, s.proxyForHost(r, u.Host), forceH1)
 	c, err := s.conn(req.Context(), u, spec)
 	if err != nil {
 		// Соединения нет — запрос до сервера не дошёл, повтор безопасен.
 		return fail(&unprocessedError{err})
+	}
+	// Соединение живое, просто не того протокола: возвращаем его в пул
+	// и падаем. Повтор бессмыслен — сервер согласует то же самое.
+	if forced == ProtoH2 && c.proto != "h2" {
+		s.release(c)
+		return fail(&fatalError{fmt.Errorf(
+			"protocol=%s: сервер согласовал %s. Список ALPN при этом не урезается: "+
+				"набора из одного h2 не шлёт ни один браузер", ProtoH2, c.proto)})
 	}
 	// Заголовки собираются после выбора соединения: порядок и регистр
 	// HTTP/1.1 зависят от того, что согласовал сервер, а не от опции.

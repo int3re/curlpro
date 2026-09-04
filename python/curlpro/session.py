@@ -158,6 +158,31 @@ def _auth_header(auth: tuple[str, str] | str | None) -> str | None:
     return "Basic " + token
 
 
+#: Как называют протоколы в жизни. Каноническое значение уходит в ядро.
+_PROTOCOLS = {
+    "http1": "http1", "http/1.1": "http1", "http1.1": "http1",
+    "h1": "http1", "1.1": "http1", "1": "http1",
+    "h2": "h2", "http2": "h2", "http/2": "h2", "2": "h2", "2.0": "h2",
+    "h3": "h3", "http3": "h3", "http/3": "h3", "3": "h3", "3.0": "h3",
+}
+
+
+def _protocol(value: str | float | None) -> str:
+    """Приводит имя протокола к тому, что понимает ядро.
+
+    Принимает и число: ``protocol=2`` читается не хуже ``protocol="h2"``,
+    а спрашивают чаще именно так.
+    """
+    if value is None:
+        return ""
+    key = str(value).strip().lower()
+    if key not in _PROTOCOLS:
+        raise ValueError(
+            f"protocol={value!r}: допустимы http1 (1.1), h2 (2) и h3 (3)"
+        )
+    return _PROTOCOLS[key]
+
+
 def _request_meta(
     method: str,
     url: str,
@@ -172,6 +197,7 @@ def _request_meta(
     body_file: str | Any = None,
     header_order: Iterable[str] | None = None,
     default_headers: bool | None = None,
+    protocol: str | float | None = None,
     timeout: float | tuple[float, float] | None = None,
     allow_redirects: bool | None = None,
     max_redirects: int | None = None,
@@ -218,7 +244,9 @@ def _request_meta(
         "url": url,
         "headers": hdrs,
         "header_order": list(header_order) if header_order else None,
-        "no_default_headers": default_headers is False,
+        # None — как у сессии; True и False перебивают её в обе стороны.
+        "default_headers": default_headers,
+        "protocol": _protocol(protocol),
         "multipart": multipart,
         "body_file": body_file or "",
         # None означает «взять из сессии»; ноль — осмысленное значение,
@@ -366,7 +394,8 @@ class Session:
     :param default_headers: подставлять заголовки профиля. Выключите, чтобы
         полностью управлять набором и порядком самостоятельно — анти-боты
         смотрят и на порядок. Без своего ``user-agent`` заголовок не уходит
-        вовсе: подставлять умолчание Go библиотека не станет
+        вовсе: подставлять умолчание Go библиотека не станет. Отдельный
+        запрос перебивает это значение в обе стороны
     :param header_order: желаемый порядок заголовков; не перечисленные идут
         следом, сохраняя относительный порядок
     :param allow_redirects: переходить по 3xx
@@ -521,6 +550,7 @@ class Session:
         body_file: str | Any = None,
         header_order: Iterable[str] | None = None,
         default_headers: bool | None = None,
+        protocol: str | float | None = None,
         timeout: float | tuple[float, float] | None = None,
         allow_redirects: bool | None = None,
         max_redirects: int | None = None,
@@ -546,7 +576,7 @@ class Session:
             data=data, json_body=json_body,
             files=files, fields=fields, body_file=body_file,
             header_order=header_order, default_headers=default_headers,
-            timeout=timeout, allow_redirects=allow_redirects,
+            protocol=protocol, timeout=timeout, allow_redirects=allow_redirects,
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
@@ -602,6 +632,7 @@ class Session:
         body_file: str | Any = None,
         header_order: Iterable[str] | None = None,
         default_headers: bool | None = None,
+        protocol: str | float | None = None,
         timeout: float | tuple[float, float] | None = None,
         allow_redirects: bool | None = None,
         max_redirects: int | None = None,
@@ -628,7 +659,7 @@ class Session:
             method, url, headers=headers, data=data, json_body=json_body,
             files=files, fields=fields, body_file=body_file,
             header_order=header_order, default_headers=default_headers,
-            timeout=timeout, allow_redirects=allow_redirects,
+            protocol=protocol, timeout=timeout, allow_redirects=allow_redirects,
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
