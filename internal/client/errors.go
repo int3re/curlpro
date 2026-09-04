@@ -27,6 +27,10 @@ const (
 	// CodeWSProtocol — the server broke RFC 6455/7692: a compressed frame without
 	// the negotiated extension, an unknown opcode and the like.
 	CodeWSProtocol ErrorCode = "ws_protocol"
+	// CodeTooLarge — the response body outgrew MaxResponseSize. The streaming
+	// path raises the same code from Python, so a caller that branches on it
+	// does not have to know which path produced the body.
+	CodeTooLarge ErrorCode = "too_large"
 )
 
 // codedError carries a code next to the original error, without losing its text.

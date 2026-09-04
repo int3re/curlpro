@@ -611,7 +611,10 @@ func (s *Session) Do(r *Request) (*Response, error) {
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 	if limit := s.opts.MaxResponseSize; limit > 0 && int64(len(data)) > limit {
-		return nil, fmt.Errorf("response body is larger than the max_response_size limit of %d bytes", limit)
+		return nil, withCode(CodeTooLarge, fmt.Errorf(
+			"response body is larger than the max_response_size limit of %d bytes; "+
+				"read it as a stream to handle a body this large without collecting it in memory",
+			limit))
 	}
 	return &Response{
 		History: stream.History,

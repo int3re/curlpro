@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -113,7 +114,7 @@ func curlpro_free(s *C.char) {
 // on, not only off).
 // 0.11.0: per-request switches for the session memory — the cookie jar
 // (cookies) and the session headers (session_headers).
-const Version = "0.11.0"
+const Version = "0.12.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -330,6 +331,48 @@ func curlpro_session_close(id C.longlong) (out *C.char) {
 	}
 	s.Close()
 	return respond(nil, nil)
+}
+
+// curlpro_debug_counts reports the size of every FFI registry: sessions, streams,
+// sockets and calls in flight.
+//
+// For tests and leak hunting. A handle left registered holds a connection and is
+// otherwise invisible until the process memory grows — the same reason
+// curlpro_async_pending exists.
+//
+//export curlpro_debug_counts
+func curlpro_debug_counts() (out *C.char) {
+	defer recoverInto(&out)
+
+	sessionsMu.RLock()
+	nSessions := len(sessions)
+	sessionsMu.RUnlock()
+
+	streamsMu.RLock()
+	nStreams := len(streams)
+	streamsMu.RUnlock()
+
+	socketsMu.RLock()
+	nSockets := len(sockets)
+	socketsMu.RUnlock()
+
+	asyncMu.Lock()
+	nPending := len(asyncPending)
+	asyncMu.Unlock()
+
+	// Goroutines and the heap come from the same call: a leaked handle shows up
+	// as goroutines long before the process memory moves.
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+
+	return respond(map[string]any{
+		"sessions":   nSessions,
+		"streams":    nStreams,
+		"sockets":    nSockets,
+		"pending":    nPending,
+		"goroutines": runtime.NumGoroutine(),
+		"heap_kb":    int(mem.HeapAlloc / 1024),
+	}, nil)
 }
 
 type requestJSON struct {

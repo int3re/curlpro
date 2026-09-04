@@ -9,9 +9,23 @@ from __future__ import annotations
 
 from typing import Iterator
 
-from ._ffi import _call, stream_read
+from ._ffi import CurlProError, _call, stream_read
 
 DEFAULT_CHUNK = 64 * 1024
+
+
+def too_large(limit: int) -> CurlProError:
+    """The error for a body that outgrew ``max_response_size``.
+
+    Shared by the sync and async readers so that the same limit is explained
+    the same way — and so that the way out is named, because collecting the
+    body is the caller's choice here, not the library's.
+    """
+    return CurlProError(
+        f"response body is larger than the max_response_size limit of {limit} bytes; "
+        f"read it with iter_content() to handle a body this large without "
+        f"collecting it in memory",
+        "too_large")
 
 
 def lines_from(buffer: bytes, chunk: bytes, keepends: bool) -> tuple[bytes, list[bytes]]:
@@ -38,15 +52,19 @@ class StreamResponse:
                 out.write(chunk)
     """
 
-    __slots__ = ("status", "proto", "headers", "url", "_id", "_closed")
+    __slots__ = ("status", "proto", "headers", "url", "_id", "_closed", "_max_size")
 
-    def __init__(self, payload: dict):
+    def __init__(self, payload: dict, max_size: int = 0):
         self.status: int = payload["status"]
         self.proto: str = payload.get("proto", "")
         self.headers: dict[str, list[str]] = payload.get("headers") or {}
         self.url: str = payload.get("url", "")
         self._id: int = payload["stream"]
         self._closed = False
+        # The session's max_response_size. It binds read() and not
+        # iter_content(): reading in chunks is how a body larger than memory is
+        # meant to be handled, while read() is the call that collects it whole.
+        self._max_size = max_size
 
     @property
     def ok(self) -> bool:
@@ -85,8 +103,26 @@ class StreamResponse:
             yield chunk
 
     def read(self) -> bytes:
-        """Reads the rest of the body. Handy when the stream was opened in vain."""
-        return b"".join(self.iter_content())
+        """Reads the rest of the body. Handy when the stream was opened in vain.
+
+        Bounded by the session's ``max_response_size``: without it a server
+        with an endless response eats the process memory, and the ordinary
+        request path has been bounded since the beginning.
+        """
+        if not self._max_size:
+            return b"".join(self.iter_content())
+        # One byte past the limit tells "exactly the limit" from "over the
+        # limit", and asking for no more than that keeps the read itself
+        # inside the budget the limit sets.
+        parts: list[bytes] = []
+        total = 0
+        while total <= self._max_size:
+            chunk = stream_read(self._id, min(DEFAULT_CHUNK, self._max_size + 1 - total))
+            if not chunk:
+                return b"".join(parts)
+            parts.append(chunk)
+            total += len(chunk)
+        raise too_large(self._max_size)
 
     def close(self) -> None:
         if not self._closed:

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import base64
 import json
+import sys
 import time
+import traceback
 from typing import Any, Callable, Iterable, Mapping
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
@@ -380,6 +382,25 @@ class Response:
         return f"<Response {self.status} {self.proto} {len(self.content)}b>"
 
 
+def _note_hook_failure(exc: BaseException, hook: Any, hook_exc: BaseException) -> None:
+    """Attaches an error hook's own failure to the exception that survives it.
+
+    From Python 3.11 the remark rides along as a PEP 678 note and prints under
+    the traceback. Older versions have nowhere to put it, so it goes to stderr
+    the way an unraisable exception does — anything else would lose it.
+    """
+    name = getattr(hook, "__name__", None) or repr(hook)
+    text = (f"on_error hook {name!r} itself failed with "
+            f"{type(hook_exc).__name__}: {hook_exc}; the request error above is "
+            f"what was raised")
+    add_note = getattr(exc, "add_note", None)
+    if add_note is not None:
+        add_note(text)
+        return
+    print(text, file=sys.stderr)
+    traceback.print_exception(type(hook_exc), hook_exc, hook_exc.__traceback__)
+
+
 class Session:
     """A session with one profile and reused connections.
 
@@ -534,6 +555,9 @@ class Session:
         self.impersonate = impersonate
         self._trust_env = trust_env
         self._closed = False
+        # Kept for the streaming path: the limit lives in the native part,
+        # which never sees a stream read as a whole body.
+        self._max_response_size = int(max_response_size)
         #: Headers added to every request of the session. Kept apart from
         #: the profile's, so clear() restores the plain fingerprint.
         self.headers = SessionHeaders(self._id)
@@ -669,7 +693,17 @@ class Session:
         if not isinstance(exc, Exception):
             return exc
         for hook in self.hooks["error"]:
-            replaced = hook(exc)
+            try:
+                replaced = hook(exc)
+            except Exception as hook_exc:  # noqa: BLE001
+                # A hook that fails must not hide why the request failed: the
+                # caller acts on the network error, not on a typo in their own
+                # logging. Replacing the exception is what returning one is
+                # for; raising from a hook used to do it by accident. The
+                # remaining hooks still run — one broken hook disables itself,
+                # not the others.
+                _note_hook_failure(exc, hook, hook_exc)
+                continue
             if isinstance(replaced, BaseException):
                 exc = replaced
         return exc
@@ -759,7 +793,7 @@ class Session:
             respect_retry_after=respect_retry_after, proxy=proxy, mode=mode,
         )
         payload, _ = call_framed("curlpro_stream_open", self._id, body=body, meta=meta)
-        return StreamResponse(payload)
+        return StreamResponse(payload, self._max_response_size)
 
     def websocket(
         self,
@@ -808,6 +842,9 @@ class Session:
         if not self._closed:
             _call("curlpro_session_close", self._id)
             self._closed = True
+            # The jar has no handle of its own: it reads the session that is
+            # now gone, and has to say so rather than name a stale number.
+            self.cookies._closed = True
 
     def __enter__(self) -> "Session":
         return self

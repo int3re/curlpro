@@ -59,16 +59,30 @@ class Cookies(Mapping[str, str]):
         s.cookies.load_file("state.json")
     """
 
-    __slots__ = ("_id",)
+    __slots__ = ("_id", "_closed")
 
     def __init__(self, session_id: int):
         self._id = session_id
+        self._closed = False
+
+    def _live(self) -> int:
+        """The session handle, or a readable error if the session is gone.
+
+        Without it the native part answers "session N not found": a number the
+        caller never chose, for a jar that died with its session. Cookies have
+        to be taken out before close() — after it there is nothing to take.
+        """
+        if self._closed:
+            raise RuntimeError(
+                "session is closed, and its cookies went with it; "
+                "export them with cookies.export() before closing")
+        return self._id
 
     # -- reading -----------------------------------------------------------
 
     def all(self) -> list[Cookie]:
         """The full records: domain, path, expiry, flags."""
-        data = _call("curlpro_session_cookies", self._id)
+        data = _call("curlpro_session_cookies", self._live())
         return [Cookie(c) for c in (data.get("cookies") or [])]
 
     def export(self) -> list[dict[str, Any]]:
@@ -105,11 +119,11 @@ class Cookies(Mapping[str, str]):
 
     def load(self, cookies: list[Mapping[str, Any]]) -> None:
         """Loads cookies into the session: they will ride along on matching requests."""
-        _call("curlpro_session_set_cookies", self._id, encode(list(cookies)))
+        _call("curlpro_session_set_cookies", self._live(), encode(list(cookies)))
 
     def clear(self) -> None:
         """Forgets every cookie of the session."""
-        _call("curlpro_session_clear_cookies", self._id)
+        _call("curlpro_session_clear_cookies", self._live())
 
     # -- transactions --------------------------------------------------------
 

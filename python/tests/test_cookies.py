@@ -176,3 +176,28 @@ def test_cookies_file_is_plain_json(tmp_path):
             s.cookies.save(state)
     data = json.loads(state.read_text(encoding="utf-8"))
     assert isinstance(data, list) and data[0]["name"] == "sid"
+
+
+def test_cookies_after_close_say_the_session_is_closed():
+    """The jar dies with its session, and has to say so.
+
+    It has no handle of its own, so it used to ask the native part about a
+    session that was gone and pass on "session 7 not found" — a number the
+    caller never chose, for a failure that is entirely predictable.
+    """
+    s = curlpro.Session(verify=False, force_http1=True)
+    s.cookies.set("sid", "1", domain="example.com")
+    saved = s.cookies.export()
+    s.close()
+
+    for call in (lambda: s.cookies.all(),
+                 lambda: s.cookies.export(),
+                 lambda: s.cookies["sid"],
+                 lambda: s.cookies.set("a", "1", domain="example.com"),
+                 lambda: s.cookies.clear(),
+                 lambda: s.cookies.load([])):
+        with pytest.raises(RuntimeError, match="session is closed"):
+            call()
+
+    # The way out named by the message: take the cookies out before closing.
+    assert saved and saved[0]["name"] == "sid"

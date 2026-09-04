@@ -147,18 +147,21 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports) (*h3
 
 // explainH3Error turns low-level errors into readable ones.
 //
-// The QPACK dynamic table case is handled separately: the profile advertises a
-// non-zero capacity, as Chrome does, and the server may use it — while the
-// quic-go/qpack library does not implement the dynamic table at all.
-// The message "expected Required Insert Count to be zero" says nothing about
-// that, and without a hint the cause takes a long time to find.
+// QPACK gets its own wording. The profile advertises a non-zero dynamic-table
+// capacity (SETTINGS 0x01), as Chrome does, so the server is entitled to encode
+// headers against the table; decoding it is ours (internal/qpack), and an error
+// mentioning the Required Insert Count means the encoder stream and the header
+// block disagree. The bare message names neither the table nor the consequence —
+// that the response headers cannot be reconstructed at all.
 func explainH3Error(err error, profileName string) error {
 	if strings.Contains(err.Error(), "Required Insert Count") {
-		return fmt.Errorf("h3: the server used the QPACK dynamic table, which this decoder "+
-			"does not support.\n"+
-			"Profile %q advertises a non-zero capacity (SETTINGS 0x01) exactly as Chrome does, "+
-			"so the server is entitled to use it.\n"+
-			"Workaround: a delta profile with \"http3\": {\"settings\": [{\"id\": 1, \"value\": 0}]} — "+
+		return fmt.Errorf("h3: QPACK decoding failed on a dynamic-table reference, "+
+			"so the response headers cannot be reconstructed.\n"+
+			"Profile %q advertises a non-zero table capacity (SETTINGS 0x01) exactly as Chrome "+
+			"does, which lets the server encode against the table; here its encoder stream and "+
+			"the header block disagree.\n"+
+			"If it repeats against one host, a delta profile with "+
+			"\"http3\": {\"settings\": [{\"id\": 1, \"value\": 0}]} turns the table off — "+
 			"at the cost of a fingerprint mismatch in the very first SETTINGS field.\n"+
 			"Underlying error: %w", profileName, err)
 	}

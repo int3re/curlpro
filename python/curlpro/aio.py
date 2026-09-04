@@ -16,11 +16,11 @@ import asyncio
 from typing import Any, AsyncIterator, Iterable, Mapping
 
 from ._completions import settle
-from ._ffi import WebSocketClosed, _call, call_with_frame, encode
+from ._ffi import CurlProError, WebSocketClosed, _call, call_with_frame, encode
 from .proxies import proxy_for as env_proxy
 from .session import DEFAULT_PROFILE, Response, Session, _request_meta
 from .timeouts import split_timeout as _split_timeout
-from .stream import DEFAULT_CHUNK, lines_from
+from .stream import DEFAULT_CHUNK, lines_from, too_large
 
 
 class _Opener:
@@ -58,15 +58,17 @@ class AsyncStreamResponse:
     The stream holds its connection until closed — hence ``async with``.
     """
 
-    __slots__ = ("status", "proto", "headers", "url", "_id", "_closed")
+    __slots__ = ("status", "proto", "headers", "url", "_id", "_closed", "_max_size")
 
-    def __init__(self, payload: dict):
+    def __init__(self, payload: dict, max_size: int = 0):
         self.status: int = payload["status"]
         self.proto: str = payload.get("proto", "")
         self.headers: dict[str, list[str]] = payload.get("headers") or {}
         self.url: str = payload.get("url", "")
         self._id: int = payload["stream"]
         self._closed = False
+        # See StreamResponse: the limit binds read(), not iter_content().
+        self._max_size = max_size
 
     @property
     def ok(self) -> bool:
@@ -109,9 +111,22 @@ class AsyncStreamResponse:
             yield buffer
 
     async def read(self) -> bytes:
-        """Reads the rest of the body. Handy when the stream was opened in vain."""
-        parts = [chunk async for chunk in self.iter_content()]
-        return b"".join(parts)
+        """Reads the rest of the body. Handy when the stream was opened in vain.
+
+        Bounded by the session's ``max_response_size``, exactly as the
+        synchronous reader is.
+        """
+        if not self._max_size:
+            return b"".join([chunk async for chunk in self.iter_content()])
+        parts: list[bytes] = []
+        total = 0
+        while total <= self._max_size:
+            chunk = await self.read_chunk(min(DEFAULT_CHUNK, self._max_size + 1 - total))
+            if not chunk:
+                return b"".join(parts)
+            parts.append(chunk)
+            total += len(chunk)
+        raise too_large(self._max_size)
 
     async def close(self) -> None:
         if self._closed:
@@ -346,7 +361,7 @@ class AsyncSession:
             "curlpro_stream_open_start", self._session._id, body=body, meta=meta
         )
         payload, _ = await settle(started)
-        return AsyncStreamResponse(payload)
+        return AsyncStreamResponse(payload, self._session._max_response_size)
 
     async def _open_websocket(
         self,

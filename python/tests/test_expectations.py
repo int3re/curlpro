@@ -223,3 +223,39 @@ def test_snapshot_is_a_plain_list_of_records():
         s.cookies.clear()
         s.cookies.restore(saved)
         assert s.cookies["a"] == "1"
+
+
+def test_a_failing_error_hook_does_not_replace_the_request_error():
+    """A hook is for logging, and logging must not become the diagnosis.
+
+    Raising from a hook used to replace the exception by accident: a typo in
+    the caller's logging arrived instead of the network error. Replacing is
+    what returning an exception is for, and that still works.
+    """
+    ran_after = []
+    with RawHeaderServer(persistent=True) as srv:
+        with curlpro.Session(verify=False, force_http1=True) as s:
+            @s.on_error
+            def broken(exc):
+                raise ValueError("the hook itself failed")
+
+            @s.on_error
+            def after(exc):
+                ran_after.append(type(exc).__name__)
+
+            with pytest.raises(ExpectationFailed) as caught:
+                s.get(srv.url, expect=Expect(status=418))
+
+    # One broken hook disables itself, not the ones behind it.
+    assert ran_after == ["ExpectationFailed"]
+    notes = getattr(caught.value, "__notes__", [])
+    if notes:  # PEP 678, Python 3.11 and up
+        assert "broken" in notes[0] and "the hook itself failed" in notes[0]
+
+
+def test_an_error_hook_still_replaces_by_returning():
+    with RawHeaderServer(persistent=True) as srv:
+        with curlpro.Session(verify=False, force_http1=True) as s:
+            s.on_error(lambda exc: LookupError("the caller's own error"))
+            with pytest.raises(LookupError):
+                s.get(srv.url, expect=Expect(status=418))

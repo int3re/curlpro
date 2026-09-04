@@ -153,7 +153,7 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 | `keep_alive`, `max_idle_conns`, `idle_conn_timeout` | connection reuse and pool size |
 | `resolve`, `ip_version` | host address override, address family (`"4"`/`"6"`) |
 | `device`, `devices` | the phone for mobile profiles and your own device list |
-| `max_response_size` | body size limit; without one an endless response eats memory |
+| `max_response_size` | body size limit; without one an endless response eats memory. Binds `read()`, not `iter_content()` |
 | `hooks` | the `request`, `response` and `error` hooks |
 
 ## Request
@@ -339,6 +339,11 @@ with s.stream("GET", ndjson_url) as r:
     for line in r.iter_lines():                  # line by line, nothing collected
         handle(json.loads(line))
 ```
+
+The session's `max_response_size` binds `read()` — the call that collects the
+body into memory — and deliberately does not bind `iter_content()`: reading in
+chunks is how a body larger than memory is meant to be handled. Both errors
+carry the code `too_large`.
 
 Closing a stream with the body unread is cheap: the connection is dropped rather
 than drained. Uploads are symmetric: `body_file=` streams a file with an explicit

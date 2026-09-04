@@ -21,8 +21,9 @@ class CurlProError(RuntimeError):
     """An error raised by the native part.
 
     ``code`` is the machine-readable code when the native side knows one:
-    ``timeout``, ``session_closed``, ``ws_closed``, ``ws_too_big``,
-    ``ws_protocol``. Never branch on the message text — it is for humans.
+    ``timeout``, ``session_closed``, ``too_large``, ``ws_closed``,
+    ``ws_too_big``, ``ws_protocol``. Never branch on the message text — it is
+    for humans.
     """
 
     def __init__(self, message: str, code: str | None = None):
@@ -150,6 +151,7 @@ for _name, _args in (
     ("curlpro_ws_recv_start", [ctypes.c_longlong]),
     ("curlpro_result_take", [ctypes.c_longlong, ctypes.POINTER(ctypes.c_int)]),
     ("curlpro_request_cancel", [ctypes.c_longlong]),
+    ("curlpro_debug_counts", []),
 ):
     try:
         _fn = getattr(_lib, _name)
@@ -204,7 +206,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Minimum version of the native part: major and minor. Raise it together
 # with lib/curlpro.go whenever Python starts depending on a new export or field.
-REQUIRED_VERSION = (0, 11)
+REQUIRED_VERSION = (0, 12)
 
 
 def _check_version() -> None:
