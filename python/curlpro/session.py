@@ -13,7 +13,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 from ._ffi import HTTPError, _call, call_framed, encode
 from .cookies import Cookies
 from .encoding import detect as detect_encoding
-from .expect import Expect, ExpectationFailed
+from .expect import Expect
 from .headers import SessionHeaders
 from .profiles import ensure_loaded
 from .proxies import proxy_for as env_proxy

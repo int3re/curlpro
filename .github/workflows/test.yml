@@ -6,38 +6,10 @@ on:
   pull_request:
 
 jobs:
-  go:
+  # Cheap and first: a formatting or an unused-import failure must not wait
+  # behind ten minutes of matrix.
+  lint:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.27"
-          cache: true
-
-      # Сертификат стенда в репозиторий не входит: приватный ключ там ни к чему.
-      # Тесты HTTP/3, WebSocket и повторов поднимают локальный TLS-сервер и
-      # без него падают — на первом же прогоне CI это и всплыло.
-      - name: certs
-        run: bash scripts/gen-certs.sh
-
-      - name: vet
-        run: go vet ./internal/... ./cmd/...
-
-      - name: tests
-        run: go test ./internal/...
-
-      # Отдельная цель: собрать нативную библиотеку. Пакеты internal/h3
-      # и internal/client тестами не покрыты, и без сборки поломка в них
-      # всплыла бы только при выпуске wheels.
-      - name: build c-shared
-        run: |
-          CGO_ENABLED=1 go build -buildmode=c-shared -o dist/libcurlpro.so ./lib
-          ls -la dist/
-
-  python:
-    runs-on: ubuntu-latest
-    needs: go
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -48,26 +20,138 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Сертификат стенда в репозиторий не входит: приватный ключ там ни к чему.
-      # Тесты HTTP/3, WebSocket и повторов поднимают локальный TLS-сервер и
-      # без него падают — на первом же прогоне CI это и всплыло.
+      # gofmt only became meaningful once the repository stopped storing CRLF:
+      # it strips the CR, so before that it called every Go file unformatted.
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l internal lib cmd)
+          if [ -n "$unformatted" ]; then
+            echo "not gofmt-ed:"; echo "$unformatted"
+            gofmt -d internal lib cmd
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./internal/... ./cmd/...
+
+      # A narrow rule set on purpose: errors, not style. F catches an undefined
+      # name and a dead import, B catches the bugbear class, E9 catches what
+      # will not even run. Style rules would add hundreds of findings and no
+      # bugs, and a linter nobody can keep green stops being read.
+      - name: ruff
+        run: |
+          pip install ruff
+          ruff check python --select E9,F,B
+
+  go:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      # The stand certificate is not in the repository: a private key in open
+      # code is a bad sign, and the certificate itself is self-signed and
+      # single-use. The HTTP/3, WebSocket and retry tests raise a local TLS
+      # server and fail without it — the first CI run is where that showed up.
+      - name: certs
+        shell: bash
+        run: bash scripts/gen-certs.sh
+
+      # -race, not a plain run: the pool, the session and the cookie jar are
+      # written from parallel goroutines, and a race there is invisible in an
+      # ordinary test. It needs cgo, and therefore a C compiler; all three
+      # runners ship one.
+      - name: tests
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./internal/...
+
+      # A separate goal: build the native library. Without it a breakage in
+      # internal/h3 or internal/client would only surface at wheel time.
+      - name: build c-shared
+        shell: bash
+        run: |
+          ext=so
+          [ "$RUNNER_OS" = "Windows" ] && ext=dll
+          [ "$RUNNER_OS" = "macOS" ] && ext=dylib
+          CGO_ENABLED=1 go build -buildmode=c-shared -o "dist/libcurlpro.$ext" ./lib
+          ls -la dist/
+
+  # The main Python run: the local stands only, and therefore deterministic.
+  # The floor is the 3.9 declared in pyproject — a floor nothing checks is a
+  # guess, not a promise.
+  python:
+    needs: go
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
       - name: certs
         run: bash scripts/gen-certs.sh
 
       - name: build native library
         run: CGO_ENABLED=1 go build -buildmode=c-shared -o dist/libcurlpro.so ./lib
 
-      # websockets нужен локальному WSS-серверу: без него тесты сокета —
-      # и обычного, и асинхронного — тихо пропускаются, а это как раз тот путь,
-      # где ошибка времени жизни памяти C уже один раз пряталась.
+      # websockets is what the local WSS server needs: without it the socket
+      # tests — synchronous and asynchronous alike — skip quietly, and that is
+      # exactly the path where a C memory lifetime bug once hid.
       - name: install
         run: pip install pytest websockets ./python
 
-      # Тесты ходят в интернет: httpbin.org, browserleaks, quic.browserleaks.
-      # Сетевые сбои не должны валить сборку, поэтому один повтор.
       - name: tests
         env:
           CURLPRO_LIBRARY: ${{ github.workspace }}/dist/libcurlpro.so
-        run: |
-          cd python
-          python -m pytest tests -q --tb=short || python -m pytest tests -q --tb=short --lf
+        run: cd python && python -m pytest tests -q --tb=short -m "not network"
+
+  # Tests against someone else's services, kept apart on purpose. They check
+  # real-world behaviour that no local stand reproduces — an oracle's verdict on
+  # the fingerprint, HTTP/3 to a live host — but httpbin being down says nothing
+  # about this library, so a failure here is reported and not fatal. It used to
+  # be one job with a `|| pytest --lf` retry, which is a way of admitting
+  # flakiness rather than containing it.
+  network:
+    needs: python
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: certs
+        run: bash scripts/gen-certs.sh
+
+      - name: build native library
+        run: CGO_ENABLED=1 go build -buildmode=c-shared -o dist/libcurlpro.so ./lib
+
+      - name: install
+        run: pip install pytest websockets ./python
+
+      - name: tests
+        env:
+          CURLPRO_LIBRARY: ${{ github.workspace }}/dist/libcurlpro.so
+        run: cd python && python -m pytest tests -q --tb=short -m network

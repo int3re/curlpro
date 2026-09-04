@@ -119,7 +119,10 @@ def _h3_reachable() -> bool:
 
 
 LIVE = "https://cloudflare-quic.com/"
-online = pytest.mark.skipif(not _h3_reachable(), reason="no access to cloudflare-quic.com")
+# The network marker and the offline skip together: the rest of this file
+# runs against the local stand and stays in the main run.
+online = pytest.mark.network(
+    pytest.mark.skipif(not _h3_reachable(), reason="no access to cloudflare-quic.com"))
 
 
 @online

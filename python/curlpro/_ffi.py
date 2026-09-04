@@ -12,7 +12,6 @@ import ctypes
 import json
 import os
 import platform
-import sys
 from pathlib import Path
 from typing import Any
 

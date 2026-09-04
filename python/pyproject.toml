@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools>=68"]
+# 77, not 68: the PEP 639 form below (a SPDX string in license= plus
+# license-files=) is rejected by anything older, and a declared floor that
+# does not build is worse than no floor.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -43,3 +46,10 @@ curlpro = ["lib/*", "profiles/*.json", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    # Tests that need someone else's service: httpbin, browserleaks,
+    # cloudflare-quic. The main run is -m "not network" and therefore
+    # deterministic; these go to a job of their own, where an outage upstream
+    # does not colour the build.
+    "network: goes to the internet rather than to a local stand",
+]

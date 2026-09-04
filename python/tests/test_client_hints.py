@@ -7,7 +7,6 @@ sec-ch-ua-platform-version hints, which the browser sends only after Accept-CH.
 
 from __future__ import annotations
 
-import json
 import socket
 import ssl
 import threading

@@ -26,7 +26,9 @@ def _online() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _online(), reason="no access to httpbin.org")
+# Goes to the internet: the network marker keeps these out of the main
+# run, so an outage of someone else's service does not read as a bug here.
+pytestmark = [pytest.mark.network, pytest.mark.skipif(not _online(), reason="no access to httpbin.org")]
 
 
 @pytest.fixture(scope="session", autouse=True)

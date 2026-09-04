@@ -144,7 +144,9 @@ def test_goroutines_do_not_pile_up(baseline):
     with RawHeaderServer(persistent=True) as srv:
         with curlpro.Session(verify=False, force_http1=True) as s:
             for _ in range(100):
-                s.get(srv.url).content
+                # The body is read on purpose: an unread response would hold
+                # its connection, and the goroutine count would measure that.
+                assert s.get(srv.url).content is not None
     gc.collect()
     now = counts()
     assert now["goroutines"] <= baseline["goroutines"] + 4, (

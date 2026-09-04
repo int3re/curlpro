@@ -11,7 +11,6 @@ are covered by test_http3.py, test_smoke.py and test_websocket.py.
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 
 import curlpro

@@ -16,7 +16,7 @@ import asyncio
 from typing import Any, AsyncIterator, Iterable, Mapping
 
 from ._completions import settle
-from ._ffi import CurlProError, WebSocketClosed, _call, call_with_frame, encode
+from ._ffi import WebSocketClosed, _call, call_with_frame, encode
 from .proxies import proxy_for as env_proxy
 from .session import DEFAULT_PROFILE, Response, Session, _request_meta
 from .timeouts import split_timeout as _split_timeout

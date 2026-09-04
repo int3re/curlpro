@@ -11,7 +11,6 @@ import socket
 import socketserver
 import struct
 import threading
-from typing import Callable
 
 
 def _pump(a: socket.socket, b: socket.socket) -> None:
