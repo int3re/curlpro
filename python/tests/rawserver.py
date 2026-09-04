@@ -11,6 +11,7 @@ import json
 import socket
 import ssl
 import threading
+import time
 from pathlib import Path
 
 CERT_DIR = Path(__file__).resolve().parents[2] / "capture" / "certs"
@@ -19,7 +20,11 @@ CERT_DIR = Path(__file__).resolve().parents[2] / "capture" / "certs"
 class RawHeaderServer:
     """Принимает одно HTTP/1.1-соединение и отвечает списком сырых заголовков."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 0, persistent: bool = False):
+    def __init__(self, host: str = "127.0.0.1", port: int = 0, persistent: bool = False,
+                 delay: float = 0.0):
+        # delay — задержка ответа: на ней видно, упирается ли клиент
+        # в одновременность или обрабатывает запросы по очереди.
+        self.delay = delay
         # persistent=True держит соединение открытым и считает принятые:
         # так проверяется переиспользование. По умолчанию сервер отвечает
         # одним ответом и закрывает — этого ждут проверки регистра заголовков.
@@ -28,7 +33,7 @@ class RawHeaderServer:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._sock.bind((host, port))
-        self._sock.listen(8)
+        self._sock.listen(128)
         self.port = self._sock.getsockname()[1]
 
         self._ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -50,12 +55,18 @@ class RawHeaderServer:
             except OSError:
                 return
             self.accepted += 1
-            try:
-                with self._ctx.wrap_socket(raw, server_side=True) as conn:
-                    while self._handle(conn) and self.persistent:
-                        pass
-            except (ssl.SSLError, OSError):
-                pass
+            # Соединение обслуживается в своём потоке: проверки
+            # одновременности открывают их десятками, и последовательный
+            # приём упирался в очередь ожидания, а не в клиента.
+            threading.Thread(target=self._session, args=(raw,), daemon=True).start()
+
+    def _session(self, raw: socket.socket) -> None:
+        try:
+            with self._ctx.wrap_socket(raw, server_side=True) as conn:
+                while self._handle(conn) and self.persistent:
+                    pass
+        except (ssl.SSLError, OSError):
+            pass
 
     def _handle(self, conn: ssl.SSLSocket) -> bool:
         data = b""
@@ -77,6 +88,8 @@ class RawHeaderServer:
             ensure_ascii=False,
         ).encode("utf-8")
 
+        if self.delay:
+            time.sleep(self.delay)
         alive = b"keep-alive" if self.persistent else b"close"
         conn.sendall(
             b"HTTP/1.1 200 OK\r\n"

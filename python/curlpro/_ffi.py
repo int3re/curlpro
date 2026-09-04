@@ -117,6 +117,9 @@ for _name, _args in (
     ("curlpro_session_cookies", [ctypes.c_longlong]),
     ("curlpro_session_set_cookies", [ctypes.c_longlong, ctypes.c_char_p]),
     ("curlpro_session_clear_cookies", [ctypes.c_longlong]),
+    ("curlpro_request_start", [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]),
+    ("curlpro_result_take", [ctypes.c_longlong, ctypes.POINTER(ctypes.c_int)]),
+    ("curlpro_request_cancel", [ctypes.c_longlong]),
 ):
     try:
         _fn = getattr(_lib, _name)
@@ -129,6 +132,14 @@ for _name, _args in (
     # Именно c_void_p, а не c_char_p: ctypes конвертирует c_char_p в bytes
     # и теряет исходный указатель, который нужен для curlpro_free.
     _fn.restype = ctypes.c_void_p
+
+# Ожидание завершений и счётчик в полёте возвращают числа, а не указатели.
+# Блокирующее ожидание ctypes выполняет с отпущенным GIL — на этом и стоит
+# асинхронный путь: поток-приёмник ждёт, не мешая циклу событий.
+_lib.curlpro_result_wait.argtypes = [ctypes.c_int]
+_lib.curlpro_result_wait.restype = ctypes.c_longlong
+_lib.curlpro_async_pending.argtypes = []
+_lib.curlpro_async_pending.restype = ctypes.c_longlong
 
 # read возвращает число байт, а не указатель: буфер выделяет вызывающий.
 _lib.curlpro_stream_read.argtypes = [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]
@@ -227,6 +238,16 @@ def call_framed(name: str, *args: Any, body: bytes = b"", meta: Any) -> tuple[An
     finally:
         _lib.curlpro_free(ptr)
     return _unframe(name, raw)
+
+
+def call_with_frame(name: str, *args: Any, body: bytes = b"", meta: Any) -> Any:
+    """Кадр на входе, обычный конверт JSON на выходе.
+
+    Так устроен запуск асинхронного запроса: тело уходит кадром, а обратно
+    приходит только номер запроса — ответа ещё нет.
+    """
+    payload = _frame(meta, body)
+    return _call(name, *args, payload, len(payload))
 
 
 def call_framed_out(name: str, *args: Any) -> tuple[Any, bytes]:

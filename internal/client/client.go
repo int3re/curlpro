@@ -153,6 +153,21 @@ type Request struct {
 
 	// Mode переопределяет Options.Mode для одного запроса.
 	Mode string
+
+	// Ctx — родительский контекст запроса. nil означает context.Background.
+	//
+	// Нужен для отмены снаружи: асинхронный вызов из Python отменяется, когда
+	// задача asyncio снята, и без контекста запрос продолжал бы жить до своего
+	// таймаута, занимая соединение.
+	Ctx context.Context
+}
+
+// context возвращает родительский контекст запроса.
+func (r *Request) context() context.Context {
+	if r != nil && r.Ctx != nil {
+		return r.Ctx
+	}
+	return context.Background()
 }
 
 // proxyFor возвращает адрес прокси для запроса.
@@ -459,7 +474,11 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	var cancel context.CancelFunc
 	if !deadline.IsZero() {
 		var ctx context.Context
-		ctx, cancel = context.WithDeadline(context.Background(), deadline)
+		ctx, cancel = context.WithDeadline(r.context(), deadline)
+		req = req.WithContext(ctx)
+	} else if parent := r.context(); parent != context.Background() {
+		var ctx context.Context
+		ctx, cancel = context.WithCancel(parent)
 		req = req.WithContext(ctx)
 	}
 	// Без явного размера транспорт перешёл бы на chunked-кодирование,
