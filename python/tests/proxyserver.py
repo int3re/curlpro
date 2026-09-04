@@ -1,7 +1,7 @@
-"""Минимальные прокси для тестов: HTTP CONNECT и SOCKS5.
+"""Minimal proxies for the tests: HTTP CONNECT and SOCKS5.
 
-Нужны, чтобы проверить, что трафик действительно идёт через прокси, а не мимо:
-каждый сервер считает туннели и запоминает запрошенные адреса.
+They are needed to check that the traffic really goes through the proxy rather
+than past it: each server counts the tunnels and records the requested addresses.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Callable
 
 
 def _pump(a: socket.socket, b: socket.socket) -> None:
-    """Перекачивает данные в одну сторону до закрытия."""
+    """Pumps data one way until it closes."""
     try:
         while chunk := a.recv(65536):
             b.sendall(chunk)
@@ -111,7 +111,7 @@ class _ConnectHandler(socketserver.BaseRequestHandler):
 
 
 class HTTPProxy(_Base):
-    """HTTP-прокси, поддерживающий только CONNECT."""
+    """An HTTP proxy supporting CONNECT only."""
 
     def __init__(self, auth: tuple[str, str] | None = None):
         super().__init__(_ConnectHandler, auth)
@@ -122,7 +122,7 @@ class _Socks5Handler(socketserver.BaseRequestHandler):
 
     def handle(self) -> None:
         sock = self.request
-        # Приветствие: версия, число методов, методы
+        # The greeting: version, method count, methods
         head = sock.recv(2)
         if len(head) < 2 or head[0] != 0x05:
             return
@@ -140,9 +140,9 @@ class _Socks5Handler(socketserver.BaseRequestHandler):
         else:
             sock.sendall(b"\x05\x00")
 
-        # Запрос: версия, команда, резерв, тип адреса
+        # The request: version, command, reserved, address type
         req = sock.recv(4)
-        if len(req) < 4 or req[1] != 0x01:  # только CONNECT
+        if len(req) < 4 or req[1] != 0x01:  # CONNECT only
             sock.sendall(b"\x05\x07\x00\x01" + b"\x00" * 6)
             return
 
@@ -179,7 +179,7 @@ class _Socks5Handler(socketserver.BaseRequestHandler):
 
 
 class Socks5Proxy(_Base):
-    """SOCKS5-прокси с необязательной авторизацией по логину и паролю."""
+    """A SOCKS5 proxy with optional username and password authentication."""
 
     def __init__(self, auth: tuple[str, str] | None = None):
         super().__init__(_Socks5Handler, auth)

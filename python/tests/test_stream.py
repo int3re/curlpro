@@ -1,4 +1,4 @@
-"""Проверка потокового чтения тела."""
+"""Streaming reads of the body."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def _online() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _online(), reason="нет доступа к httpbin.org")
+pytestmark = pytest.mark.skipif(not _online(), reason="no access to httpbin.org")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -38,7 +38,7 @@ def test_stream_reads_full_body():
 
 
 def test_stream_matches_buffered_read():
-    """Поток и обычный запрос должны давать одинаковые байты."""
+    """A stream and an ordinary request must return the same bytes."""
     url = "https://httpbin.org/base64/Y3VybFBybyBzdHJlYW1pbmc="
     with curlpro.Session() as s:
         buffered = s.get(url).content
@@ -51,14 +51,14 @@ def test_stream_yields_multiple_chunks():
     with curlpro.Session() as s:
         with s.stream("GET", "https://httpbin.org/bytes/40000") as r:
             chunks = list(r.iter_content(4096))
-    assert len(chunks) > 1, "тело пришло одним куском — стриминга нет"
+    assert len(chunks) > 1, "the body arrived in one piece — no streaming"
     assert sum(len(c) for c in chunks) == 40_000
 
 
 def test_stream_headers_available_before_body():
     with curlpro.Session() as s:
         with s.stream("GET", "https://httpbin.org/bytes/10000") as r:
-            # Заголовки доступны до чтения тела — в этом смысл потока.
+            # The headers are available before the body is read — that is the point of a stream.
             assert r.header("content-type")
             assert r.ok
             r.read()
@@ -73,7 +73,7 @@ def test_stream_follows_redirects():
 
 
 def test_connection_usable_after_stream_closed():
-    """Закрытый поток должен освободить соединение для следующего запроса."""
+    """A closed stream must free the connection for the next request."""
     with curlpro.Session() as s:
         with s.stream("GET", "https://httpbin.org/bytes/10000") as r:
             r.read()

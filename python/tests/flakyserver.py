@@ -1,8 +1,8 @@
-"""Управляемый TLS-сервер для проверки retry, таймаутов и редиректов.
+"""A scripted TLS server for checking retries, timeouts and redirects.
 
-Внешние сервисы для этого не годятся: нужно точно знать, сколько попыток
-дошло до сервера и что именно он ответил. httpbin умеет /status/503, но
-не даёт отличить «клиент повторил» от «клиент сходил один раз».
+External services will not do: the test must know exactly how many attempts
+reached the server and what it answered. httpbin can do /status/503 but gives
+no way to tell "the client retried" from "the client went once".
 """
 
 from __future__ import annotations
@@ -19,11 +19,11 @@ CERT_DIR = Path(__file__).resolve().parents[2] / "capture" / "certs"
 
 
 class FlakyServer:
-    """HTTPS-сервер со сценарным поведением.
+    """An HTTPS server with scripted behaviour.
 
-    Каждый путь описывается сценарием: список ответов, которые сервер выдаёт
-    по очереди. Это позволяет проверить, что клиент повторил ровно столько раз,
-    сколько нужно, и остановился.
+    Every path is described by a script: the list of responses the server hands
+    out in turn. That makes it possible to check that the client retried exactly
+    as many times as it should and then stopped.
     """
 
     def __init__(self):
@@ -37,9 +37,9 @@ class FlakyServer:
         self._ctx.load_cert_chain(CERT_DIR / "tls.crt", CERT_DIR / "tls.key")
         self._ctx.set_alpn_protocols(["http/1.1"])
 
-        # путь -> список шагов; шаг = dict(status, body, delay, headers)
+        # path -> list of steps; a step is dict(status, body, delay, headers)
         self.scenarios: dict[str, list[dict]] = {}
-        # путь -> сколько запросов дошло: отличает повтор от единственного захода
+        # path -> how many requests arrived: tells a retry from a single visit
         self.hits: dict[str, int] = defaultdict(int)
         self.requests: list[dict] = []
 
@@ -55,9 +55,9 @@ class FlakyServer:
         return f"{self.base}{path}"
 
     def scenario(self, path: str, steps: list[dict]) -> str:
-        """Задаёт последовательность ответов для пути и возвращает его URL.
+        """Sets the response sequence for a path and returns its URL.
 
-        Последний шаг повторяется, если попыток больше, чем шагов.
+        The last step repeats when there are more attempts than steps.
         """
         self.scenarios[path] = steps
         return self.url(path)
@@ -73,7 +73,7 @@ class FlakyServer:
     def _session(self, raw: socket.socket) -> None:
         try:
             with self._ctx.wrap_socket(raw, server_side=True) as conn:
-                # keep-alive: клиент вправе слать несколько запросов подряд
+                # keep-alive: the client may send several requests in a row
                 while not self._stop.is_set():
                     if not self._handle(conn):
                         return
@@ -100,8 +100,8 @@ class FlakyServer:
                 k, v = ln.split(":", 1)
                 headers[k.strip().lower()] = v.strip()
 
-        # Дочитываем тело, иначе следующий запрос по этому соединению
-        # начнётся с его остатка.
+        # Drain the body, or the next request on this connection
+        # would start with its remainder.
         body_len = int(headers.get("content-length", 0) or 0)
         body = rest
         while len(body) < body_len:

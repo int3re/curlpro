@@ -1,11 +1,11 @@
 package client
 
-// Регрессионные тесты по находкам аудита 2026-09-02 (docs/STAGE14-RESULTS.md).
+// Regression tests for the findings of the 2026-09-02 audit (docs/STAGE14-RESULTS.md).
 //
-// Каждый тест воспроизводил конкретное расхождение между задокументированным
-// и фактическим поведением на локальном стенде: TLS-сервер httptest (HTTP/1.1
-// и HTTP/2), сервер HTTP/3 на uquic, WebSocket поверх Hijack, прокси-заглушки.
-// Стенды поднимаются внутри теста, сеть не нужна.
+// Every test reproduced a concrete divergence between the documented and the
+// actual behaviour on a local stand: an httptest TLS server (HTTP/1.1 and
+// HTTP/2), an HTTP/3 server on uquic, a WebSocket over Hijack, proxy stubs.
+// The stands come up inside the test, no network needed.
 
 import (
 	"bufio"
@@ -44,9 +44,9 @@ func auditProfile(t *testing.T, name string) *profile.Profile {
 	return p
 }
 
-// auditServer поднимает TLS-сервер httptest. h2=false ограничивает ALPN
-// до http/1.1 (так устроен httptest: EnableHTTP2 даёт только "h2").
-// Второе значение — счётчик TCP-соединений, которые увидел сервер.
+// auditServer brings up an httptest TLS server. h2=false limits ALPN to
+// http/1.1 (that is how httptest works: EnableHTTP2 only adds "h2").
+// The second value counts the TCP connections the server saw.
 func auditServer(t *testing.T, h2 bool, h stdhttp.Handler) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
 	var conns atomic.Int32
@@ -62,8 +62,8 @@ func auditServer(t *testing.T, h2 bool, h stdhttp.Handler) (*httptest.Server, *a
 	return srv, &conns
 }
 
-// auditURL переводит адрес httptest на localhost: подключение по голому IP
-// меняет SNI и JA4, а здесь нужна обычная форма.
+// auditURL rewrites the httptest address to localhost: connecting by bare IP
+// changes the SNI and JA4, and the ordinary form is what is needed here.
 func auditURL(srv *httptest.Server, path string) string {
 	_, port, _ := net.SplitHostPort(srv.Listener.Addr().String())
 	return "https://localhost:" + port + path
@@ -84,8 +84,8 @@ func auditSession(t *testing.T, opts Options) *Session {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Путь HTTP/1.1 не распаковывает тело: DecompressBody у fhttp живёт
-//    в Transport и в h2-транспорте, а conn.roundTrip ходит мимо обоих.
+// 1. The HTTP/1.1 path does not decompress the body: DecompressBody in fhttp
+//    lives in Transport and in the h2 transport, and conn.roundTrip goes past both.
 // ---------------------------------------------------------------------------
 
 func TestAudit_HTTP1BodyNotDecompressed(t *testing.T) {
@@ -109,18 +109,18 @@ func TestAudit_HTTP1BodyNotDecompressed(t *testing.T) {
 				t.Fatal(err)
 			}
 			if string(resp.Body) != plain {
-				t.Errorf("%s: тело не распаковано: proto=%s, %d байт, начало % x",
+				t.Errorf("%s: the body was not decompressed: proto=%s, %d bytes, starts with % x",
 					tc.name, resp.Proto, len(resp.Body), resp.Body[:min(len(resp.Body), 8)])
 			} else {
-				t.Logf("%s: тело распаковано (proto=%s)", tc.name, resp.Proto)
+			t.Logf("%s: the body was decompressed (proto=%s)", tc.name, resp.Proto)
 			}
 		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// 2. Повтор по коду ответа не закрывает удержанный ответ предыдущей попытки:
-//    DoStream в цикле теряет outcome.stream вместе с телом, conn и cancel.
+// 2. A retry on a response code does not close the held response of the previous
+//    attempt: DoStream in the loop loses outcome.stream along with the body, conn and cancel.
 // ---------------------------------------------------------------------------
 
 func TestAudit_RetryLeaksHeldResponse(t *testing.T) {
@@ -147,7 +147,7 @@ func TestAudit_RetryLeaksHeldResponse(t *testing.T) {
 				t.Fatal(err)
 			}
 			if resp.Status != 200 {
-				t.Fatalf("статус %d", resp.Status)
+				t.Fatalf("status %d", resp.Status)
 			}
 			s.mu.Lock()
 			var busy []int32
@@ -157,26 +157,26 @@ func TestAudit_RetryLeaksHeldResponse(t *testing.T) {
 				}
 			}
 			s.mu.Unlock()
-			t.Logf("%s: сервер увидел %d соединений; busy соединений в пуле после ответа: %v",
+			t.Logf("%s: the server saw %d connections; busy pooled connections after the response: %v",
 				tc.name, conns.Load(), busy)
 			for _, b := range busy {
 				if b != 0 {
-					t.Errorf("%s: соединение в пуле осталось занятым (busy=%d) после завершённого "+
-						"запроса — удержанные ответы 503 не закрыты", tc.name, b)
+					t.Errorf("%s: a pooled connection stayed busy (busy=%d) after a finished "+
+						"request — the held 503 responses were not closed", tc.name, b)
 				}
 			}
 			if !tc.h2 && conns.Load() != 1 {
-				t.Errorf("http1: ожидалось одно keep-alive соединение, сервер увидел %d", conns.Load())
+				t.Errorf("http1: expected one keep-alive connection, the server saw %d", conns.Load())
 			}
 		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// 3. Stream.Close на HTTP/1.1 дочитывает тело целиком: fhttp body.Close
-//    (ветка default в transfer.go) делает io.Copy(io.Discard) до EOF.
-//    А при истечении таймаута посреди дренажа соединение возвращается в пул
-//    с недочитанными байтами в сокете.
+// 3. Stream.Close on HTTP/1.1 drains the whole body: fhttp body.Close
+//    (the default branch in transfer.go) does io.Copy(io.Discard) until EOF.
+//    And when the timeout expires mid-drain the connection returns to the pool
+//    with unread bytes in the socket.
 // ---------------------------------------------------------------------------
 
 func slowBodyHandler(chunks, chunk int, delay time.Duration, written *atomic.Int32) stdhttp.Handler {
@@ -215,10 +215,10 @@ func TestAudit_StreamCloseDrainsWholeBodyOnHTTP1(t *testing.T) {
 	start := time.Now()
 	cerr := st.Close()
 	el := time.Since(start)
-	t.Logf("Close после 1 КБ занял %s (err=%v); сервер успел отдать %d/%d кусков по 64 КБ",
+	t.Logf("Close after 1 KB took %s (err=%v); the server managed to send %d/%d chunks of 64 KB",
 		el, cerr, written.Load(), chunks)
 	if el > 500*time.Millisecond {
-		t.Errorf("Close дочитал ~%d МБ вместо того, чтобы сбросить соединение", chunks*64/1024)
+		t.Errorf("Close drained ~%d MB instead of dropping the connection", chunks*64/1024)
 	}
 }
 
@@ -234,14 +234,14 @@ func TestAudit_StreamCloseTimeoutPoisonsConnection(t *testing.T) {
 	if _, err := io.ReadFull(st, make([]byte, 1024)); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("Close (тело не дочитано, таймаут 700 мс): %v", st.Close())
+	t.Logf("Close (body unread, timeout 700 ms): %v", st.Close())
 
 	resp, err := s.Do(&Request{Method: "GET", URL: auditURL(srv, "/small")})
 	if err != nil {
-		t.Errorf("следующий запрос по той же сессии сломан: %v (соединений на сервере: %d)",
+		t.Errorf("the next request on the same session is broken: %v (connections on the server: %d)",
 			err, conns.Load())
 	} else {
-		t.Logf("следующий запрос: %d %q (соединений на сервере: %d)", resp.Status, resp.Body, conns.Load())
+	t.Logf("next request: %d %q (connections on the server: %d)", resp.Status, resp.Body, conns.Load())
 	}
 }
 
@@ -249,13 +249,13 @@ func TestAudit_StreamCloseTimeoutPoisonsConnection(t *testing.T) {
 // 4. WebSocket.
 // ---------------------------------------------------------------------------
 
-// wsServer отвечает 101 на любое рукопожатие и отдаёт сокет в after.
+// wsServer answers 101 to any handshake and hands the socket to after.
 func wsServer(t *testing.T, after func(c net.Conn, br *bufio.Reader)) *httptest.Server {
 	t.Helper()
 	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		hj, ok := w.(stdhttp.Hijacker)
 		if !ok {
-			t.Error("нет Hijacker")
+			t.Error("no Hijacker")
 			return
 		}
 		c, rw, err := hj.Hijack()
@@ -276,11 +276,11 @@ func wsURL(srv *httptest.Server) string {
 	return strings.Replace(auditURL(srv, "/ws"), "https://", "wss://", 1)
 }
 
-// Сервер прислал кадр Close: markClosed выставлен, и последующий Close()
-// клиента становится no-op — TCP-сокет остаётся открытым.
+	// The server sent a Close frame: markClosed is set, and the client's later
+	// Close() becomes a no-op — the TCP socket stays open.
 func TestAudit_WebSocketServerCloseLeaksSocket(t *testing.T) {
 	srv := wsServer(t, func(c net.Conn, _ *bufio.Reader) {
-		c.Write([]byte{0x88, 0x02, 0x03, 0xE8}) // Close 1000 без маски
+		c.Write([]byte{0x88, 0x02, 0x03, 0xE8}) // Close 1000, unmasked
 		time.Sleep(2 * time.Second)
 		c.Close()
 	})
@@ -290,20 +290,20 @@ func TestAudit_WebSocketServerCloseLeaksSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = ws.Recv()
-	t.Logf("Recv после Close сервера: %v", err)
-	t.Logf("Close клиента: %v", ws.Close(1000, ""))
+	t.Logf("Recv after the server Close: %v", err)
+	t.Logf("client Close: %v", ws.Close(1000, ""))
 
 	if err := ws.conn.SetDeadline(time.Now()); err == nil {
-		t.Errorf("после ws.Close() сокет остался открытым: Close вернулся по isClosed(), " +
-			"не закрыв net.Conn и не ответив кадром Close")
+		t.Errorf("after ws.Close() the socket stayed open: Close returned through isClosed() " +
+			"without closing net.Conn and without answering with a Close frame")
 		ws.conn.Close()
 	} else {
-		t.Logf("сокет закрыт: %v", err)
+		t.Logf("the socket is closed: %v", err)
 	}
 }
 
-// Длина кадра берётся из сети без предела: make([]byte, 2^62) паникует,
-// а паника в c-shared библиотеке — это смерть процесса Python.
+// The frame length comes from the network without a limit: make([]byte, 2^62)
+// panics, and a panic in a c-shared library is the death of the Python process.
 func TestAudit_WebSocketHugeFrameLengthPanics(t *testing.T) {
 	srv := wsServer(t, func(c net.Conn, _ *bufio.Reader) {
 		head := []byte{0x82, 0x7F}
@@ -321,7 +321,7 @@ func TestAudit_WebSocketHugeFrameLengthPanics(t *testing.T) {
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				t.Errorf("Recv паникует на заявленной длине кадра 2^62: %v", r)
+			t.Errorf("Recv panics on a declared frame length of 2^62: %v", r)
 			}
 		}()
 		_, err := ws.Recv()
@@ -330,11 +330,11 @@ func TestAudit_WebSocketHugeFrameLengthPanics(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Прокси.
+// 5. Proxies.
 // ---------------------------------------------------------------------------
 
-// Прокси принял TCP и молчит: CONNECT уходит без дедлайна, и таймаут
-// запроса не действует.
+// The proxy accepted the TCP connection and went silent: CONNECT goes out with
+// no deadline, and the request timeout has no effect.
 func TestAudit_ProxyConnectIgnoresTimeout(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -371,14 +371,14 @@ func TestAudit_ProxyConnectIgnoresTimeout(t *testing.T) {
 	}()
 	select {
 	case err := <-done:
-		t.Logf("запрос завершился за %s: %v", time.Since(start), err)
+	t.Logf("the request finished in %s: %v", time.Since(start), err)
 	case <-time.After(4 * time.Second):
-		t.Errorf("timeout=1s, а запрос через молчащий прокси не завершился за 4 с: " +
-			"connectProxy пишет и читает без дедлайна")
+		t.Errorf("timeout=1s, yet a request through a silent proxy did not finish in 4 s: " +
+			"connectProxy writes and reads without a deadline")
 	}
 }
 
-// CONNECT к прокси уходит с заголовками по умолчанию fhttp.
+// CONNECT to the proxy goes out with the fhttp default headers.
 func TestAudit_ProxyConnectCarriesGoUserAgent(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -402,24 +402,24 @@ func TestAudit_ProxyConnectCarriesGoUserAgent(t *testing.T) {
 
 	s := auditSession(t, Options{DefaultHeaders: true, Proxy: "http://user:pw@" + ln.Addr().String(), Timeout: 3 * time.Second})
 	_, err = s.Do(&Request{Method: "GET", URL: "https://example.com/"})
-	t.Logf("ответ клиенту: %v", err)
+			t.Logf("reply to the client: %v", err)
 	select {
 	case req := <-got:
-		t.Logf("CONNECT %s %s; Host=%q; заголовки: %v", req.Method, req.RequestURI, req.Host, req.Header)
+		t.Logf("CONNECT %s %s; Host=%q; headers: %v", req.Method, req.RequestURI, req.Host, req.Header)
 		if ua := req.Header.Get("User-Agent"); !strings.Contains(ua, "Chrome/151") {
-			t.Errorf("CONNECT к прокси уходит с User-Agent %q, а не браузера — прокси видит не браузер", ua)
+			t.Errorf("CONNECT to the proxy carries User-Agent %q rather than a browser one — the proxy sees a non-browser", ua)
 		}
 		if pc := req.Header.Get("Proxy-Connection"); pc != "keep-alive" {
-			t.Errorf("Proxy-Connection = %q, Chrome шлёт keep-alive", pc)
+			t.Errorf("Proxy-Connection = %q, Chrome sends keep-alive", pc)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("прокси не получил CONNECT")
+		t.Fatal("the proxy received no CONNECT")
 	}
 }
 
 // ---------------------------------------------------------------------------
-// 6. Session.Close ждёт чужой запрос: close() у h1 берёт c.mu, который
-//    roundTrip удерживает на время ReadResponse.
+// 6. Session.Close waits for somebody else's request: close() on h1 takes c.mu,
+//    which roundTrip holds for the duration of ReadResponse.
 // ---------------------------------------------------------------------------
 
 func TestAudit_SessionCloseWaitsForInflightHTTP1(t *testing.T) {
@@ -439,14 +439,14 @@ func TestAudit_SessionCloseWaitsForInflightHTTP1(t *testing.T) {
 	start := time.Now()
 	s.Close()
 	el := time.Since(start)
-	t.Logf("Close занял %s; запрос завершился: %v", el, <-done)
+	t.Logf("Close took %s; the request finished: %v", el, <-done)
 	if el > 500*time.Millisecond {
-		t.Errorf("Close ждал завершения чужого запроса %s вместо того, чтобы оборвать его", el)
+		t.Errorf("Close waited %s for somebody else's request instead of cutting it off", el)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// 7. Без заголовков профиля транспорты подставляют User-Agent Go.
+// 7. Without profile headers the transports substitute the Go User-Agent.
 // ---------------------------------------------------------------------------
 
 func TestAudit_NoDefaultHeadersLeaksGoUserAgent(t *testing.T) {
@@ -466,16 +466,16 @@ func TestAudit_NoDefaultHeadersLeaksGoUserAgent(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := ua.Load().(string)
-			t.Logf("%s: User-Agent на сервере = %s", tc.name, got)
+			t.Logf("%s: User-Agent at the server = %s", tc.name, got)
 			if got != `""` {
-				t.Errorf("%s: default_headers=false, UA не задан, а на провод ушёл %s", tc.name, got)
+				t.Errorf("%s: default_headers=false, no UA set, yet %s reached the wire", tc.name, got)
 			}
 		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// 8. HTTP/3: дубль accept-encoding, HEAD с Content-Encoding, утечка UDP.
+// 8. HTTP/3: a duplicate accept-encoding, HEAD with Content-Encoding, a UDP leak.
 // ---------------------------------------------------------------------------
 
 func auditH3Server(t *testing.T, h stdhttp.Handler) string {
@@ -501,8 +501,8 @@ func auditH3Server(t *testing.T, h stdhttp.Handler) string {
 		srv.Close()
 		udp.Close()
 	})
-	// Ждём, пока сервер запустит свой приёмный цикл: иначе он попадает
-	// в счётчик горутин уже после замера «до» и выглядит утечкой клиента.
+		// Wait for the server to start its accept loop: otherwise it lands in the
+		// goroutine count after the "before" measurement and looks like a client leak.
 	for i := 0; i < 50 && countGoroutinesWith(h3ListenFn) == 0; i++ {
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -540,31 +540,31 @@ func TestAudit_HTTP3(t *testing.T) {
 	}
 	t.Logf("GET /ae: %d %s %q", resp.Status, resp.Proto, resp.Body)
 	if got, _ := accept.Load().([]string); len(got) != 1 {
-		t.Errorf("сервер получил accept-encoding %d раз: %q — транспорт h3 добавил свой "+
-			"«gzip», не увидев строчного ключа профиля через Header.Get", len(got), got)
+			t.Errorf("the server received accept-encoding %d times: %q — the h3 transport added its own "+
+				"gzip after missing the profile's lowercase key through Header.Get", len(got), got)
 	} else {
-		t.Logf("accept-encoding на сервере: %q", got)
+			t.Logf("accept-encoding at the server: %q", got)
 	}
 
 	if resp, err := s.Do(&Request{Method: "HEAD", URL: base + "/head"}); err != nil {
-		t.Errorf("HEAD с Content-Encoding: gzip и пустым телом: %v", err)
+			t.Errorf("HEAD with Content-Encoding: gzip and an empty body: %v", err)
 	} else {
-		t.Logf("HEAD: %d, тело %d байт", resp.Status, len(resp.Body))
+			t.Logf("HEAD: %d, body %d bytes", resp.Status, len(resp.Body))
 	}
 
 	s.Close()
 	time.Sleep(300 * time.Millisecond)
 	after := countGoroutinesWith(listenFn)
-	t.Logf("горутин %s: до сессии %d, после Close %d", listenFn, before, after)
+		t.Logf("goroutines %s: before the session %d, after Close %d", listenFn, before, after)
 	if after > before {
-		t.Errorf("UDP-транспорт из Dial не закрыт вместе с сессией: +%d слушающих горутин, "+
-			"UDP-сокет утёк", after-before)
+			t.Errorf("the UDP transport from Dial was not closed with the session: +%d listening goroutines, "+
+				"the UDP socket leaked", after-before)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// 9. Параллельные запросы под -race: пул, потоки, закрытие под нагрузкой.
-//    Это не воспроизведение бага, а недостающее покрытие (AUDIT-QUESTIONS 2.2).
+// 9. Parallel requests under -race: the pool, streams, closing under load.
+//    Not a bug reproduction but missing coverage (AUDIT-QUESTIONS 2.2).
 // ---------------------------------------------------------------------------
 
 func TestAudit_ConcurrentRequests(t *testing.T) {
@@ -619,9 +619,9 @@ func TestAudit_ConcurrentRequests(t *testing.T) {
 				}()
 			}
 			wg.Wait()
-			t.Logf("%s: ok=%d err=%d, соединений на сервере %d", tc.name, okN.Load(), errN.Load(), conns.Load())
+			t.Logf("%s: ok=%d err=%d, connections on the server %d", tc.name, okN.Load(), errN.Load(), conns.Load())
 			if !tc.closeMid && errN.Load() != 0 {
-				t.Errorf("%s: %d ошибок без закрытия сессии", tc.name, errN.Load())
+				t.Errorf("%s: %d errors without closing the session", tc.name, errN.Load())
 			}
 		})
 	}

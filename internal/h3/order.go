@@ -6,21 +6,21 @@ import (
 	"strings"
 )
 
-// Порядок заголовков задаётся через служебные ключи в http.Header — тот же
-// приём, что у fhttp для HTTP/1.1 и HTTP/2.
+// The header order is set through service keys in http.Header — the same trick
+// fhttp uses for HTTP/1.1 and HTTP/2.
 //
-// Зависеть от fhttp здесь нельзя: он собран поверх другого форка utls, и его
-// типы несовместимы с теми, что использует uquic. Ключи объявлены своими,
-// а из заголовков перед отправкой вырезаются.
+// Depending on fhttp here is impossible: it is built on a different utls fork,
+// and its types are incompatible with the ones uquic uses. The keys are declared
+// here and stripped from the headers before sending.
 const (
-	// HeaderOrderKey задаёт порядок обычных заголовков.
+	// HeaderOrderKey sets the order of ordinary headers.
 	HeaderOrderKey = "Header-Order:"
-	// PseudoHeaderOrderKey задаёт порядок псевдо-заголовков.
+	// PseudoHeaderOrderKey sets the order of pseudo-headers.
 	PseudoHeaderOrderKey = "Pheader-Order:"
 )
 
-// defaultPseudoOrder — порядок Chrome. Апстрим uquic писал :authority первым,
-// что не совпадает ни с Chrome, ни с Firefox.
+// defaultPseudoOrder is Chrome's order. Upstream uquic wrote :authority first,
+// which matches neither Chrome nor Firefox.
 var defaultPseudoOrder = []string{":method", ":authority", ":scheme", ":path"}
 
 func pseudoOrder(req *http.Request) []string {
@@ -30,12 +30,12 @@ func pseudoOrder(req *http.Request) []string {
 	return defaultPseudoOrder
 }
 
-// withSlot вставляет имя в последовательность на позицию, которую оно
-// занимает в HeaderOrderKey, даже если такого заголовка в запросе нет.
+// withSlot inserts a name into the sequence at the position it holds in
+// HeaderOrderKey, even when the request has no such header.
 //
-// Нужно для заголовков, которые добавляет сам транспорт: Chrome шлёт
-// Content-Length первым в наборе fetch, а не в хвосте. Замер стендом
-// cmd/hcapture: на HTTP/2 позиция бралась из порядка, на HTTP/3 — нет.
+// Needed for headers the transport adds itself: Chrome sends Content-Length
+// first in the fetch set, not at the tail. Measured with the cmd/hcapture stand:
+// on HTTP/2 the position came from the order, on HTTP/3 it did not.
 func withSlot(req *http.Request, seq []string, name string) []string {
 	want := req.Header[HeaderOrderKey]
 	idx := -1
@@ -46,9 +46,9 @@ func withSlot(req *http.Request, seq []string, name string) []string {
 		}
 	}
 	if idx < 0 {
-		return append(seq, name) // порядок про него молчит — как было, в хвост
+		return append(seq, name) // the order says nothing about it — to the tail, as before
 	}
-	// Встаём перед первым именем, которое идёт после слота и реально уходит.
+	// Stand before the first name that comes after the slot and actually goes out.
 	for _, w := range want[idx+1:] {
 		for j, s := range seq {
 			if strings.EqualFold(s, w) {
@@ -62,11 +62,11 @@ func withSlot(req *http.Request, seq []string, name string) []string {
 	return append(seq, name)
 }
 
-// headerSequence возвращает имена обычных заголовков в порядке отправки.
+// headerSequence returns the ordinary header names in send order.
 //
-// Сначала перечисленные в HeaderOrderKey, затем остальные по алфавиту.
-// Сортировка вместо обхода map принципиальна: случайный порядок на каждом
-// запросе — сам по себе признак, отличающий клиент от браузера.
+// First those listed in HeaderOrderKey, then the rest alphabetically.
+// Sorting instead of iterating a map is essential: a random order on every
+// request is itself a trait that tells a client from a browser.
 func headerSequence(req *http.Request) []string {
 	want, _ := req.Header[HeaderOrderKey]
 

@@ -1,7 +1,7 @@
-"""Пул соединений: занятость, переиспользование, ограничители.
+"""The connection pool: busy state, reuse, limits.
 
-Проверяется через локальный сервер, который считает установленные соединения:
-по одному лишь коду ответа переиспользование от переустановки не отличить.
+Checked through a local server that counts the connections it accepts: from the
+response code alone reuse cannot be told from re-establishing.
 """
 
 from __future__ import annotations
@@ -34,11 +34,11 @@ def session(**kw):
 
 
 def test_open_stream_does_not_corrupt_parallel_request(srv):
-    """HTTP/1.1 не мультиплексирует: пока тело не дочитано, писать следующий
-    запрос в тот же сокет нельзя.
+    """HTTP/1.1 does not multiplex: until the body is read, the next request
+    cannot be written into the same socket.
 
-    Раньше соединение отпускалось сразу после чтения заголовков, и второй
-    запрос писал поверх недочитанного тела, а ответ разбирал из чужих байт.
+    The connection used to be released right after the headers were read, and a
+    second request wrote over an unread body while parsing its response from foreign bytes.
     """
     srv.scenario("/a", [{"status": 200, "body": {"n": "a" * 2000}}])
     srv.scenario("/b", [{"status": 200, "body": {"n": "b" * 2000}}])
@@ -51,28 +51,28 @@ def test_open_stream_does_not_corrupt_parallel_request(srv):
         stream.close()
 
     body = (head + tail).decode()
-    assert set(parallel) == {"b"}, "параллельный ответ испорчен"
-    assert "b" not in body, "поток испорчен параллельным запросом"
+    assert set(parallel) == {"b"}, "the parallel response is corrupted"
+    assert "b" not in body, "the stream is corrupted by a parallel request"
     assert body.count("a") >= 2000
 
 
 def test_connection_is_reused_after_stream_closed(srv):
-    """Закрытый поток возвращает соединение в оборот, а не выбрасывает его."""
+    """A closed stream returns the connection to circulation instead of dropping it."""
     srv.scenario("/x", [{"status": 200}])
     with session() as s:
         with s.stream("GET", srv.url("/x")) as r:
             r.read()
         s.get(srv.url("/x"))
         s.get(srv.url("/x"))
-    # Три запроса подряд по одному соединению: сервер видит один сокет.
+    # Three requests in a row over one connection: the server sees one socket.
     assert srv.hits["/x"] == 3
 
 
 def test_pool_limit_is_enforced(srv):
-    """Пул не растёт без предела.
+    """The pool does not grow without a limit.
 
-    Ротационный прокси с идентификатором в логине даёт новый ключ на каждый
-    запрос — без ограничителя это тысячи живых сокетов.
+    A rotating proxy with an identifier in the login yields a new key per request
+    — without a limiter that means thousands of live sockets.
     """
     for i in range(12):
         srv.scenario(f"/p{i}", [{"status": 200}])
@@ -80,7 +80,7 @@ def test_pool_limit_is_enforced(srv):
     with session(max_idle_conns=4) as s:
         for i in range(12):
             assert s.get(srv.url(f"/p{i}")).status == 200
-    # Все запросы к одному хосту, значит ключ один и лимит не мешает.
+    # Every request goes to one host, so the key is one and the limit does not interfere.
     assert sum(srv.hits[f"/p{i}"] for i in range(12)) == 12
 
 

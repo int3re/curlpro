@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// Подсказки высокой энтропии не уходят, пока сайт их не запросил: браузер
-// шлёт их только после Accept-CH в ответе.
+// High-entropy hints do not go out until the site asks for them: a browser
+// sends them only after an Accept-CH in a response.
 func TestHintsSentOnlyAfterAcceptCH(t *testing.T) {
 	var got []string
 	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -24,21 +24,21 @@ func TestHintsSentOnlyAfterAcceptCH(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		if _, err := s.Do(&Request{Method: "GET", URL: auditURL(srv, "/")}); err != nil {
-			t.Fatalf("запрос %d: %v", i, err)
+			t.Fatalf("request %d: %v", i, err)
 		}
 	}
 	if len(got) < 2 {
-		t.Fatalf("сервер получил %d запросов", len(got))
+		t.Fatalf("the server received %d requests", len(got))
 	}
 	if got[0] != "" {
-		t.Errorf("первый запрос ушёл с sec-ch-ua-model %q — сайт его ещё не просил", got[0])
+		t.Errorf("the first request carried sec-ch-ua-model %q — the site had not asked yet", got[0])
 	}
 	if got[1] != `"Pixel 8"` {
-		t.Errorf("второй запрос: sec-ch-ua-model = %q, ожидалось \"Pixel 8\"", got[1])
+		t.Errorf("second request: sec-ch-ua-model = %q, expected \"Pixel 8\"", got[1])
 	}
 }
 
-// Critical-CH заставляет повторить запрос сразу, а не со следующего.
+// Critical-CH makes the request repeat at once rather than from the next one.
 func TestCriticalCHRetriesImmediately(t *testing.T) {
 	var models []string
 	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -56,14 +56,14 @@ func TestCriticalCHRetriesImmediately(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(models) != 2 {
-		t.Fatalf("сервер получил %d запросов, ожидалось 2 (повтор по Critical-CH)", len(models))
+		t.Fatalf("the server received %d requests, expected 2 (a Critical-CH repeat)", len(models))
 	}
 	if models[0] != "" || models[1] != `"Pixel 7"` {
-		t.Errorf("получено %q и %q, ожидалось пусто и \"Pixel 7\"", models[0], models[1])
+		t.Errorf("got %q and %q, expected empty and \"Pixel 7\"", models[0], models[1])
 	}
 }
 
-// Устройство выбирается на сессию и не меняется между запросами.
+// The device is chosen per session and does not change between requests.
 func TestDeviceIsStableWithinSession(t *testing.T) {
 	var seen []string
 	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -83,16 +83,16 @@ func TestDeviceIsStableWithinSession(t *testing.T) {
 		}
 	}
 	if len(seen) < 3 {
-		t.Fatalf("подсказка ушла %d раз", len(seen))
+		t.Fatalf("the hint went out %d times", len(seen))
 	}
 	for _, m := range seen[1:] {
 		if m != seen[0] {
-			t.Errorf("устройство сменилось внутри сессии: %q против %q", m, seen[0])
+			t.Errorf("the device changed inside a session: %q against %q", m, seen[0])
 		}
 	}
 }
 
-// Порядок с подсказками — отдельный шаблон: Chromium перестраивает кластер.
+// The order with hints is a separate template: Chromium rebuilds the cluster.
 func TestHintOrderFollowsMeasuredTemplate(t *testing.T) {
 	var order []string
 	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -116,18 +116,18 @@ func TestHintOrderFollowsMeasuredTemplate(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Сам порядок проверяется на сыром сервере в Python; здесь важно, что
-	// шаблон подсказок вообще выбран и заголовки собрались без ошибок.
+	// The order itself is checked against the raw server in Python; what matters
+	// here is that the hints template was chosen and the headers assembled cleanly.
 	tpl := s.template(&Request{Method: "GET", URL: auditURL(srv, "/")})
 	names := strings.Join(tpl.names(), " ")
 	for _, want := range []string{"sec-ch-ua-model", "sec-ch-ua-platform-version", "sec-ch-ua-form-factors"} {
 		if !strings.Contains(names, want) {
-			t.Errorf("в шаблоне нет %s: %s", want, names)
+			t.Errorf("the template has no %s: %s", want, names)
 		}
 	}
 }
 
-// auditSessionProfile — сессия на произвольном профиле из каталога.
+// auditSessionProfile is a session on an arbitrary profile from the directory.
 func auditSessionProfile(t *testing.T, name string, opts Options) *Session {
 	t.Helper()
 	opts.InsecureSkipVerify = true

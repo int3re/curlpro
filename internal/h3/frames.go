@@ -174,18 +174,18 @@ type settingsFrame struct {
 	ExtendedConnect bool              // Extended CONNECT, RFC 9220
 	Other           map[uint64]uint64 // all settings that we don't explicitly recognize
 
-	// Order задаёт последовательность записи настроек на провод.
+	// Order sets the sequence in which the settings are written to the wire.
 	//
-	// Порядок наблюдаем и различает браузеры: Chrome шлёт
-	// [0x01, 0x06, 0x07, 0x33, GREASE], Firefox — свой набор в своём порядке.
-	// Без этого поля настройки писались из обхода map, то есть в случайном
-	// порядке на каждом соединении — отпечаток был бы нестабильным и не
-	// совпадал бы ни с одним браузером.
+	// The order is observable and tells browsers apart: Chrome sends
+	// [0x01, 0x06, 0x07, 0x33, GREASE], Firefox its own set in its own order.
+	// Without this field the settings were written by iterating a map, that is, in a
+	// random order on every connection — the fingerprint would be unstable and
+	// would match no browser at all.
 	Order []uint64
 }
 
-// settingsMap сводит все настройки в одну карту: дальше они пишутся единообразно
-// и в заданном порядке, без деления на «известные» и «прочие».
+// settingsMap folds every setting into one map: from there they are written
+// uniformly and in the given order, with no split into "known" and "other".
 func (f *settingsFrame) settingsMap() map[uint64]uint64 {
 	out := make(map[uint64]uint64, len(f.Other)+3)
 	for id, val := range f.Other {
@@ -203,9 +203,9 @@ func (f *settingsFrame) settingsMap() map[uint64]uint64 {
 	return out
 }
 
-// settingsSequence возвращает идентификаторы в порядке отправки: сначала
-// перечисленные в Order, затем прочие по возрастанию. Сортировка вместо обхода
-// map важна: случайный порядок сам по себе отличал бы нас от браузера.
+// settingsSequence returns the identifiers in send order: first those listed in
+// Order, then the rest in ascending order. Sorting instead of iterating a map
+// matters: a random order would set us apart from a browser on its own.
 func (f *settingsFrame) settingsSequence(all map[uint64]uint64) []uint64 {
 	seq := make([]uint64, 0, len(all))
 	seen := make(map[uint64]bool, len(all))

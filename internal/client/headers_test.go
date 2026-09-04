@@ -8,13 +8,13 @@ import (
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
-// Порядок и регистр заголовков — часть отпечатка наравне с набором, но до сих
-// пор проверялись только через сеть, на живом стенде. Здесь проверяется сама
-// сборка: она общая для HTTP/1.1, HTTP/2 и HTTP/3, и расхождение между путями
-// уже приводило к тому, что HTTP/3 молча терял SuppressHeaders и слот cookie.
+// Header order and case are part of the fingerprint just as much as the set,
+// yet until now they were only checked over the network, on a live stand. Here
+// the assembly itself is checked: it is shared by HTTP/1.1, HTTP/2 and HTTP/3,
+// and a divergence already made HTTP/3 silently lose SuppressHeaders and the cookie slot.
 
-// testSession собирает сессию в обход New: тому нужна валидная TLS-спека,
-// а здесь проверяются только заголовки.
+// testSession builds a session bypassing New: that one needs a valid TLS spec,
+// while only the headers are checked here.
 func testSession(t *testing.T, headers profile.HeadersSpec, h1 profile.HTTP1Spec) *Session {
 	t.Helper()
 	return &Session{
@@ -30,20 +30,20 @@ func chromeLike() profile.HeadersSpec {
 		CustomAnchor: "accept-encoding",
 		Order: []profile.HeaderPair{
 			{Key: "sec-ch-ua", Value: `"Chromium";v="141"`},
-			// Пустое значение — подстановка из UserAgent с сохранением позиции.
+			// An empty value means substituting UserAgent while keeping the position.
 			{Key: "user-agent"},
 			{Key: "accept", Value: "text/html"},
 			{Key: "accept-encoding", Value: "gzip, deflate, br, zstd"},
 			{Key: "accept-language", Value: "en-US,en;q=0.9"},
-			// Пустой слот: задаёт позицию, значение приходит из jar.
+			// An empty slot: it fixes the position, the value comes from the jar.
 			{Key: "cookie"},
 			{Key: "priority", Value: "u=0, i"},
 		},
 	}
 }
 
-// profileHTTP1 — порядок HTTP/1.1 с местом под Content-Length там, где его
-// шлёт Chrome: сразу за Connection.
+// profileHTTP1 is the HTTP/1.1 order with a place for Content-Length exactly
+// where Chrome sends it: right after Connection.
 func profileHTTP1() profile.HTTP1Spec {
 	return profile.HTTP1Spec{
 		Connection: "keep-alive",
@@ -75,7 +75,7 @@ func mustURL(t *testing.T, raw string) *url.URL {
 	t.Helper()
 	u, err := url.Parse(raw)
 	if err != nil {
-		t.Fatalf("разбор %q: %v", raw, err)
+		t.Fatalf("parsing %q: %v", raw, err)
 	}
 	return u
 }
@@ -88,12 +88,12 @@ func TestCustomHeaderGoesBeforeAnchor(t *testing.T) {
 
 	at := indexOf(got, "x-api-key")
 	if at < 0 {
-		t.Fatalf("заголовок сессии потерян: %v", got)
+		t.Fatalf("the session header was lost: %v", got)
 	}
-	// Служебный хвост браузер дописывает последним, поэтому заголовок после
-	// него — заметная аномалия.
+	// The browser appends its service tail last, so a header after it is a
+	// visible anomaly.
 	if at > indexOf(got, "accept-encoding") {
-		t.Errorf("кастомный заголовок после якоря: %v", got)
+		t.Errorf("a custom header after the anchor: %v", got)
 	}
 }
 
@@ -106,17 +106,17 @@ func TestProfileOverrideKeepsPosition(t *testing.T) {
 	built := s.buildHeaders(&Request{}, u, "example.com", nil)
 
 	if got := names(built); indexOf(got, "user-agent") != indexOf(before, "user-agent") {
-		t.Errorf("переопределение сдвинуло заголовок: %v -> %v", before, got)
+		t.Errorf("the override moved the header: %v -> %v", before, got)
 	}
 	for _, h := range built {
 		if strings.EqualFold(h.Key, "user-agent") && h.Value != "custom/1.0" {
-			t.Errorf("значение не применилось: %q", h.Value)
+		t.Errorf("the value was not applied: %q", h.Value)
 		}
 	}
 }
 
-// Профиль пишет user-agent, пользователь — User-Agent. Пока ключи хранились
-// в map, получалось два заголовка при одном имени в порядке.
+// The profile writes user-agent, the user writes User-Agent. While the keys
+// lived in a map, that produced two headers for one name in the order.
 func TestDifferentCaseIsOneHeader(t *testing.T) {
 	s := testSession(t, chromeLike(), profile.HTTP1Spec{})
 	s.headers.Set("USER-AGENT", "custom/1.0")
@@ -130,7 +130,7 @@ func TestDifferentCaseIsOneHeader(t *testing.T) {
 		}
 	}
 	if n != 1 {
-		t.Errorf("user-agent встречается %d раз: %v", n, got)
+		t.Errorf("user-agent appears %d times: %v", n, got)
 	}
 }
 
@@ -141,19 +141,19 @@ func TestSuppressedHeaderIsRemoved(t *testing.T) {
 	got := names(s.buildHeaders(r, mustURL(t, "https://example.com/"), "example.com", nil))
 
 	if indexOf(got, "accept-language") >= 0 {
-		t.Errorf("погашенный заголовок остался: %v", got)
+		t.Errorf("the suppressed header stayed: %v", got)
 	}
 }
 
-// Пустой слот cookie в профиле задаёт позицию, а не значение: без jar он
-// обязан исчезнуть, иначе на провод уйдёт пустой заголовок.
+// An empty cookie slot in the profile fixes a position, not a value: without a
+// jar it must disappear, or an empty header reaches the wire.
 func TestEmptyCookieSlotDisappears(t *testing.T) {
 	s := testSession(t, chromeLike(), profile.HTTP1Spec{})
 
 	got := names(s.buildHeaders(&Request{}, mustURL(t, "https://example.com/"), "example.com", nil))
 
 	if indexOf(got, "cookie") >= 0 {
-		t.Errorf("пустой слот попал в запрос: %v", got)
+		t.Errorf("an empty slot made it into the request: %v", got)
 	}
 }
 
@@ -168,22 +168,22 @@ func TestHTTP1AddsHostAndConnection(t *testing.T) {
 	got := names(built)
 
 	if got[0] != "host" {
-		t.Errorf("Host обязан идти первым: %v", got)
+		t.Errorf("Host must come first: %v", got)
 	}
 	if indexOf(got, "connection") != 1 {
-		t.Errorf("Connection обязан идти вторым: %v", got)
+		t.Errorf("Connection must come second: %v", got)
 	}
-	// Регистр в HTTP/1.1 произволен, и браузеры им пользуются: профиль задаёт
-	// его явно, поэтому на провод должен уйти Host, а не host.
+	// The case in HTTP/1.1 is free and browsers use it: the profile states it
+	// explicitly, so Host must reach the wire, not host.
 	for _, h := range built {
 		if strings.EqualFold(h.Key, "host") && h.Key != "Host" {
-			t.Errorf("регистр профиля потерян: %q", h.Key)
+			t.Errorf("the profile case was lost: %q", h.Key)
 		}
 	}
 }
 
-// В HTTP/3 нет ни Host, ни Connection: они запрещены, а авторитет передаётся
-// псевдо-заголовком :authority.
+// HTTP/3 has neither Host nor Connection: they are forbidden, and the authority
+// travels in the :authority pseudo-header.
 func TestHTTP3OmitsHostAndConnection(t *testing.T) {
 	h1 := profile.HTTP1Spec{Order: []string{"Host", "Connection"}, Connection: "keep-alive"}
 	s := testSession(t, chromeLike(), h1)
@@ -191,13 +191,13 @@ func TestHTTP3OmitsHostAndConnection(t *testing.T) {
 	got := names(s.buildHeaders(&Request{}, mustURL(t, "https://example.com/"), "example.com", nil))
 
 	if indexOf(got, "host") >= 0 || indexOf(got, "connection") >= 0 {
-		t.Errorf("HTTP/3 получил заголовки HTTP/1.1: %v", got)
+			t.Errorf("HTTP/3 got HTTP/1.1 headers: %v", got)
 	}
 }
 
-// Content-Length транспорт добавляет сам, уже после сборки. Место под него
-// занимается заранее, иначе он уходит в хвост, а браузер шлёт его сразу
-// за Connection.
+// Content-Length is added by the transport, after the assembly. Its place is
+// reserved in advance, otherwise it ends up at the tail while a browser sends
+// it right after Connection.
 func TestWireOrderKeepsSlotForAbsentHeader(t *testing.T) {
 	built := []headerKV{{Key: "Host", Value: "example.com"},
 		{Key: "Connection", Value: "keep-alive"}, {Key: "Accept", Value: "*/*"}}
@@ -206,7 +206,7 @@ func TestWireOrderKeepsSlotForAbsentHeader(t *testing.T) {
 	got := wireOrder(built, want, "accept-encoding")
 
 	if indexOf(got, "content-length") != 2 {
-		t.Errorf("место под Content-Length не занято: %v", got)
+		t.Errorf("the place for Content-Length was not reserved: %v", got)
 	}
 }
 
@@ -218,7 +218,7 @@ func TestWireOrderPlacesCustomAtAnchor(t *testing.T) {
 	got := wireOrder(built, want, "accept-encoding")
 
 	if indexOf(got, "x-api-key") != indexOf(got, "accept-encoding")-1 {
-		t.Errorf("кастомный заголовок не встал перед якорем: %v", got)
+		t.Errorf("the custom header did not land before the anchor: %v", got)
 	}
 }
 
@@ -231,7 +231,7 @@ func TestRequestHeadersWinOverSession(t *testing.T) {
 
 	for _, h := range built {
 		if strings.EqualFold(h.Key, "x-trace") && h.Value != "request" {
-			t.Errorf("заголовок запроса не перебил сессионный: %q", h.Value)
+		t.Errorf("the request header did not override the session one: %q", h.Value)
 		}
 	}
 }
@@ -245,15 +245,15 @@ func TestNoDefaultHeadersDropsProfile(t *testing.T) {
 		mustURL(t, "https://example.com/"), "example.com", nil))
 
 	if len(got) != 1 || got[0] != "x-only" {
-		t.Errorf("профильные заголовки не отключились: %v", got)
+		t.Errorf("the profile headers were not disabled: %v", got)
 	}
 }
 
-// Значение заголовка может зависеть от метода.
+// A header value may depend on the method.
 //
-// Замер Яндекс.Браузера 26.8 на Pixel 7: sdch в Accept-Encoding уходит на GET,
-// HEAD, DELETE и PUT, но не на POST — даже с пустым телом. Правило описано
-// в профиле данными; код о самом sdch ничего не знает.
+// Yandex Browser 26.8 on a Pixel 7, measured: sdch in Accept-Encoding goes out
+// on GET, HEAD, DELETE and PUT but not on POST — not even with an empty body.
+// The rule is described in the profile as data; the code knows nothing of sdch.
 func TestHeaderValueDependsOnMethod(t *testing.T) {
 	h := chromeLike()
 	for i := range h.Order {
@@ -269,7 +269,7 @@ func TestHeaderValueDependsOnMethod(t *testing.T) {
 		{"GET", "gzip, deflate, br, zstd, sdch"},
 		{"DELETE", "gzip, deflate, br, zstd, sdch"},
 		{"PUT", "gzip, deflate, br, zstd, sdch"},
-		// Регистр метода в профиле произвольный: сверка идёт без учёта регистра.
+	// The method case in a profile is arbitrary: the match is case-insensitive.
 		{"POST", "gzip, deflate, br, zstd"},
 	} {
 		got := ""
@@ -279,7 +279,7 @@ func TestHeaderValueDependsOnMethod(t *testing.T) {
 			}
 		}
 		if got != tc.want {
-			t.Errorf("%s: accept-encoding = %q, ожидалось %q", tc.method, got, tc.want)
+				t.Errorf("%s: accept-encoding = %q, expected %q", tc.method, got, tc.want)
 		}
 	}
 }

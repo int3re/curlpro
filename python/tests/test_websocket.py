@@ -1,7 +1,7 @@
-"""Проверка WebSocket.
+"""WebSocket checks.
 
-Рукопожатие — обычный HTTP/1.1-запрос с Upgrade, поэтому его заголовки берутся
-из профиля браузера и тоже входят в отпечаток.
+The handshake is a plain HTTP/1.1 request with Upgrade, so its headers come from
+the browser profile and belong to the fingerprint too.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def _online() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _online(), reason="нет доступа к echo.websocket.org")
+pytestmark = pytest.mark.skipif(not _online(), reason="no access to echo.websocket.org")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -37,20 +37,20 @@ def _profiles():
 def ws():
     with curlpro.Session("chrome-151-windows") as s:
         with s.websocket(ECHO) as sock:
-            sock.recv()  # сервер присылает приветствие первым
+            sock.recv()  # the server sends a greeting first
             yield sock
 
 
 def test_text_roundtrip(ws):
-    ws.send("привет из curlpro")
+    ws.send("hello from curlpro")
     got = ws.recv()
-    assert got == "привет из curlpro"
+    assert got == "hello from curlpro"
     assert isinstance(got, str)
 
 
 def test_binary_roundtrip(ws):
-    """Двоичные данные не должны пострадать: текстовый кадр испортил бы
-    последовательности, не являющиеся валидным UTF-8."""
+    """Binary data must not be damaged: a text frame would corrupt sequences that
+    are not valid UTF-8."""
     blob = bytes(range(256))
     ws.send(blob)
     got = ws.recv()
@@ -59,33 +59,33 @@ def test_binary_roundtrip(ws):
 
 
 def test_frame_type_follows_payload_type(ws):
-    """str уходит текстовым кадром, bytes — двоичным. Это разные опкоды,
-    и сервер вправе их различать."""
-    ws.send("строка")
+    """A str goes out as a text frame, bytes as a binary one. These are different
+    opcodes, and a server may tell them apart."""
+    ws.send("a string")
     assert isinstance(ws.recv(), str)
     ws.send(b"bytes")
     assert isinstance(ws.recv(), bytes)
 
 
 def test_large_message(ws):
-    """Длина больше 65535 кодируется восемью байтами (RFC 6455)."""
+    """A length above 65535 is encoded in eight bytes (RFC 6455)."""
     payload = "x" * 100_000
     ws.send(payload)
     assert ws.recv() == payload
 
 
 def test_medium_message(ws):
-    """Длина от 126 до 65535 кодируется двумя байтами."""
+    """A length between 126 and 65535 is encoded in two bytes."""
     payload = "y" * 5000
     ws.send(payload)
     assert ws.recv() == payload
 
 
 def test_ping_does_not_break_stream(ws):
-    """Ответный pong обрабатывается внутри recv и не попадает наружу."""
+    """The matching pong is handled inside recv and never surfaces."""
     ws.ping(b"probe")
-    ws.send("после ping")
-    assert ws.recv() == "после ping"
+    ws.send("after the ping")
+    assert ws.recv() == "after the ping"
 
 
 def test_close_is_idempotent():
@@ -94,7 +94,7 @@ def test_close_is_idempotent():
         sock.close()
         sock.close()
         with pytest.raises(RuntimeError, match="closed"):
-            sock.send("уже поздно")
+            sock.send("too late")
 
 
 def test_requires_wss():
@@ -104,11 +104,11 @@ def test_requires_wss():
 
 
 def test_handshake_uses_profile_headers():
-    """Отпечаток рукопожатия должен зависеть от профиля.
+    """The handshake fingerprint must depend on the profile.
 
-    Прямая проверка заголовков требует своего сервера; здесь проверяется,
-    что соединение с профилем Firefox устанавливается так же успешно —
-    то есть заголовки собираются, а не берутся из умолчаний Go.
+    Checking the headers directly needs a server of our own; here it is checked
+    that a connection with the Firefox profile is established just as
+    successfully — that is, the headers are assembled rather than taken from Go's defaults.
     """
     with curlpro.Session("firefox-144-macos") as s:
         with s.websocket(ECHO) as sock:

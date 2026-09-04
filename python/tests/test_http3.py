@@ -1,7 +1,7 @@
-"""Проверка HTTP/3.
+"""HTTP/3 checks.
 
-Отпечаток сверяется с настоящим Chrome: quic.browserleaks.com отдаёт h3_text,
-который у Chrome 144 выглядит ровно так, как записано в CHROME_H3.
+The fingerprint is compared with real Chrome: quic.browserleaks.com returns
+h3_text, which for Chrome 144 looks exactly like CHROME_H3.
 """
 
 from __future__ import annotations
@@ -16,12 +16,12 @@ import curlpro
 REPO = Path(__file__).resolve().parents[2]
 ORACLE = "https://quic.browserleaks.com/fp"
 
-# Эталон, снятый с настоящего Chrome 144.
+# The baseline captured from a real Chrome 144.
 CHROME_H3 = "1:65536;6:262144;7:100;51:1;GREASE|GREASE|984832|m,a,s,p"
 
 
 def _quic_reachable() -> bool:
-    # Проверяем TCP-порт: если хост недоступен, UDP тем более.
+    # Check the TCP port: if the host is unreachable, UDP certainly is.
     try:
         with socket.create_connection(("quic.browserleaks.com", 443), timeout=5):
             return True
@@ -29,7 +29,7 @@ def _quic_reachable() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _quic_reachable(), reason="нет доступа к quic.browserleaks.com")
+pytestmark = pytest.mark.skipif(not _quic_reachable(), reason="no access to quic.browserleaks.com")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -51,36 +51,36 @@ def test_http3_fingerprint_matches_chrome():
 
 
 def test_http3_fingerprint_is_stable():
-    """Отпечаток не должен меняться от запроса к запросу.
+    """The fingerprint must not change from request to request.
 
-    Ловит две гонки, которые уже случались: управляющий поток, уходящий
-    параллельно запросу, и PRIORITY_UPDATE, отправленный один раз вместо
-    каждого запроса.
+    Catches two races that have already happened: the control stream going out in
+    parallel with the request, and PRIORITY_UPDATE sent once instead of per
+    request.
     """
     with curlpro.Session(http3=True) as s:
         seen = {s.get(ORACLE).json()["h3_text"] for _ in range(4)}
-    assert seen == {CHROME_H3}, f"отпечаток нестабилен: {seen}"
+    assert seen == {CHROME_H3}, f"the fingerprint is unstable: {seen}"
 
 
 def test_ja4_marks_quic_transport():
-    """JA4 над QUIC начинается с 'q', над TCP — с 't'."""
+    """JA4 over QUIC starts with 'q', over TCP with 't'."""
     with curlpro.Session(http3=True) as s:
         quic_ja4 = s.get(ORACLE).json()["ja4"]
     assert quic_ja4.startswith("q13d"), quic_ja4
 
 
 def test_http3_requires_profile_support():
-    """Профиль без секции http3 не должен молча уходить на TCP."""
+    """A profile without an http3 section must not quietly fall back to TCP."""
     with pytest.raises(curlpro.CurlProError, match="no http3 section"):
         curlpro.Session("firefox-144-macos", http3=True)
 
 
 def test_brotli_response_is_decompressed():
-    """Профиль объявляет br и zstd — значит ответ надо уметь распаковать.
+    """The profile advertises br and zstd — so the response must be decodable.
 
-    До появления распаковки этот запрос возвращал сжатые байты, и разбор JSON
-    падал на первом символе.
+    Before decompression existed this request returned compressed bytes and JSON
+    parsing failed on the first character.
     """
     with curlpro.Session(http3=True) as s:
         r = s.get(ORACLE)
-    assert r.json()["h3_text"]  # разобралось, значит распаковано
+    assert r.json()["h3_text"]  # it parsed, so it was decompressed

@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-// Протокол на запрос.
+// Per-request protocol.
 //
-// Стенд httptest даёт ровно два варианта ALPN: с EnableHTTP2 сервер
-// объявляет h2, без него — только http/1.1. Этого хватает, чтобы проверить
-// и принуждение, и отказ, когда сервер согласовал не то.
+// The httptest stand offers exactly two ALPN variants: with EnableHTTP2 the
+// server advertises h2, without it only http/1.1. That is enough to check both
+// the forcing and the refusal when the server negotiated something else.
 
 func okHandler() stdhttp.Handler {
 	return stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -19,8 +19,8 @@ func okHandler() stdhttp.Handler {
 	})
 }
 
-// Запрос обязан уйти по HTTP/1.1, хотя сервер предлагает h2 и сессия
-// его не запрещает.
+// The request must go over HTTP/1.1 even though the server offers h2 and the
+// session does not forbid it.
 func TestRequestProtocolForcesHTTP1(t *testing.T) {
 	srv, _ := auditServer(t, true, okHandler())
 	s := auditSession(t, Options{DefaultHeaders: true})
@@ -30,11 +30,11 @@ func TestRequestProtocolForcesHTTP1(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resp.Proto != "HTTP/1.1" {
-		t.Errorf("согласован %s, ожидался HTTP/1.1", resp.Proto)
+		t.Errorf("negotiated %s, expected HTTP/1.1", resp.Proto)
 	}
 }
 
-// Обратное направление: сессия просит HTTP/1.1, запрос — h2.
+// The other direction: the session asks for HTTP/1.1, the request for h2.
 func TestRequestProtocolOverridesSessionForceHTTP1(t *testing.T) {
 	srv, _ := auditServer(t, true, okHandler())
 	s := auditSession(t, Options{DefaultHeaders: true, ForceHTTP1: true})
@@ -44,7 +44,7 @@ func TestRequestProtocolOverridesSessionForceHTTP1(t *testing.T) {
 		t.Fatal(err)
 	}
 	if plain.Proto != "HTTP/1.1" {
-		t.Fatalf("без указания согласован %s, ожидался HTTP/1.1", plain.Proto)
+		t.Fatalf("without an instruction %s was negotiated, expected HTTP/1.1", plain.Proto)
 	}
 
 	forced, err := s.Do(&Request{Method: "GET", URL: auditURL(srv, "/"), Protocol: ProtoH2})
@@ -52,12 +52,12 @@ func TestRequestProtocolOverridesSessionForceHTTP1(t *testing.T) {
 		t.Fatal(err)
 	}
 	if forced.Proto != "HTTP/2.0" {
-		t.Errorf("с protocol=h2 согласован %s, ожидался HTTP/2.0", forced.Proto)
+		t.Errorf("with protocol=h2 %s was negotiated, expected HTTP/2.0", forced.Proto)
 	}
 }
 
-// Два протокола в одной сессии живут на разных соединениях: признак входит
-// в ключ пула, иначе запрос по h2 достался бы соединению http/1.1.
+// Two protocols in one session live on separate connections: the flag is part
+// of the pool key, otherwise an h2 request would get the http/1.1 connection.
 func TestBothProtocolsInOneSession(t *testing.T) {
 	srv, conns := auditServer(t, true, okHandler())
 	s := auditSession(t, Options{DefaultHeaders: true})
@@ -73,32 +73,32 @@ func TestBothProtocolsInOneSession(t *testing.T) {
 			t.Fatalf("protocol=%s: %v", tc.proto, err)
 		}
 		if resp.Proto != tc.want {
-			t.Fatalf("protocol=%s: согласован %s, ожидался %s", tc.proto, resp.Proto, tc.want)
+			t.Fatalf("protocol=%s: negotiated %s, expected %s", tc.proto, resp.Proto, tc.want)
 		}
 	}
-	// По одному соединению на протокол, а не по одному на запрос.
+	// One connection per protocol, not one per request.
 	if got := conns.Load(); got != 2 {
-		t.Errorf("сервер принял %d соединений, ожидалось 2", got)
+		t.Errorf("the server accepted %d connections, expected 2", got)
 	}
 }
 
-// Сервер без h2: запрос, потребовавший h2, обязан упасть внятно, а не
-// молча уехать по HTTP/1.1.
+// A server without h2: a request demanding h2 must fail clearly rather than
+// quietly travel over HTTP/1.1.
 func TestRequestProtocolH2FailsOnHTTP1Server(t *testing.T) {
 	srv, _ := auditServer(t, false, okHandler())
 	s := auditSession(t, Options{DefaultHeaders: true})
 
 	_, err := s.Do(&Request{Method: "GET", URL: auditURL(srv, "/"), Protocol: ProtoH2})
 	if err == nil {
-		t.Fatal("ошибки нет, а h2 сервер не предлагает")
+		t.Fatal("no error, though the server does not offer h2")
 	}
 	if !strings.Contains(err.Error(), "http/1.1") {
-		t.Errorf("ошибка не называет согласованный протокол: %v", err)
+		t.Errorf("the error does not name the negotiated protocol: %v", err)
 	}
 }
 
-// Такую ошибку повторять нечего: со второй попытки сервер согласует то же.
-// Считаем соединения — три лишних рукопожатия были бы видны здесь.
+// Such an error has nothing to retry: the second attempt negotiates the same.
+// The connections are counted — three extra handshakes would show up here.
 func TestForcedProtocolErrorIsNotRetried(t *testing.T) {
 	srv, conns := auditServer(t, false, okHandler())
 	s := auditSession(t, Options{
@@ -109,15 +109,15 @@ func TestForcedProtocolErrorIsNotRetried(t *testing.T) {
 	if _, err := s.Do(&Request{
 		Method: "GET", URL: auditURL(srv, "/"), Protocol: ProtoH2,
 	}); err == nil {
-		t.Fatal("ошибки нет")
+		t.Fatal("no error")
 	}
 	if got := conns.Load(); got != 1 {
-		t.Errorf("сервер принял %d соединений, ожидалось одно: повторов быть не должно", got)
+		t.Errorf("the server accepted %d connections, expected one: there must be no retries", got)
 	}
 }
 
-// Профиль без секции http3: требование h3 обязано вскрыться ошибкой,
-// а не тихим уходом по TCP.
+// A profile without an http3 section: demanding h3 must surface as an error
+// rather than a quiet fallback to TCP.
 func TestRequestProtocolH3NeedsProfileSection(t *testing.T) {
 	srv, conns := auditServer(t, true, okHandler())
 	s, err := New(auditProfile(t, "chrome-150-macos"), Options{
@@ -130,26 +130,26 @@ func TestRequestProtocolH3NeedsProfileSection(t *testing.T) {
 
 	_, err = s.Do(&Request{Method: "GET", URL: auditURL(srv, "/"), Protocol: ProtoH3})
 	if err == nil {
-		t.Fatal("ошибки нет, а профиль не описывает http3")
+		t.Fatal("no error, though the profile has no http3 section")
 	}
 	if !strings.Contains(err.Error(), "http3") {
-		t.Errorf("ошибка не объясняет причину: %v", err)
+		t.Errorf("the error does not explain the reason: %v", err)
 	}
 	if got := conns.Load(); got != 0 {
-		t.Errorf("сервер принял %d соединений: до сети дело доходить не должно", got)
+		t.Errorf("the server accepted %d connections: it must never reach the network", got)
 	}
 }
 
-// Неизвестное значение отвергается до сети.
+// An unknown value is rejected before the network.
 func TestUnknownProtocolIsRejected(t *testing.T) {
 	s := auditSession(t, Options{DefaultHeaders: true})
 	_, err := s.Do(&Request{Method: "GET", URL: "https://localhost/", Protocol: "spdy"})
 	if err == nil || !strings.Contains(err.Error(), "protocol") {
-		t.Fatalf("ожидалась ошибка про protocol, получено: %v", err)
+		t.Fatalf("expected an error about protocol, got: %v", err)
 	}
 }
 
-// Заголовки профиля включаются и выключаются на запрос — в обе стороны.
+// The profile headers can be switched on and off per request — both ways.
 func TestRequestDefaultHeadersBothWays(t *testing.T) {
 	seen := make(chan stdhttp.Header, 4)
 	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -158,13 +158,13 @@ func TestRequestDefaultHeadersBothWays(t *testing.T) {
 	})
 	srv, _ := auditServer(t, true, h)
 
-	// Сессия без заголовков профиля: запрос возвращает их обратно.
+	// A session without profile headers: the request brings them back.
 	off := auditSession(t, Options{DefaultHeaders: false})
 	if _, err := off.Do(&Request{Method: "GET", URL: auditURL(srv, "/")}); err != nil {
 		t.Fatal(err)
 	}
 	if got := (<-seen).Get("sec-fetch-site"); got != "" {
-		t.Errorf("сессия отключила заголовки профиля, а sec-fetch-site пришёл: %q", got)
+		t.Errorf("the session disabled the profile headers, yet sec-fetch-site arrived: %q", got)
 	}
 
 	on := true
@@ -174,10 +174,10 @@ func TestRequestDefaultHeadersBothWays(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := (<-seen).Get("sec-fetch-site"); got == "" {
-		t.Error("запрос вернул заголовки профиля, а sec-fetch-site не пришёл")
+		t.Error("the request re-enabled the profile headers, yet sec-fetch-site did not arrive")
 	}
 
-	// И наоборот: сессия с заголовками, запрос без них.
+	// And the other way round: a session with headers, a request without them.
 	no := false
 	with := auditSession(t, Options{DefaultHeaders: true})
 	if _, err := with.Do(&Request{
@@ -186,6 +186,6 @@ func TestRequestDefaultHeadersBothWays(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := (<-seen).Get("sec-fetch-site"); got != "" {
-		t.Errorf("запрос отключил заголовки профиля, а sec-fetch-site пришёл: %q", got)
+		t.Errorf("the request disabled the profile headers, yet sec-fetch-site arrived: %q", got)
 	}
 }

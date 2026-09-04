@@ -8,9 +8,9 @@ import (
 	http "github.com/bogdanfinn/fhttp"
 )
 
-// Сборка заголовков может быть верной, а на провод уйти другое: часть
-// заголовков добавляет сам транспорт, уже после applyHeaders. Здесь
-// проверяется результат целиком — через настоящий Request.Write.
+// The header assembly may be right while something else reaches the wire: part
+// of the headers are added by the transport itself, after applyHeaders. Here
+// the whole result is checked — through a real Request.Write.
 func wireNames(t *testing.T, s *Session, r *Request, body string) []string {
 	t.Helper()
 
@@ -50,9 +50,9 @@ func wireSession(t *testing.T) *Session {
 	return testSession(t, chromeLike(), h1)
 }
 
-// Content-Length добавляет транспорт, уже после сборки. Место под него
-// занимается заранее: иначе он уходит в самый хвост, тогда как браузер шлёт
-// его сразу за Connection.
+// Content-Length is added by the transport, after the assembly. Its place is
+// reserved in advance: otherwise it ends up at the very tail, whereas a browser
+// sends it right after Connection.
 func TestContentLengthTakesItsSlot(t *testing.T) {
 	s := wireSession(t)
 	r := &Request{Method: "POST", URL: "https://example.com/x"}
@@ -60,11 +60,11 @@ func TestContentLengthTakesItsSlot(t *testing.T) {
 	got := wireNames(t, s, r, `{"a":1}`)
 
 	if len(got) < 3 || got[2] != "content-length" {
-		t.Errorf("Content-Length не занял своё место: %v", got)
+		t.Errorf("Content-Length did not take its place: %v", got)
 	}
 }
 
-// Без тела заголовка нет вовсе, а место под него не должно оставлять следа.
+// Without a body there is no header at all, and its reserved place must leave no trace.
 func TestNoContentLengthWithoutBody(t *testing.T) {
 	s := wireSession(t)
 
@@ -72,7 +72,7 @@ func TestNoContentLengthWithoutBody(t *testing.T) {
 
 	for _, n := range got {
 		if n == "content-length" {
-			t.Errorf("пустое место превратилось в заголовок: %v", got)
+		t.Errorf("an empty place turned into a header: %v", got)
 		}
 	}
 }
@@ -85,9 +85,9 @@ func TestCustomHeaderReachesWireBeforeAnchor(t *testing.T) {
 
 	at, anchor := indexOf(got, "x-api-key"), indexOf(got, "accept-encoding")
 	if at < 0 {
-		t.Fatalf("заголовок не дошёл до провода: %v", got)
+		t.Fatalf("the header never reached the wire: %v", got)
 	}
 	if at > anchor {
-		t.Errorf("кастомный заголовок после якоря: %v", got)
+		t.Errorf("a custom header after the anchor: %v", got)
 	}
 }

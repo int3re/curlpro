@@ -1,9 +1,9 @@
-"""permessage-deflate с окном меньше 32 КиБ.
+"""permessage-deflate with a window below 32 KiB.
 
-Проверять сервером из пакета ``websockets`` бессмысленно: несжатые кадры он
-принимает молча, и проверка проходила бы и без сжатия. Здесь сервер свой —
-он смотрит бит RSV1 и разжимает окном ровно той ширины, которую потребовал:
-zlib с ``wbits=-9`` откажется читать поток, сжатый окном 32 КиБ.
+Checking it with a server from the ``websockets`` package is pointless: it
+accepts uncompressed frames silently, and the check would pass without any
+compression. Here the server is our own — it looks at the RSV1 bit and inflates
+with exactly the window it demanded: zlib with ``wbits=-9`` refuses a 32 KiB stream.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ def _profiles():
 
 
 class DeflateWS:
-    """Сервер, требующий client_max_window_bits, и читающий один кадр."""
+    """A server that demands client_max_window_bits and reads one frame."""
 
     def __init__(self, bits: int):
         self.bits = bits
@@ -62,10 +62,10 @@ class DeflateWS:
             with self._ctx.wrap_socket(raw, server_side=True) as conn:
                 self._handshake(conn)
                 self._read_frame(conn)
-                # Ответ уходит несжатым: RSV1 ставится по сообщению.
+                # The reply goes out uncompressed: RSV1 is set per message.
                 conn.sendall(b"\x81\x02ok")
-                # Дожидаемся кадра закрытия и отвечаем своим: иначе клиент
-                # получит обрыв TLS вместо штатного закрытия.
+                # Wait for the close frame and answer with our own: otherwise the
+                # client gets a TLS break instead of a clean close.
                 self._read_frame(conn)
                 conn.sendall(b"\x88\x00")
         except Exception as exc:  # noqa: BLE001
@@ -76,7 +76,7 @@ class DeflateWS:
         while b"\r\n\r\n" not in data:
             chunk = conn.recv(4096)
             if not chunk:
-                raise ConnectionError("клиент не прислал рукопожатие")
+                raise ConnectionError("the client sent no handshake")
             data += chunk
         key = ""
         for line in data.decode("latin-1").split("\r\n")[1:]:
@@ -99,7 +99,7 @@ class DeflateWS:
             while len(buf) < n:
                 chunk = conn.recv(n - len(buf))
                 if not chunk:
-                    raise ConnectionError("кадр оборван")
+                    raise ConnectionError("the frame was cut short")
                 buf += chunk
             return buf
 
@@ -127,10 +127,10 @@ class DeflateWS:
         self._thread.join(timeout=2)
 
 
-# Далёкие повторы: при окне 512 байт ссылка на начало недостижима,
-# и компрессор обязан это учитывать. Окном 32 КиБ он сослался бы назад,
-# и zlib с wbits=-9 такой поток не прочитает.
-PAYLOAD = ("A" * 400 + "B" * 400) * 4 + "хвост"
+# Distant repeats: with a 512-byte window a reference to the beginning is out of
+# reach, and the compressor must account for that. With a 32 KiB window it would
+# refer back, and zlib with wbits=-9 cannot read such a stream.
+PAYLOAD = ("A" * 400 + "B" * 400) * 4 + "tail"
 
 
 def test_small_client_window_is_compressed_within_window():
@@ -141,14 +141,14 @@ def test_small_client_window_is_compressed_within_window():
                 assert ws.recv() == "ok"
 
     assert srv.error is None, srv.error
-    assert srv.rsv1 is True, "сообщение ушло несжатым, хотя расширение согласовано"
-    # Хвост stored-блока отправитель срезает (RFC 7692, 7.2.1) — возвращаем.
+    assert srv.rsv1 is True, "the message went out uncompressed though the extension was negotiated"
+    # The sender trims the stored-block tail (RFC 7692, 7.2.1) — we put it back.
     raw = zlib.decompressobj(-9).decompress(srv.payload + b"\x00\x00\xff\xff")
     assert raw.decode("utf-8") == PAYLOAD
 
 
 def test_full_window_still_compressed():
-    """Обычный случай — окно 32 КиБ — не сломан переключением компрессора."""
+    """The ordinary case — a 32 KiB window — is not broken by switching compressors."""
     with DeflateWS(bits=15) as srv:
         with curlpro.Session("chrome-151-windows", verify=False) as s:
             with s.websocket(srv.url, timeout=5) as ws:

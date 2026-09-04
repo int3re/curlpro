@@ -1,9 +1,9 @@
-"""Совместимость с requests и сетевые возможности.
+"""Compatibility with requests, and network features.
 
-Проверяется то, по чему библиотеку оценивают в первые пять минут: params,
-auth, куки ответа, время запроса, цепочка редиректов, построчное чтение,
-типизированные ошибки. И то, без чего клиент считают игрушечным: свой
-корневой сертификат, прокси из окружения, предел размера ответа.
+What is checked is what the library is judged by in the first five minutes:
+params, auth, response cookies, request timing, the redirect chain, line-by-line
+reading, typed errors. And what makes a client look serious: a custom root
+certificate, a proxy from the environment, a response size limit.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def _profiles():
 
 
 class SmallServer:
-    """Сервер с редиректами, куками и большим телом."""
+    """A server with redirects, cookies and a large body."""
 
     def __init__(self):
         outer = self
@@ -101,16 +101,16 @@ class SmallServer:
         self._srv.server_close()
 
 
-# --- совместимость -------------------------------------------------------------
+# --- compatibility -----------------------------------------------------------
 
 def test_params_are_added_to_the_query():
     with RawHeaderServer(persistent=True) as srv:
         with curlpro.Session(verify=False, force_http1=True) as s:
-            line = s.get(srv.url, params={"q": "привет", "page": 2,
+            line = s.get(srv.url, params={"q": "hello", "page": 2,
                                           "tag": ["a", "b"], "skip": None}).json()["request_line"]
-    assert "q=%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82" in line
+    assert "q=hello" in line
     assert "page=2" in line and "tag=a&tag=b" in line
-    assert "skip" not in line, "None-параметры не отправляются"
+    assert "skip" not in line, "None parameters are not sent"
 
 
 def test_existing_query_is_kept():
@@ -133,7 +133,7 @@ def test_response_cookies_are_only_this_response():
             first = s.get(srv.url("/cookies"))
             second = s.get(srv.url("/"))
     assert first.cookies == {"sid": "abc", "theme": "dark"}
-    assert second.cookies == {}, "у ответа без Set-Cookie своих кук нет"
+    assert second.cookies == {}, "a response without Set-Cookie has no cookies of its own"
 
 
 def test_elapsed_is_measured():
@@ -185,11 +185,11 @@ def test_timeout_has_its_own_class():
     assert info.value.code == "timeout"
 
 
-# --- сетевые возможности --------------------------------------------------------
+# --- network features ----------------------------------------------------------
 
 def test_own_ca_is_trusted():
-    """Сертификат стенда подписан сам собой: с указанным корнем проверка
-    проходит, без него — падает."""
+    """The stand certificate is self-signed: with that root given verification
+    passes, without it it fails."""
     with RawHeaderServer(persistent=True) as srv:
         with curlpro.Session(verify=str(CERT_DIR / "tls.crt"), force_http1=True) as s:
             assert s.get(srv.url).status == 200
@@ -201,7 +201,7 @@ def test_own_ca_is_trusted():
 
 def test_missing_ca_file_fails_at_session_creation():
     with pytest.raises(curlpro.CurlProError, match="CA certificate"):
-        curlpro.Session(verify="нет-такого-файла.pem")
+        curlpro.Session(verify="no-such-file.pem")
 
 
 def test_client_cert_requires_both_files():
@@ -222,10 +222,10 @@ def test_max_response_size():
 
 
 def _clean_proxy_env(monkeypatch) -> None:
-    """Убирает всё, что могло остаться от машины.
+    """Clears everything the machine might have left behind.
 
-    На раннере GitHub no_proxy выставлен заранее, и тест, не знающий об этом,
-    падал: прокси законно не применялся, а проверка ждала обратного.
+    On a GitHub runner no_proxy is set in advance, and a test unaware of it
+    failed: the proxy was legitimately not applied while the check expected the opposite.
     """
     for name in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy",
                  "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"):
@@ -233,10 +233,10 @@ def _clean_proxy_env(monkeypatch) -> None:
 
 
 def test_proxy_from_environment(monkeypatch):
-    """Прокси из окружения используется, а NO_PROXY его отменяет."""
+    """A proxy from the environment is used, and NO_PROXY cancels it."""
     _clean_proxy_env(monkeypatch)
     with RawHeaderServer(persistent=True) as srv:
-        # Заведомо мёртвый прокси: если его взяли, запрос упадёт.
+        # A deliberately dead proxy: if it was picked up, the request fails.
         monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
         with curlpro.Session(verify=False, force_http1=True, timeout=5) as s:
             with pytest.raises(curlpro.CurlProError):
@@ -260,6 +260,6 @@ def test_explicit_proxy_beats_environment(monkeypatch):
     _clean_proxy_env(monkeypatch)
     with RawHeaderServer(persistent=True) as srv:
         monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
-        # Пустая строка в запросе означает «идти напрямую».
+        # An empty string in the request means "go directly".
         with curlpro.Session(verify=False, force_http1=True, timeout=5) as s:
             assert s.get(srv.url, proxy=False).status == 200

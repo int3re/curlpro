@@ -1,11 +1,11 @@
-"""Проверка биндинга против локального fingerproxy echo-server.
+"""Checking the binding against a local fingerproxy echo-server.
 
-Стенд поднимается отдельно (см. docs/CAPTURE.md):
+The stand is started separately (see docs/CAPTURE.md):
 
     tools/echo-server_windows_amd64.exe -listen-addr localhost:8443 \
         -cert-filename capture/certs/tls.crt -certkey-filename capture/certs/tls.key
 
-Без него тесты пропускаются, а не падают.
+Without it the tests skip rather than fail.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ def _stand_up() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _stand_up(), reason="echo-server на :8443 не запущен")
+pytestmark = pytest.mark.skipif(not _stand_up(), reason="no echo-server on :8443")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -47,33 +47,33 @@ def _fetch(profile: str) -> dict:
 
 
 def test_fingerprint_matches_reference():
-    """JA4 должен совпасть с эталоном, снятым с настоящего Chrome 151."""
+    """JA4 must match the baseline captured from a real Chrome 151."""
     want = json.loads(REFERENCE.read_text(encoding="utf-8"))["captured"]["ja4"][0]
     assert _fetch("chrome-151-windows")["ja4"] == want
 
 
 def test_ja3_varies_between_connections():
-    """Chrome >=110 перемешивает расширения: постоянный JA3 — сам по себе признак."""
+    """Chrome >= 110 shuffles extensions: a constant JA3 is a trait in itself."""
     seen = set()
     for _ in range(5):
-        # Каждая сессия — новое TLS-соединение и новая перестановка расширений.
+        # Every session is a new TLS connection and a new extension permutation.
         with curlpro.Session("chrome-151-windows", verify=False) as s:
             seen.add(s.get(STAND).json()["ja3"])
-    assert len(seen) > 1, f"JA3 не меняется между соединениями: {seen}"
+    assert len(seen) > 1, f"JA3 does not change between connections: {seen}"
 
 
 def test_profiles_differ():
-    """Разные браузеры должны давать разные отпечатки на всех слоях."""
+    """Different browsers must produce different fingerprints on every layer."""
     chrome = _fetch("chrome-151-windows")
     firefox = _fetch("firefox-144-macos")
     assert chrome["ja4"] != firefox["ja4"]
-    # Firefox отличается и на уровне HTTP/2: своё окно и порядок псевдо-заголовков.
+    # Firefox differs at the HTTP/2 level too: its own window and pseudo-header order.
     assert chrome["http2"] != firefox["http2"]
     assert firefox["http2"].endswith("m,p,a,s")
 
 
 def test_register_profile_at_runtime():
-    """Профиль, добавленный в рантайме, сразу пригоден для запросов."""
+    """A profile added at runtime is immediately usable for requests."""
     base = json.loads((REPO / "profiles" / "chrome-151-windows.json").read_text(encoding="utf-8"))
     delta = {
         "name": "chrome-152-test",
@@ -84,7 +84,7 @@ def test_register_profile_at_runtime():
 
     with curlpro.Session("chrome-152-test", verify=False) as s:
         body = s.get(STAND).json()
-    # Отпечаток TLS унаследован от родителя — менялся только User-Agent.
+    # The TLS fingerprint is inherited from the parent — only the User-Agent changed.
     assert body["ja4"] == _fetch("chrome-151-windows")["ja4"]
 
 

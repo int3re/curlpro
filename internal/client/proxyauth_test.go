@@ -12,17 +12,17 @@ import (
 	"time"
 )
 
-// authProxy — прокси, требующий Basic-авторизацию.
+// authProxy is a proxy demanding Basic authentication.
 //
-// keepAlive выбирает поведение после 407: держать соединение (как делает
-// большинство) или закрыть его — тогда клиент обязан переоткрыть сокет.
+// keepAlive selects the behaviour after a 407: hold the connection (as most do)
+// or close it — then the client must reopen the socket.
 type authProxy struct {
 	ln        net.Listener
 	keepAlive bool
-	target    string // куда вести туннель
+	target    string // where to tunnel
 
 	mu       sync.Mutex
-	connects []*stdhttp.Request // все полученные CONNECT
+	connects []*stdhttp.Request // every CONNECT received
 	accepted atomic.Int32
 }
 
@@ -70,7 +70,7 @@ func (p *authProxy) handle(c net.Conn) {
 		p.mu.Unlock()
 
 		if req.Header.Get("Proxy-Authorization") == "" {
-			body := "нужна авторизация"
+	body := "authentication required"
 			hdr := "HTTP/1.1 407 Proxy Authentication Required\r\n" +
 				"Proxy-Authenticate: Basic realm=\"test\"\r\n" +
 				"Content-Length: " + itoa(len(body)) + "\r\n"
@@ -110,8 +110,8 @@ func itoa(n int) string {
 	return string(b)
 }
 
-// Chrome шлёт CONNECT без учётных данных и добавляет их только после 407.
-// Прокси, ведущий журнал, видит у нас ту же пару запросов.
+// Chrome sends CONNECT without credentials and adds them only after a 407.
+// A proxy keeping a log sees the same pair of requests from us.
 func TestConnectSendsCredentialsOnlyAfterChallenge(t *testing.T) {
 	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		io.WriteString(w, "ok")
@@ -124,8 +124,8 @@ func TestConnectSendsCredentialsOnlyAfterChallenge(t *testing.T) {
 		keepAlive bool
 		wantConns int32
 	}{
-		{"прокси держит соединение", true, 1},
-		{"прокси закрывает после 407", false, 2},
+		{"the proxy holds the connection", true, 1},
+		{"the proxy closes after the 407", false, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := newAuthProxy(t, target, tc.keepAlive)
@@ -134,31 +134,31 @@ func TestConnectSendsCredentialsOnlyAfterChallenge(t *testing.T) {
 
 			resp, err := s.Do(&Request{Method: "GET", URL: auditURL(srv, "/")})
 			if err != nil {
-				t.Fatalf("запрос через прокси: %v", err)
+				t.Fatalf("request through the proxy: %v", err)
 			}
 			if resp.Status != 200 {
-				t.Fatalf("статус %d", resp.Status)
+				t.Fatalf("status %d", resp.Status)
 			}
 
 			reqs := p.requests()
 			if len(reqs) != 2 {
-				t.Fatalf("прокси получил %d CONNECT, ожидалось 2", len(reqs))
+				t.Fatalf("the proxy received %d CONNECTs, expected 2", len(reqs))
 			}
 			if got := reqs[0].Header.Get("Proxy-Authorization"); got != "" {
-				t.Errorf("первый CONNECT ушёл с Proxy-Authorization %q — браузер так не делает", got)
+				t.Errorf("the first CONNECT carried Proxy-Authorization %q — a browser does not", got)
 			}
 			if got := reqs[1].Header.Get("Proxy-Authorization"); !strings.HasPrefix(got, "Basic ") {
-				t.Errorf("второй CONNECT без учётных данных: %q", got)
+				t.Errorf("the second CONNECT had no credentials: %q", got)
 			}
 			if n := p.accepted.Load(); n != tc.wantConns {
-				t.Errorf("прокси принял %d соединений, ожидалось %d", n, tc.wantConns)
+				t.Errorf("the proxy accepted %d connections, expected %d", n, tc.wantConns)
 			}
 		})
 	}
 }
 
-// Прокси требует авторизацию, а её нет: ошибка должна называть причину,
-// а не «прокси вернул 407 Proxy Authentication Required».
+// The proxy demands authentication and there is none: the error must name the
+// reason rather than say "the proxy returned 407 Proxy Authentication Required".
 func TestConnectWithoutCredentialsReportsChallenge(t *testing.T) {
 	p := newAuthProxy(t, "127.0.0.1:1", true)
 	s := auditSession(t, Options{DefaultHeaders: true, ForceHTTP1: true,
@@ -166,9 +166,9 @@ func TestConnectWithoutCredentialsReportsChallenge(t *testing.T) {
 
 	_, err := s.Do(&Request{Method: "GET", URL: "https://example.com/"})
 	if err == nil {
-		t.Fatal("ожидалась ошибка авторизации")
+		t.Fatal("expected an authentication error")
 	}
 	if !strings.Contains(err.Error(), "requires authentication") {
-		t.Errorf("ошибка не называет причину: %v", err)
+		t.Errorf("the error does not name the reason: %v", err)
 	}
 }

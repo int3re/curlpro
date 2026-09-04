@@ -1,4 +1,4 @@
-"""Куки в формате Netscape: тот же файл, что у curl и расширений браузера."""
+"""Cookies in the Netscape format: the same file curl and browser extensions use."""
 
 from __future__ import annotations
 
@@ -33,32 +33,32 @@ def test_reads_a_file_written_by_curl():
     sid, token, pref = cookies
     assert sid["domain"] == ".example.com" and sid["secure"] is True
     assert sid["expires"] == 1893456000 and sid["http_only"] is False
-    # Префикс #HttpOnly_ — не комментарий: строку надо прочитать, сняв его.
+    # The #HttpOnly_ prefix is not a comment: the line must be read with it stripped.
     assert token["http_only"] is True and token["path"] == "/api"
-    assert token["expires"] == 0, "ноль — кука сеанса"
+    assert token["expires"] == 0, "zero means a session cookie"
     assert pref["secure"] is False and pref["value"] == "dark"
 
 
 def test_comments_and_blank_lines_are_skipped():
-    assert parse_netscape("# только комментарий\n\n   \n") == []
+    assert parse_netscape("# a comment only\n\n   \n") == []
 
 
 def test_missing_value_column_is_an_empty_value():
-    """Пустое значение редакторы срезают вместе с табуляцией."""
+    """Editors trim an empty value together with its tab."""
     cookies = parse_netscape(".example.com\tTRUE\t/\tFALSE\t0\tempty")
     assert cookies[0]["name"] == "empty" and cookies[0]["value"] == ""
 
 
 def test_broken_line_names_its_number():
     with pytest.raises(ValueError, match="line 2"):
-        parse_netscape(".a.com\tTRUE\t/\tFALSE\t0\tn\tv\nмусор\n")
+        parse_netscape(".a.com\tTRUE\t/\tFALSE\t0\tn\tv\ngarbage\n")
 
     with pytest.raises(ValueError, match="expiry"):
-        parse_netscape(".a.com\tTRUE\t/\tFALSE\tзавтра\tn\tv")
+        parse_netscape(".a.com\tTRUE\t/\tFALSE\ttomorrow\tn\tv")
 
 
 def test_round_trip_keeps_the_essentials():
-    """Через файл и обратно должны дойти домен, путь, срок и флаги."""
+    """Domain, path, expiry and flags must survive the round trip through a file."""
     with curlpro.Session() as s:
         s.cookies.set("sid", "abc", domain="example.com", expires=1893456000,
                       secure=True, http_only=True)
@@ -72,13 +72,13 @@ def test_round_trip_keeps_the_essentials():
     sid = by_name["sid"]
     assert sid.value == "abc" and sid.expires == 1893456000
     assert sid["secure"] is True and sid["http_only"] is True
-    # Точку ядро снимает: внутри домен хранится без неё.
+    # The core strips the dot: inside, the domain is stored without it.
     assert sid.domain == "example.com"
     assert by_name["plain"].path == "/api"
 
 
 def test_export_marks_domain_cookies():
-    """Наши куки уходят и на поддомены, поэтому в файле — точка и TRUE."""
+    """Our cookies also go to subdomains, so the file gets a dot and TRUE."""
     text = format_netscape([{
         "name": "a", "value": "1", "domain": "example.com",
         "path": "/", "expires": 0, "secure": False, "http_only": False,
@@ -97,7 +97,7 @@ def test_http_only_survives_the_file():
 
 
 def test_save_and_load_file_detect_the_format(tmp_path):
-    """load_file смотрит в содержимое: у cookies.txt имя бывает любым."""
+    """load_file looks at the content: a cookies.txt may be named anything."""
     path = tmp_path / "jar"
     with curlpro.Session() as s:
         s.cookies.set("sid", "abc", domain="example.com")
@@ -107,7 +107,7 @@ def test_save_and_load_file_detect_the_format(tmp_path):
         s.cookies.load_file(path)
         assert s.cookies["sid"] == "abc"
 
-    # JSON того же назначения по-прежнему читается тем же методом.
+    # JSON for the same purpose is still read by the same method.
     js = tmp_path / "state.json"
     with curlpro.Session() as s:
         s.cookies.set("sid", "json", domain="example.com")
@@ -118,7 +118,7 @@ def test_save_and_load_file_detect_the_format(tmp_path):
 
 
 def test_load_netscape_refuses_json(tmp_path):
-    """Явный вызов обязан ругаться на чужой формат, а не молчать."""
+    """An explicit call must complain about a foreign format rather than stay quiet."""
     path = tmp_path / "state.json"
     path.write_text('[{"name": "a", "value": "1", "domain": "example.com"}]',
                     encoding="utf-8")
@@ -129,6 +129,6 @@ def test_load_netscape_refuses_json(tmp_path):
 
 def test_missing_file_is_not_an_error(tmp_path):
     with curlpro.Session() as s:
-        s.cookies.load_netscape(tmp_path / "нет-такого.txt")
-        s.cookies.load_file(tmp_path / "нет-такого.json")
+        s.cookies.load_netscape(tmp_path / "no-such-file.txt")
+        s.cookies.load_file(tmp_path / "no-such-file.json")
         assert len(s.cookies) == 0

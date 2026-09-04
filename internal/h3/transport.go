@@ -87,15 +87,15 @@ type Transport struct {
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
 
-	// Fingerprint задаёт наблюдаемые особенности HTTP/3-слоя: порядок SETTINGS,
-	// GREASE-кадр на управляющем потоке и PRIORITY_UPDATE. nil означает
-	// поведение апстрима, которое не совпадает ни с одним браузером.
+	// Fingerprint sets the observable traits of the HTTP/3 layer: the SETTINGS
+	// order, the GREASE frame on the control stream and PRIORITY_UPDATE. nil means
+	// the upstream behaviour, which matches no browser.
 	Fingerprint *Fingerprint
 
-	// DisableInternalRetry выключает встроенный повтор запроса.
+	// DisableInternalRetry turns the built-in request retry off.
 	//
-	// Нужен, когда повторами управляет вызывающий: два независимых механизма
-	// дают вдвое больше запросов, чем заявлено, и не соблюдают общий бюджет.
+	// Needed when the caller manages retries: two independent mechanisms make
+	// twice as many requests as declared and ignore the shared budget.
 	DisableInternalRetry bool
 
 	// MaxResponseHeaderBytes specifies a limit on how many response bytes are
@@ -211,8 +211,8 @@ func (t *Transport) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 		return nil, fmt.Errorf("http3: invalid method %q", req.Method)
 	}
 	for k, vv := range req.Header {
-		// Служебные ключи порядка не уходят на провод и намеренно содержат
-		// двоеточие, недопустимое в имени заголовка.
+	// The service order keys never reach the wire and deliberately contain a
+	// colon, which is illegal in a header name.
 		if k == HeaderOrderKey || k == PseudoHeaderOrderKey {
 			continue
 		}
@@ -258,9 +258,9 @@ func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, isRetrie
 			return nil, err
 		default:
 		}
-		// Клиент курлПро ведёт собственный учёт попыток и общий бюджет времени.
-		// Внутренний повтор складывался бы с ним: заявленное число попыток
-		// удваивается, а каждая переустановка — лишнее рукопожатие QUIC.
+		// The curlPro client keeps its own attempt count and time budget.
+		// An internal retry would add to it: the declared number of attempts
+		// doubles, and every re-establish is an extra QUIC handshake.
 		if isRetried || t.DisableInternalRetry {
 			return nil, err
 		}

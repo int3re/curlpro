@@ -1,4 +1,4 @@
-"""Переиспользование соединения между запросами."""
+"""Connection reuse between requests."""
 
 from __future__ import annotations
 
@@ -27,18 +27,18 @@ def test_connection_is_reused_by_default(server):
     with curlpro.Session(verify=False, force_http1=True) as s:
         for _ in range(3):
             assert s.get(server.url).status == 200
-    assert server.accepted == 1, "три запроса должны уложиться в одно соединение"
+    assert server.accepted == 1, "three requests must fit into one connection"
 
 
 def test_keep_alive_false_opens_connection_per_request(server):
     with curlpro.Session(verify=False, force_http1=True, keep_alive=False) as s:
         for _ in range(3):
             assert s.get(server.url).status == 200
-    assert server.accepted == 3, "keep_alive=False: соединение на запрос"
+    assert server.accepted == 3, "keep_alive=False: one connection per request"
 
 
 def test_keep_alive_false_keeps_browser_connection_header(server):
-    """Connection: close не отправляется — браузер его не шлёт."""
+    """Connection: close is not sent — a browser does not send it."""
     with curlpro.Session(verify=False, force_http1=True, keep_alive=False) as s:
         raw = s.get(server.url).json()["raw"]
     sent = [ln for ln in raw if ln.lower().startswith("connection:")]

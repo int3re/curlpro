@@ -1,8 +1,8 @@
-"""Проверка multipart-форм.
+"""Checking multipart forms.
 
-Граница формы — часть отпечатка: Chrome шлёт ----WebKitFormBoundary и 16
-символов, Firefox — череду дефисов с цифрами. Несовпадение стиля с User-Agent
-само по себе аномалия, поэтому проверяется и оно.
+The form boundary is part of the fingerprint: Chrome sends ----WebKitFormBoundary
+plus 16 characters, Firefox a run of dashes with digits. A style that does not
+match the User-Agent is an anomaly in itself, so it is checked as well.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ def _online() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _online(), reason="нет доступа к httpbin.org")
+pytestmark = pytest.mark.skipif(not _online(), reason="no access to httpbin.org")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -37,8 +37,8 @@ def _profiles():
 
 def test_fields_only():
     with curlpro.Session() as s:
-        got = s.post(URL, fields={"a": "1", "b": "два"}).json()
-    assert got["form"] == {"a": "1", "b": "два"}
+        got = s.post(URL, fields={"a": "1", "b": "two"}).json()
+    assert got["form"] == {"a": "1", "b": "two"}
 
 
 def test_file_upload():
@@ -48,11 +48,11 @@ def test_file_upload():
 
 
 def test_binary_file_survives_roundtrip():
-    """Бинарное содержимое не должно пострадать по дороге."""
+    """Binary content must not be damaged on the way."""
     blob = bytes(range(256)) * 8
     with curlpro.Session() as s:
         got = s.post(URL, files={"bin": ("blob.bin", blob)}).json()
-    # httpbin отдаёт бинарь как data:-URL, поэтому сверяем длину через заголовок.
+    # httpbin returns binary as a data: URL, so the length is checked through the header.
     assert got["headers"]["Content-Type"].startswith("multipart/form-data; boundary=")
     assert got["files"]
 
@@ -61,10 +61,10 @@ def test_fields_and_files_together():
     with curlpro.Session() as s:
         got = s.post(
             URL,
-            fields={"title": "отчёт"},
+            fields={"title": "report"},
             files={"doc": ("a.txt", b"body", "text/plain")},
         ).json()
-    assert got["form"]["title"] == "отчёт"
+    assert got["form"]["title"] == "report"
     assert got["files"]["doc"] == "body"
 
 
@@ -86,7 +86,7 @@ def test_boundary_is_unique_per_request():
     with curlpro.Session() as s:
         first = s.post(URL, fields={"a": "1"}).json()["headers"]["Content-Type"]
         second = s.post(URL, fields={"a": "1"}).json()["headers"]["Content-Type"]
-    assert first != second, "граница формы повторяется между запросами"
+    assert first != second, "the form boundary repeats between requests"
 
 
 def test_multipart_conflicts_with_data():

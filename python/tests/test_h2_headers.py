@@ -1,12 +1,12 @@
-"""Порядок обычных заголовков в HTTP/2 — на проводе, а не в сборке.
+"""The order of ordinary headers in HTTP/2 — on the wire, not in the assembly.
 
-Между сборкой заголовков и проводом лежит HPACK, и до сих пор порядок в HTTP/2
-не проверялся ничем: Python-тесты заголовков гоняют с force_http1=True, а
-Go-тесты видят только результат сборки. Из-за этого прожил незамеченным баг,
-при котором якорь пользовательских заголовков работал лишь на HTTP/1.1.
+Between the header assembly and the wire lies HPACK, and until now the HTTP/2
+order was checked by nothing: the Python header tests run with force_http1=True
+while the Go tests only see the assembly result. That let a bug live unnoticed
+where the custom header anchor worked over HTTP/1.1 only.
 
-Стенд `echo-server` из fingerproxy отдаёт HEADERS-кадр в порядке провода
-(`/json/detail` → detail.metadata.HTTP2Frames.Headers), чем здесь и пользуемся.
+The `echo-server` stand from fingerproxy returns the HEADERS frame in wire order
+(`/json/detail` -> detail.metadata.HTTP2Frames.Headers), which is what is used here.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def _stand_up() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _stand_up(), reason="стенд на :8443 не поднят")
+pytestmark = pytest.mark.skipif(not _stand_up(), reason="no stand on :8443")
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -45,7 +45,7 @@ def sess():
 
 
 def wire_order(s: curlpro.Session) -> list[str]:
-    """Имена полей HEADERS в порядке отправки, включая псевдо-заголовки."""
+    """The HEADERS field names in send order, pseudo-headers included."""
     detail = s.get(STAND).json()["detail"]
     return [h["Name"] for h in detail["metadata"]["HTTP2Frames"]["Headers"]]
 
@@ -56,53 +56,53 @@ def test_pseudo_headers_come_first_in_chrome_order(sess):
 
 def test_profile_order_reaches_the_wire(sess):
     names = [n for n in wire_order(sess) if not n.startswith(":")]
-    assert names[0] == "sec-ch-ua", f"порядок профиля не дошёл: {names}"
-    # Служебный хвост Chrome дописывает последним.
+    assert names[0] == "sec-ch-ua", f"the profile order did not arrive: {names}"
+    # Chrome appends its service tail last.
     assert names[-1] == "priority"
     assert names.index("accept-encoding") < names.index("accept-language")
 
 
 def test_custom_header_lands_before_anchor():
-    """Якорь обязан работать и в HTTP/2, а не только в HTTP/1.1.
+    """The anchor must work in HTTP/2 as well, not only in HTTP/1.1.
 
-    Именно этот случай был сломан: reorder вызывался лишь при явном порядке,
-    который есть только у http1.order. Режим задан явно: без него кастомное
-    имя переключает набор на fetch.
+    This is exactly the case that was broken: reorder ran only with an explicit
+    order, which only http1.order has. The mode is set explicitly: without it a
+    custom name switches the set to fetch.
     """
     with curlpro.Session("chrome-151-windows", verify=False, mode="navigate") as sess:
         before = wire_order(sess)
         sess.headers["X-Api-Key"] = "secret"
         after = wire_order(sess)
 
-    assert "x-api-key" in after, "заголовок сессии не дошёл до провода"
+    assert "x-api-key" in after, "the session header never reached the wire"
     assert after.index("x-api-key") < after.index("accept-encoding"), (
-        f"кастомный заголовок после служебного хвоста: {after}"
+        f"a custom header after the service tail: {after}"
     )
-    # Порядок профильных заголовков не изменился.
+    # The order of the profile headers did not change.
     assert [n for n in after if n != "x-api-key"] == before
 
 
 def test_custom_header_switches_to_fetch_set(sess):
-    """Без явного режима кастомный заголовок означает fetch: у него другой
-    набор и другой кластер (замер Chrome 152)."""
+    """Without an explicit mode a custom header means fetch: it has a different
+    set and a different cluster (measured on Chrome 152)."""
     navigation = wire_order(sess)
     sess.headers["X-Api-Key"] = "secret"
     after = wire_order(sess)
 
     assert "x-api-key" in after
-    assert "upgrade-insecure-requests" not in after, "у fetch этого заголовка нет"
+    assert "upgrade-insecure-requests" not in after, "fetch does not carry this header"
     assert "sec-fetch-user" not in after
     assert after.index("x-api-key") < after.index("sec-ch-ua-mobile")
     assert after != navigation
 
 
 def test_profile_header_override_keeps_position(sess):
-    """Переопределение профильного имени не меняет ни набор, ни позицию:
-    user-agent есть и в навигационном наборе, значит это не признак fetch."""
+    """Overriding a profile name changes neither the set nor the position:
+    user-agent is in the navigation set too, so it is not a sign of fetch."""
     before = wire_order(sess)
     position = before.index("user-agent")
     sess.headers["User-Agent"] = "custom/1.0"
 
     after = wire_order(sess)
-    assert after.index("user-agent") == position, f"позиция сдвинулась: {after}"
-    assert after == before, "переопределение значения изменило порядок"
+    assert after.index("user-agent") == position, f"the position moved: {after}"
+    assert after == before, "overriding the value changed the order"

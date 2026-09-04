@@ -1,4 +1,4 @@
-"""Куки: учёт, выгрузка, загрузка, сохранение между запусками."""
+"""Cookies: recording, export, import, carrying a session between runs."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def _profiles():
 
 
 class CookieServer:
-    """Ставит куки и показывает, что пришло обратно."""
+    """Sets cookies and reports what came back."""
 
     def __init__(self, set_cookies: list[str]):
         self.set_cookies = set_cookies
@@ -98,7 +98,7 @@ def test_cookies_are_recorded_and_sent_back():
             s.get(srv.url())
     names = {c.name: c.value for c in got}
     assert names == {"sid": "abc", "theme": "dark"}
-    assert srv.seen[0] == "", "в первый запрос кук ещё нет"
+    assert srv.seen[0] == "", "the first request carries no cookies yet"
     assert "sid=abc" in srv.seen[1] and "theme=dark" in srv.seen[1]
 
 
@@ -116,14 +116,14 @@ def test_export_keeps_domain_path_and_flags():
 
 
 def test_session_survives_between_runs(tmp_path):
-    """Ради этого всё и делалось: авторизация переносится в новый запуск."""
+    """This is what it was all for: the login carries into a new run."""
     state = tmp_path / "cookies.json"
     with CookieServer(["sid=secret; Path=/"]) as srv:
         with curlpro.Session(verify=False, force_http1=True) as first:
             first.get(srv.url())
             first.cookies.save(state)
 
-        # Новая сессия — как новый запуск парсера.
+        # A new session is like a new run of the scraper.
         with curlpro.Session(verify=False, force_http1=True) as second:
             second.cookies.load_file(state)
             second.get(srv.url())
@@ -132,7 +132,7 @@ def test_session_survives_between_runs(tmp_path):
 
 def test_missing_file_is_not_an_error(tmp_path):
     with curlpro.Session(verify=False) as s:
-        s.cookies.load_file(tmp_path / "нет-такого.json")  # первый запуск
+        s.cookies.load_file(tmp_path / "no-such-file.json")  # the first run
         assert len(s.cookies) == 0
 
 
@@ -146,7 +146,7 @@ def test_set_and_clear():
             assert len(s.cookies) == 0
             s.get(srv.url())
     assert "token=xyz" in srv.seen[0]
-    assert srv.seen[1] == "", "после clear куки уходить не должны"
+    assert srv.seen[1] == "", "after clear no cookies must go out"
 
 
 def test_server_can_delete_a_cookie():
@@ -156,7 +156,7 @@ def test_server_can_delete_a_cookie():
             assert "sid" in s.cookies
             srv.set_cookies = ["sid=; Path=/; Max-Age=0"]
             s.get(srv.url())
-            assert "sid" not in s.cookies, "погашенная кука не должна оставаться в выгрузке"
+            assert "sid" not in s.cookies, "a cleared cookie must not stay in the export"
 
 
 def test_expired_cookie_is_not_exported():

@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-// tlsServerConn оборачивает сырое соединение серверным TLS на сертификате
-// стенда и выполняет рукопожатие. Нужен тестам, которым важны сырые байты
-// запроса — httptest их не отдаёт.
+// tlsServerConn wraps a raw connection in server-side TLS using the stand
+// certificate and performs the handshake. Needed by tests that care about the
+// raw request bytes — httptest does not hand those over.
 func tlsServerConn(t *testing.T, c net.Conn) net.Conn {
 	t.Helper()
 	cert, err := tls.LoadX509KeyPair("../../capture/certs/tls.crt", "../../capture/certs/tls.key")
@@ -23,7 +23,7 @@ func tlsServerConn(t *testing.T, c net.Conn) net.Conn {
 	return tc
 }
 
-// tlsListener оборачивает слушатель серверным TLS на сертификате стенда.
+// tlsListener wraps a listener in server-side TLS using the stand certificate.
 func tlsListener(t *testing.T, ln net.Listener) net.Listener {
 	t.Helper()
 	cert, err := tls.LoadX509KeyPair("../../capture/certs/tls.crt", "../../capture/certs/tls.key")

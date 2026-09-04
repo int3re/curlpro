@@ -1,7 +1,7 @@
-"""Повторы, переопределения на запрос и заголовки сессии.
+"""Retries, per-request overrides and session headers.
 
-Проверяется против локального сервера со сценариями: важно точно знать,
-сколько попыток дошло, а публичные сервисы этого не показывают.
+Checked against a local scripted server: the test must know exactly how many
+attempts arrived, and public services do not show that.
 """
 
 from __future__ import annotations
@@ -37,32 +37,32 @@ def session(**kw):
     return curlpro.Session(**kw)
 
 
-# --- повторы -------------------------------------------------------------
+# --- retries -------------------------------------------------------------
 
 
 def test_retry_until_success(srv):
     url = srv.scenario("/flaky", [{"status": 503}, {"status": 503}, {"status": 200}])
     with session(retries=3, retry_backoff=0.01) as s:
         assert s.get(url).status == 200
-    assert srv.hits["/flaky"] == 3, "должно быть ровно три попытки"
+    assert srv.hits["/flaky"] == 3, "there must be exactly three attempts"
 
 
 def test_exhausted_retries_return_last_response(srv):
-    """Исчерпав попытки, клиент отдаёт последний ответ, а не ошибку.
+    """Once the attempts run out the client returns the last response, not an error.
 
-    Ответ сервера — это результат, а не сбой клиента: так ведут себя curl
-    и urllib3, и это согласуется с тем, что raise_for_status здесь добровольный.
+    A server response is a result, not a client failure: curl and urllib3 behave
+    the same way, and it fits raise_for_status being voluntary here.
     """
     url = srv.scenario("/always", [{"status": 500, "body": {"why": "busy"}}])
     with session(retries=2, retry_backoff=0.01) as s:
         r = s.get(url)
     assert r.status == 500
-    assert r.json() == {"why": "busy"}, "тело последнего ответа потеряно"
-    assert srv.hits["/always"] == 3, "первая попытка плюс два повтора"
+    assert r.json() == {"why": "busy"}, "the body of the last response was lost"
+    assert srv.hits["/always"] == 3, "the first attempt plus two retries"
 
 
 def test_post_not_retried_returns_response(srv):
-    """POST не повторяется, но ответ сервера всё равно доходит."""
+    """A POST is not retried, but the server response still arrives."""
     url = srv.scenario("/post503", [{"status": 503}, {"status": 200}])
     with session(retries=3, retry_backoff=0.01) as s:
         r = s.post(url, data=b"x")
@@ -86,13 +86,13 @@ def test_retry_respects_retry_after(srv):
         start = time.perf_counter()
         assert s.get(url).status == 200
         elapsed = time.perf_counter() - start
-    # Сервер попросил секунду — формула backoff дала бы 0.01 с.
-    assert elapsed >= 0.9, f"Retry-After проигнорирован: {elapsed:.2f}s"
+    # The server asked for a second — the backoff formula would give 0.01 s.
+    assert elapsed >= 0.9, f"Retry-After was ignored: {elapsed:.2f}s"
 
 
 def test_post_not_retried_by_default(srv):
-    """Повтор POST может создать второй заказ: сервер мог обработать запрос
-    и не успеть ответить, и клиент этого не различает."""
+    """Repeating a POST may create a second order: the server may have processed
+    the request and failed to answer in time, and the client cannot tell."""
     url = srv.scenario("/post", [{"status": 503}, {"status": 200}])
     with session(retries=3, retry_backoff=0.01) as s:
         assert s.post(url, data=b"x").status == 503
@@ -115,12 +115,12 @@ def test_retry_status_list_is_configurable(srv):
 
 def test_per_request_retry_override(srv):
     url = srv.scenario("/req", [{"status": 503}, {"status": 200}])
-    with session() as s:  # у сессии повторов нет
+    with session() as s:  # the session has no retries
         assert s.get(url, retries=2, retry_backoff=0.01).status == 200
     assert srv.hits["/req"] == 2
 
 
-# --- переопределения на запрос ------------------------------------------
+# --- per-request overrides -----------------------------------------------
 
 
 def test_per_request_timeout(srv):
@@ -133,9 +133,9 @@ def test_per_request_timeout(srv):
 
 
 def test_timeout_covers_whole_redirect_chain(srv):
-    """Дедлайн общий на цепочку, а не свой у каждого шага.
+    """One deadline covers the chain rather than each step.
 
-    Иначе четыре редиректа растянулись бы на четыре таймаута.
+    Otherwise four redirects would stretch into four timeouts.
     """
     for i in range(3):
         srv.scenario(f"/c{i}", [{"status": 302, "headers": {"Location": srv.url(f"/c{i+1}")}}])
@@ -163,8 +163,8 @@ def test_per_request_redirect_block(srv):
 
 
 def test_body_survives_307_redirect(srv):
-    """307 обязан сохранить метод и тело. Раньше BodyFile терялся при копии
-    запроса, и на сервер уходил пустой POST."""
+    """A 307 must keep the method and the body. BodyFile used to be lost when the
+    request was copied, and an empty POST reached the server."""
     srv.scenario("/r307", [{"status": 307, "headers": {"Location": srv.url("/land")}}])
     srv.scenario("/land", [{"status": 200}])
 
@@ -180,7 +180,7 @@ def test_body_survives_307_redirect(srv):
 
 
 def test_body_dropped_on_303(srv):
-    """303 наоборот: метод становится GET, тело отбрасывается."""
+    """A 303 does the opposite: the method becomes GET and the body is dropped."""
     srv.scenario("/r303", [{"status": 303, "headers": {"Location": srv.url("/land303")}}])
     srv.scenario("/land303", [{"status": 200}])
     with session() as s:
@@ -190,7 +190,7 @@ def test_body_dropped_on_303(srv):
     assert landed["body_len"] == 0
 
 
-# --- прокси --------------------------------------------------------------
+# --- proxies ---------------------------------------------------------------
 
 
 def test_proxy_can_be_bypassed_per_request(srv):
@@ -199,9 +199,9 @@ def test_proxy_can_be_bypassed_per_request(srv):
         with session(proxy=f"http://{proxy.url_host}") as s:
             assert s.get(url).status == 200
             assert len(proxy.tunnels) == 1
-            # proxy=False должен пойти напрямую
+            # proxy=False must go directly
             assert s.get(url, proxy=False).status == 200
-            assert len(proxy.tunnels) == 1, "запрос всё же ушёл через прокси"
+            assert len(proxy.tunnels) == 1, "the request went through the proxy after all"
 
 
 def test_proxy_can_be_overridden_per_request(srv):
@@ -219,7 +219,7 @@ def test_proxy_true_rejected():
             s.get("https://example.com", proxy=True)
 
 
-# --- заголовки сессии ----------------------------------------------------
+# --- session headers -------------------------------------------------------
 
 
 @pytest.fixture
@@ -233,11 +233,11 @@ def headers_of(srv, s) -> list[str]:
 
 
 def test_session_header_added_before_anchor(raw):
-    """Кастомный заголовок встаёт перед якорем профиля, а не в конец.
+    """A custom header stands before the profile anchor rather than at the end.
 
-    Служебный хвост (accept-encoding, cookie) браузер дописывает последним,
-    поэтому заголовок после него — заметная аномалия. Режим задан явно:
-    без него кастомное имя переключает набор на fetch (см. test_http1.py).
+    The browser appends its service tail (accept-encoding, cookie) last, so a
+    header after it is a visible anomaly. The mode is set explicitly: without it
+    a custom name switches the set to fetch (see test_http1.py).
     """
     with session(mode="navigate") as s:
         base = headers_of(raw, s)
@@ -246,16 +246,16 @@ def test_session_header_added_before_anchor(raw):
 
     assert "X-Api-Key" in after
     assert after.index("X-Api-Key") < after.index("Accept-Encoding")
-    # Порядок профильных заголовков не изменился.
+    # The order of the profile headers did not change.
     assert [h for h in after if h != "X-Api-Key"] == base
 
 
 def test_cookie_takes_profile_position(raw):
-    """cookie объявлен в профиле слотом и встаёт на свою позицию — после
-    accept-language, а не туда, куда его положил бы порядок добавления.
+    """cookie is declared in the profile as a slot and takes its own position —
+    after accept-language, not where the insertion order would put it.
 
-    На HTTP/1.1 Chrome не шлёт priority (замер Chrome 152), поэтому cookie
-    здесь последний; в HTTP/2 за ним идёт priority.
+    Over HTTP/1.1 Chrome does not send priority (measured on Chrome 152), so
+    cookie comes last here; in HTTP/2 priority follows it.
     """
     with session(cookies=True) as s:
         s.headers["Cookie"] = "sid=abc"
@@ -290,8 +290,8 @@ def test_reset_keeps_profile_headers(raw):
 
 
 def test_overriding_profile_header_keeps_its_position(raw):
-    """Значение меняется, позиция остаётся: перенос в конец сломал бы
-    отпечаток."""
+    """The value changes while the position stays: moving it to the end would
+    break the fingerprint."""
     with session(mode="navigate") as s:
         base = headers_of(raw, s)
         position = base.index("User-Agent")
@@ -301,14 +301,14 @@ def test_overriding_profile_header_keeps_its_position(raw):
         assert any(l == "User-Agent: custom/1.0" for l in after["raw"])
 
 
-# --- добавлено по итогам аудита (STAGE14) ---------------------------------
+# --- added after the audit (STAGE14) ---------------------------------------
 
 
 def test_per_request_zero_retries_overrides_session(srv):
-    """retries=0 у запроса выключает повторы сессии, а не наследует их.
+    """retries=0 on a request switches the session retries off rather than inheriting them.
 
-    Раньше ноль схлопывался в «не задано», и отключить повторы на один
-    запрос было нельзя.
+    Zero used to collapse into "not set", and switching retries off for one
+    request was impossible.
     """
     url = srv.scenario("/zero", [{"status": 503}, {"status": 200}])
     with session(retries=3, retry_backoff=0.01) as s:
@@ -317,7 +317,7 @@ def test_per_request_zero_retries_overrides_session(srv):
 
 
 def test_stream_accepts_request_overrides(srv):
-    """stream() принимает те же переопределения, что и request()."""
+    """stream() takes the same overrides as request()."""
     url = srv.scenario("/slow-stream", [{"status": 200, "delay": 3}])
     with session(timeout=30) as s:
         start = time.perf_counter()
@@ -328,7 +328,7 @@ def test_stream_accepts_request_overrides(srv):
 
 
 def test_stream_early_close_keeps_session_usable(srv):
-    """Закрытие потока с недочитанным телом не портит следующий запрос."""
+    """Closing a stream with the body unread does not spoil the next request."""
     srv.scenario("/big", [{"status": 200, "body": {"n": "z" * 200_000}}])
     srv.scenario("/after", [{"status": 200}])
     with session() as s:

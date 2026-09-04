@@ -1,4 +1,4 @@
-"""Подмена разрешения имён и выбор версии IP."""
+"""Name resolution override and IP version selection."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ def _profiles():
 
 
 def test_name_is_kept_while_address_is_substituted():
-    """Главное свойство: сокет уходит на подменённый адрес, а имя в Host
-    остаётся исходным — иначе подмена ломала бы отпечаток и виртуальный хост."""
+    """The key property: the socket goes to the overridden address while the name
+    in Host stays the original — otherwise it would break fingerprint and vhost."""
     with RawHeaderServer(persistent=True) as srv:
         with curlpro.Session(verify=False, force_http1=True,
                              resolve={f"example.com:{srv.port}": "127.0.0.1"}) as s:
@@ -53,8 +53,8 @@ def test_without_a_rule_nothing_changes():
 
 
 def test_two_rules_do_not_share_a_connection():
-    """Разные подмены одного имени ведут на разные машины: общее соединение
-    отправило бы запрос не туда."""
+    """Different overrides of one name lead to different machines: a shared
+    connection would send the request to the wrong one."""
     with RawHeaderServer(persistent=True) as first, RawHeaderServer(persistent=True) as second:
         with curlpro.Session(verify=False, force_http1=True,
                              resolve={f"example.com:{first.port}": "127.0.0.1",
@@ -72,7 +72,7 @@ def test_ip_version_four_still_works():
 
 
 def test_ip_version_six_cannot_reach_an_ipv4_only_host():
-    """Ограничение действительно ограничивает, а не игнорируется."""
+    """The restriction really restricts rather than being ignored."""
     with RawHeaderServer(persistent=True) as srv:
         with curlpro.Session(verify=False, force_http1=True, ip_version="6", timeout=5) as s:
             with pytest.raises(curlpro.CurlProError):

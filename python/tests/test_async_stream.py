@@ -1,8 +1,8 @@
-"""Потоковое чтение и WebSocket в асинхронной сессии.
+"""Streaming reads and WebSocket in the async session.
 
-Раньше и то и другое ходило через пул потоков — потолок одновременности был
-в его размере. Теперь ждут горутины, и поток у процесса по-прежнему один:
-тот, что забирает завершения.
+Both used to go through a thread pool — the concurrency ceiling was its size.
+Now goroutines do the waiting, and the process still keeps one thread: the one
+that collects completions.
 """
 
 from __future__ import annotations
@@ -28,13 +28,13 @@ def _profiles():
 
 
 class BodyServer:
-    """Отдаёт тело частями: так видно, что чтение идёт по кускам.
+    """Hands the body over in parts: that shows the reading goes in chunks.
 
-    :param chunks: список частей тела.
-    :param gap: пауза между частями — на ней проверяется, что ожидание
-        не занимает поток и не мешает другим задачам.
-    :param head_delay: пауза до строки ответа: на ней ловится отмена
-        ещё не открытого потока.
+    :param chunks: the list of body parts.
+    :param gap: the pause between parts — it is where the wait is checked not to
+        tie up a thread or get in the way of other tasks.
+    :param head_delay: the pause before the status line: it is where a cancelled
+        open is caught.
     """
 
     def __init__(self, chunks: list[bytes], gap: float = 0.0, head_delay: float = 0.0):
@@ -102,16 +102,16 @@ class BodyServer:
 
 
 def ours() -> list[str]:
-    """Только свои потоки: сервер в тестах тоже заводит поток на соединение."""
+    """Only our own threads: the test server also starts a thread per connection."""
     return [t.name for t in threading.enumerate() if t.name.startswith("curlpro")]
 
 
 async def watch_threads(stop: asyncio.Event) -> list[list[str]]:
-    """Снимает список своих потоков, пока работа не кончится.
+    """Samples the list of our threads until the work is over.
 
-    Одной выборки мало: приёмник завершается, как только ждать нечего,
-    и между двумя работами его может не быть вовсе. Важно другое — что
-    их никогда не становится больше одного.
+    One sample is not enough: the collector exits as soon as there is nothing to
+    wait for, and between two pieces of work it may not exist at all. What
+    matters is that there is never more than one.
     """
     seen: list[list[str]] = []
     while not stop.is_set():
@@ -122,9 +122,9 @@ async def watch_threads(stop: asyncio.Event) -> list[list[str]]:
 
 def check_threads(samples: list[list[str]]) -> None:
     biggest = max((len(s) for s in samples), default=0)
-    assert biggest <= 1, f"своих потоков стало {biggest}: {samples}"
+    assert biggest <= 1, f"our threads grew to {biggest}: {samples}"
     assert any(s == ["curlpro-completions"] for s in samples), (
-        f"приёмник ни разу не попался на глаза: {samples}"
+        f"the collector was never seen: {samples}"
     )
 
 
@@ -143,7 +143,7 @@ def test_stream_reads_full_body():
 
 
 def test_iter_lines_splits_ndjson():
-    """Строка, разорванная границей части, должна собраться обратно."""
+    """A line broken by a chunk boundary must be put back together."""
     chunks = [b'{"n":1}\n{"n":', b'2}\n{"n":3}']
 
     async def run(srv):
@@ -157,7 +157,7 @@ def test_iter_lines_splits_ndjson():
 
 
 def test_await_form_closes_by_hand():
-    """Поток можно открыть и без ``async with`` — тогда закрывать вручную."""
+    """A stream can also be opened without ``async with`` — then close it by hand."""
 
     async def run(srv):
         async with curlpro.AsyncSession(verify=False, force_http1=True) as s:
@@ -173,7 +173,7 @@ def test_await_form_closes_by_hand():
 
 
 def test_reading_does_not_block_the_loop():
-    """Пока часть тела едет, цикл событий обязан заниматься другими делами."""
+    """While a body part is on the way, the event loop must handle other work."""
     ticks = 0
 
     async def tick():
@@ -192,7 +192,7 @@ def test_reading_does_not_block_the_loop():
 
     with BodyServer([b"y" * 1024] * 4, gap=0.1) as srv:
         asyncio.run(run(srv))
-    assert ticks > 10, f"цикл событий тикнул {ticks} раз — похоже, он стоял"
+    assert ticks > 10, f"the event loop ticked {ticks} times — it looks stalled"
 
 
 def test_many_streams_share_one_helper_thread():
@@ -217,11 +217,11 @@ def test_many_streams_share_one_helper_thread():
 
 
 def test_cancelled_open_leaves_nothing_behind():
-    """Отмена во время открытия не должна оставлять поток на учёте.
+    """Cancelling during the open must not leave a stream registered.
 
-    Если бы результат просто выбрасывался, соединение осталось бы занятым
-    до конца жизни процесса: закрыть его снаружи уже нечем — номера потока
-    вызывающий так и не увидел.
+    If the result were simply thrown away, the connection would stay busy for the
+    life of the process: there is nothing left to close it with — the caller
+    never saw the stream number.
     """
 
     async def open_it(s, url):
@@ -234,7 +234,7 @@ def test_cancelled_open_leaves_nothing_behind():
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
-            await asyncio.sleep(0.6)  # даём нативной части убрать за собой
+            await asyncio.sleep(0.6)  # let the native part clean up
 
     with BodyServer([b"q" * 1024], head_delay=0.5) as srv:
         asyncio.run(run(srv))

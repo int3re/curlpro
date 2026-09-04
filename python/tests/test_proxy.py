@@ -1,7 +1,7 @@
-"""Проверка прокси против локальных серверов.
+"""Checking proxies against local servers.
 
-Каждый прокси считает туннели, поэтому тест подтверждает не только что запрос
-удался, но и что он действительно шёл через прокси, а не мимо.
+Every proxy counts its tunnels, so the test confirms not only that the request
+succeeded but that it really went through the proxy rather than past it.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def _online() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _online(), reason="нет доступа к httpbin.org")
+pytestmark = pytest.mark.skipif(not _online(), reason="no access to httpbin.org")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -39,7 +39,7 @@ def test_http_connect_proxy():
         with curlpro.Session(proxy=f"http://{proxy.url_host}") as s:
             r = s.get(TARGET)
         assert r.status == 200
-        assert proxy.tunnels == ["httpbin.org:443"], "запрос не прошёл через прокси"
+        assert proxy.tunnels == ["httpbin.org:443"], "the request did not go through the proxy"
 
 
 def test_http_proxy_with_auth():
@@ -47,8 +47,8 @@ def test_http_proxy_with_auth():
         with curlpro.Session(proxy=f"http://user:s3cret@{proxy.url_host}") as s:
             assert s.get(TARGET).status == 200
         assert proxy.tunnels == ["httpbin.org:443"]
-        # Один отказ обязателен: первый CONNECT уходит без учётных данных,
-        # как у браузера, и они добавляются только в ответ на 407.
+        # One refusal is mandatory: the first CONNECT goes without credentials,
+        # as in a browser, and they are added only in response to a 407.
         assert proxy.rejected == 1
 
 
@@ -57,7 +57,7 @@ def test_http_proxy_rejects_wrong_password():
         with curlpro.Session(proxy=f"http://user:wrong@{proxy.url_host}") as s:
             with pytest.raises(curlpro.CurlProError, match="407"):
                 s.get(TARGET)
-        # Два отказа: пробный CONNECT без данных и повтор с неверными.
+        # Two refusals: the probing CONNECT without credentials and a retry with wrong ones.
         assert proxy.rejected == 2
         assert proxy.tunnels == []
 
@@ -92,12 +92,12 @@ def _stand_up() -> bool:
         return False
 
 
-@pytest.mark.skipif(not _stand_up(), reason="echo-server на :8443 не запущен")
+@pytest.mark.skipif(not _stand_up(), reason="no echo-server on :8443")
 def test_fingerprint_survives_proxy():
-    """Прокси не должен влиять на TLS-отпечаток: он туннелирует байты.
+    """A proxy must not affect the TLS fingerprint: it tunnels bytes.
 
-    Проверяется на локальном стенде, а не на внешнем сервисе: тест про
-    туннелирование не должен падать из-за чужой сети.
+    Checked on a local stand rather than an external service: a test about
+    tunnelling must not fail because of somebody else's network.
     """
     stand = "https://localhost:8443/json"
     with curlpro.Session(verify=False) as s:

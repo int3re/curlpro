@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// Соединение между запросами не пересоздаётся: пять последовательных запросов
-// должны уложиться в одно TCP-соединение — и по HTTP/1.1, и по HTTP/2.
+// The connection is not recreated between requests: five sequential requests
+// must fit into one TCP connection — over HTTP/1.1 as well as HTTP/2.
 func TestConnectionReusedBetweenRequests(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -25,19 +25,19 @@ func TestConnectionReusedBetweenRequests(t *testing.T) {
 			s := auditSession(t, Options{DefaultHeaders: true, ForceHTTP1: tc.force})
 			for i := 0; i < 5; i++ {
 				if _, err := s.Do(&Request{Method: "GET", URL: auditURL(srv, "/")}); err != nil {
-					t.Fatalf("запрос %d: %v", i, err)
+					t.Fatalf("request %d: %v", i, err)
 				}
 			}
 			if got := conns.Load(); got != 1 {
-				t.Errorf("сервер принял %d соединений на 5 запросов, ожидалось 1", got)
+				t.Errorf("the server accepted %d connections for 5 requests, expected 1", got)
 			}
 		})
 	}
 }
 
-// keep_alive=False: соединение не переиспользуется, каждый запрос начинается
-// с рукопожатия. Проверяется на обоих транспортах — для HTTP/2 «не
-// переиспользовать» означает не мультиплексировать в уже открытое.
+// keep_alive=False: the connection is not reused, every request starts with a
+// handshake. Checked on both transports — for HTTP/2 "do not reuse" means not
+// multiplexing into an already open one.
 func TestKeepAliveDisabledOpensConnectionPerRequest(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -55,26 +55,26 @@ func TestKeepAliveDisabledOpensConnectionPerRequest(t *testing.T) {
 				DisableKeepAlive: true})
 			for i := 0; i < 3; i++ {
 				if _, err := s.Do(&Request{Method: "GET", URL: auditURL(srv, "/")}); err != nil {
-					t.Fatalf("запрос %d: %v", i, err)
+					t.Fatalf("request %d: %v", i, err)
 				}
 			}
 			if got := conns.Load(); got != 3 {
-				t.Errorf("сервер принял %d соединений на 3 запроса, ожидалось 3", got)
+				t.Errorf("the server accepted %d connections for 3 requests, expected 3", got)
 			}
-			// Пул при этом остаётся пустым: выключенный keep-alive не должен
-			// копить сокеты, которые всё равно никому не достанутся.
+			// The pool stays empty as well: keep-alive switched off must not pile up
+			// sockets nobody will ever get.
 			s.mu.Lock()
 			n := s.totalLocked()
 			s.mu.Unlock()
 			if n != 0 {
-				t.Errorf("в пуле осталось %d соединений, ожидалось 0", n)
+				t.Errorf("%d connections left in the pool, expected 0", n)
 			}
 		})
 	}
 }
 
-// Заголовок Connection берётся из профиля и при выключенном keep-alive:
-// «Connection: close» браузер не шлёт, и он выдал бы клиента.
+// The Connection header comes from the profile even with keep-alive off:
+// a browser does not send "Connection: close", and it would give the client away.
 func TestKeepAliveDisabledKeepsProfileConnectionHeader(t *testing.T) {
 	got := make(chan string, 1)
 	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -90,6 +90,6 @@ func TestKeepAliveDisabledKeepsProfileConnectionHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 	if v := <-got; !strings.EqualFold(v, "keep-alive") {
-		t.Errorf("Connection: %q, ожидалось keep-alive из профиля", v)
+		t.Errorf("Connection: %q, expected keep-alive from the profile", v)
 	}
 }

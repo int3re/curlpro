@@ -39,7 +39,7 @@ type rawConn struct {
 	rcvdQPACKEncoderStr atomic.Bool
 	rcvdQPACKDecoderStr atomic.Bool
 	controlStrHandler   func(*quic.ReceiveStream, *frameParser) // is called *after* the SETTINGS frame was parsed
-	// onEncoderStream получает поток кодировщика QPACK; nil — поток игнорируется.
+	// onEncoderStream receives the QPACK encoder stream; nil ignores the stream.
 	onEncoderStream func(*quic.ReceiveStream)
 
 	onStreamsEmpty func()
@@ -81,12 +81,12 @@ func (c *rawConn) OpenUniStream() (*quic.SendStream, error) {
 
 // openControlStream opens the control stream and sends the SETTINGS frame.
 // It returns the control stream (needed by the server for sending GOAWAY later).
-// openControlStream открывает управляющий поток и пишет в него SETTINGS,
-// а следом extra — кадры, которые браузер отправляет тем же пакетом
-// (GREASE и PRIORITY_UPDATE).
+// openControlStream opens the control stream and writes SETTINGS into it,
+// followed by extra — the frames a browser sends in the same packet
+// (GREASE and PRIORITY_UPDATE).
 //
-// Отдельная запись здесь порождала бы гонку: сервер успевает ответить, увидев
-// одни SETTINGS, и отпечаток получался нестабильным от запроса к запросу.
+// Writing them separately here would create a race: the server answers after
+// seeing one SETTINGS, and the fingerprint came out unstable between requests.
 func (c *rawConn) openControlStream(settings *settingsFrame, extra []byte) (*quic.SendStream, error) {
 	c.qloggerWG.Add(1)
 	defer c.qloggerWG.Done()
@@ -183,9 +183,9 @@ func (c *rawConn) handleUnidirectionalStream(str *quic.ReceiveStream, isServer b
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK encoder stream")
 			return
 		}
-		// Инструкции кодировщика наполняют динамическую таблицу декодера;
-		// апстрим их игнорировал, и любая ссылка на таблицу в ответе
-		// заканчивалась ошибкой декомпрессии.
+			// The encoder instructions fill the decoder's dynamic table;
+			// upstream ignored them, and any reference to the table in a
+			// response ended in a decompression error.
 		if c.onEncoderStream != nil {
 			c.onEncoderStream(str)
 		}
@@ -194,8 +194,8 @@ func (c *rawConn) handleUnidirectionalStream(str *quic.ReceiveStream, isServer b
 		if isFirst := c.rcvdQPACKDecoderStr.CompareAndSwap(false, true); !isFirst {
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK decoder stream")
 		}
-		// Наш кодировщик статический, подтверждать серверу нечего: поток
-		// читается в никуда, чтобы не копить окно потока.
+			// Our encoder is static, there is nothing to acknowledge to the
+			// server: the stream is read into nowhere so its window does not fill up.
 		go io.Copy(io.Discard, str)
 		return
 	case streamTypePushStream:

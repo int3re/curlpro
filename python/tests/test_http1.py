@@ -1,8 +1,8 @@
-"""Проверка отпечатка HTTP/1.1.
+"""Checking the HTTP/1.1 fingerprint.
 
-В HTTP/2 имена заголовков обязаны быть строчными, а в HTTP/1.1 регистр
-произволен — и браузеры им пользуются. Публичные оракулы имена нормализуют,
-поэтому проверка идёт против локального сервера, отдающего сырые строки.
+In HTTP/2 header names must be lowercase, while in HTTP/1.1 the case is free —
+and browsers use it. Public oracles normalise the names, so the check runs
+against a local server that returns the raw lines.
 """
 
 from __future__ import annotations
@@ -16,11 +16,11 @@ from rawserver import RawHeaderServer
 
 REPO = Path(__file__).resolve().parents[2]
 
-# Порядок и регистр навигационного запроса по HTTP/1.1.
+# The order and case of a navigational HTTP/1.1 request.
 #
-# Замер Chrome 152 и Firefox 154 (docs/STAGE15-RESULTS.md): на HTTP/1.1 Chrome
-# не шлёт priority, а Firefox — TE, хотя в HTTP/2 оба присутствуют. Поэтому
-# http1.order задаёт не только порядок, но и набор.
+# Chrome 152 and Firefox 154 measured (docs/STAGE15-RESULTS.md): over HTTP/1.1
+# Chrome does not send priority and Firefox does not send TE, though HTTP/2 has
+# both. That is why http1.order defines the set as well as the order.
 CHROME_H1 = [
     "Host", "Connection",
     "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform",
@@ -36,7 +36,7 @@ FIREFOX_H1 = [
     "Priority",
 ]
 
-# Кластер, в который Chrome ставит кастомные заголовки запроса fetch/XHR.
+# The cluster Chrome puts the custom headers of a fetch/XHR request into.
 CHROME_FETCH_H1 = [
     "Host", "Connection", "sec-ch-ua-platform", "User-Agent", "sec-ch-ua",
     "X-Api-Key", "sec-ch-ua-mobile", "Accept",
@@ -70,16 +70,16 @@ def test_firefox_header_order_and_case(raw):
 
 
 def test_case_is_not_canonicalized(raw):
-    """sec-ch-* остаются строчными, хотя Go по умолчанию канонизирует имена."""
+    """sec-ch-* stay lowercase, though Go canonicalises names by default."""
     names = fetch(raw, "chrome-151-windows")["headers"]
     assert "sec-ch-ua" in names and "Sec-Ch-Ua" not in names
     assert "sec-ch-ua-platform" in names and "Sec-Ch-Ua-Platform" not in names
-    # А эти, наоборот, должны быть в Title-Case.
+    # These, on the contrary, must be in Title-Case.
     assert "User-Agent" in names and "user-agent" not in names
 
 
 def test_host_and_connection_present(raw):
-    """Их нет в HTTP/2, но в HTTP/1.1 браузер шлёт оба, и Host — первым."""
+    """HTTP/2 has neither, but over HTTP/1.1 a browser sends both, Host first."""
     d = fetch(raw, "chrome-151-windows")
     assert d["headers"][0] == "Host"
     assert d["headers"][1] == "Connection"
@@ -94,18 +94,18 @@ def test_profiles_differ(raw):
     chrome = fetch(raw, "chrome-151-windows")["headers"]
     firefox = fetch(raw, "firefox-144-macos")["headers"]
     assert chrome != firefox
-    # У Firefox есть Priority, у Chrome на HTTP/1.1 его нет вовсе.
+    # Firefox has Priority, Chrome over HTTP/1.1 does not have it at all.
     assert "Priority" in firefox and not any(h.lower() == "priority" for h in chrome)
-    # sec-ch-* — только у Chromium.
+    # sec-ch-* belong to Chromium only.
     assert "sec-ch-ua" in chrome and "sec-ch-ua" not in firefox
 
 
 def test_custom_header_switches_to_fetch_set(raw):
-    """Кастомный заголовок бывает только у fetch/XHR, и набор у них другой.
+    """A custom header only appears on fetch/XHR, and their set is different.
 
-    Навигационный набор плюс X-Api-Key аномален при любом якоре: у fetch нет
-    upgrade-insecure-requests и sec-fetch-user, accept — */*, а sec-ch-*
-    стоят в кластере рендерера (замер Chrome 152).
+    The navigation set plus X-Api-Key is anomalous with any anchor: fetch has no
+    upgrade-insecure-requests and no sec-fetch-user, its accept is */*, and the
+    sec-ch-* live in the renderer cluster (measured on Chrome 152).
     """
     with curlpro.Session("chrome-151-windows", force_http1=True, verify=False) as s:
         s.headers["X-Api-Key"] = "secret"
@@ -115,7 +115,7 @@ def test_custom_header_switches_to_fetch_set(raw):
 
 
 def test_mode_navigate_keeps_navigation_set(raw):
-    """Явный режим navigate оставляет навигационный набор."""
+    """An explicit navigate mode keeps the navigation set."""
     with curlpro.Session("chrome-151-windows", force_http1=True, verify=False,
                          mode="navigate") as s:
         s.headers["X-Api-Key"] = "secret"

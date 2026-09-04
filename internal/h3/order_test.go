@@ -6,9 +6,9 @@ import (
 	"net/http"
 )
 
-// Content-Length добавляет транспорт, поэтому в req.Header его нет, а в порядке
-// профиля он есть слотом. Слот обязан сработать: Chrome шлёт его первым
-// в наборе fetch — замер cmd/hcapture против живого Chrome 152.
+// Content-Length is added by the transport, so req.Header does not have it while
+// the profile order has it as a slot. The slot must work: Chrome sends it first
+// in the fetch set — measured by cmd/hcapture against a live Chrome 152.
 func TestWithSlotPlacesTransportHeader(t *testing.T) {
 	order := []string{"content-length", "sec-ch-ua-platform", "user-agent", "content-type", "accept"}
 	cases := []struct {
@@ -17,19 +17,19 @@ func TestWithSlotPlacesTransportHeader(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "первым перед всеми",
+			name: "first of all",
 			seq:  []string{"sec-ch-ua-platform", "user-agent", "content-type", "accept"},
 			want: []string{"content-length", "sec-ch-ua-platform", "user-agent", "content-type", "accept"},
 		},
 		{
-			// Соседа по порядку в запросе может не быть: встаём перед следующим,
-			// который реально уходит.
-			name: "сосед отсутствует",
+			// The order neighbour may be missing from the request: stand before the
+			// next one that actually goes out.
+			name: "the neighbour is missing",
 			seq:  []string{"content-type", "accept"},
 			want: []string{"content-length", "content-type", "accept"},
 		},
 		{
-			name: "ничего из порядка не уходит",
+			name: "nothing from the order goes out",
 			seq:  []string{"x-custom"},
 			want: []string{"x-custom", "content-length"},
 		},
@@ -39,22 +39,22 @@ func TestWithSlotPlacesTransportHeader(t *testing.T) {
 			req := &http.Request{Header: http.Header{HeaderOrderKey: order}}
 			got := withSlot(req, tc.seq, "content-length")
 			if len(got) != len(tc.want) {
-				t.Fatalf("получено %v, ожидалось %v", got, tc.want)
+				t.Fatalf("got %v, expected %v", got, tc.want)
 			}
 			for i := range got {
 				if got[i] != tc.want[i] {
-					t.Fatalf("получено %v, ожидалось %v", got, tc.want)
+					t.Fatalf("got %v, expected %v", got, tc.want)
 				}
 			}
 		})
 	}
 }
 
-// Порядок молчит о заголовке — он уходит в хвост, как было до слотов.
+// The order says nothing about the header — it goes to the tail, as before slots.
 func TestWithSlotFallsBackToTail(t *testing.T) {
 	req := &http.Request{Header: http.Header{HeaderOrderKey: []string{"accept", "user-agent"}}}
 	got := withSlot(req, []string{"accept", "user-agent"}, "content-length")
 	if len(got) != 3 || got[2] != "content-length" {
-		t.Errorf("получено %v, ожидался хвост", got)
+		t.Errorf("got %v, expected the tail", got)
 	}
 }

@@ -1,4 +1,4 @@
-"""Протокол и заголовки профиля — на каждый запрос отдельно."""
+"""Protocol and profile headers — per individual request."""
 
 from __future__ import annotations
 
@@ -21,8 +21,8 @@ def _profiles():
 
 @pytest.fixture
 def server():
-    # Сервер стенда объявляет только http/1.1: на нём видно и принуждение
-    # к 1.1, и отказ, когда запрос требует h2.
+    # The stand server advertises http/1.1 only: it shows both the forcing to 1.1
+    # and the refusal when a request demands h2.
     with RawHeaderServer(persistent=True) as srv:
         yield srv
 
@@ -43,7 +43,7 @@ def test_http1_forced_per_request(server):
 
 
 def test_h2_on_http1_server_fails_clearly(server):
-    """Молча уехать по HTTP/1.1 нельзя: запрос просил h2."""
+    """Travelling over HTTP/1.1 in silence is not allowed: the request asked for h2."""
     with curlpro.Session(verify=False) as s:
         with pytest.raises(curlpro.CurlProError, match="http/1.1"):
             s.get(server.url, protocol=2)
@@ -56,7 +56,7 @@ def test_h3_needs_the_profile_section(server):
 
 
 def test_h3_through_proxy_is_refused(server):
-    """QUIC через CONNECT не ходит; молча пойти напрямую — раскрыть адрес."""
+    """QUIC does not pass through CONNECT; going direct in silence would reveal the address."""
     with curlpro.Session(verify=False, proxy="http://127.0.0.1:9") as s:
         with pytest.raises(curlpro.CurlProError, match="proxy"):
             s.get(server.url, protocol="h3")
@@ -80,12 +80,12 @@ def test_async_session_takes_the_protocol_too(server):
 
 
 def sent(response) -> list[str]:
-    """Имена заголовков, ушедших на провод."""
+    """The header names that reached the wire."""
     return [line.split(":", 1)[0].lower() for line in response.json()["raw"] if ":" in line]
 
 
 def test_default_headers_switch_both_ways(server):
-    """Сессия задаёт умолчание, запрос перебивает его в обе стороны."""
+    """The session sets the default, a request overrides it either way."""
     with curlpro.Session(verify=False, force_http1=True, default_headers=False) as s:
         assert "sec-fetch-site" not in sent(s.get(server.url))
         assert "sec-fetch-site" in sent(s.get(server.url, default_headers=True))
@@ -98,16 +98,16 @@ def test_default_headers_switch_both_ways(server):
 
 
 def test_disabled_headers_do_not_leak_into_the_next_request(server):
-    """Отключение действует на один запрос, а не на сессию."""
+    """Switching off applies to one request, not to the session."""
     with curlpro.Session(verify=False, force_http1=True) as s:
         s.get(server.url, default_headers=False)
         assert "sec-fetch-site" in sent(s.get(server.url))
 
 
-# --- против живого сервера ----------------------------------------------------
+# --- against a live server ----------------------------------------------------
 #
-# Локальный стенд не умеет ни h2, ни QUIC одновременно, поэтому переход
-# по Alt-Svc и принуждение к h3 проверяются на cloudflare-quic.com.
+# The local stand can do neither h2 nor QUIC at the same time, so the Alt-Svc
+# upgrade and the forcing to h3 are checked against cloudflare-quic.com.
 
 def _h3_reachable() -> bool:
     import socket
@@ -119,15 +119,15 @@ def _h3_reachable() -> bool:
 
 
 LIVE = "https://cloudflare-quic.com/"
-online = pytest.mark.skipif(not _h3_reachable(), reason="нет доступа к cloudflare-quic.com")
+online = pytest.mark.skipif(not _h3_reachable(), reason="no access to cloudflare-quic.com")
 
 
 @online
 def test_forced_protocol_beats_alt_svc():
-    """Сайт объявил h3, клиент перешёл — но запрос вправе остаться на h2."""
+    """The site advertised h3 and the client upgraded — but a request may stay on h2."""
     with curlpro.Session("chrome-151-windows") as s:
         assert s.get(LIVE).proto == "HTTP/2.0"
-        assert s.get(LIVE).proto == "HTTP/3.0", "второй запрос должен уйти по QUIC"
+        assert s.get(LIVE).proto == "HTTP/3.0", "the second request must go over QUIC"
         assert s.get(LIVE, protocol="h2").proto == "HTTP/2.0"
         assert s.get(LIVE, protocol=1.1).proto == "HTTP/1.1"
         assert s.get(LIVE, protocol=3).proto == "HTTP/3.0"
@@ -135,7 +135,7 @@ def test_forced_protocol_beats_alt_svc():
 
 @online
 def test_h3_without_waiting_for_alt_svc():
-    """Указание работает на первом же запросе, до всякого Alt-Svc."""
+    """The instruction works on the very first request, before any Alt-Svc."""
     with curlpro.Session("chrome-151-windows") as s:
         assert s.get(LIVE, protocol="h3").proto == "HTTP/3.0"
 

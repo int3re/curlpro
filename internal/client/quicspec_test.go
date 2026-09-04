@@ -9,11 +9,11 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-// Набор расширений в QUIC-рукопожатии Chrome 152.
+// The extension set in the QUIC handshake of Chrome 152.
 //
-// Снят cmd/quiccapture с живого браузера: три захвата дали один и тот же
-// набор в трёх разных перестановках. Паррот uquic описывает Chrome 146,
-// и от этого набора его отличало ровно одно расширение — trust_anchors.
+// Captured by cmd/quiccapture from a live browser: three captures gave the same
+// set in three different permutations. The uquic parrot describes Chrome 146,
+// and exactly one extension separated it from this set — trust_anchors.
 var chrome152QUICExtensions = []int{0, 10, 13, 16, 27, 43, 45, 51, 57, 17613, 51764, 65037}
 
 func quicExtIDs(t *testing.T, spec *utls.ClientHelloSpec) []int {
@@ -22,12 +22,12 @@ func quicExtIDs(t *testing.T, spec *utls.ClientHelloSpec) []int {
 	for _, e := range spec.Extensions {
 		buf := make([]byte, e.Len())
 		if len(buf) < 2 {
-			// SNI без имени сериализуется пустым: номер берём по типу.
+				// An SNI without a name serialises empty: take the number by type.
 			if _, ok := e.(*utls.SNIExtension); ok {
 				ids = append(ids, 0)
 				continue
 			}
-			t.Fatalf("расширение %T короче заголовка", e)
+				t.Fatalf("extension %T is shorter than a header", e)
 		}
 		if _, err := e.Read(buf); err != nil && err != io.EOF {
 			t.Fatal(err)
@@ -37,7 +37,7 @@ func quicExtIDs(t *testing.T, spec *utls.ClientHelloSpec) []int {
 	return ids
 }
 
-// Набор расширений обязан совпадать с замеренным у Chrome 152.
+// The extension set must match the one measured on Chrome 152.
 func TestQUICHelloMatchesChrome152(t *testing.T) {
 	p := auditProfile(t, "chrome-152-windows")
 	spec, err := quicSpec(p)
@@ -48,17 +48,17 @@ func TestQUICHelloMatchesChrome152(t *testing.T) {
 	sort.Ints(got)
 
 	if len(got) != len(chrome152QUICExtensions) {
-		t.Fatalf("расширений %d, ожидалось %d: %v", len(got), len(chrome152QUICExtensions), got)
+		t.Fatalf("%d extensions, expected %d: %v", len(got), len(chrome152QUICExtensions), got)
 	}
 	for i := range got {
 		if got[i] != chrome152QUICExtensions[i] {
-			t.Fatalf("набор разошёлся:\n получено %v\n ожидалось %v", got, chrome152QUICExtensions)
+			t.Fatalf("the set diverged:\n got      %v\n expected %v", got, chrome152QUICExtensions)
 		}
 	}
 }
 
-// Порядок перемешивается на каждое соединение: браузер делает так же —
-// три захвата Chrome 152 дали три разные перестановки.
+// The order is shuffled per connection: the browser does the same —
+// three Chrome 152 captures gave three different permutations.
 func TestQUICHelloOrderIsShuffled(t *testing.T) {
 	p := auditProfile(t, "chrome-152-windows")
 	seen := map[string]bool{}
@@ -70,12 +70,12 @@ func TestQUICHelloOrderIsShuffled(t *testing.T) {
 		seen[fmt.Sprint(quicExtIDs(t, spec.ClientHelloSpec))] = true
 	}
 	if len(seen) < 5 {
-		t.Errorf("за 32 сборки встретилось %d порядков — похоже на постоянный", len(seen))
+		t.Errorf("32 builds produced %d orders — looks like a constant one", len(seen))
 	}
 }
 
-// В QUIC у Chrome свой список алгоритмов подписи: девять записей, без GREASE
-// и без 0x0904. Наш TCP-список сюда переносить нельзя — это разные списки.
+// In QUIC Chrome has its own signature algorithm list: nine entries, without
+// GREASE and without 0x0904. Our TCP list must not be carried over — they differ.
 func TestQUICSignatureAlgorithmsAreTheParrotOnes(t *testing.T) {
 	p := auditProfile(t, "chrome-152-windows")
 	spec, err := quicSpec(p)
@@ -92,11 +92,11 @@ func TestQUICSignatureAlgorithmsAreTheParrotOnes(t *testing.T) {
 		}
 	}
 	if len(got) != len(want) {
-		t.Fatalf("алгоритмов %d, ожидалось %d: %#v", len(got), len(want), got)
+		t.Fatalf("%d algorithms, expected %d: %#v", len(got), len(want), got)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("список разошёлся:\n получено %#04x\n ожидалось %#04x", got, want)
+			t.Fatalf("the list diverged:\n got      %#04x\n expected %#04x", got, want)
 		}
 	}
 }

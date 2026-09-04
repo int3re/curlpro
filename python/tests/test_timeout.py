@@ -1,4 +1,4 @@
-"""Отдельный предел на установку соединения: timeout=(соединение, всего)."""
+"""A separate limit on establishing the connection: timeout=(connect, total)."""
 
 from __future__ import annotations
 
@@ -22,11 +22,11 @@ def _profiles():
 
 
 class StalledServer:
-    """Принимает TCP-соединение и молчит: рукопожатие TLS не начинается.
+    """Accepts a TCP connection and stays silent: the TLS handshake never starts.
 
-    Мёртвый адрес для проверки не годится: ядро отвечает на него по-разному
-    и на Windows часто сразу отказом. Молчащий сокет даёт ту же фазу
-    «соединение ещё не установлено», но одинаково на всех системах.
+    A dead address will not do for the check: the kernel answers it differently
+    and on Windows often refuses at once. A silent socket gives the same
+    "not connected yet" phase, but identically on every system.
     """
 
     def __init__(self) -> None:
@@ -49,8 +49,8 @@ class StalledServer:
                 raw, _ = self._sock.accept()
             except OSError:
                 return
-            # Сокет держится открытым: закрытие вернуло бы клиенту ошибку
-            # раньше срока, и предел остался бы непроверенным.
+            # The socket is held open: closing it would return an error to the
+            # client too early and leave the limit unchecked.
             self._held.append(raw)
 
     def __enter__(self) -> "StalledServer":
@@ -78,34 +78,34 @@ def test_pair_splits_connect_and_total():
 
 
 def test_connect_timeout_fires_before_total(stalled):
-    """Молчащий узел обязан отвалиться по первому пределу, а не по общему."""
+    """A silent host must fail on the first limit rather than on the total one."""
     with curlpro.Session(verify=False) as s:
         started = time.monotonic()
         with pytest.raises(curlpro.Timeout):
             s.get(stalled.url, timeout=(0.4, 30))
         spent = time.monotonic() - started
-    assert spent < 5, f"ждали {spent:.1f} с — похоже, сработал общий предел"
+    assert spent < 5, f"waited {spent:.1f} s — that looks like the total limit"
 
 
 def test_session_connect_timeout_applies(stalled):
-    """Предел из конструктора действует без переопределения в запросе."""
+    """The limit from the constructor applies without a per-request override."""
     with curlpro.Session(verify=False, timeout=(0.4, 30)) as s:
         started = time.monotonic()
         with pytest.raises(curlpro.Timeout):
             s.get(stalled.url)
         spent = time.monotonic() - started
-    assert spent < 5, f"ждали {spent:.1f} с"
+    assert spent < 5, f"waited {spent:.1f} s"
 
 
 def test_connect_timeout_does_not_limit_reading():
-    """Ответ ждётся под общим пределом: медленный сервер не должен падать."""
+    """The response is awaited under the total limit: a slow server must not fail."""
     with RawHeaderServer(delay=1.0) as srv:
         with curlpro.Session(verify=False, force_http1=True) as s:
             assert s.get(srv.url, timeout=(0.5, 10)).status == 200
 
 
 def test_total_timeout_still_cuts_slow_response():
-    """Общий предел работает и когда задан отдельный предел на соединение."""
+    """The total limit still works when a separate connect limit is set."""
     with RawHeaderServer(delay=2.0) as srv:
         with curlpro.Session(verify=False, force_http1=True) as s:
             with pytest.raises(curlpro.Timeout):
@@ -113,10 +113,10 @@ def test_total_timeout_still_cuts_slow_response():
 
 
 def test_websocket_connect_timeout(stalled):
-    """Рукопожатие сокета — та же фаза установки, что и у запроса."""
+    """The socket handshake is the same connecting phase as a request's."""
     with curlpro.Session("chrome-151-windows", verify=False) as s:
         started = time.monotonic()
         with pytest.raises(curlpro.CurlProError):
             s.websocket(stalled.url.replace("https://", "wss://"), timeout=(0.4, 30))
         spent = time.monotonic() - started
-    assert spent < 5, f"ждали {spent:.1f} с"
+    assert spent < 5, f"waited {spent:.1f} s"

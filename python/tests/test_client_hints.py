@@ -1,8 +1,8 @@
-"""Клиентские подсказки высокой энтропии и выбор устройства.
+"""High-entropy client hints and device selection.
 
-Chrome вырезал модель и версию системы из User-Agent: у любого телефона там
-«Android 10; K». Разные телефоны различаются подсказками sec-ch-ua-model и
-sec-ch-ua-platform-version, а браузер шлёт их только после Accept-CH.
+Chrome cut the model and the OS version out of the User-Agent: every phone
+"reports Android 10; K" there. Phones differ through the sec-ch-ua-model and
+sec-ch-ua-platform-version hints, which the browser sends only after Accept-CH.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def _profiles():
 
 
 class HintServer:
-    """Сервер, запрашивающий подсказки и записывающий сырые заголовки."""
+    """A server that asks for hints and records the raw headers."""
 
     def __init__(self, accept_ch: str, critical: bool = False):
         self.accept_ch = accept_ch
@@ -117,7 +117,7 @@ def test_hints_appear_only_after_accept_ch():
                              force_http1=True, device="Pixel 8") as s:
             s.get(srv.url)
             s.get(srv.url)
-    assert srv.value(0, "sec-ch-ua-model") is None, "подсказка ушла до Accept-CH"
+    assert srv.value(0, "sec-ch-ua-model") is None, "the hint went out before Accept-CH"
     assert srv.value(1, "sec-ch-ua-model") == '"Pixel 8"'
     assert srv.value(1, "sec-ch-ua-platform-version") == '"16.0.0"'
 
@@ -127,7 +127,7 @@ def test_critical_ch_makes_the_client_repeat_at_once():
         with curlpro.Session("chrome-152-android", verify=False,
                              force_http1=True, device="Pixel 7") as s:
             s.get(srv.url)
-    assert len(srv.requests) == 2, "Critical-CH обязан вызвать немедленный повтор"
+    assert len(srv.requests) == 2, "Critical-CH must trigger an immediate repeat"
     assert srv.value(1, "sec-ch-ua-model") == '"Pixel 7"'
 
 
@@ -139,12 +139,12 @@ def test_only_requested_hints_are_sent():
             s.get(srv.url)
     names = [n.lower() for n in srv.names(1)]
     assert "sec-ch-ua-model" in names
-    assert "sec-ch-ua-platform-version" not in names, "сайт этой подсказки не просил"
+    assert "sec-ch-ua-platform-version" not in names, "the site did not ask for this hint"
     assert "sec-ch-ua-full-version-list" not in names
 
 
 def test_hint_order_matches_measured_template():
-    """Порядок кластера с подсказками снят с Chrome 152 на Pixel 7."""
+    """The order of the cluster with hints was captured from Chrome 152 on a Pixel 7."""
     with HintServer(ALL_HINTS) as srv:
         with curlpro.Session("chrome-152-android", verify=False,
                              force_http1=True, device="Pixel 7") as s:
@@ -168,14 +168,14 @@ def test_random_device_differs_between_sessions():
                 s.get(srv.url)
                 s.get(srv.url)
             seen.add(srv.value(len(srv.requests) - 1, "sec-ch-ua-model"))
-    assert len(seen) > 1, f"за двенадцать сессий устройство не сменилось: {seen}"
+    assert len(seen) > 1, f"the device never changed over twelve sessions: {seen}"
 
 
 def test_own_device_list_overrides_the_profile():
-    devices = [{"name": "мой", "model": "SM-X999", "platform_version": "13.0.0"}]
+    devices = [{"name": "mine", "model": "SM-X999", "platform_version": "13.0.0"}]
     with HintServer(ALL_HINTS) as srv:
         with curlpro.Session("chrome-152-android", verify=False, force_http1=True,
-                             device="мой", devices=devices) as s:
+                             device="mine", devices=devices) as s:
             s.get(srv.url)
             s.get(srv.url)
     assert srv.value(1, "sec-ch-ua-model") == '"SM-X999"'
@@ -188,7 +188,7 @@ def test_unknown_device_is_an_error():
 
 
 def test_user_agent_stays_frozen():
-    """Модель в User-Agent не подставляется: у Chrome там заглушка для всех."""
+    """The model is not put into the User-Agent: Chrome has a placeholder there for everyone."""
     with HintServer(ALL_HINTS) as srv:
         with curlpro.Session("chrome-152-android", verify=False,
                              force_http1=True, device="Galaxy S23") as s:
@@ -200,7 +200,7 @@ def test_user_agent_stays_frozen():
 
 
 def test_yandex_puts_the_device_into_the_user_agent():
-    """У Яндекса модель и версия Android стоят в самой строке — подставляем там."""
+    """Yandex puts the model and the Android version into the string itself — so we substitute there."""
     with HintServer(ALL_HINTS) as srv:
         with curlpro.Session("yandex-26.8-android", verify=False,
                              force_http1=True, device="Galaxy S23") as s:
@@ -209,13 +209,13 @@ def test_yandex_puts_the_device_into_the_user_agent():
     ua = srv.value(1, "user-agent")
     assert "Android 15; SM-S911B" in ua, ua
     assert "Pixel 7" not in ua
-    # Подсказка и строка обязаны говорить одно и то же.
+    # The hint and the string must say the same thing.
     assert srv.value(1, "sec-ch-ua-model") == '"SM-S911B"'
     assert srv.value(1, "sec-ch-ua-platform-version") == '"15.0.0"'
 
 
 def test_yandex_full_version_is_its_own():
-    """Полная версия у Яндекса своя, не хромовская — замер телефона."""
+    """Yandex has its own full version, not Chrome's — measured on a phone."""
     with HintServer(ALL_HINTS) as srv:
         with curlpro.Session("yandex-26.8-android", verify=False,
                              force_http1=True, device="Pixel 7") as s:
@@ -226,10 +226,10 @@ def test_yandex_full_version_is_its_own():
 
 
 def test_without_device_nothing_is_substituted():
-    """Без device профиль остаётся ровно таким, каким снят."""
+    """Without device the profile stays exactly as it was captured."""
     with HintServer(ALL_HINTS) as srv:
         with curlpro.Session("yandex-26.8-android", verify=False, force_http1=True) as s:
             s.get(srv.url)
             s.get(srv.url)
     assert "Pixel 7" in srv.value(1, "user-agent")
-    assert srv.value(1, "sec-ch-ua-model") is None, "модель без выбранного устройства не подставляется"
+    assert srv.value(1, "sec-ch-ua-model") is None, "no model is substituted without a chosen device"

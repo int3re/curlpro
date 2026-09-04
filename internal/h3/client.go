@@ -54,8 +54,8 @@ type ClientConn struct {
 	conn    *quic.Conn
 	rawConn *rawConn
 
-	// decoder — свой QPACK с динамической таблицей: quic-go/qpack умеет
-	// только статическую, а профиль объявляет ёмкость 65536, как Chrome.
+	// decoder is our own QPACK with a dynamic table: quic-go/qpack handles only
+	// the static one, while the profile advertises a capacity of 65536, as Chrome does.
 	decoder *qp.Decoder
 
 	// Additional HTTP/3 settings.
@@ -82,30 +82,30 @@ type ClientConn struct {
 
 	requestWriter *requestWriter
 
-	// fingerprint задаёт наблюдаемые особенности HTTP/3-слоя: порядок SETTINGS,
-	// GREASE-кадр, PRIORITY_UPDATE. nil означает поведение апстрима.
+	// fingerprint sets the observable traits of the HTTP/3 layer: the SETTINGS
+	// order, the GREASE frame, PRIORITY_UPDATE. nil means the upstream behaviour.
 	fingerprint *Fingerprint
 
-	// settingsSent закрывается, когда управляющий поток записан.
+	// settingsSent closes once the control stream has been written.
 	//
-	// Первый запрос ждёт этого события: запрос и управляющий поток — разные
-	// потоки QUIC, и без синхронизации сервер успевает ответить, не увидев
-	// SETTINGS. Отпечаток тогда меняется от запроса к запросу. Браузер
-	// открывает управляющий поток до первого запроса.
+	// The first request waits for that event: the request and the control stream
+	// are different QUIC streams, and without synchronisation the server manages
+	// to answer without having seen SETTINGS. The fingerprint then changes from
+	// request to request. A browser opens the control stream before the first request.
 	settingsSent chan struct{}
 
-	// controlStream остаётся открытым: PRIORITY_UPDATE адресован конкретному
-	// потоку запроса, поэтому Chrome шлёт его сюда перед каждым запросом,
-	// а не один раз при установке соединения.
+	// controlStream stays open: PRIORITY_UPDATE addresses one particular request
+	// stream, so Chrome sends it here before every request rather than once when
+	// the connection is established.
 	controlMx     sync.Mutex
 	controlStream *quic.SendStream
 }
 
-// sendPriorityUpdate объявляет приоритет потока запроса.
+// sendPriorityUpdate declares the priority of a request stream.
 //
-// Кадр несёт идентификатор потока, к которому относится, поэтому отправляется
-// на каждый запрос. Одна отправка с нулём давала совпадение только для первого
-// запроса соединения.
+// The frame carries the identifier of the stream it refers to, so it is sent per
+// request. Sending it once with a zero matched only the first request of a
+// connection.
 func (c *ClientConn) sendPriorityUpdate(streamID quic.StreamID) {
 	if c.fingerprint == nil || c.fingerprint.PriorityParam == 0 {
 		return
@@ -118,8 +118,8 @@ func (c *ClientConn) sendPriorityUpdate(streamID quic.StreamID) {
 	_, _ = c.controlStream.Write(priorityUpdateFrame(c.fingerprint.PriorityParam, uint64(streamID)))
 }
 
-// awaitSettings ждёт записи управляющего потока, но не бесконечно: если что-то
-// пошло не так, лучше отправить запрос, чем повиснуть.
+// awaitSettings waits for the control stream to be written, but not forever: if
+// something went wrong, sending the request beats hanging.
 func (c *ClientConn) awaitSettings() {
 	if c.settingsSent == nil {
 		return
@@ -154,12 +154,12 @@ func newClientConn(
 		lastStreamID:       invalidStreamID,
 		logger:             logger,
 		qlogger:            qlogger,
-		// Ёмкость таблицы — наша же объявленная SETTINGS_QPACK_MAX_TABLE_CAPACITY
-		// (0x01): больше кодировщик сервера задать не вправе.
+	// The table capacity is our own advertised SETTINGS_QPACK_MAX_TABLE_CAPACITY
+	// (0x01): the server encoder may not set more.
 		decoder: qp.NewDecoder(additionalSettings[settingQPACKMaxTableCapacity]),
 	}
-	// Заблокированные секции ждут вставок кодировщика; закрытие соединения
-	// обязано их разбудить, иначе поток запроса повис бы навсегда.
+	// Blocked sections wait for the encoder's insertions; closing the connection
+	// must wake them, or the request stream would hang forever.
 	context.AfterFunc(conn.Context(), func() {
 		c.decoder.Close(context.Cause(conn.Context()))
 	})
@@ -178,7 +178,7 @@ func newClientConn(
 		qlogger,
 		c.logger,
 	)
-	// Поток кодировщика сервера кормит нашу динамическую таблицу.
+		// The server's encoder stream feeds our dynamic table.
 	c.rawConn.onEncoderStream = func(str *quic.ReceiveStream) {
 		if err := c.decoder.ReadEncoderStream(str); err != nil {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeQPACKEncoderStreamError), err.Error())
@@ -193,10 +193,10 @@ func newClientConn(
 		}
 		c.fingerprint.applySettings(sf)
 
-		// Браузеры дописывают в управляющий поток ещё два кадра сразу за
-		// SETTINGS: GREASE и, у Chrome, PRIORITY_UPDATE. Их отсутствие
-		// отличает клиент не менее надёжно, чем сами настройки, поэтому
-		// они уходят тем же пакетом.
+	// Browsers append two more frames to the control stream right after
+	// SETTINGS: GREASE and, in Chrome, PRIORITY_UPDATE. Their absence
+	// identifies a client no less reliably than the settings themselves, so
+	// they go out in the same packet.
 		var extra []byte
 		if c.fingerprint != nil && c.fingerprint.SendGreaseFrame {
 			extra = append(extra, greaseFrame()...)
@@ -206,10 +206,10 @@ func newClientConn(
 		c.controlMx.Lock()
 		c.controlStream = str
 		c.controlMx.Unlock()
-		// Потоки QPACK открываются сразу за управляющим, как у Chrome:
-		// кодировщика (0x02) и декодера (0x03). Первый пуст — наши запросы
-		// динамической таблицей не пользуются; по второму уходят подтверждения
-		// секций, без которых кодировщик сервера не может вытеснять записи.
+	// The QPACK streams open right after the control one, as in Chrome:
+	// the encoder (0x02) and the decoder (0x03). The first stays empty — our
+	// requests do not use the dynamic table; the second carries section
+	// acknowledgements, without which the server encoder cannot evict entries.
 		if err == nil {
 			if enc, e := c.rawConn.OpenUniStream(); e == nil {
 				_, _ = enc.Write(quicvarint.Append(nil, streamTypeQPACKEncoderStream))
@@ -243,8 +243,8 @@ func (c *ClientConn) openRequestStream(
 	disableCompression bool,
 	maxHeaderBytes int,
 ) (*RequestStream, error) {
-	// Управляющий поток должен уйти раньше запроса, иначе сервер увидит
-	// запрос без SETTINGS и отпечаток окажется неполным.
+	// The control stream must go out before the request, or the server sees a
+	// request without SETTINGS and the fingerprint comes out incomplete.
 	c.awaitSettings()
 	c.streamMx.Lock()
 	maxStreamID := c.maxStreamID
@@ -283,7 +283,7 @@ func (c *ClientConn) openRequestStream(
 		return nil, errGoAway
 	}
 
-	// Приоритет объявляется до отправки запроса и адресован именно этому потоку.
+	// The priority is declared before the request and addresses this very stream.
 	c.sendPriorityUpdate(str.StreamID())
 
 	hstr := c.rawConn.TrackStream(str)

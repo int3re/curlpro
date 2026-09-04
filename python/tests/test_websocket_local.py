@@ -1,8 +1,8 @@
-"""WebSocket против локального сервера: сжатие, закрытие, таймауты.
+"""WebSocket against a local server: compression, closing, timeouts.
 
-echo.websocket.org не включает permessage-deflate и не закрывает соединение
-сам, поэтому эти сценарии проверяются на сервере из пакета ``websockets``
-с сертификатом стенда. Без пакета тесты пропускаются.
+echo.websocket.org does not enable permessage-deflate and never closes the
+connection itself, so those scenarios are checked against a server from the
+``websockets`` package with the stand certificate. Without it they skip.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def _profiles():
 
 
 class LocalWS:
-    """WSS-сервер в отдельном потоке. handler — корутина websockets."""
+    """A WSS server in its own thread. handler is a websockets coroutine."""
 
     def __init__(self, handler, compression="deflate"):
         self._handler = handler
@@ -52,7 +52,7 @@ class LocalWS:
 
         try:
             asyncio.run(main())
-        except Exception:  # noqa: BLE001 — сервер останавливается снаружи
+        except Exception:  # noqa: BLE001 — the server is stopped from outside
             pass
 
     def __enter__(self) -> "LocalWS":
@@ -70,8 +70,8 @@ class LocalWS:
 
 
 def test_compressed_messages_are_inflated():
-    """Сервер принимает permessage-deflate и шлёт сжатые кадры; клиент обязан
-    их распаковать, а не отдать deflate-байты как текст."""
+    """The server accepts permessage-deflate and sends compressed frames; the
+    client must inflate them rather than hand deflate bytes back as text."""
 
     async def handler(ws):
         await ws.send("hello, deflate " * 20)
@@ -90,7 +90,7 @@ def test_compressed_messages_are_inflated():
 
 
 def test_iteration_stops_only_on_close():
-    """Таймаут чтения — ошибка с кодом, а не конец итерации."""
+    """A read timeout is an error with a code, not the end of the iteration."""
 
     async def handler(ws):
         await ws.send("one")

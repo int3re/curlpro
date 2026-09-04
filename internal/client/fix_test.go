@@ -1,8 +1,8 @@
 package client
 
-// Тесты на поведение, введённое по итогам аудита (docs/STAGE14-RESULTS.md):
-// метаданные Fetch на редиректах, permessage-deflate, ленивая распаковка,
-// несколько HTTP/1.1-соединений на хост, слоты Content-Length/Content-Type/Origin.
+// Tests for the behaviour introduced after the audit (docs/STAGE14-RESULTS.md):
+// Fetch metadata on redirects, permessage-deflate, lazy decompression, several
+// HTTP/1.1 connections per host, the Content-Length/Content-Type/Origin slots.
 
 import (
 	"bufio"
@@ -25,7 +25,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Редиректы
+// Redirects
 // ---------------------------------------------------------------------------
 
 func navigationLike() profile.HeadersSpec {
@@ -50,8 +50,8 @@ func headerOf(h map[string]string, name string) (string, bool) {
 	return "", false
 }
 
-// Навигация, начатая браузером, инициатора не имеет: Chromium оставляет
-// sec-fetch-site: none и sec-fetch-user на каждом хопе, даже при смене хоста.
+// A navigation started by the browser has no initiator: Chromium keeps
+// sec-fetch-site: none and sec-fetch-user on every hop, even across hosts.
 func TestRedirectKeepsNoneAndUserForNavigation(t *testing.T) {
 	s := testSession(t, navigationLike(), profile.HTTP1Spec{})
 	prev := &Request{Method: "GET", URL: "https://a.example.com/x"}
@@ -59,21 +59,21 @@ func TestRedirectKeepsNoneAndUserForNavigation(t *testing.T) {
 	next := s.nextRequest(prev, "https://b.other.org/y", 302, prev.URL)
 
 	if v, ok := headerOf(next.Headers, "sec-fetch-site"); ok {
-		t.Errorf("sec-fetch-site: none переписан в %q", v)
+		t.Errorf("sec-fetch-site: none was rewritten to %q", v)
 	}
 	for _, name := range next.SuppressHeaders {
 		if strings.EqualFold(name, "sec-fetch-user") {
-			t.Error("sec-fetch-user погашен, а браузер его оставляет")
+		t.Error("sec-fetch-user was cleared, though a browser keeps it")
 		}
 	}
 	built := names(s.buildHeaders(&next, mustURL(t, next.URL), "b.other.org", nil))
 	if indexOf(built, "sec-fetch-user") < 0 {
-		t.Errorf("sec-fetch-user пропал из запроса после редиректа: %v", built)
+		t.Errorf("sec-fetch-user disappeared from the request after the redirect: %v", built)
 	}
 }
 
-// Явно заданное значение считается от инициатора всей цепочки и только
-// ухудшается: same-origin → same-site → cross-site.
+// An explicitly set value is computed from the initiator of the whole chain and
+// only ever degrades: same-origin -> same-site -> cross-site.
 func TestRedirectEscalatesExplicitSite(t *testing.T) {
 	s := testSession(t, navigationLike(), profile.HTTP1Spec{})
 	const initiator = "https://a.example.com/start"
@@ -82,7 +82,7 @@ func TestRedirectEscalatesExplicitSite(t *testing.T) {
 		{initiator, "https://b.example.com/next", "same-origin", "same-site"},
 		{initiator, "https://a.example.co.uk/next", "same-origin", "cross-site"},
 		{initiator, "https://other.org/next", "same-origin", "cross-site"},
-		// Обратно не возвращается: цепочка уже была cross-site.
+		// It never comes back: the chain was already cross-site.
 		{"https://other.org/mid", "https://a.example.com/back", "cross-site", "cross-site"},
 		{initiator, "https://b.example.com/next", "same-site", "same-site"},
 	}
@@ -91,15 +91,15 @@ func TestRedirectEscalatesExplicitSite(t *testing.T) {
 		next := s.nextRequest(prev, tc.to, 302, initiator)
 		got, _ := headerOf(next.Headers, "sec-fetch-site")
 		if got != tc.want {
-			t.Errorf("%s → %s при %s: получено %q, ожидалось %q", tc.from, tc.to, tc.prev, got, tc.want)
+			t.Errorf("%s -> %s with %s: got %q, expected %q", tc.from, tc.to, tc.prev, got, tc.want)
 		}
 		if n := len(next.Headers); n != 1 {
-			t.Errorf("в карте %d ключей, ожидался один: %v", n, next.Headers)
+			t.Errorf("the map holds %d keys, expected one: %v", n, next.Headers)
 		}
 	}
 }
 
-// Редирект на http:// не ошибка клиента: ответ 3xx отдаётся как есть.
+// A redirect to http:// is not a client error: the 3xx response is handed over as is.
 func TestRedirectToHTTPReturnsResponse(t *testing.T) {
 	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		w.Header().Set("Location", "http://example.com/plain")
@@ -109,15 +109,15 @@ func TestRedirectToHTTPReturnsResponse(t *testing.T) {
 	s := auditSession(t, Options{DefaultHeaders: true, ForceHTTP1: true, FollowRedirects: true})
 	resp, err := s.Do(&Request{Method: "GET", URL: auditURL(srv, "/")})
 	if err != nil {
-		t.Fatalf("ожидался ответ 302, получена ошибка: %v", err)
+		t.Fatalf("expected a 302 response, got an error: %v", err)
 	}
 	if resp.Status != 302 || resp.Headers["Location"] == nil {
-		t.Errorf("ответ %d %v", resp.Status, resp.Headers)
+		t.Errorf("response %d %v", resp.Status, resp.Headers)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Слоты: Content-Length, Content-Type, Origin
+// Slots: Content-Length, Content-Type, Origin
 // ---------------------------------------------------------------------------
 
 func postLike() (profile.HeadersSpec, profile.HTTP1Spec) {
@@ -143,7 +143,7 @@ func postLike() (profile.HeadersSpec, profile.HTTP1Spec) {
 	return headers, h1
 }
 
-// Замер Chromium 148, навигационный POST: Host, Connection, Content-Length,
+	// Chromium 148 measured, a navigational POST: Host, Connection, Content-Length,
 // …, Content-Type, User-Agent, Origin, Accept, …
 func TestPostSlotsOnWire(t *testing.T) {
 	headers, h1 := postLike()
@@ -156,11 +156,11 @@ func TestPostSlotsOnWire(t *testing.T) {
 	want := []string{"host", "connection", "content-length", "sec-ch-ua", "upgrade-insecure-requests",
 		"content-type", "user-agent", "origin", "x-api-key", "accept", "accept-encoding"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
-		t.Errorf("порядок на проводе\n получен: %v\n ожидался: %v", got, want)
+		t.Errorf("wire order\n got:      %v\n expected: %v", got, want)
 	}
 }
 
-// GET без тела: пустые слоты не оставляют следа, Origin не добавляется.
+// A GET with no body: empty slots leave no trace and Origin is not added.
 func TestGetLeavesSlotsEmpty(t *testing.T) {
 	headers, h1 := postLike()
 	s := testSession(t, headers, h1)
@@ -170,7 +170,7 @@ func TestGetLeavesSlotsEmpty(t *testing.T) {
 	for _, n := range got {
 		switch n {
 		case "content-length", "content-type", "origin":
-			t.Errorf("пустой слот %s превратился в заголовок: %v", n, got)
+			t.Errorf("the empty slot %s turned into a header: %v", n, got)
 		}
 	}
 }
@@ -187,11 +187,11 @@ func TestOriginValueIsRequestOrigin(t *testing.T) {
 			return
 		}
 	}
-	t.Errorf("origin не добавлен: %v", names(built))
+		t.Errorf("origin was not added: %v", names(built))
 }
 
 // ---------------------------------------------------------------------------
-// Распаковка
+// Decompression
 // ---------------------------------------------------------------------------
 
 func gzipped(t *testing.T, data []byte) []byte {
@@ -220,9 +220,9 @@ func TestDecompressChainsAndSniffs(t *testing.T) {
 		body           []byte
 	}{
 		{"gzip", "gzip", gzipped(t, plain)},
-		{"x-gzip с пробелами", " x-gzip ", gzipped(t, plain)},
-		{"цепочка gzip, br", "gzip, br", brBuf.Bytes()},
-		{"deflate сырой", "deflate", raw.Bytes()},
+		{"x-gzip with spaces", " x-gzip ", gzipped(t, plain)},
+		{"the gzip, br chain", "gzip, br", brBuf.Bytes()},
+		{"raw deflate", "deflate", raw.Bytes()},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -232,14 +232,14 @@ func TestDecompressChainsAndSniffs(t *testing.T) {
 			}
 			got, err := io.ReadAll(rc)
 			if err != nil || string(got) != string(plain) {
-				t.Errorf("получено %q, %v", got, err)
+				t.Errorf("got %q, %v", got, err)
 			}
 		})
 	}
 }
 
-// Пустое тело с Content-Encoding (HEAD, 204, 304) — это отсутствие данных,
-// а не сбой распаковки.
+// An empty body with Content-Encoding (HEAD, 204, 304) means no data,
+// not a decompression failure.
 func TestDecompressEmptyBodyIsEOF(t *testing.T) {
 	for _, enc := range []string{"gzip", "deflate", "zstd"} {
 		rc, err := decompress(io.NopCloser(bytes.NewReader(nil)), enc)
@@ -255,12 +255,12 @@ func TestDecompressEmptyBodyIsEOF(t *testing.T) {
 
 func TestDecompressRejectsUnknown(t *testing.T) {
 	if _, err := decompress(io.NopCloser(bytes.NewReader(nil)), "compress"); err == nil {
-		t.Error("неизвестная кодировка принята молча")
+		t.Error("an unknown encoding was accepted silently")
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Пул HTTP/1.1: параллельные запросы на нескольких соединениях
+// The HTTP/1.1 pool: parallel requests over several connections
 // ---------------------------------------------------------------------------
 
 func TestHTTP1PoolKeepsSeveralConnections(t *testing.T) {
@@ -295,21 +295,21 @@ func TestHTTP1PoolKeepsSeveralConnections(t *testing.T) {
 		pooled += len(list)
 	}
 	s.mu.Unlock()
-	t.Logf("первая волна: %d соединений, вторая: +%d, в пуле: %d", first, second, pooled)
+	t.Logf("first wave: %d connections, second: +%d, pooled: %d", first, second, pooled)
 	if pooled != maxConnsPerHost {
-		t.Errorf("в пуле %d соединений, ожидалось %d", pooled, maxConnsPerHost)
+		t.Errorf("the pool holds %d connections, expected %d", pooled, maxConnsPerHost)
 	}
 	if second > 12-maxConnsPerHost {
-		t.Errorf("вторая волна открыла %d новых соединений, а %d простаивали в пуле",
+		t.Errorf("the second wave opened %d new connections while %d sat idle in the pool",
 			second, maxConnsPerHost)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// WebSocket: permessage-deflate и заголовки рукопожатия
+// WebSocket: permessage-deflate and the handshake headers
 // ---------------------------------------------------------------------------
 
-// deflateServer — компрессор серверной стороны с context takeover.
+// deflateServer is a server-side compressor with context takeover.
 type deflateServer struct {
 	buf bytes.Buffer
 	w   *flate.Writer
@@ -335,7 +335,7 @@ func (d *deflateServer) frame(t *testing.T, msg string) []byte {
 	return append(head, payload...)
 }
 
-// readClientFrame разбирает маскированный кадр клиента.
+// readClientFrame parses a masked client frame.
 func readClientFrame(t *testing.T, br *bufio.Reader) (rsv1 bool, payload []byte) {
 	t.Helper()
 	var head [2]byte
@@ -374,7 +374,7 @@ func inflateForTest(t *testing.T, payload []byte) string {
 	return string(out)
 }
 
-// wsServerWith — как wsServer, но с дополнительными заголовками ответа 101.
+// wsServerWith is wsServer with extra headers on the 101 response.
 func wsServerWith(t *testing.T, extra string, after func(c net.Conn, br *bufio.Reader)) string {
 	t.Helper()
 	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -397,12 +397,12 @@ func TestWebSocketPermessageDeflate(t *testing.T) {
 	url := wsServerWith(t, "Sec-WebSocket-Extensions: permessage-deflate\r\n",
 		func(c net.Conn, br *bufio.Reader) {
 			var d deflateServer
-			// Два сообщения подряд: второе ссылается на окно первого.
+		// Two messages in a row: the second refers to the first one's window.
 			c.Write(d.frame(t, "hello, websocket deflate"))
 			c.Write(d.frame(t, "hello, websocket deflate again"))
 			rsv1, payload := readClientFrame(t, br)
 			if !rsv1 {
-				got <- "клиент не сжал сообщение"
+			got <- "the client did not compress the message"
 				return
 			}
 			got <- inflateForTest(t, payload)
@@ -422,7 +422,7 @@ func TestWebSocketPermessageDeflate(t *testing.T) {
 			t.Fatal(err)
 		}
 		if string(msg.Data) != want {
-			t.Errorf("получено %q, ожидалось %q", msg.Data, want)
+			t.Errorf("got %q, expected %q", msg.Data, want)
 		}
 	}
 	if err := ws.Send(false, []byte("from client, compressed")); err != nil {
@@ -431,10 +431,10 @@ func TestWebSocketPermessageDeflate(t *testing.T) {
 	select {
 	case s := <-got:
 		if s != "from client, compressed" {
-			t.Errorf("сервер прочитал %q", s)
+			t.Errorf("the server read %q", s)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("сервер не получил сообщение")
+		t.Fatal("the server received no message")
 	}
 }
 
@@ -453,7 +453,7 @@ func TestWebSocketRejectsCompressedWithoutNegotiation(t *testing.T) {
 	defer ws.Close(1000, "")
 	_, err = ws.Recv()
 	if Code(err) != CodeWSProtocol {
-		t.Errorf("ожидалась ошибка протокола, получено %v (код %q)", err, Code(err))
+		t.Errorf("expected a protocol error, got %v (code %q)", err, Code(err))
 	}
 }
 
@@ -473,12 +473,12 @@ func TestWebSocketMessageLimit(t *testing.T) {
 	defer ws.Close(1000, "")
 	_, err = ws.Recv()
 	if Code(err) != CodeWSTooBig {
-		t.Errorf("ожидался код %s, получено %v (код %q)", CodeWSTooBig, err, Code(err))
+		t.Errorf("expected the code %s, got %v (code %q)", CodeWSTooBig, err, Code(err))
 	}
 }
 
-// Рукопожатие собирается по шаблону профиля: Host первым, ключ после
-// Accept-Language, навигационных заголовков нет (замер Chromium 148).
+// The handshake is built from the profile template: Host first, the key after
+// Accept-Language, no navigation headers (measured on Chromium 148).
 func TestWebSocketHandshakeFollowsTemplate(t *testing.T) {
 	var lines atomic.Value
 	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -487,8 +487,8 @@ func TestWebSocketHandshakeFollowsTemplate(t *testing.T) {
 		_ = rw
 		io.WriteString(c, "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
 	})
-	// Сырые строки нужны для регистра и порядка: берём их с сокета до Hijack
-	// нельзя, поэтому сервер-обёртка читает запрос сам.
+	// The raw lines are needed for case and order: they cannot be taken off the
+	// socket after Hijack, so a wrapper server reads the request itself.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -527,7 +527,7 @@ func TestWebSocketHandshakeFollowsTemplate(t *testing.T) {
 	s.profile.WebSocket.Order = chromeWebSocketOrder()
 	_, err = s.DialWebSocket("wss://localhost:"+port+"/ws", WebSocketOptions{Timeout: 2 * time.Second, Subprotocols: []string{"chat"}})
 	if err == nil || !strings.Contains(err.Error(), "400") {
-		t.Fatalf("ожидался отказ 400, получено %v", err)
+		t.Fatalf("expected a 400 refusal, got %v", err)
 	}
 	head, _ := lines.Load().([]string)
 	var got []string
@@ -538,7 +538,7 @@ func TestWebSocketHandshakeFollowsTemplate(t *testing.T) {
 		"Sec-WebSocket-Version", "Accept-Encoding", "Accept-Language", "Sec-WebSocket-Key",
 		"Sec-WebSocket-Extensions", "Sec-WebSocket-Protocol"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
-		t.Errorf("рукопожатие\n получено: %v\n ожидалось: %v", got, want)
+		t.Errorf("handshake\n got:      %v\n expected: %v", got, want)
 	}
 	for _, l := range head {
 		if strings.HasPrefix(l, "Connection:") && l != "Connection: Upgrade" {
@@ -559,13 +559,13 @@ func chromeWebSocketOrder() []profile.HeaderPair {
 }
 
 // ---------------------------------------------------------------------------
-// STAGE15: набор HTTP/1.1, список якорей, порядок на хопе редиректа
+// STAGE15: the HTTP/1.1 set, the anchor list, the order on a redirect hop
 // ---------------------------------------------------------------------------
 
-// http1.order задаёт и набор: Chrome не шлёт priority на HTTP/1.1, хотя
-// в HTTP/2 он есть (замер Chrome 152).
+// http1.order defines the set as well: Chrome does not send priority over
+// HTTP/1.1 even though HTTP/2 has it (measured on Chrome 152).
 func TestHTTP1OrderDefinesHeaderSet(t *testing.T) {
-	headers := chromeLike() // содержит priority
+	headers := chromeLike() // contains priority
 	h1 := profile.HTTP1Spec{Connection: "keep-alive",
 		Order: []string{"Host", "Connection", "User-Agent", "Accept", "Accept-Encoding", "Accept-Language", "Cookie"}}
 	s := testSession(t, headers, h1)
@@ -574,16 +574,16 @@ func TestHTTP1OrderDefinesHeaderSet(t *testing.T) {
 	onH1 := names(s.buildHeaders(&Request{}, u, "example.com", h1.Order))
 	onH2 := names(s.buildHeaders(&Request{}, u, "example.com", nil))
 	if indexOf(onH1, "priority") >= 0 {
-		t.Errorf("priority ушёл на HTTP/1.1, хотя в http1.order его нет: %v", onH1)
+		t.Errorf("priority went out over HTTP/1.1 though http1.order does not list it: %v", onH1)
 	}
 	if indexOf(onH2, "priority") < 0 {
-		t.Errorf("priority пропал в HTTP/2: %v", onH2)
+		t.Errorf("priority disappeared in HTTP/2: %v", onH2)
 	}
 }
 
-// Список якорей: берётся первый присутствующий. У Firefox кастомные заголовки
-// идут перед Connection, которого в HTTP/2 нет, — там перед
-// Upgrade-Insecure-Requests (замер Firefox 154).
+// The anchor list: the first one present is taken. In Firefox custom headers go
+// before Connection, which HTTP/2 does not have — there they go before
+// Upgrade-Insecure-Requests (measured on Firefox 154).
 func TestAnchorListPicksPresentName(t *testing.T) {
 	headers := profile.HeadersSpec{
 		UserAgent:    "Mozilla/5.0",
@@ -601,21 +601,21 @@ func TestAnchorListPicksPresentName(t *testing.T) {
 
 	onH1 := names(s.buildHeaders(&Request{}, u, "example.com", h1.Order))
 	if at, anchor := indexOf(onH1, "x-api-key"), indexOf(onH1, "connection"); at != anchor-1 {
-		t.Errorf("HTTP/1.1: кастомный заголовок не перед Connection: %v", onH1)
+		t.Errorf("HTTP/1.1: the custom header is not before Connection: %v", onH1)
 	}
 	onH2 := names(s.buildHeaders(&Request{}, u, "example.com", nil))
 	if at, anchor := indexOf(onH2, "x-api-key"), indexOf(onH2, "upgrade-insecure-requests"); at != anchor-1 {
-		t.Errorf("HTTP/2: кастомный заголовок не перед Upgrade-Insecure-Requests: %v", onH2)
+		t.Errorf("HTTP/2: the custom header is not before Upgrade-Insecure-Requests: %v", onH2)
 	}
-	// И на проводе HTTP/1.1 — через настоящий Request.Write.
+	// And on the HTTP/1.1 wire — through a real Request.Write.
 	got := wireNames(t, s, &Request{Method: "GET", URL: "https://example.com/"}, "")
 	if at, anchor := indexOf(got, "x-api-key"), indexOf(got, "connection"); at != anchor-1 {
-		t.Errorf("провод HTTP/1.1: %v", got)
+		t.Errorf("HTTP/1.1 wire: %v", got)
 	}
 }
 
-// На хопе редиректа Chromium переставляет sec-ch-ua* после Sec-Fetch-Dest,
-// а Referer следует за ними (замер Chrome 152: оба хопа).
+// On a redirect hop Chromium moves sec-ch-ua* after Sec-Fetch-Dest, and Referer
+// follows them (measured on Chrome 152: both hops).
 func TestRedirectHopMovesClientHints(t *testing.T) {
 	headers := profile.HeadersSpec{
 		UserAgent:    "Mozilla/5.0",
@@ -640,17 +640,17 @@ func TestRedirectHopMovesClientHints(t *testing.T) {
 		"sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "sec-ch-ua", "sec-ch-ua-mobile",
 		"sec-ch-ua-platform", "referer", "accept-encoding", "accept-language"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
-		t.Errorf("хоп редиректа\n получен: %v\n ожидался: %v", got, want)
+		t.Errorf("redirect hop\n got:      %v\n expected: %v", got, want)
 	}
-	// В HTTP/2 то же самое, без Host и Connection.
+	// The same in HTTP/2, without Host and Connection.
 	onH2 := names(s.buildHeaders(r, mustURL(t, r.URL), "example.com", nil))
 	if indexOf(onH2, "sec-ch-ua") < indexOf(onH2, "sec-fetch-dest") {
-		t.Errorf("HTTP/2 хоп: client hints не переставлены: %v", onH2)
+		t.Errorf("HTTP/2 hop: the client hints were not moved: %v", onH2)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// STAGE15: режим fetch
+// STAGE15: the fetch mode
 // ---------------------------------------------------------------------------
 
 func chromeWithFetch() (profile.HeadersSpec, profile.HTTP1Spec, profile.FetchSpec) {
@@ -694,25 +694,25 @@ func fetchSession(t *testing.T) *Session {
 	return s
 }
 
-// Замер Chrome 152, fetch POST JSON с кастомным заголовком по HTTP/1.1.
+	// Chrome 152 measured, a fetch POST of JSON with a custom header over HTTP/1.1.
 func TestFetchModeOnWire(t *testing.T) {
 	s := fetchSession(t)
 	r := &Request{Method: "POST", URL: "https://example.com/api",
 		Headers: map[string]string{"content-type": "application/json", "X-Api-Key": "v1"}}
 	if got := s.modeFor(r); got != ModeFetch {
-		t.Fatalf("режим %q, ожидался fetch (JSON и кастомный заголовок)", got)
+		t.Fatalf("mode %q, expected fetch (JSON and a custom header)", got)
 	}
 	got := wireNames(t, s, r, `{"a":1}`)
 	want := []string{"host", "connection", "content-length", "sec-ch-ua-platform", "user-agent", "sec-ch-ua",
 		"content-type", "x-api-key", "sec-ch-ua-mobile", "accept", "origin", "sec-fetch-site",
 		"sec-fetch-mode", "sec-fetch-dest", "accept-encoding", "accept-language"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
-		t.Errorf("fetch POST\n получен: %v\n ожидался: %v", got, want)
+		t.Errorf("fetch POST\n got:      %v\n expected: %v", got, want)
 	}
 }
 
-// Слоты fetch берут значения из навигационного набора: дельта на новую
-// версию Chrome правит sec-ch-ua один раз.
+// The fetch slots take their values from the navigation set: a delta for a new
+// Chrome version edits sec-ch-ua once.
 func TestFetchSlotsFilledFromNavigation(t *testing.T) {
 	s := fetchSession(t)
 	built := s.buildHeaders(&Request{Method: "GET", Headers: map[string]string{"X-Api-Key": "v1"}},
@@ -725,15 +725,15 @@ func TestFetchSlotsFilledFromNavigation(t *testing.T) {
 			}
 		case "accept":
 			if h.Value != "*/*" {
-				t.Errorf("accept = %q, у fetch должен быть */*", h.Value)
+			t.Errorf("accept = %q, fetch must have */*", h.Value)
 			}
 		case "upgrade-insecure-requests", "sec-fetch-user":
-			t.Errorf("навигационный заголовок %s в fetch-наборе", h.Key)
+			t.Errorf("the navigation header %s is in the fetch set", h.Key)
 		}
 	}
 }
 
-// Автовыбор: форма — навигация, JSON — fetch, PUT — fetch, явный режим важнее.
+// Auto-selection: a form is navigation, JSON is fetch, PUT is fetch, an explicit mode wins.
 func TestModeAutoDetection(t *testing.T) {
 	s := fetchSession(t)
 	cases := []struct {
@@ -741,23 +741,23 @@ func TestModeAutoDetection(t *testing.T) {
 		r    *Request
 		want string
 	}{
-		{"GET без кастомных", &Request{Method: "GET"}, ModeNavigate},
-		{"POST форма", &Request{Method: "POST", Headers: map[string]string{"Content-Type": "application/x-www-form-urlencoded"}}, ModeNavigate},
+		{"GET without custom headers", &Request{Method: "GET"}, ModeNavigate},
+		{"POST form", &Request{Method: "POST", Headers: map[string]string{"Content-Type": "application/x-www-form-urlencoded"}}, ModeNavigate},
 		{"POST JSON", &Request{Method: "POST", Headers: map[string]string{"content-type": "application/json"}}, ModeFetch},
 		{"PUT", &Request{Method: "PUT"}, ModeFetch},
-		{"кастомный заголовок", &Request{Method: "GET", Headers: map[string]string{"Authorization": "Bearer x"}}, ModeFetch},
-		{"referer не признак", &Request{Method: "GET", Headers: map[string]string{"Referer": "https://example.com/"}}, ModeNavigate},
-		{"явная навигация", &Request{Method: "PUT", Mode: ModeNavigate}, ModeNavigate},
-		{"явный fetch", &Request{Method: "GET", Mode: ModeFetch}, ModeFetch},
+		{"a custom header", &Request{Method: "GET", Headers: map[string]string{"Authorization": "Bearer x"}}, ModeFetch},
+		{"referer is not a sign", &Request{Method: "GET", Headers: map[string]string{"Referer": "https://example.com/"}}, ModeNavigate},
+		{"explicit navigation", &Request{Method: "PUT", Mode: ModeNavigate}, ModeNavigate},
+		{"explicit fetch", &Request{Method: "GET", Mode: ModeFetch}, ModeFetch},
 	}
 	for _, tc := range cases {
 		if got := s.modeFor(tc.r); got != tc.want {
-			t.Errorf("%s: %q, ожидалось %q", tc.name, got, tc.want)
+			t.Errorf("%s: %q, expected %q", tc.name, got, tc.want)
 		}
 	}
-	// Профиль без секции fetch всегда навигация.
+	// A profile without a fetch section is always navigation.
 	s.profile.Fetch = profile.FetchSpec{}
 	if got := s.modeFor(&Request{Method: "PUT", Mode: ModeFetch}); got != ModeNavigate {
-		t.Errorf("без секции fetch режим %q", got)
+		t.Errorf("without a fetch section the mode is %q", got)
 	}
 }

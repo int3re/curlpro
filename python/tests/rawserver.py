@@ -1,8 +1,8 @@
-"""Минимальный TLS-сервер, возвращающий сырые заголовки запроса.
+"""A minimal TLS server that echoes the raw request headers.
 
-Публичные оракулы приводят имена заголовков к нижнему регистру, поэтому
-проверить регистр на них нельзя. Этот сервер отдаёт строки запроса ровно
-так, как они пришли на провод.
+Public oracles lowercase header names, so the case cannot be checked against
+them. This server returns the request lines exactly as they arrived on the
+wire.
 """
 
 from __future__ import annotations
@@ -18,16 +18,16 @@ CERT_DIR = Path(__file__).resolve().parents[2] / "capture" / "certs"
 
 
 class RawHeaderServer:
-    """Принимает одно HTTP/1.1-соединение и отвечает списком сырых заголовков."""
+    """Accepts one HTTP/1.1 connection and answers with the raw header lines."""
 
     def __init__(self, host: str = "127.0.0.1", port: int = 0, persistent: bool = False,
                  delay: float = 0.0):
-        # delay — задержка ответа: на ней видно, упирается ли клиент
-        # в одновременность или обрабатывает запросы по очереди.
+        # delay postpones the response: it shows whether the client is limited
+        # by concurrency or handles requests one after another.
         self.delay = delay
-        # persistent=True держит соединение открытым и считает принятые:
-        # так проверяется переиспользование. По умолчанию сервер отвечает
-        # одним ответом и закрывает — этого ждут проверки регистра заголовков.
+        # persistent=True keeps the connection open and counts the accepted ones:
+        # that is how reuse is checked. By default the server answers once and
+        # closes — which is what the header case checks expect.
         self.persistent = persistent
         self.accepted = 0
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -38,7 +38,7 @@ class RawHeaderServer:
 
         self._ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self._ctx.load_cert_chain(CERT_DIR / "tls.crt", CERT_DIR / "tls.key")
-        # Только HTTP/1.1: h2 запретил бы проверку регистра, там он всегда нижний.
+        # HTTP/1.1 only: h2 would forbid the case check, there it is always lower.
         self._ctx.set_alpn_protocols(["http/1.1"])
 
         self._stop = threading.Event()
@@ -55,9 +55,9 @@ class RawHeaderServer:
             except OSError:
                 return
             self.accepted += 1
-            # Соединение обслуживается в своём потоке: проверки
-            # одновременности открывают их десятками, и последовательный
-            # приём упирался в очередь ожидания, а не в клиента.
+            # Every connection is served in its own thread: the concurrency checks
+            # open dozens of them, and accepting sequentially measured the accept
+            # queue rather than the client.
             threading.Thread(target=self._session, args=(raw,), daemon=True).start()
 
     def _session(self, raw: socket.socket) -> None:
@@ -81,7 +81,7 @@ class RawHeaderServer:
         body = json.dumps(
             {
                 "request_line": lines[0],
-                # Имена ровно как на проводе, без нормализации.
+                # Names exactly as on the wire, with no normalisation.
                 "headers": [ln.split(":", 1)[0] for ln in lines[1:] if ":" in ln],
                 "raw": lines[1:],
             },

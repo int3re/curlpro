@@ -1,7 +1,7 @@
-"""Проверка возможностей клиента против настоящих сайтов.
+"""Checking the client features against real sites.
 
-Стенд echo-server здесь не нужен: проверяются семантика HTTP и сетевые
-возможности, а не отпечаток. Тесты пропускаются, если нет интернета.
+The echo-server stand is not needed here: what is checked is HTTP semantics and
+network features, not the fingerprint. The tests skip without internet access.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def _online() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _online(), reason="нет доступа к httpbin.org")
+pytestmark = pytest.mark.skipif(not _online(), reason="no access to httpbin.org")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -40,7 +40,7 @@ def test_http2_negotiated():
 
 
 def test_http1_when_forced():
-    """Профиль предлагает h2, но force_http1 должен ограничить ALPN."""
+    """The profile offers h2, but force_http1 must restrict the ALPN."""
     with curlpro.Session(force_http1=True) as s:
         r = s.get("https://httpbin.org/get")
     assert r.proto.startswith("HTTP/1.")
@@ -82,12 +82,12 @@ def test_cookies_disabled():
 
 def test_post_json_body():
     with curlpro.Session() as s:
-        r = s.post("https://httpbin.org/post", json_body={"hello": "мир"})
-    assert r.json()["json"] == {"hello": "мир"}
+        r = s.post("https://httpbin.org/post", json_body={"hello": "world"})
+    assert r.json()["json"] == {"hello": "world"}
 
 
 def test_default_headers_can_be_disabled():
-    """Без заголовков профиля должен уйти только то, что задано явно."""
+    """Without the profile headers only what was set explicitly must go out."""
     with curlpro.Session(default_headers=False) as s:
         sent = s.get("https://httpbin.org/get",
                      headers={"x-only": "1"}).json()["headers"]
@@ -96,8 +96,8 @@ def test_default_headers_can_be_disabled():
 
 
 def test_header_order_is_controllable():
-    """httpbin не отдаёт порядок, поэтому проверяем через отражение заголовков
-    в /headers: важно, что запрос не сломался и наши заголовки дошли."""
+    """httpbin does not report the order, so this checks through the header echo
+    at /headers: what matters is that the request worked and our headers arrived."""
     order = ["user-agent", "accept", "x-marker"]
     with curlpro.Session(header_order=order) as s:
         sent = s.get("https://httpbin.org/headers",
@@ -111,21 +111,21 @@ def test_verify_can_be_disabled():
 
 
 def test_connection_is_reused():
-    """Второй запрос по той же сессии не должен переустанавливать TLS."""
+    """The second request on the same session must not re-establish TLS."""
     with curlpro.Session() as s:
         s.get("https://httpbin.org/get")
         first = time.perf_counter()
         s.get("https://httpbin.org/get")
         reused = time.perf_counter() - first
-    assert reused < 2.0, f"повторный запрос занял {reused:.2f}s — соединение не переиспользовано"
+    assert reused < 2.0, f"the repeat request took {reused:.2f}s — the connection was not reused"
 
 
 def test_async_requests_run_concurrently():
-    """Пять секундных задержек должны занять примерно столько же, сколько одна.
+    """Five one-second delays must take about as long as one.
 
-    Порог относительный, а не абсолютный: httpbin отвечает то за секунду,
-    то за три, и фиксированное значение делало тест флаким. Базовый замер
-    снимается в тех же условиях, что и параллельный.
+    The threshold is relative rather than absolute: httpbin answers in a second
+    one time and in three the next, and a fixed value made the test flaky. The
+    baseline is measured under the same conditions as the parallel run.
     """
     n = 5
 
@@ -146,8 +146,8 @@ def test_async_requests_run_concurrently():
     elapsed, results = asyncio.run(many())
 
     assert all(r.status == 200 for r in results)
-    # Последовательное выполнение дало бы примерно n * baseline.
+    # Sequential execution would take roughly n * baseline.
     assert elapsed < baseline * 2.5, (
-        f"{n} запросов заняли {elapsed:.2f}s при базовом {baseline:.2f}s — "
-        "похоже на последовательное выполнение"
+        f"{n} requests took {elapsed:.2f}s with a baseline of {baseline:.2f}s — "
+        "that looks sequential"
     )

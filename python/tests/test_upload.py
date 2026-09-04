@@ -1,4 +1,4 @@
-"""Проверка потоковой отправки тела."""
+"""Streaming uploads of the body."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def _online() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _online(), reason="нет доступа к httpbin.org")
+pytestmark = pytest.mark.skipif(not _online(), reason="no access to httpbin.org")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -33,7 +33,7 @@ def _profiles():
 
 @pytest.fixture
 def big_file():
-    """Файл заметно больше, чем стоило бы держать в памяти без нужды."""
+    """A file noticeably larger than one would keep in memory without need."""
     path = Path(tempfile.mkdtemp()) / "upload.bin"
     path.write_bytes(os.urandom(4 * 1024 * 1024))
     yield path
@@ -41,8 +41,8 @@ def big_file():
 
 
 def test_file_upload_sets_content_length(big_file):
-    """Без явной длины транспорт перешёл бы на chunked, чего браузер
-    при отправке файла не делает — и это было бы видно на проводе."""
+    """Without an explicit length the transport would switch to chunked, which a
+    browser does not do when uploading a file — and that would show on the wire."""
     with curlpro.Session() as s:
         h = s.post("https://httpbin.org/post", body_file=big_file).json()["headers"]
     assert h.get("Content-Length") == str(big_file.stat().st_size)
@@ -56,7 +56,7 @@ def test_file_content_arrives_intact():
     try:
         with curlpro.Session() as s:
             got = s.post("https://httpbin.org/post", body_file=path).json()
-        # httpbin отдаёт двоичное тело как data:-URL с base64.
+        # httpbin returns a binary body as a base64 data: URL.
         assert got["data"].startswith("data:application/octet-stream;base64,")
         import base64
         decoded = base64.b64decode(got["data"].split(",", 1)[1])
@@ -68,7 +68,7 @@ def test_file_content_arrives_intact():
 def test_missing_file_reports_clearly():
     with curlpro.Session() as s:
         with pytest.raises(curlpro.CurlProError, match="request body"):
-            s.post("https://httpbin.org/post", body_file="нет-такого-файла.bin")
+            s.post("https://httpbin.org/post", body_file="no-such-file.bin")
 
 
 def test_body_file_conflicts_with_data(big_file):

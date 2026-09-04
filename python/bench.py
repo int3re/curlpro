@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Сравнение накладных расходов с curl_cffi, requests, httpx.
+"""Comparing the overhead with curl_cffi, requests and httpx.
 
-Меряется против локального echo-server, чтобы в результат не попадала сетевая
-задержка: интерес представляет цена самой библиотеки на запрос.
+Measured against a local echo-server so that network latency stays out of the
+result: what is of interest is the library's own cost per request.
 
     tools/echo-server_windows_amd64.exe -listen-addr localhost:8443 \
         -cert-filename capture/certs/tls.crt -certkey-filename capture/certs/tls.key -quiet
@@ -35,7 +35,7 @@ def stand_is_up() -> bool:
 
 
 def measure(name: str, fetch, n: int, warmup: int = 20) -> tuple[str, float, float, float]:
-    """Возвращает (имя, запросов/сек, медиана мс, p95 мс)."""
+    """Returns (name, requests/sec, median ms, p95 ms)."""
     for _ in range(warmup):
         fetch()
 
@@ -78,7 +78,7 @@ def bench_requests(n: int):
 
     s = requests.Session()
     try:
-        return measure("requests (без отпечатка)", lambda: s.get(URL, verify=False).content, n)
+        return measure("requests (no fingerprint)", lambda: s.get(URL, verify=False).content, n)
     finally:
         s.close()
 
@@ -87,16 +87,16 @@ def bench_httpx(n: int):
     import httpx
 
     with httpx.Client(verify=False, http2=True) as c:
-        return measure("httpx h2 (без отпечатка)", lambda: c.get(URL).content, n)
+        return measure("httpx h2 (no fingerprint)", lambda: c.get(URL).content, n)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("-n", type=int, default=300, help="запросов на библиотеку")
+    ap.add_argument("-n", type=int, default=300, help="requests per library")
     args = ap.parse_args()
 
     if not stand_is_up():
-        print("echo-server на localhost:8443 не запущен — см. docstring", file=sys.stderr)
+        print("no echo-server on localhost:8443 — see the docstring", file=sys.stderr)
         return 1
 
     benches = [
@@ -110,12 +110,12 @@ def main() -> int:
     for label, fn in benches:
         try:
             rows.append(fn(args.n))
-        except Exception as exc:  # библиотека может быть не установлена
-            print(f"  {label}: пропуск ({type(exc).__name__}: {exc})", file=sys.stderr)
+        except Exception as exc:  # the library may not be installed
+            print(f"  {label}: skipped ({type(exc).__name__}: {exc})", file=sys.stderr)
 
     rows.sort(key=lambda r: -r[1])
-    print(f"\n{args.n} запросов, переиспользуемое соединение, локальный стенд\n")
-    print(f"{'библиотека':30} {'req/s':>9} {'медиана':>10} {'p95':>9}")
+    print(f"\n{args.n} requests, a reused connection, a local stand\n")
+    print(f"{'library':30} {'req/s':>9} {'median':>10} {'p95':>9}")
     print("-" * 61)
     best = rows[0][1] if rows else 1
     for name, rps, med, p95 in rows:

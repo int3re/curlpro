@@ -7,32 +7,32 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-// Корпус curl-impersonate хранит группы, версии и sigalgs числами (4588, 29,
-// TLS_VERSION_1_3), а примеры uTLS — именами ("x25519", "TLS 1.3"). От того,
-// что кодек реально принимает, зависит объём конвертера на этапе 3.
+// The curl-impersonate corpus stores groups, versions and sigalgs as numbers
+// (4588, 29, TLS_VERSION_1_3), while the uTLS examples use names ("x25519",
+// "TLS 1.3"). How much converter stage 3 needs depends on what the codec accepts.
 func TestJSONCodecAcceptsNumericValues(t *testing.T) {
 	cases := []struct {
 		name string
 		spec string
 	}{
-		{"группы именами", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
+		{"groups by name", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
 			"extensions":[{"name":"supported_groups","named_group_list":["GREASE","x25519","secp256r1"]}]}`},
-		{"группы числами", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
+		{"groups by number", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
 			"extensions":[{"name":"supported_groups","named_group_list":[4588,29,23]}]}`},
-		{"шифры числами", `{"cipher_suites":[4865,4866],"compression_methods":["NULL"],"extensions":[]}`},
-		{"версии именами", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
+		{"ciphers by number", `{"cipher_suites":[4865,4866],"compression_methods":["NULL"],"extensions":[]}`},
+		{"versions by name", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
 			"extensions":[{"name":"supported_versions","versions":["GREASE","TLS 1.3","TLS 1.2"]}]}`},
-		{"версии числами", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
+		{"versions by number", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
 			"extensions":[{"name":"supported_versions","versions":[772,771]}]}`},
-		{"sigalgs именами", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
+		{"sigalgs by name", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
 			"extensions":[{"name":"signature_algorithms","supported_signature_algorithms":["ecdsa_secp256r1_sha256"]}]}`},
-		{"sigalgs числами", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
+		{"sigalgs by number", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
 			"extensions":[{"name":"signature_algorithms","supported_signature_algorithms":[2308,1027]}]}`},
-		{"key_share числами", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
+		{"key_share by number", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
 			"extensions":[{"name":"key_share","client_shares":[{"group":4588},{"group":29}]}]}`},
-		{"ALPS новый", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
+		{"ALPS, the new one", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
 			"extensions":[{"name":"application_settings_new","supported_protocols":["h2"]}]}`},
-		{"compress_cert числом", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
+		{"compress_cert as a number", `{"cipher_suites":["TLS_AES_128_GCM_SHA256"],"compression_methods":["NULL"],
 			"extensions":[{"name":"compress_certificate","algorithms":[2]}]}`},
 	}
 
@@ -40,10 +40,10 @@ func TestJSONCodecAcceptsNumericValues(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var s utls.ClientHelloSpec
 			if err := json.Unmarshal([]byte(tc.spec), &s); err != nil {
-				t.Logf("НЕ принимает: %v", err)
-				t.Skip("вариант не поддержан кодеком")
+				t.Logf("NOT accepted: %v", err)
+				t.Skip("this variant is not supported by the codec")
 			}
-			t.Logf("принимает, расширений=%d шифров=%d", len(s.Extensions), len(s.CipherSuites))
+			t.Logf("accepted, extensions=%d ciphers=%d", len(s.Extensions), len(s.CipherSuites))
 		})
 	}
 }

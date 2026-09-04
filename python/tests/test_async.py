@@ -1,8 +1,8 @@
-"""Асинхронный путь: горутины вместо пула потоков.
+"""The async path: goroutines instead of a thread pool.
 
-Раньше AsyncSession была фасадом над пулом из тридцати двух потоков, и он же
-был потолком одновременности. Теперь запрос уходит в горутину, а поток на весь
-процесс ровно один — тот, что ждёт завершений.
+AsyncSession used to be a facade over a pool of thirty-two threads, and that
+pool was the concurrency ceiling. Now a request becomes a goroutine and the
+process keeps exactly one thread — the one waiting for completions.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ def _profiles():
 
 
 def test_concurrency_is_not_capped_by_threads():
-    """Сто двадцать восемь запросов по 0.3 с не должны идти четырьмя волнами."""
+    """A hundred and twenty-eight 0.3 s requests must not run in four waves."""
     n, delay = 128, 0.3
 
     async def run(srv):
@@ -39,13 +39,13 @@ def test_concurrency_is_not_capped_by_threads():
     with RawHeaderServer(persistent=True, delay=delay) as srv:
         spent = asyncio.run(run(srv))
 
-    # Пул из 32 потоков дал бы минимум четыре волны, то есть 4×delay.
-    assert spent < delay * 3, f"{n} запросов заняли {spent:.2f} с — похоже на очередь"
+    # A pool of 32 threads would give at least four waves, that is 4x delay.
+    assert spent < delay * 3, f"{n} requests took {spent:.2f} s — that looks like a queue"
 
 
 def test_one_helper_thread_regardless_of_load():
-    """Считаем только свои потоки: тестовый сервер тоже заводит поток
-    на соединение, и общий счётчик мерил бы его, а не клиента."""
+    """Only our own threads are counted: the test server also starts a thread
+    per connection, and a total count would measure it rather than the client."""
     import threading
 
     def ours() -> list[str]:
@@ -54,7 +54,7 @@ def test_one_helper_thread_regardless_of_load():
     async def run(srv):
         async with curlpro.AsyncSession(verify=False, force_http1=True) as s:
             tasks = [asyncio.create_task(s.get(srv.url)) for _ in range(64)]
-            await asyncio.sleep(0.1)   # смотрим, пока запросы в полёте
+            await asyncio.sleep(0.1)   # look while the requests are in flight
             names = ours()
             await asyncio.gather(*tasks)
             return names
@@ -88,8 +88,8 @@ def test_error_reaches_the_caller():
 
 
 def test_cancelled_task_cancels_the_request():
-    """Снятая задача не должна оставлять запрос в полёте: он занимал бы
-    соединение до своего таймаута."""
+    """A cancelled task must not leave a request in flight: it would hold a
+    connection until its own timeout."""
 
     async def run(srv):
         async with curlpro.AsyncSession(verify=False, force_http1=True) as s:
@@ -98,12 +98,12 @@ def test_cancelled_task_cancels_the_request():
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
-            # Даём нативной части дойти до отмены.
+            # Give the native part time to reach the cancellation.
             await asyncio.sleep(0.5)
 
     with RawHeaderServer(persistent=True, delay=1.0) as srv:
         asyncio.run(run(srv))
-    assert int(_lib.curlpro_async_pending()) == 0, "запрос остался в учёте"
+    assert int(_lib.curlpro_async_pending()) == 0, "the request stayed registered"
 
 
 def test_nothing_leaks_after_a_batch():
@@ -132,7 +132,7 @@ def test_hooks_and_cookies_work_in_async():
 
 
 def test_two_event_loops_in_a_row():
-    """Приёмник завершается вместе с последним запросом и поднимается снова."""
+    """The collector exits with the last request and comes back up again."""
 
     async def once(srv):
         async with curlpro.AsyncSession(verify=False, force_http1=True) as s:
@@ -140,12 +140,12 @@ def test_two_event_loops_in_a_row():
 
     with RawHeaderServer(persistent=True) as srv:
         assert asyncio.run(once(srv)) == 200
-        time.sleep(0.4)  # приёмник успевает выйти по простою
+        time.sleep(0.4)  # the collector has time to exit on idle
         assert asyncio.run(once(srv)) == 200
 
 
 def test_still_faster_than_the_old_thread_pool():
-    """Прямое сравнение со схемой, которая была: пул поверх синхронной сессии."""
+    """A direct comparison with the old scheme: a pool over the sync session."""
     n, delay = 64, 0.3
 
     def old_way(srv):
@@ -164,4 +164,4 @@ def test_still_faster_than_the_old_thread_pool():
     with RawHeaderServer(persistent=True, delay=delay) as srv:
         old = old_way(srv)
         new = asyncio.run(new_way(srv))
-    assert new < old, f"новый путь {new:.2f} с против прежнего {old:.2f} с"
+    assert new < old, f"the new path {new:.2f} s against the old {old:.2f} s"

@@ -17,8 +17,8 @@ func mustRegister(t *testing.T, r *Registry, jsons ...string) {
 	}
 }
 
-// Дельта поверх базы — основной сценарий: месячный бамп Chrome меняет
-// только User-Agent и sigalgs, всё остальное наследуется.
+// A delta over a base is the main scenario: a monthly Chrome bump changes only
+// the User-Agent and the sigalgs, everything else is inherited.
 func TestResolveInheritance(t *testing.T) {
 	r := NewRegistry()
 	mustRegister(t, r,
@@ -34,18 +34,18 @@ func TestResolveInheritance(t *testing.T) {
 		t.Fatalf("Resolve: %v", err)
 	}
 	if p.TLS.RawClientHello != "AAAA" {
-		t.Errorf("raw_client_hello не унаследован: %q", p.TLS.RawClientHello)
+		t.Errorf("raw_client_hello was not inherited: %q", p.TLS.RawClientHello)
 	}
 	if got := p.TLS.SignatureAlgorithms; len(got) != 3 || got[0] != 9 {
-		t.Errorf("sigalgs не переопределены: %v", got)
+		t.Errorf("the sigalgs were not overridden: %v", got)
 	}
 	if p.HTTP2.ConnectionWindowUpdate != 15663105 {
-		t.Errorf("http2 не унаследован: %d", p.HTTP2.ConnectionWindowUpdate)
+		t.Errorf("http2 was not inherited: %d", p.HTTP2.ConnectionWindowUpdate)
 	}
 	if p.Headers.UserAgent != "child-ua" {
-		t.Errorf("user_agent не переопределён: %q", p.Headers.UserAgent)
+		t.Errorf("user_agent was not overridden: %q", p.Headers.UserAgent)
 	}
-	// Порядок заголовков наследуется, а UA подставляется в свою позицию.
+	// The header order is inherited while the UA is substituted into its position.
 	if hs := p.ResolvedHeaders(); len(hs) != 1 || hs[0].Value != "child-ua" {
 		t.Errorf("ResolvedHeaders: %+v", hs)
 	}
@@ -59,7 +59,7 @@ func TestResolveErrors(t *testing.T) {
 		want    string
 	}{
 		{
-			name: "цикл",
+			name: "a cycle",
 			profs: []string{
 				`{"name":"a","based_on":"b","tls":{},"http2":{},"headers":{}}`,
 				`{"name":"b","based_on":"a","tls":{},"http2":{},"headers":{}}`,
@@ -67,17 +67,17 @@ func TestResolveErrors(t *testing.T) {
 			resolve: "a", want: "based_on cycle",
 		},
 		{
-			name:    "обрыв цепочки",
+			name:    "a broken chain",
 			profs:   []string{`{"name":"a","based_on":"missing","tls":{},"http2":{},"headers":{}}`},
 			resolve: "a", want: "missing based_on",
 		},
 		{
-			name:    "профиль не найден",
+			name:    "profile not found",
 			profs:   nil,
 			resolve: "nope", want: "not found",
 		},
 		{
-			name:    "нет источника ClientHello",
+			name:    "no ClientHello source",
 			profs:   []string{`{"name":"a","tls":{},"http2":{},"headers":{}}`},
 			resolve: "a", want: "no ClientHello source",
 		},
@@ -88,27 +88,27 @@ func TestResolveErrors(t *testing.T) {
 			mustRegister(t, r, tc.profs...)
 			_, err := r.Resolve(tc.resolve)
 			if err == nil {
-				t.Fatal("ожидалась ошибка, получен nil")
+				t.Fatal("expected an error, got nil")
 			}
 			if !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("ошибка %q не содержит %q", err, tc.want)
+				t.Errorf("the error %q does not contain %q", err, tc.want)
 			}
 		})
 	}
 }
 
-// Опечатка в имени поля должна ломать загрузку, а не терять настройку молча.
+// A typo in a field name must break the load rather than lose a setting silently.
 func TestRegisterRejectsUnknownField(t *testing.T) {
 	r := NewRegistry()
 	err := r.Register([]byte(`{"name":"a","tls":{"raw_clienthello":"x"},"http2":{},"headers":{}}`))
 	if err == nil {
-		t.Fatal("неизвестное поле принято молча")
+		t.Fatal("an unknown field was accepted silently")
 	}
 }
 
-// ECH не реализует UnmarshalJSON в uTLS: штатный разбор падает с
-// "unknown to the dictionary". Проверяем, что наш пост-процессор это чинит
-// и ставит расширение ровно на заявленную позицию.
+// ECH does not implement UnmarshalJSON in uTLS: a plain parse fails with
+// "unknown to the dictionary". This checks that our post-processor fixes it
+// and puts the extension exactly at the declared position.
 func TestSpecFromJSONHandlesECH(t *testing.T) {
 	const spec = `{
       "cipher_suites":["TLS_AES_128_GCM_SHA256"],
@@ -119,10 +119,10 @@ func TestSpecFromJSONHandlesECH(t *testing.T) {
         {"name":"supported_versions","versions":["TLS 1.3"]}
       ]}`
 
-	// Контроль: без пост-процессора uTLS обязан отказать.
+	// A control: without the post-processor uTLS must refuse.
 	var bare utls.ClientHelloSpec
 	if err := json.Unmarshal([]byte(spec), &bare); err == nil {
-		t.Fatal("uTLS неожиданно принял ECH — пост-процессор больше не нужен, упростить BuildSpec")
+		t.Fatal("uTLS unexpectedly accepted ECH — the post-processor is no longer needed, simplify BuildSpec")
 	}
 
 	got, err := specFromJSON([]byte(spec))
@@ -130,25 +130,25 @@ func TestSpecFromJSONHandlesECH(t *testing.T) {
 		t.Fatalf("specFromJSON: %v", err)
 	}
 	if len(got.Extensions) != 3 {
-		t.Fatalf("расширений %d, ожидали 3", len(got.Extensions))
+		t.Fatalf("%d extensions, expected 3", len(got.Extensions))
 	}
 	if _, ok := got.Extensions[1].(*utls.GREASEEncryptedClientHelloExtension); !ok {
-		t.Errorf("на позиции 1 ожидался ECH, получен %T", got.Extensions[1])
+		t.Errorf("position 1 was expected to hold ECH, got %T", got.Extensions[1])
 	}
 }
 
-// Оверрайд, который некуда применить, — ошибка. Тихая потеря настройки это то,
-// на чём горит curl-impersonate с нестандартным порядком шифров.
+// An override with nowhere to apply is an error. A silently lost setting is
+// exactly what curl-impersonate burns on with a non-standard cipher order.
 func TestOverrideMissingExtensionFails(t *testing.T) {
 	spec := &utls.ClientHelloSpec{
 		Extensions: []utls.TLSExtension{&utls.SNIExtension{}},
 	}
 	err := applyOverrides(spec, &TLSSpec{SignatureAlgorithms: []uint16{0x0403}})
 	if err == nil {
-		t.Fatal("оверрайд применён вникуда без ошибки")
+		t.Fatal("the override was applied nowhere without an error")
 	}
 	if !strings.Contains(err.Error(), "0x000d") {
-		t.Errorf("ошибка не называет расширение: %v", err)
+		t.Errorf("the error does not name the extension: %v", err)
 	}
 }
 
@@ -163,6 +163,6 @@ func TestOverrideAppliesSigAlgs(t *testing.T) {
 	}
 	got := ext.SupportedSignatureAlgorithms
 	if len(got) != 2 || got[0] != utls.SignatureScheme(0x0904) {
-		t.Errorf("sigalgs не применены: %v", got)
+		t.Errorf("the sigalgs were not applied: %v", got)
 	}
 }
