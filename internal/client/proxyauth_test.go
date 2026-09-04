@@ -70,7 +70,7 @@ func (p *authProxy) handle(c net.Conn) {
 		p.mu.Unlock()
 
 		if req.Header.Get("Proxy-Authorization") == "" {
-	body := "authentication required"
+			body := "authentication required"
 			hdr := "HTTP/1.1 407 Proxy Authentication Required\r\n" +
 				"Proxy-Authenticate: Basic realm=\"test\"\r\n" +
 				"Content-Length: " + itoa(len(body)) + "\r\n"

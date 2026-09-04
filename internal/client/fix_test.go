@@ -63,7 +63,7 @@ func TestRedirectKeepsNoneAndUserForNavigation(t *testing.T) {
 	}
 	for _, name := range next.SuppressHeaders {
 		if strings.EqualFold(name, "sec-fetch-user") {
-		t.Error("sec-fetch-user was cleared, though a browser keeps it")
+			t.Error("sec-fetch-user was cleared, though a browser keeps it")
 		}
 	}
 	built := names(s.buildHeaders(&next, mustURL(t, next.URL), "b.other.org", nil))
@@ -143,7 +143,7 @@ func postLike() (profile.HeadersSpec, profile.HTTP1Spec) {
 	return headers, h1
 }
 
-	// Chromium 148 measured, a navigational POST: Host, Connection, Content-Length,
+// Chromium 148 measured, a navigational POST: Host, Connection, Content-Length,
 // …, Content-Type, User-Agent, Origin, Accept, …
 func TestPostSlotsOnWire(t *testing.T) {
 	headers, h1 := postLike()
@@ -187,7 +187,7 @@ func TestOriginValueIsRequestOrigin(t *testing.T) {
 			return
 		}
 	}
-		t.Errorf("origin was not added: %v", names(built))
+	t.Errorf("origin was not added: %v", names(built))
 }
 
 // ---------------------------------------------------------------------------
@@ -397,12 +397,12 @@ func TestWebSocketPermessageDeflate(t *testing.T) {
 	url := wsServerWith(t, "Sec-WebSocket-Extensions: permessage-deflate\r\n",
 		func(c net.Conn, br *bufio.Reader) {
 			var d deflateServer
-		// Two messages in a row: the second refers to the first one's window.
+			// Two messages in a row: the second refers to the first one's window.
 			c.Write(d.frame(t, "hello, websocket deflate"))
 			c.Write(d.frame(t, "hello, websocket deflate again"))
 			rsv1, payload := readClientFrame(t, br)
 			if !rsv1 {
-			got <- "the client did not compress the message"
+				got <- "the client did not compress the message"
 				return
 			}
 			got <- inflateForTest(t, payload)
@@ -694,7 +694,7 @@ func fetchSession(t *testing.T) *Session {
 	return s
 }
 
-	// Chrome 152 measured, a fetch POST of JSON with a custom header over HTTP/1.1.
+// Chrome 152 measured, a fetch POST of JSON with a custom header over HTTP/1.1.
 func TestFetchModeOnWire(t *testing.T) {
 	s := fetchSession(t)
 	r := &Request{Method: "POST", URL: "https://example.com/api",
@@ -725,7 +725,7 @@ func TestFetchSlotsFilledFromNavigation(t *testing.T) {
 			}
 		case "accept":
 			if h.Value != "*/*" {
-			t.Errorf("accept = %q, fetch must have */*", h.Value)
+				t.Errorf("accept = %q, fetch must have */*", h.Value)
 			}
 		case "upgrade-insecure-requests", "sec-fetch-user":
 			t.Errorf("the navigation header %s is in the fetch set", h.Key)

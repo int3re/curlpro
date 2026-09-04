@@ -38,7 +38,7 @@ func decodeAll(t *testing.T, d *Decoder, streamID uint64, block string) []Header
 			return out
 		}
 		if err != nil {
-		t.Fatalf("section: %v", err)
+			t.Fatalf("section: %v", err)
 		}
 		out = append(out, hf)
 	}
@@ -62,14 +62,14 @@ func (d *Decoder) state() (n int, size, dropped, inserts uint64) {
 	return len(d.entries), d.size, d.dropped, d.insertCount
 }
 
-	// B.1: a section without the dynamic table.
+// B.1: a section without the dynamic table.
 func TestRFCB1LiteralWithNameReference(t *testing.T) {
 	d := NewDecoder(0)
 	got := decodeAll(t, d, 0, "0000 510b 2f69 6e64 6578 2e68 746d 6c")
 	expectFields(t, got, ":path", "/index.html")
 }
 
-	// B.2-B.5: the full scenario with the dynamic table.
+// B.2-B.5: the full scenario with the dynamic table.
 func TestRFCAppendixBDynamicTable(t *testing.T) {
 	d := NewDecoder(220)
 	var decoderStream bytes.Buffer

@@ -30,7 +30,7 @@ func TestH2UnprocessedClassification(t *testing.T) {
 	}
 	for _, tc := range cases {
 		if got := h2Unprocessed(tc.err); got != tc.want {
-				t.Errorf("%v: got %v, expected %v", tc.err, got, tc.want)
+			t.Errorf("%v: got %v, expected %v", tc.err, got, tc.want)
 		}
 	}
 }
@@ -43,7 +43,7 @@ func TestPostNotRetriedAfterAmbiguousNetworkError(t *testing.T) {
 		n := hits.Add(1)
 		io.ReadAll(r.Body)
 		if n == 1 {
-		// A break with no response: the server "processed" it, but the client does not know.
+			// A break with no response: the server "processed" it, but the client does not know.
 			hj, _ := w.(stdhttp.Hijacker)
 			c, _, _ := hj.Hijack()
 			c.Close()

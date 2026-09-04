@@ -110,7 +110,7 @@ func TestProfileOverrideKeepsPosition(t *testing.T) {
 	}
 	for _, h := range built {
 		if strings.EqualFold(h.Key, "user-agent") && h.Value != "custom/1.0" {
-		t.Errorf("the value was not applied: %q", h.Value)
+			t.Errorf("the value was not applied: %q", h.Value)
 		}
 	}
 }
@@ -191,7 +191,7 @@ func TestHTTP3OmitsHostAndConnection(t *testing.T) {
 	got := names(s.buildHeaders(&Request{}, mustURL(t, "https://example.com/"), "example.com", nil))
 
 	if indexOf(got, "host") >= 0 || indexOf(got, "connection") >= 0 {
-			t.Errorf("HTTP/3 got HTTP/1.1 headers: %v", got)
+		t.Errorf("HTTP/3 got HTTP/1.1 headers: %v", got)
 	}
 }
 
@@ -231,7 +231,7 @@ func TestRequestHeadersWinOverSession(t *testing.T) {
 
 	for _, h := range built {
 		if strings.EqualFold(h.Key, "x-trace") && h.Value != "request" {
-		t.Errorf("the request header did not override the session one: %q", h.Value)
+			t.Errorf("the request header did not override the session one: %q", h.Value)
 		}
 	}
 }
@@ -269,7 +269,7 @@ func TestHeaderValueDependsOnMethod(t *testing.T) {
 		{"GET", "gzip, deflate, br, zstd, sdch"},
 		{"DELETE", "gzip, deflate, br, zstd, sdch"},
 		{"PUT", "gzip, deflate, br, zstd, sdch"},
-	// The method case in a profile is arbitrary: the match is case-insensitive.
+		// The method case in a profile is arbitrary: the match is case-insensitive.
 		{"POST", "gzip, deflate, br, zstd"},
 	} {
 		got := ""
@@ -279,7 +279,7 @@ func TestHeaderValueDependsOnMethod(t *testing.T) {
 			}
 		}
 		if got != tc.want {
-				t.Errorf("%s: accept-encoding = %q, expected %q", tc.method, got, tc.want)
+			t.Errorf("%s: accept-encoding = %q, expected %q", tc.method, got, tc.want)
 		}
 	}
 }

@@ -72,7 +72,7 @@ func TestNoContentLengthWithoutBody(t *testing.T) {
 
 	for _, n := range got {
 		if n == "content-length" {
-		t.Errorf("an empty place turned into a header: %v", got)
+			t.Errorf("an empty place turned into a header: %v", got)
 		}
 	}
 }

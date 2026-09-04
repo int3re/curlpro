@@ -101,6 +101,39 @@ with curlpro.Session("chrome-152-android", device="random") as s:
                         # запросил подсказки заголовком Accept-CH
 ```
 
+## Ошибки
+
+Любой сбой приходит исключением, которое называет и причину, и следствие.
+Ветвиться следует по типу или по ``code``, но не по тексту:
+
+```python
+try:
+    r = s.get(url, timeout=(3, 30))
+    r.raise_for_status()
+except curlpro.Timeout as e:          # code == "timeout"
+    ...                               # предел истёк, повтор осмыслен
+except curlpro.HTTPError as e:        # поднимает raise_for_status()
+    print(e.status, e.response.text)  # тело ответа с ошибкой сохранено
+except curlpro.WebSocketClosed:       # code == "ws_closed"
+    ...                               # сокет закрыл сервер
+except curlpro.CurlProError as e:     # всё остальное из нативной части
+    print(e.code, e)
+```
+
+``code`` — машинный код исхода, когда он известен: ``timeout``,
+``session_closed``, ``ws_closed``, ``ws_too_big``, ``ws_protocol``. Текст
+написан для человека и называет следствие, а не только факт:
+
+```
+timeout must be positive, got 0s (leave it unset for no limit)
+unsupported proxy scheme "ftp" (use http, https or socks5)
+protocol=h2: server negotiated http/1.1. The ALPN list is left intact on
+  purpose: no browser offers h2 alone
+```
+
+Сообщения ошибок и комментарии в коде — на английском: библиотека открытая,
+и код читают не только по-русски. Документация проекта остаётся на русском.
+
 ## Скорость
 
 400 запросов, локальный стенд, переиспользуемое соединение:

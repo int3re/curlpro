@@ -123,6 +123,38 @@ address substitution, and `keep_alive` control.
 
 HTML parsing is deliberately out of scope — pair it with `selectolax` or `lxml`.
 
+## Errors
+
+Every failure arrives as an exception carrying both the cause and what to do
+about it. Branch on the type or on `code`, never on the message text:
+
+```python
+try:
+    r = s.get(url, timeout=(3, 30))
+    r.raise_for_status()
+except curlpro.Timeout as e:          # code == "timeout"
+    ...                               # the deadline expired; retrying is sane
+except curlpro.HTTPError as e:        # raised by raise_for_status()
+    print(e.status, e.response.text)  # the body of the error response is kept
+except curlpro.WebSocketClosed:       # code == "ws_closed"
+    ...                               # the server closed the socket
+except curlpro.CurlProError as e:     # everything else from the native side
+    print(e.code, e)
+```
+
+`code` is the machine-readable outcome when the native side knows one:
+`timeout`, `session_closed`, `ws_closed`, `ws_too_big`, `ws_protocol`. The
+message is written for a human and names the consequence, not only the fact:
+
+```
+timeout must be positive, got 0s (leave it unset for no limit)
+unsupported proxy scheme "ftp" (use http, https or socks5)
+protocol=h2: server negotiated http/1.1. The ALPN list is left intact on
+  purpose: no browser offers h2 alone
+the pre_shared_key extension only appears on a resumed session: recapture the
+  profile on a fresh connection, where padding sits in its place
+```
+
 ## Build
 
 ```powershell

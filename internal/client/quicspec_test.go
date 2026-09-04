@@ -22,12 +22,12 @@ func quicExtIDs(t *testing.T, spec *utls.ClientHelloSpec) []int {
 	for _, e := range spec.Extensions {
 		buf := make([]byte, e.Len())
 		if len(buf) < 2 {
-				// An SNI without a name serialises empty: take the number by type.
+			// An SNI without a name serialises empty: take the number by type.
 			if _, ok := e.(*utls.SNIExtension); ok {
 				ids = append(ids, 0)
 				continue
 			}
-				t.Fatalf("extension %T is shorter than a header", e)
+			t.Fatalf("extension %T is shorter than a header", e)
 		}
 		if _, err := e.Read(buf); err != nil && err != io.EOF {
 			t.Fatal(err)

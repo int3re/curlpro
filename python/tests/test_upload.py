@@ -43,7 +43,9 @@ def big_file():
 def test_file_upload_sets_content_length(big_file):
     """Without an explicit length the transport would switch to chunked, which a
     browser does not do when uploading a file — and that would show on the wire."""
-    with curlpro.Session() as s:
+    # 4 MiB over somebody else's network: the default 30 s is not always enough,
+    # and this test is about Content-Length, not about httpbin's throughput.
+    with curlpro.Session(timeout=120) as s:
         h = s.post("https://httpbin.org/post", body_file=big_file).json()["headers"]
     assert h.get("Content-Length") == str(big_file.stat().st_size)
     assert "Transfer-Encoding" not in h

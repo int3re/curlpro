@@ -112,7 +112,7 @@ func TestAudit_HTTP1BodyNotDecompressed(t *testing.T) {
 				t.Errorf("%s: the body was not decompressed: proto=%s, %d bytes, starts with % x",
 					tc.name, resp.Proto, len(resp.Body), resp.Body[:min(len(resp.Body), 8)])
 			} else {
-			t.Logf("%s: the body was decompressed (proto=%s)", tc.name, resp.Proto)
+				t.Logf("%s: the body was decompressed (proto=%s)", tc.name, resp.Proto)
 			}
 		})
 	}
@@ -241,7 +241,7 @@ func TestAudit_StreamCloseTimeoutPoisonsConnection(t *testing.T) {
 		t.Errorf("the next request on the same session is broken: %v (connections on the server: %d)",
 			err, conns.Load())
 	} else {
-	t.Logf("next request: %d %q (connections on the server: %d)", resp.Status, resp.Body, conns.Load())
+		t.Logf("next request: %d %q (connections on the server: %d)", resp.Status, resp.Body, conns.Load())
 	}
 }
 
@@ -276,8 +276,8 @@ func wsURL(srv *httptest.Server) string {
 	return strings.Replace(auditURL(srv, "/ws"), "https://", "wss://", 1)
 }
 
-	// The server sent a Close frame: markClosed is set, and the client's later
-	// Close() becomes a no-op — the TCP socket stays open.
+// The server sent a Close frame: markClosed is set, and the client's later
+// Close() becomes a no-op — the TCP socket stays open.
 func TestAudit_WebSocketServerCloseLeaksSocket(t *testing.T) {
 	srv := wsServer(t, func(c net.Conn, _ *bufio.Reader) {
 		c.Write([]byte{0x88, 0x02, 0x03, 0xE8}) // Close 1000, unmasked
@@ -321,7 +321,7 @@ func TestAudit_WebSocketHugeFrameLengthPanics(t *testing.T) {
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-			t.Errorf("Recv panics on a declared frame length of 2^62: %v", r)
+				t.Errorf("Recv panics on a declared frame length of 2^62: %v", r)
 			}
 		}()
 		_, err := ws.Recv()
@@ -371,7 +371,7 @@ func TestAudit_ProxyConnectIgnoresTimeout(t *testing.T) {
 	}()
 	select {
 	case err := <-done:
-	t.Logf("the request finished in %s: %v", time.Since(start), err)
+		t.Logf("the request finished in %s: %v", time.Since(start), err)
 	case <-time.After(4 * time.Second):
 		t.Errorf("timeout=1s, yet a request through a silent proxy did not finish in 4 s: " +
 			"connectProxy writes and reads without a deadline")
@@ -402,7 +402,7 @@ func TestAudit_ProxyConnectCarriesGoUserAgent(t *testing.T) {
 
 	s := auditSession(t, Options{DefaultHeaders: true, Proxy: "http://user:pw@" + ln.Addr().String(), Timeout: 3 * time.Second})
 	_, err = s.Do(&Request{Method: "GET", URL: "https://example.com/"})
-			t.Logf("reply to the client: %v", err)
+	t.Logf("reply to the client: %v", err)
 	select {
 	case req := <-got:
 		t.Logf("CONNECT %s %s; Host=%q; headers: %v", req.Method, req.RequestURI, req.Host, req.Header)
@@ -501,8 +501,8 @@ func auditH3Server(t *testing.T, h stdhttp.Handler) string {
 		srv.Close()
 		udp.Close()
 	})
-		// Wait for the server to start its accept loop: otherwise it lands in the
-		// goroutine count after the "before" measurement and looks like a client leak.
+	// Wait for the server to start its accept loop: otherwise it lands in the
+	// goroutine count after the "before" measurement and looks like a client leak.
 	for i := 0; i < 50 && countGoroutinesWith(h3ListenFn) == 0; i++ {
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -540,25 +540,25 @@ func TestAudit_HTTP3(t *testing.T) {
 	}
 	t.Logf("GET /ae: %d %s %q", resp.Status, resp.Proto, resp.Body)
 	if got, _ := accept.Load().([]string); len(got) != 1 {
-			t.Errorf("the server received accept-encoding %d times: %q — the h3 transport added its own "+
-				"gzip after missing the profile's lowercase key through Header.Get", len(got), got)
+		t.Errorf("the server received accept-encoding %d times: %q — the h3 transport added its own "+
+			"gzip after missing the profile's lowercase key through Header.Get", len(got), got)
 	} else {
-			t.Logf("accept-encoding at the server: %q", got)
+		t.Logf("accept-encoding at the server: %q", got)
 	}
 
 	if resp, err := s.Do(&Request{Method: "HEAD", URL: base + "/head"}); err != nil {
-			t.Errorf("HEAD with Content-Encoding: gzip and an empty body: %v", err)
+		t.Errorf("HEAD with Content-Encoding: gzip and an empty body: %v", err)
 	} else {
-			t.Logf("HEAD: %d, body %d bytes", resp.Status, len(resp.Body))
+		t.Logf("HEAD: %d, body %d bytes", resp.Status, len(resp.Body))
 	}
 
 	s.Close()
 	time.Sleep(300 * time.Millisecond)
 	after := countGoroutinesWith(listenFn)
-		t.Logf("goroutines %s: before the session %d, after Close %d", listenFn, before, after)
+	t.Logf("goroutines %s: before the session %d, after Close %d", listenFn, before, after)
 	if after > before {
-			t.Errorf("the UDP transport from Dial was not closed with the session: +%d listening goroutines, "+
-				"the UDP socket leaked", after-before)
+		t.Errorf("the UDP transport from Dial was not closed with the session: +%d listening goroutines, "+
+			"the UDP socket leaked", after-before)
 	}
 }
 

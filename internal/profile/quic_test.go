@@ -56,16 +56,16 @@ func TestApplyQUICFixesParrotDivergences(t *testing.T) {
 			case tpGoogleConnectionOptions:
 				sawOptions = true
 				if string(v.Val) != "ORIG" {
-		t.Errorf("google_connection_options = %q, expected ORIG", v.Val)
+					t.Errorf("google_connection_options = %q, expected ORIG", v.Val)
 				}
 			}
 		case *utls.VersionInformation:
 			sawVersion = true
 			if v.LegacyID {
-		t.Error("version_information kept the draft ID 0xff73db")
+				t.Error("version_information kept the draft ID 0xff73db")
 			}
 			if id := v.ID(); id != 0x11 {
-		t.Errorf("version_information ID = %d, expected 17", id)
+				t.Errorf("version_information ID = %d, expected 17", id)
 			}
 		}
 	}
@@ -96,7 +96,7 @@ func TestApplyQUICCanKeepInitialRTT(t *testing.T) {
 			return
 		}
 	}
-		t.Error("google_initial_rtt was removed though it was requested explicitly")
+	t.Error("google_initial_rtt was removed though it was requested explicitly")
 }
 
 // Without an explicit value the version order is drawn at random: a Chrome 152
@@ -146,7 +146,7 @@ func TestApplyQUICVersionOrder(t *testing.T) {
 				}
 				return
 			}
-				t.Error("version_information not found")
+			t.Error("version_information not found")
 		})
 	}
 }

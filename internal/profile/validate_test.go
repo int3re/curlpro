@@ -147,11 +147,11 @@ func TestTrustAnchorsOrderIsShuffled(t *testing.T) {
 		}
 		g, ok := ext.(*utls.GenericExtension)
 		if !ok || g.Id != TrustAnchorsID {
-		t.Fatalf("got %T with number %v", ext, ok)
+			t.Fatalf("got %T with number %v", ext, ok)
 		}
 		got := parseTrustAnchors(g.Data)
 		if len(got) != len(ids) {
-		t.Fatalf("%d entries, expected %d", len(got), len(ids))
+			t.Fatalf("%d entries, expected %d", len(got), len(ids))
 		}
 		if first == nil {
 			first = got
@@ -168,7 +168,7 @@ func TestTrustAnchorsOrderIsShuffled(t *testing.T) {
 	sort.Strings(want)
 	for i := range want {
 		if sorted[i] != want[i] {
-		t.Fatalf("the set changed: %v against %v", sorted, want)
+			t.Fatalf("the set changed: %v against %v", sorted, want)
 		}
 	}
 }
