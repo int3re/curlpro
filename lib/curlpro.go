@@ -103,7 +103,8 @@ func curlpro_free(s *C.char) {
 // 0.4.0: mode (навигация или fetch) и keep_alive у сессии.
 // 0.5.0: device и devices — подсказки высокой энтропии по Accept-CH.
 // 0.6.0: выгрузка, загрузка и очистка кук.
-const Version = "0.6.0"
+// 0.7.0: асинхронный запуск запросов, resolve и ip_version.
+const Version = "0.7.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -141,19 +142,21 @@ func curlpro_profiles_list() (out *C.char) {
 }
 
 type sessionConfig struct {
-	Profile            string   `json:"profile"`
-	InsecureSkipVerify bool     `json:"insecure_skip_verify"`
-	TimeoutMS          int      `json:"timeout_ms"`
-	Proxy              string   `json:"proxy"`
-	DefaultHeaders     bool     `json:"default_headers"`
-	HeaderOrder        []string `json:"header_order"`
-	FollowRedirects    bool     `json:"follow_redirects"`
-	MaxRedirects       int      `json:"max_redirects"`
-	Cookies            bool     `json:"cookies"`
-	ForceHTTP1         bool     `json:"force_http1"`
-	HTTP3              bool     `json:"http3"`
-	MaxIdleConns       int      `json:"max_idle_conns"`
-	IdleConnTimeoutMS  int      `json:"idle_conn_timeout_ms"`
+	Profile            string            `json:"profile"`
+	InsecureSkipVerify bool              `json:"insecure_skip_verify"`
+	TimeoutMS          int               `json:"timeout_ms"`
+	Proxy              string            `json:"proxy"`
+	DefaultHeaders     bool              `json:"default_headers"`
+	HeaderOrder        []string          `json:"header_order"`
+	FollowRedirects    bool              `json:"follow_redirects"`
+	MaxRedirects       int               `json:"max_redirects"`
+	Cookies            bool              `json:"cookies"`
+	ForceHTTP1         bool              `json:"force_http1"`
+	HTTP3              bool              `json:"http3"`
+	MaxIdleConns       int               `json:"max_idle_conns"`
+	IdleConnTimeoutMS  int               `json:"idle_conn_timeout_ms"`
+	Resolve            map[string]string `json:"resolve"`
+	IPVersion          string            `json:"ip_version"`
 	// KeepAlive: указатель, потому что отсутствие поля означает «включено».
 	// Старый Python со свежей DLL не должен молча получить пересоздание
 	// соединения на каждый запрос.
@@ -220,6 +223,8 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		Cookies:            c.Cookies,
 		ForceHTTP1:         c.ForceHTTP1,
 		HTTP3:              c.HTTP3,
+		Resolve:            c.Resolve,
+		IPVersion:          c.IPVersion,
 		DisableKeepAlive:   c.KeepAlive != nil && !*c.KeepAlive,
 		MaxIdleConns:       c.MaxIdleConns,
 		IdleConnTimeout:    time.Duration(c.IdleConnTimeoutMS) * time.Millisecond,

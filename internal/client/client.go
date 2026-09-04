@@ -60,6 +60,21 @@ type Options struct {
 	// IdleConnTimeout — сколько держать неиспользуемое соединение. 0 — 300 с,
 	// столько же держит Chrome.
 	IdleConnTimeout time.Duration
+	// Resolve подменяет адрес узла, не трогая имя в SNI и заголовке Host.
+	//
+	// Ключ — "host:port" или просто "host" (тогда правило действует на любой
+	// порт), значение — "ip" или "ip:port". Аналог --resolve у curl: нужен,
+	// чтобы ходить на конкретный сервер за балансировщиком или проверять
+	// стенд под настоящим именем. Отпечаток при этом не меняется: имя
+	// остаётся тем же, меняется только куда открывается сокет.
+	Resolve map[string]string
+
+	// IPVersion ограничивает семейство адресов: "4", "6" или пусто.
+	//
+	// Нужен там, где у имени есть запись AAAA, но маршрута по IPv6 нет:
+	// без ограничения соединение сначала уходит в таймаут.
+	IPVersion string
+
 	// DisableKeepAlive выключает переиспользование: каждый запрос получает
 	// своё соединение, и оно закрывается сразу после ответа.
 	//
@@ -515,7 +530,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		return fromStdResponse(resp), cancel, nil, nil
 	}
 
-	spec := newDialSpec(u, s.proxyFor(r), s.opts.ForceHTTP1)
+	spec := s.newDialSpec(u, s.proxyFor(r), s.opts.ForceHTTP1)
 	c, err := s.conn(req.Context(), u, spec)
 	if err != nil {
 		// Соединения нет — запрос до сервера не дошёл, повтор безопасен.

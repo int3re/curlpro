@@ -37,21 +37,27 @@ type dialSpec struct {
 	addr       string // host:port, hostname в нижнем регистре
 	proxy      string // адрес прокси как задан; пусто — напрямую
 	forceHTTP1 bool
+	// target — куда на самом деле открывается сокет после подмены имени.
+	// Входит в ключ: два правила для одного имени ведут на разные машины,
+	// и общее соединение отправило бы запрос не туда.
+	target string
 }
 
 // newDialSpec собирает ключ соединения.
 //
 // Hostname приводится к нижнему регистру: иначе https://Example.COM
 // и https://example.com дали бы два соединения к одному серверу.
-func newDialSpec(u *url.URL, proxy string, forceHTTP1 bool) dialSpec {
+func (s *Session) newDialSpec(u *url.URL, proxy string, forceHTTP1 bool) dialSpec {
 	port := u.Port()
 	if port == "" {
 		port = "443"
 	}
+	addr := strings.ToLower(u.Hostname()) + ":" + port
 	return dialSpec{
-		addr:       strings.ToLower(u.Hostname()) + ":" + port,
+		addr:       addr,
 		proxy:      proxy,
 		forceHTTP1: forceHTTP1,
+		target:     resolveAddr(s.opts.Resolve, addr),
 	}
 }
 

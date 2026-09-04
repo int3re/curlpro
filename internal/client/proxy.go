@@ -22,8 +22,17 @@ import (
 // запрос вправе его переопределить или отключить.
 func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, error) {
 	d := &net.Dialer{}
+	network := "tcp"
+	switch s.opts.IPVersion {
+	case "4", "ipv4":
+		network = "tcp4"
+	case "6", "ipv6":
+		network = "tcp6"
+	}
 	if proxy == "" {
-		return d.DialContext(ctx, "tcp", addr)
+		// Подмена действует только на прямое соединение: через прокси имя
+		// разрешает он сам, и наша таблица там ничего не решает.
+		return d.DialContext(ctx, network, resolveAddr(s.opts.Resolve, addr))
 	}
 
 	pu, err := url.Parse(proxy)
@@ -39,6 +48,33 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, er
 	default:
 		return nil, fmt.Errorf("схема прокси %q не поддерживается (нужна http, https или socks5)", pu.Scheme)
 	}
+}
+
+// resolveAddr применяет таблицу подмены к адресу "host:port".
+//
+// Правило ищется сначала по паре с портом, затем по одному имени: так
+// "example.com:443" можно направить отдельно от "example.com". Значение без
+// порта сохраняет исходный порт — подменяется только узел.
+func resolveAddr(table map[string]string, addr string) string {
+	if len(table) == 0 {
+		return addr
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	host = strings.ToLower(host)
+	target, ok := table[host+":"+port]
+	if !ok {
+		target, ok = table[host]
+	}
+	if !ok {
+		return addr
+	}
+	if _, _, err := net.SplitHostPort(target); err == nil {
+		return target
+	}
+	return net.JoinHostPort(target, port)
 }
 
 func dialSOCKS5(ctx context.Context, pu *url.URL, addr string) (net.Conn, error) {

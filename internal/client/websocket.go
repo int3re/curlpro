@@ -300,7 +300,7 @@ func (s *Session) websocketRequest(u *url.URL, key string, opts WebSocketOptions
 // включая обычные запросы. Соединение WebSocket не кладётся в пул: оно
 // переходит в собственность сокета и живёт до его закрытия.
 func (s *Session) dialHTTP1(ctx context.Context, u *url.URL) (*conn, error) {
-	c, err := s.dial(ctx, u, newDialSpec(u, s.opts.Proxy, true))
+	c, err := s.dial(ctx, u, s.newDialSpec(u, s.opts.Proxy, true))
 	if err != nil {
 		return nil, err
 	}

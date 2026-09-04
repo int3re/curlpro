@@ -270,6 +270,13 @@ class Session:
     :param http3: отправлять запросы по QUIC вместо TCP. Профиль обязан
         описывать секцию ``http3``, иначе сессия не создастся. Это отдельный
         транспорт, а не вариант ALPN, поэтому выбирается явно
+    :param resolve: подмена адреса узла: ``{"example.com:443": "10.0.0.7"}``.
+        Имя в SNI и заголовке Host остаётся прежним — меняется только то,
+        куда открывается сокет. Аналог ``--resolve`` у curl: нужен, чтобы
+        попасть на конкретный сервер за балансировщиком. Через прокси
+        не действует: там имя разрешает он сам
+    :param ip_version: ограничить семейство адресов: ``"4"`` или ``"6"``.
+        Нужно там, где у имени есть запись AAAA, а маршрута по IPv6 нет
     :param keep_alive: переиспользовать соединение между запросами. Включено:
         так делает браузер, и рукопожатие TLS не повторяется на каждый запрос.
         ``False`` закрывает соединение сразу после ответа — нужно, когда
@@ -304,6 +311,8 @@ class Session:
         cookies: bool = True,
         force_http1: bool = False,
         http3: bool = False,
+        resolve: Mapping[str, str] | None = None,
+        ip_version: str | None = None,
         keep_alive: bool = True,
         hooks: Mapping[str, Iterable[Callable[..., Any]]] | None = None,
         device: str | None = None,
@@ -336,6 +345,8 @@ class Session:
                     "cookies": cookies,
                     "force_http1": force_http1,
                     "http3": http3,
+                    "resolve": dict(resolve) if resolve else None,
+                    "ip_version": ip_version or "",
                     "keep_alive": keep_alive,
                     "device": device or "",
                     "devices": [dict(d) for d in devices] if devices else None,
