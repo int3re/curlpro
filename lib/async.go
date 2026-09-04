@@ -31,6 +31,55 @@ type asyncCall struct {
 	cancel context.CancelFunc
 	frame  []byte // готовый кадр ответа: [uint32 len JSON][JSON][тело]
 	done   bool
+	// dropped — результат уже никому не нужен: вызывающий отменил ожидание.
+	// Такой результат не кладётся в очередь готовых, а отдаётся discard.
+	dropped bool
+	// discard освобождает то, что осталось в брошенном результате. У обычного
+	// запроса освобождать нечего, а у открытого потока и сокета — соединение,
+	// про которое Python уже не узнает.
+	discard func(frame []byte)
+}
+
+// startAsync ставит работу на учёт и запускает её в горутине.
+//
+// cancel вызывается при отмене; работам без контекста — чтению из потока
+// и приёму сообщения — передаётся пустышка, и отмена там только снимает
+// ожидание: байты, уже взятые из соединения, теряются, поэтому после отмены
+// поток или сокет закрывают.
+func startAsync(cancel context.CancelFunc, discard func([]byte), work func(rid int64) []byte) *C.char {
+	if cancel == nil {
+		cancel = func() {}
+	}
+	rid := asyncID.Add(1)
+	call := &asyncCall{cancel: cancel, discard: discard}
+	asyncMu.Lock()
+	asyncPending[rid] = call
+	asyncMu.Unlock()
+
+	go func() {
+		payload := work(rid)
+
+		asyncMu.Lock()
+		call.frame, call.done = payload, true
+		dropped := call.dropped
+		if dropped {
+			delete(asyncPending, rid)
+		}
+		asyncMu.Unlock()
+
+		// Результат бросили, пока он готовился: убираем за собой сами —
+		// на той стороне про этот номер уже забыли.
+		if dropped {
+			if call.discard != nil {
+				call.discard(payload)
+			}
+			call.cancel()
+			return
+		}
+		asyncReady <- rid
+	}()
+
+	return respond(map[string]any{"request": rid}, nil)
 }
 
 var (
@@ -67,30 +116,14 @@ func curlpro_request_start(id C.longlong, frame *C.char, frameLen C.int) (out *C
 	ctx, cancel := context.WithCancel(context.Background())
 	req.Ctx = ctx
 
-	rid := asyncID.Add(1)
-	call := &asyncCall{cancel: cancel}
-	asyncMu.Lock()
-	asyncPending[rid] = call
-	asyncMu.Unlock()
-
-	go func() {
+	return startAsync(cancel, nil, func(int64) []byte {
 		defer cancel()
 		resp, err := s.Do(req)
-		var payload []byte
 		if err != nil {
-			payload = errorFrame(err)
-		} else {
-			payload = okFrame(resp)
+			return errorFrame(err)
 		}
-		asyncMu.Lock()
-		if c, ok := asyncPending[rid]; ok {
-			c.frame, c.done = payload, true
-		}
-		asyncMu.Unlock()
-		asyncReady <- rid
-	}()
-
-	return respond(map[string]any{"request": rid}, nil)
+		return okFrame(resp)
+	})
 }
 
 // curlpro_result_wait ждёт завершения любого запроса не дольше timeoutMS.
@@ -151,12 +184,25 @@ func curlpro_request_cancel(rid C.longlong) (out *C.char) {
 	defer recoverInto(&out)
 	asyncMu.Lock()
 	call, ok := asyncPending[int64(rid)]
-	if ok {
-		delete(asyncPending, int64(rid))
-	}
-	asyncMu.Unlock()
 	if !ok {
+		asyncMu.Unlock()
 		return respond(nil, nil) // уже забрали или отменили — не ошибка
+	}
+	// Результат ещё готовится: помечаем брошенным, убирать будет горутина.
+	// Снимать с учёта здесь нельзя — она бы не нашла себя и оставила
+	// открытым соединение потока или сокета.
+	if !call.done {
+		call.dropped = true
+		asyncMu.Unlock()
+		call.cancel()
+		return respond(nil, nil)
+	}
+	delete(asyncPending, int64(rid))
+	frame := call.frame
+	asyncMu.Unlock()
+
+	if call.discard != nil {
+		call.discard(frame)
 	}
 	call.cancel()
 	return respond(nil, nil)

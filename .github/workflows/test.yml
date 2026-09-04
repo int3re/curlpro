@@ -57,8 +57,11 @@ jobs:
       - name: build native library
         run: CGO_ENABLED=1 go build -buildmode=c-shared -o dist/libcurlpro.so ./lib
 
+      # websockets нужен локальному WSS-серверу: без него тесты сокета —
+      # и обычного, и асинхронного — тихо пропускаются, а это как раз тот путь,
+      # где ошибка времени жизни памяти C уже один раз пряталась.
       - name: install
-        run: pip install pytest ./python
+        run: pip install pytest websockets ./python
 
       # Тесты ходят в интернет: httpbin.org, browserleaks, quic.browserleaks.
       # Сетевые сбои не должны валить сборку, поэтому один повтор.

@@ -29,6 +29,14 @@ with curlpro.Session("chrome-151-windows") as s:
 async with curlpro.AsyncSession("firefox-144-macos", proxy="socks5://127.0.0.1:1080") as s:
     results = await asyncio.gather(*(s.get(u) for u in urls))
 
+    # Потоковое чтение и WebSocket там же и так же: без пула потоков
+    async with s.stream("GET", url) as r:
+        async for chunk in r.iter_content():
+            out.write(chunk)
+    async with s.websocket("wss://example.com/ws") as ws:
+        await ws.send("привет")
+        print(await ws.recv())
+
 # HTTP/3 включается сам, как в браузере: первый запрос идёт по TCP, а увидев
 # в ответе Alt-Svc, клиент со следующего переходит на QUIC. Если QUIC не
 # проходит, запрос откатывается на TCP, и попытка какое-то время не повторяется.
@@ -57,6 +65,7 @@ with curlpro.Session() as s:
 with curlpro.Session(retries=3, proxy="socks5://127.0.0.1:1080") as s:
     s.headers["X-Api-Key"] = "secret"     # во всех последующих запросах
     s.get(url, timeout=2.0)               # свой предел на этот запрос
+    s.get(url, timeout=(3, 30))           # отдельно на соединение и на всё
     s.get(url, allow_redirects=False)     # без перехода по 3xx
     s.get(url, proxy=False)               # в обход прокси сессии
     s.get(url, retries=0)                 # без повторов, хотя у сессии они есть
@@ -122,6 +131,14 @@ s.cookies["sid"]                          # значение
 s.cookies.all()                           # полные записи
 s.cookies.set("token", "xyz", domain="example.com")
 s.cookies.clear()
+```
+
+Читается и формат Netscape — тот самый `cookies.txt` от `curl -c`, wget
+и расширений браузера. `load_file` узнаёт его по содержимому, а не по имени:
+
+```python
+s.cookies.load_file("cookies.txt")        # curl, wget, расширение браузера
+s.cookies.save_netscape("cookies.txt")    # обратно, для чужого инструмента
 ```
 
 Перехватчики дают вклиниться до отправки и после ответа, не трогая саму

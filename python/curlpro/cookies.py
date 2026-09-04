@@ -120,7 +120,11 @@ class Cookies(Mapping[str, str]):
         )
 
     def load_file(self, path: str | Path) -> None:
-        """Загрузить куки из файла, сохранённого :meth:`save`.
+        """Загрузить куки из файла: JSON или Netscape ``cookies.txt``.
+
+        Формат определяется по содержимому, а не по имени: файлы от curl
+        и расширений браузера называются как угодно, а вот начинаются
+        по-разному — JSON со скобки, Netscape с комментария или домена.
 
         Отсутствие файла — не ошибка: первый запуск парсера начинается
         с пустой сессии, и проверять это каждый раз в вызывающем коде
@@ -129,6 +133,126 @@ class Cookies(Mapping[str, str]):
         p = Path(path)
         if not p.exists():
             return
-        data = json.loads(p.read_text(encoding="utf-8"))
+        text = p.read_text(encoding="utf-8")
+        head = text.lstrip()[:1]
+        if head in ("[", "{"):
+            data = json.loads(text)
+        else:
+            data = parse_netscape(text)
         if data:
             self.load(data)
+
+    def save_netscape(self, path: str | Path) -> None:
+        """Сохранить куки в формате Netscape — том же, что у ``curl -c``.
+
+        Формат беднее нашего JSON: в нём нет SameSite, — но его понимают
+        curl, wget, yt-dlp и расширения браузера, и ради переноса сессии
+        в чужой инструмент этой потери обычно не жалко.
+        """
+        Path(path).write_text(self.to_netscape(), encoding="utf-8")
+
+    def load_netscape(self, path: str | Path) -> None:
+        """Загрузить ``cookies.txt``, не гадая по содержимому.
+
+        Нужен, когда файл заведомо в этом формате: пустой файл или файл
+        из одних комментариев :meth:`load_file` принял бы за Netscape и так,
+        но явный вызов читается понятнее и падает на JSON, а не молчит.
+        """
+        p = Path(path)
+        if not p.exists():
+            return
+        data = parse_netscape(p.read_text(encoding="utf-8"))
+        if data:
+            self.load(data)
+
+    def to_netscape(self) -> str:
+        """Куки в виде текста ``cookies.txt``."""
+        return format_netscape(self.export())
+
+
+# -- формат Netscape -------------------------------------------------------
+#
+# Семь полей через табуляцию: домен, флаг поддоменов, путь, secure, срок,
+# имя, значение. Флаг HttpOnly формат не предусматривает, поэтому curl
+# помечает такие строки префиксом #HttpOnly_ — комментарием для тех, кто
+# про него не знает.
+
+NETSCAPE_HEADER = (
+    "# Netscape HTTP Cookie File\n"
+    "# Создан curlpro. Формат тот же, что у curl -c.\n"
+    "\n"
+)
+
+_HTTP_ONLY_PREFIX = "#HttpOnly_"
+
+
+def format_netscape(cookies: list[dict[str, Any]]) -> str:
+    """Собирает текст ``cookies.txt`` из полных записей."""
+    lines = [NETSCAPE_HEADER]
+    for c in cookies:
+        domain = str(c.get("domain", ""))
+        if not domain:
+            continue
+        # Точка означает «и поддоменам тоже». Наши куки ведут себя именно так:
+        # замер показал, что кука домена example.test уходит и на
+        # sub.example.test, — поэтому домен пишется с точкой, а флаг TRUE.
+        if not domain.startswith("."):
+            domain = "." + domain
+        prefix = _HTTP_ONLY_PREFIX if c.get("http_only") else ""
+        lines.append("\t".join([
+            prefix + domain,
+            "TRUE",
+            str(c.get("path") or "/"),
+            "TRUE" if c.get("secure") else "FALSE",
+            str(int(c.get("expires", 0) or 0)),
+            str(c.get("name", "")),
+            str(c.get("value", "")),
+        ]) + "\n")
+    return "".join(lines)
+
+
+def parse_netscape(text: str) -> list[dict[str, Any]]:
+    """Разбирает ``cookies.txt``. Ошибка называет номер строки.
+
+    Молча пропускать кривые строки нельзя: файл обычно один на всю сессию,
+    и потерянная кука выглядит как разлогин, а не как испорченный файл.
+    """
+    out: list[dict[str, Any]] = []
+    for number, raw in enumerate(text.splitlines(), start=1):
+        line = raw.rstrip("\r\n")
+        http_only = line.startswith(_HTTP_ONLY_PREFIX)
+        if http_only:
+            line = line[len(_HTTP_ONLY_PREFIX):]
+        elif line.lstrip().startswith("#"):
+            continue
+        if not line.strip():
+            continue
+
+        parts = line.split("\t")
+        # Пустое значение в конце строки редакторы срезают вместе
+        # с табуляцией — шесть полей означают куку без значения.
+        if len(parts) == 6:
+            parts.append("")
+        if len(parts) != 7:
+            raise ValueError(
+                f"строка {number}: полей {len(parts)}, а в формате Netscape их семь "
+                f"(домен, поддомены, путь, secure, срок, имя, значение)"
+            )
+        domain, _subdomains, path, secure, expires, name, value = parts
+        try:
+            # Некоторые расширения пишут срок с дробной частью.
+            when = int(float(expires or 0))
+        except ValueError:
+            raise ValueError(f"строка {number}: срок {expires!r} — не число") from None
+
+        out.append({
+            "name": name,
+            "value": value,
+            "domain": domain,
+            "path": path or "/",
+            "expires": when,
+            "secure": secure.strip().upper() == "TRUE",
+            "http_only": http_only,
+            "same_site": "",
+        })
+    return out

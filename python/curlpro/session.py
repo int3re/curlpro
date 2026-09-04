@@ -15,6 +15,7 @@ from .headers import SessionHeaders
 from .profiles import ensure_loaded
 from .proxies import proxy_for as env_proxy
 from .stream import StreamResponse
+from .timeouts import split_timeout as _split_timeout
 from .websocket import WebSocket, connect as ws_connect
 
 DEFAULT_PROFILE = "chrome-151-windows"
@@ -171,7 +172,7 @@ def _request_meta(
     body_file: str | Any = None,
     header_order: Iterable[str] | None = None,
     default_headers: bool | None = None,
-    timeout: float | None = None,
+    timeout: float | tuple[float, float] | None = None,
     allow_redirects: bool | None = None,
     max_redirects: int | None = None,
     retries: int | None = None,
@@ -185,6 +186,7 @@ def _request_meta(
 ) -> tuple[dict[str, Any], bytes]:
     # params и auth — привычные аргументы requests; здесь они превращаются
     # в адрес со строкой запроса и в обычный заголовок, дальше всё как обычно.
+    connect_timeout, timeout = _split_timeout(timeout)
     url = _with_params(url, params)
     if credentials := _auth_header(auth):
         headers = dict(headers or {})
@@ -222,6 +224,7 @@ def _request_meta(
         # None означает «взять из сессии»; ноль — осмысленное значение,
         # поэтому передаётся именно отсутствие, а не подстановка.
         "timeout_ms": None if timeout is None else int(timeout * 1000),
+        "connect_timeout_ms": None if connect_timeout is None else int(connect_timeout * 1000),
         "follow_redirects": allow_redirects,
         "max_redirects": max_redirects,
         "retry": _retry_config(
@@ -353,7 +356,12 @@ class Session:
         ``ALL_PROXY`` с учётом ``NO_PROXY``. Явно заданный ``proxy`` сильнее
     :param max_response_size: предел размера тела в байтах; 0 — без предела.
         Без него сервер с бесконечным ответом съедает память процесса
-    :param timeout: предел на запрос целиком, включая редиректы, в секундах
+    :param timeout: предел на запрос целиком, включая редиректы, в секундах.
+        Пара ``(соединение, всего)`` задаёт отдельный предел на установку
+        соединения — разрешение имени, TCP и рукопожатие TLS. Второй элемент
+        у нас означает предел на запрос целиком, а не предел молчания между
+        байтами, как в requests: это строже, и привычное значение подставлять
+        безопасно
     :param proxy: ``http://``, ``https://`` или ``socks5://``, можно с user:pass
     :param default_headers: подставлять заголовки профиля. Выключите, чтобы
         полностью управлять набором и порядком самостоятельно — анти-боты
@@ -408,7 +416,7 @@ class Session:
         cert: tuple[str, str] | None = None,
         trust_env: bool = True,
         max_response_size: int = 0,
-        timeout: float = 30.0,
+        timeout: float | tuple[float, float] = 30.0,
         proxy: str | None = None,
         default_headers: bool = True,
         header_order: Iterable[str] | None = None,
@@ -437,6 +445,7 @@ class Session:
         # Профили, вложенные в пакет, подгружаются при первом обращении:
         # после pip install библиотека должна работать без лишних шагов.
         ensure_loaded()
+        session_connect, session_total = _split_timeout(timeout)
         self._id = _call(
             "curlpro_session_new",
             encode(
@@ -453,7 +462,9 @@ class Session:
                     # и правка os.environ в рантайме до неё не доходит.
                     "trust_env": False,
                     "max_response_size": int(max_response_size),
-                    "timeout_ms": int(timeout * 1000),
+                    "timeout_ms": int(session_total * 1000) if session_total else 0,
+                    "connect_timeout_ms":
+                        int(session_connect * 1000) if session_connect else 0,
                     "proxy": proxy or "",
                     "default_headers": default_headers,
                     "header_order": list(header_order) if header_order else None,
@@ -510,7 +521,7 @@ class Session:
         body_file: str | Any = None,
         header_order: Iterable[str] | None = None,
         default_headers: bool | None = None,
-        timeout: float | None = None,
+        timeout: float | tuple[float, float] | None = None,
         allow_redirects: bool | None = None,
         max_redirects: int | None = None,
         retries: int | None = None,
@@ -591,7 +602,7 @@ class Session:
         body_file: str | Any = None,
         header_order: Iterable[str] | None = None,
         default_headers: bool | None = None,
-        timeout: float | None = None,
+        timeout: float | tuple[float, float] | None = None,
         allow_redirects: bool | None = None,
         max_redirects: int | None = None,
         retries: int | None = None,
@@ -632,12 +643,14 @@ class Session:
         *,
         headers: Mapping[str, str] | None = None,
         subprotocols: Iterable[str] | None = None,
-        timeout: float = 30.0,
+        timeout: float | tuple[float, float] = 30.0,
         max_message_size: int = 0,
     ) -> "WebSocket":
         """Открывает WebSocket с заголовками рукопожатия из профиля.
 
         ``timeout`` ограничивает рукопожатие и ожидание одного сообщения;
+        парой ``(соединение, всего)`` установку соединения можно ограничить
+        отдельно — как и у обычного запроса;
         ``max_message_size`` — предел принимаемого сообщения в байтах
         (ноль — 64 МиБ). Соединение держится до закрытия — используйте ``with``.
         """
@@ -688,7 +701,7 @@ class Session:
 
 
 def request(method: str, url: str, *, impersonate: str = DEFAULT_PROFILE,
-            verify: bool = True, timeout: float = 30.0, proxy: str | None = None,
+            verify: bool = True, timeout: float | tuple[float, float] = 30.0, proxy: str | None = None,
             **kw: Any) -> Response:
     """Одиночный запрос. Для серии запросов используйте Session."""
     session_kw = {

@@ -68,6 +68,22 @@ with curlpro.Session("chrome-152-windows") as s:
     s.cookies.save("state.json")
 ```
 
+Netscape `cookies.txt` is read too — the file `curl -c`, wget and browser
+extensions write. `load_file` recognises it by content, not by name:
+
+```python
+s.cookies.load_file("cookies.txt")        # from curl, wget, an extension
+s.cookies.save_netscape("cookies.txt")    # and back, for another tool
+```
+
+Timeouts split the way `requests` splits them, with one difference worth
+knowing: the second element caps the whole request, not the silence between
+bytes — stricter, so the familiar number is safe to keep.
+
+```python
+s.get(url, timeout=(3, 30))               # 3 s to connect, 30 s in total
+```
+
 Async is native — a request becomes a goroutine, and one helper thread serves
 the whole process. 128 requests of 0.3 s each take 0.37 s instead of the 1.27 s
 a 32-thread pool needed:
@@ -75,6 +91,14 @@ a 32-thread pool needed:
 ```python
 async with curlpro.AsyncSession("firefox-144-macos") as s:
     results = await asyncio.gather(*(s.get(u) for u in urls))
+
+    # Streaming and WebSocket run the same way — no thread pool either
+    async with s.stream("GET", url) as r:
+        async for chunk in r.iter_content():
+            out.write(chunk)
+    async with s.websocket("wss://example.com/ws") as ws:
+        await ws.send("hello")
+        print(await ws.recv())
 ```
 
 Also available: hooks (`on_request`, `on_response`), proxies (HTTP CONNECT and

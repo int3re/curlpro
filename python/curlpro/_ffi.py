@@ -142,6 +142,11 @@ for _name, _args in (
     ("curlpro_session_set_cookies", [ctypes.c_longlong, ctypes.c_char_p]),
     ("curlpro_session_clear_cookies", [ctypes.c_longlong]),
     ("curlpro_request_start", [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]),
+    ("curlpro_stream_open_start", [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]),
+    ("curlpro_stream_read_start", [ctypes.c_longlong, ctypes.c_int]),
+    ("curlpro_ws_connect_start", [ctypes.c_longlong, ctypes.c_char_p]),
+    ("curlpro_ws_send_start", [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]),
+    ("curlpro_ws_recv_start", [ctypes.c_longlong]),
     ("curlpro_result_take", [ctypes.c_longlong, ctypes.POINTER(ctypes.c_int)]),
     ("curlpro_request_cancel", [ctypes.c_longlong]),
 ):
@@ -197,7 +202,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Минимальная версия нативной части: мажор и минор. Поднимать вместе
 # с lib/curlpro.go, когда Python начинает зависеть от нового экспорта или поля.
-REQUIRED_VERSION = (0, 8)
+REQUIRED_VERSION = (0, 9)
 
 
 def _check_version() -> None:

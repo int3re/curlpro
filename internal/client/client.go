@@ -61,6 +61,14 @@ type Options struct {
 	// IdleConnTimeout — сколько держать неиспользуемое соединение. 0 — 300 с,
 	// столько же держит Chrome.
 	IdleConnTimeout time.Duration
+	// ConnectTimeout ограничивает установку соединения отдельно от Timeout:
+	// разрешение имени, TCP и рукопожатие TLS. 0 — только общий предел.
+	//
+	// Нужен там, где узел молчит: без отдельного предела запрос ждёт весь
+	// свой бюджет на мёртвом адресе, хотя понятно всё за секунду.
+	// Чтение ответа этим пределом не ограничивается — на него работает Timeout.
+	ConnectTimeout time.Duration
+
 	// CACert — путь к своему корневому сертификату (PEM) вместо системных.
 	//
 	// Нужен для стендов, корпоративных сетей и перехватывающих прокси:
@@ -171,6 +179,8 @@ type Request struct {
 
 	// Timeout ограничивает этот запрос целиком, включая редиректы и повторы.
 	Timeout *time.Duration
+	// ConnectTimeout переопределяет предел на установку соединения.
+	ConnectTimeout *time.Duration
 	// FollowRedirects переопределяет переходы по 3xx.
 	FollowRedirects *bool
 	// MaxRedirects переопределяет предел длины цепочки.
@@ -240,6 +250,33 @@ func (s *Session) proxyForHost(r *Request, host string) string {
 	return ""
 }
 
+// connectLimitKey помечает предел на установку соединения в контексте.
+type connectLimitKey struct{}
+
+// withConnectLimit кладёт переопределение запроса в контекст.
+//
+// Значением в контексте, а не аргументом: до dial ведут три пути — пул
+// соединений, апгрейд до HTTP/3 и WebSocket, — и лишний параметр пришлось бы
+// протаскивать через каждый.
+func withConnectLimit(ctx context.Context, d time.Duration) context.Context {
+	return context.WithValue(ctx, connectLimitKey{}, d)
+}
+
+// connectContext ограничивает фазу установки соединения.
+//
+// Возвращает исходный контекст, если отдельного предела нет: лишний слой
+// с отменой на каждое соединение стоил бы дороже, чем экономит.
+func (s *Session) connectContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	limit := s.opts.ConnectTimeout
+	if d, ok := ctx.Value(connectLimitKey{}).(time.Duration); ok && d > 0 {
+		limit = d
+	}
+	if limit <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, limit)
+}
+
 // timeout возвращает предел для запроса с учётом переопределения.
 //
 // Ноль отвергается на входе (New и validate), поэтому здесь он означать ничего
@@ -260,6 +297,10 @@ func (r *Request) validate() error {
 	if r.Timeout != nil && *r.Timeout <= 0 {
 		return fmt.Errorf("timeout должен быть положительным, получено %s "+
 			"(чтобы не ограничивать, не задавайте его вовсе)", *r.Timeout)
+	}
+	if r.ConnectTimeout != nil && *r.ConnectTimeout <= 0 {
+		return fmt.Errorf("connect timeout должен быть положительным, получено %s "+
+			"(чтобы не ограничивать, не задавайте его вовсе)", *r.ConnectTimeout)
 	}
 	if r.MaxRedirects != nil && *r.MaxRedirects < 0 {
 		return fmt.Errorf("max_redirects не может быть отрицательным, получено %d",
@@ -576,6 +617,9 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		ctx, cancel = context.WithCancel(parent)
 		req = req.WithContext(ctx)
 	}
+	if r != nil && r.ConnectTimeout != nil {
+		req = req.WithContext(withConnectLimit(req.Context(), *r.ConnectTimeout))
+	}
 	// Без явного размера транспорт перешёл бы на chunked-кодирование,
 	// которого браузер при отправке файла не использует.
 	if size >= 0 {
@@ -651,7 +695,12 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 }
 
 func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, error) {
-	raw, err := s.dialRaw(ctx, ds.addr, ds.proxy)
+	// Предел на установку покрывает и TCP, и рукопожатие TLS: для вызывающего
+	// это одна фаза «пока соединения нет», и делить её незачем.
+	dialCtx, done := s.connectContext(ctx)
+	defer done()
+
+	raw, err := s.dialRaw(dialCtx, ds.addr, ds.proxy)
 	if err != nil {
 		return nil, err
 	}
@@ -697,7 +746,9 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 		raw.Close()
 		return nil, fmt.Errorf("ApplyPreset: %w", err)
 	}
-	if err := uconn.HandshakeContext(ctx); err != nil {
+	// Рукопожатие идёт под тем же пределом, что и TCP: узел, принявший
+	// соединение и замолчавший, иначе съел бы весь бюджет запроса.
+	if err := uconn.HandshakeContext(dialCtx); err != nil {
 		raw.Close()
 		return nil, fmt.Errorf("TLS handshake: %w", err)
 	}

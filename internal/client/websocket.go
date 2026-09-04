@@ -89,6 +89,9 @@ type WebSocketOptions struct {
 	Subprotocols []string
 	// Timeout ограничивает рукопожатие и чтение или запись одного сообщения.
 	Timeout time.Duration
+	// ConnectTimeout ограничивает установку соединения отдельно: разрешение
+	// имени, TCP и рукопожатие TLS. Ноль — только Timeout.
+	ConnectTimeout time.Duration
 	// MaxMessageSize ограничивает принимаемое сообщение, в байтах, включая
 	// распакованный размер. Ноль — defaultMaxMessageSize.
 	MaxMessageSize int64
@@ -127,6 +130,9 @@ func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocke
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	if opts.ConnectTimeout > 0 {
+		ctx = withConnectLimit(ctx, opts.ConnectTimeout)
+	}
 
 	// Рукопожатие идёт по HTTP/1.1: Upgrade в HTTP/2 работает иначе
 	// (RFC 8441, расширенный CONNECT) и поддерживается не везде.

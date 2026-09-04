@@ -14,6 +14,22 @@ from ._ffi import _call, stream_read
 DEFAULT_CHUNK = 64 * 1024
 
 
+def lines_from(buffer: bytes, chunk: bytes, keepends: bool) -> tuple[bytes, list[bytes]]:
+    """Достаёт из накопленного готовые строки и возвращает остаток.
+
+    Общая для обычного и асинхронного чтения: разойтись двум копиям здесь
+    легко — например, на переводе строки, попавшем на границу частей.
+    """
+    buffer += chunk
+    lines: list[bytes] = []
+    while True:
+        line, sep, rest = buffer.partition(b"\n")
+        if not sep:
+            return buffer, lines
+        buffer = rest
+        lines.append(line + sep if keepends else line.rstrip(b"\r"))
+
+
 class StreamResponse:
     """Ответ с телом, читаемым по частям.
 
@@ -46,13 +62,8 @@ class StreamResponse:
         """
         buffer = b""
         for chunk in self.iter_content(chunk_size):
-            buffer += chunk
-            while True:
-                line, sep, rest = buffer.partition(b"\n")
-                if not sep:
-                    break
-                buffer = rest
-                yield line + sep if keepends else line.rstrip(b"\r")
+            buffer, lines = lines_from(buffer, chunk, keepends)
+            yield from lines
         if buffer:
             yield buffer
 

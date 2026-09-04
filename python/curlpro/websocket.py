@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Iterable, Iterator, Mapping
 
 from ._ffi import WebSocketClosed, _call, call_framed, call_framed_out, encode
+from .timeouts import split_timeout as _split_timeout
 
 
 class WebSocket:
@@ -105,9 +106,10 @@ def connect(
     *,
     headers: Mapping[str, str] | None = None,
     subprotocols: Iterable[str] | None = None,
-    timeout: float = 30.0,
+    timeout: float | tuple[float, float] = 30.0,
     max_message_size: int = 0,
 ) -> WebSocket:
+    connect_timeout, timeout = _split_timeout(timeout)
     data = _call(
         "curlpro_ws_connect",
         session_id,
@@ -116,7 +118,9 @@ def connect(
                 "url": url,
                 "headers": dict(headers or {}),
                 "subprotocols": list(subprotocols or []),
-                "timeout_ms": int(timeout * 1000),
+                "timeout_ms": int(timeout * 1000) if timeout else 0,
+                "connect_timeout_ms":
+                    int(connect_timeout * 1000) if connect_timeout else 0,
                 # Ноль — умолчание нативной части (64 МиБ). Предел нужен:
                 # длину кадра называет сервер.
                 "max_message_size": int(max_message_size),

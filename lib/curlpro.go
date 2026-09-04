@@ -106,7 +106,9 @@ func curlpro_free(s *C.char) {
 // 0.7.0: асинхронный запуск запросов, resolve и ip_version.
 // 0.8.0: alt_svc, свой CA, клиентские сертификаты, trust_env, предел тела,
 // история редиректов в ответе.
-const Version = "0.8.0"
+// 0.9.0: отдельный предел на установку соединения (connect_timeout_ms),
+// асинхронные открытие потока, чтение части тела и работа с WebSocket.
+const Version = "0.9.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -157,6 +159,7 @@ type sessionConfig struct {
 	HTTP3              bool     `json:"http3"`
 	MaxIdleConns       int      `json:"max_idle_conns"`
 	IdleConnTimeoutMS  int      `json:"idle_conn_timeout_ms"`
+	ConnectTimeoutMS   int      `json:"connect_timeout_ms"`
 	CACert             string   `json:"ca_cert"`
 	ClientCert         string   `json:"client_cert"`
 	ClientKey          string   `json:"client_key"`
@@ -232,6 +235,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		Cookies:            c.Cookies,
 		ForceHTTP1:         c.ForceHTTP1,
 		HTTP3:              c.HTTP3,
+		ConnectTimeout:     time.Duration(c.ConnectTimeoutMS) * time.Millisecond,
 		CACert:             c.CACert,
 		ClientCert:         c.ClientCert,
 		ClientKey:          c.ClientKey,
@@ -335,10 +339,11 @@ type requestJSON struct {
 
 	// Переопределения сессионных настроек. Указатели отличают «не задано»
 	// от «задано в ноль»: для таймаута и редиректов это разные вещи.
-	TimeoutMS       *int       `json:"timeout_ms"`
-	FollowRedirects *bool      `json:"follow_redirects"`
-	MaxRedirects    *int       `json:"max_redirects"`
-	Retry           *retryJSON `json:"retry"`
+	TimeoutMS        *int       `json:"timeout_ms"`
+	ConnectTimeoutMS *int       `json:"connect_timeout_ms"`
+	FollowRedirects  *bool      `json:"follow_redirects"`
+	MaxRedirects     *int       `json:"max_redirects"`
+	Retry            *retryJSON `json:"retry"`
 	// Proxy: null — взять из сессии, "" — идти напрямую в обход сессионного.
 	Proxy *string `json:"proxy"`
 	// Mode переопределяет режим набора заголовков для одного запроса.
@@ -350,6 +355,10 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 	if r.TimeoutMS != nil {
 		d := time.Duration(*r.TimeoutMS) * time.Millisecond
 		req.Timeout = &d
+	}
+	if r.ConnectTimeoutMS != nil {
+		d := time.Duration(*r.ConnectTimeoutMS) * time.Millisecond
+		req.ConnectTimeout = &d
 	}
 	req.FollowRedirects = r.FollowRedirects
 	req.MaxRedirects = r.MaxRedirects
