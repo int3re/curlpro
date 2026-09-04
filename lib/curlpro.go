@@ -142,21 +142,23 @@ func curlpro_profiles_list() (out *C.char) {
 }
 
 type sessionConfig struct {
-	Profile            string            `json:"profile"`
-	InsecureSkipVerify bool              `json:"insecure_skip_verify"`
-	TimeoutMS          int               `json:"timeout_ms"`
-	Proxy              string            `json:"proxy"`
-	DefaultHeaders     bool              `json:"default_headers"`
-	HeaderOrder        []string          `json:"header_order"`
-	FollowRedirects    bool              `json:"follow_redirects"`
-	MaxRedirects       int               `json:"max_redirects"`
-	Cookies            bool              `json:"cookies"`
-	ForceHTTP1         bool              `json:"force_http1"`
-	HTTP3              bool              `json:"http3"`
-	MaxIdleConns       int               `json:"max_idle_conns"`
-	IdleConnTimeoutMS  int               `json:"idle_conn_timeout_ms"`
-	Resolve            map[string]string `json:"resolve"`
-	IPVersion          string            `json:"ip_version"`
+	Profile            string   `json:"profile"`
+	InsecureSkipVerify bool     `json:"insecure_skip_verify"`
+	TimeoutMS          int      `json:"timeout_ms"`
+	Proxy              string   `json:"proxy"`
+	DefaultHeaders     bool     `json:"default_headers"`
+	HeaderOrder        []string `json:"header_order"`
+	FollowRedirects    bool     `json:"follow_redirects"`
+	MaxRedirects       int      `json:"max_redirects"`
+	Cookies            bool     `json:"cookies"`
+	ForceHTTP1         bool     `json:"force_http1"`
+	HTTP3              bool     `json:"http3"`
+	MaxIdleConns       int      `json:"max_idle_conns"`
+	IdleConnTimeoutMS  int      `json:"idle_conn_timeout_ms"`
+	// AltSvc: указатель, потому что отсутствие поля означает «включено».
+	AltSvc    *bool             `json:"alt_svc"`
+	Resolve   map[string]string `json:"resolve"`
+	IPVersion string            `json:"ip_version"`
 	// KeepAlive: указатель, потому что отсутствие поля означает «включено».
 	// Старый Python со свежей DLL не должен молча получить пересоздание
 	// соединения на каждый запрос.
@@ -223,6 +225,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		Cookies:            c.Cookies,
 		ForceHTTP1:         c.ForceHTTP1,
 		HTTP3:              c.HTTP3,
+		DisableAltSvc:      c.AltSvc != nil && !*c.AltSvc,
 		Resolve:            c.Resolve,
 		IPVersion:          c.IPVersion,
 		DisableKeepAlive:   c.KeepAlive != nil && !*c.KeepAlive,

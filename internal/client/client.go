@@ -60,6 +60,14 @@ type Options struct {
 	// IdleConnTimeout — сколько держать неиспользуемое соединение. 0 — 300 с,
 	// столько же держит Chrome.
 	IdleConnTimeout time.Duration
+	// DisableAltSvc выключает автопереход на HTTP/3 по заголовку Alt-Svc.
+	//
+	// По умолчанию переход включён: так делает браузер — первый запрос
+	// к сайту всегда идёт по TCP, а на HTTP/3 клиент переходит, только
+	// увидев объявление. Выключать стоит там, где UDP заведомо закрыт
+	// и лишняя попытка только тратит время.
+	DisableAltSvc bool
+
 	// Resolve подменяет адрес узла, не трогая имя в SNI и заголовке Host.
 	//
 	// Ключ — "host:port" или просто "host" (тогда правило действует на любой
@@ -277,6 +285,9 @@ type Session struct {
 	// cookies — свой учёт кук для выгрузки: банка отдаёт только пару
 	// «имя-значение» для адреса, а сохранить сессию этого мало.
 	cookies map[string]Cookie
+
+	// altSvc — объявления HTTP/3 по origin вместе с пометкой «сломан».
+	altSvc map[string]altSvcEntry
 
 	h3 h3Transport
 }
@@ -517,17 +528,25 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// Ветка HTTP/3 стоит здесь, а не раньше: до создания контекста она
 	// уходила без таймаута вовсе, и зависший запрос висел бы вечно.
 	// Заголовки для неё собирает sendH3 сам: fhttp-запрос ей не нужен.
-	if s.opts.HTTP3 {
+	// Автопереход по Alt-Svc действует только на прямые соединения: через
+	// прокси QUIC не проходит, и предлагать его там нечего.
+	viaAltSvc := !s.opts.HTTP3 && s.proxyFor(r) == "" && s.altSvcH3(u)
+	if s.opts.HTTP3 || viaAltSvc {
 		if r.Proxy != nil && *r.Proxy != "" {
 			return fail(fmt.Errorf("прокси для HTTP/3 не поддерживается " +
 				"(QUIC требует CONNECT-UDP, RFC 9298)"))
 		}
 		resp, err := s.sendH3(req.Context(), r, u)
-		if err != nil {
+		if err == nil {
+			// У HTTP/3 своё соединение внутри транспорта, отпускать нечего.
+			return fromStdResponse(resp), cancel, nil, nil
+		}
+		if !viaAltSvc {
 			return fail(err)
 		}
-		// У HTTP/3 своё соединение внутри транспорта, отпускать нечего.
-		return fromStdResponse(resp), cancel, nil, nil
+		// Переход был нашей догадкой по объявлению сайта — откатываемся
+		// на TCP и какое-то время больше не пробуем, как делает браузер.
+		s.markAltSvcBroken(u)
 	}
 
 	spec := s.newDialSpec(u, s.proxyFor(r), s.opts.ForceHTTP1)

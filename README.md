@@ -29,7 +29,14 @@ with curlpro.Session("chrome-151-windows") as s:
 async with curlpro.AsyncSession("firefox-144-macos", proxy="socks5://127.0.0.1:1080") as s:
     results = await asyncio.gather(*(s.get(u) for u in urls))
 
-# HTTP/3 — отдельный транспорт, выбирается явно
+# HTTP/3 включается сам, как в браузере: первый запрос идёт по TCP, а увидев
+# в ответе Alt-Svc, клиент со следующего переходит на QUIC. Если QUIC не
+# проходит, запрос откатывается на TCP, и попытка какое-то время не повторяется.
+with curlpro.Session("chrome-151-windows") as s:
+    print(s.get("https://cloudflare-quic.com/").proto)   # HTTP/2.0
+    print(s.get("https://cloudflare-quic.com/").proto)   # HTTP/3.0
+
+# Явное включение тоже осталось: тогда первый же запрос уходит по QUIC
 with curlpro.Session("chrome-151-windows", http3=True) as s:
     print(s.get("https://quic.browserleaks.com/fp").json()["h3_text"])
     # 1:65536;6:262144;7:100;51:1;GREASE|GREASE|984832|m,a,s,p — как Chrome

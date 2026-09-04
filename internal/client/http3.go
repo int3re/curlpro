@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	quic "github.com/refraction-networking/uquic"
 	utls "github.com/refraction-networking/utls"
@@ -88,8 +89,14 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports) (*h3
 	}
 
 	return &h3.Transport{
-		TLSClientConfig:        &utls.Config{InsecureSkipVerify: opts.InsecureSkipVerify},
-		QUICConfig:             &quic.Config{EnableDatagrams: datagrams},
+		TLSClientConfig: &utls.Config{InsecureSkipVerify: opts.InsecureSkipVerify},
+		QUICConfig: &quic.Config{
+			EnableDatagrams: datagrams,
+			// Предел на рукопожатие задан явно: при автопереходе по Alt-Svc
+			// неудачная попытка QUIC оплачивается из бюджета запроса, и без
+			// границы откат на TCP получал бы уже исчерпанный дедлайн.
+			HandshakeIdleTimeout: 3 * time.Second,
+		},
 		EnableDatagrams:        datagrams,
 		MaxResponseHeaderBytes: int(maxFieldSection),
 		AdditionalSettings:     extra,

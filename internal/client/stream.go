@@ -77,6 +77,9 @@ func (s *Session) DoStream(r *Request) (*Stream, error) {
 	if err != nil || stream == nil {
 		return stream, err
 	}
+	if u, uerr := url.Parse(stream.URL); uerr == nil {
+		s.noteAltSvc(u, stream.Headers)
+	}
 	if u, uerr := url.Parse(stream.URL); uerr == nil && s.noteAcceptCH(u, stream.Headers) {
 		stream.Close()
 		if retried, rerr := s.doStream(r); rerr == nil {

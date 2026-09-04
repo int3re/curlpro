@@ -270,6 +270,11 @@ class Session:
     :param http3: отправлять запросы по QUIC вместо TCP. Профиль обязан
         описывать секцию ``http3``, иначе сессия не создастся. Это отдельный
         транспорт, а не вариант ALPN, поэтому выбирается явно
+    :param alt_svc: переходить на HTTP/3, увидев в ответе заголовок
+        ``Alt-Svc``. Так делает браузер: первый запрос к сайту всегда идёт
+        по TCP, а на QUIC он переходит, только увидев объявление. Неудачная
+        попытка откладывает следующую и откатывает запрос на TCP. Требует
+        профиля с секцией ``http3``; через прокси не действует
     :param resolve: подмена адреса узла: ``{"example.com:443": "10.0.0.7"}``.
         Имя в SNI и заголовке Host остаётся прежним — меняется только то,
         куда открывается сокет. Аналог ``--resolve`` у curl: нужен, чтобы
@@ -311,6 +316,7 @@ class Session:
         cookies: bool = True,
         force_http1: bool = False,
         http3: bool = False,
+        alt_svc: bool = True,
         resolve: Mapping[str, str] | None = None,
         ip_version: str | None = None,
         keep_alive: bool = True,
@@ -345,6 +351,7 @@ class Session:
                     "cookies": cookies,
                     "force_http1": force_http1,
                     "http3": http3,
+                    "alt_svc": alt_svc,
                     "resolve": dict(resolve) if resolve else None,
                     "ip_version": ip_version or "",
                     "keep_alive": keep_alive,
