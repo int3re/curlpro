@@ -29,6 +29,28 @@ class CurlProError(RuntimeError):
         self.code = code
 
 
+class Timeout(CurlProError):
+    """Истёк предел на запрос.
+
+    Отдельным классом, потому что таймаут — единственный исход, который
+    в парсере обрабатывают иначе, чем прочие сетевые ошибки: его повторяют.
+    """
+
+
+class HTTPError(CurlProError):
+    """Ответ со статусом ошибки; поднимает :meth:`Response.raise_for_status`.
+
+    Раньше там поднимался голый RuntimeError, и отличить его от внутренней
+    поломки было нельзя. ``response`` остаётся под рукой: у ответа с ошибкой
+    обычно есть тело, ради которого его и разбирают.
+    """
+
+    def __init__(self, message: str, response=None, code: str | None = None):  # noqa: ANN001
+        super().__init__(message, code)
+        self.response = response
+        self.status = getattr(response, "status", None)
+
+
 class WebSocketClosed(CurlProError):
     """WebSocket закрыт: сервером кадром Close либо вызывающим.
 
@@ -42,6 +64,8 @@ def _raise(envelope: dict, name: str) -> None:
     message = envelope.get("error") or f"{name}: неизвестная ошибка"
     if code == "ws_closed":
         raise WebSocketClosed(message, code)
+    if code == "timeout":
+        raise Timeout(message, code)
     raise CurlProError(message, code)
 
 
@@ -173,7 +197,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Минимальная версия нативной части: мажор и минор. Поднимать вместе
 # с lib/curlpro.go, когда Python начинает зависеть от нового экспорта или поля.
-REQUIRED_VERSION = (0, 7)
+REQUIRED_VERSION = (0, 8)
 
 
 def _check_version() -> None:

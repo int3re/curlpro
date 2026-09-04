@@ -36,6 +36,26 @@ class StreamResponse:
     def ok(self) -> bool:
         return 200 <= self.status < 400
 
+    def iter_lines(self, chunk_size: int = DEFAULT_CHUNK,
+                   keepends: bool = False) -> Iterator[bytes]:
+        """Тело построчно, не собирая его целиком.
+
+        Нужно для потоков вида NDJSON, где ответ бесконечен по смыслу
+        и материализовать его нельзя. Разделителем считается перевод
+        строки; последняя строка отдаётся даже без него.
+        """
+        buffer = b""
+        for chunk in self.iter_content(chunk_size):
+            buffer += chunk
+            while True:
+                line, sep, rest = buffer.partition(b"\n")
+                if not sep:
+                    break
+                buffer = rest
+                yield line + sep if keepends else line.rstrip(b"\r")
+        if buffer:
+            yield buffer
+
     def header(self, name: str) -> str | None:
         lowered = name.lower()
         for key, values in self.headers.items():

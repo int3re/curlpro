@@ -104,7 +104,9 @@ func curlpro_free(s *C.char) {
 // 0.5.0: device и devices — подсказки высокой энтропии по Accept-CH.
 // 0.6.0: выгрузка, загрузка и очистка кук.
 // 0.7.0: асинхронный запуск запросов, resolve и ip_version.
-const Version = "0.7.0"
+// 0.8.0: alt_svc, свой CA, клиентские сертификаты, trust_env, предел тела,
+// история редиректов в ответе.
+const Version = "0.8.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -155,6 +157,11 @@ type sessionConfig struct {
 	HTTP3              bool     `json:"http3"`
 	MaxIdleConns       int      `json:"max_idle_conns"`
 	IdleConnTimeoutMS  int      `json:"idle_conn_timeout_ms"`
+	CACert             string   `json:"ca_cert"`
+	ClientCert         string   `json:"client_cert"`
+	ClientKey          string   `json:"client_key"`
+	TrustEnv           bool     `json:"trust_env"`
+	MaxResponseSize    int64    `json:"max_response_size"`
 	// AltSvc: указатель, потому что отсутствие поля означает «включено».
 	AltSvc    *bool             `json:"alt_svc"`
 	Resolve   map[string]string `json:"resolve"`
@@ -225,6 +232,11 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		Cookies:            c.Cookies,
 		ForceHTTP1:         c.ForceHTTP1,
 		HTTP3:              c.HTTP3,
+		CACert:             c.CACert,
+		ClientCert:         c.ClientCert,
+		ClientKey:          c.ClientKey,
+		TrustEnv:           c.TrustEnv,
+		MaxResponseSize:    c.MaxResponseSize,
 		DisableAltSvc:      c.AltSvc != nil && !*c.AltSvc,
 		Resolve:            c.Resolve,
 		IPVersion:          c.IPVersion,
@@ -417,6 +429,7 @@ type responseJSON struct {
 	Headers map[string][]string `json:"headers"`
 	URL     string              `json:"url"`
 	BodyLen int                 `json:"body_len"`
+	History []client.Redirect   `json:"history,omitempty"`
 }
 
 // Тела передаются в бинарном виде, отдельно от JSON.
@@ -527,6 +540,7 @@ func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int
 			Headers: resp.Headers,
 			URL:     resp.URL,
 			BodyLen: len(resp.Body),
+			History: resp.History,
 		}, resp.Body, nil)
 	})
 }

@@ -39,7 +39,7 @@ packages = ["curlpro"]
 # бесполезна, а требовать их отдельной загрузки — лишний шаг для пользователя.
 # Оба каталога наполняются на этапе сборки (.github/workflows/wheels.yml).
 [tool.setuptools.package-data]
-curlpro = ["lib/*", "profiles/*.json"]
+curlpro = ["lib/*", "profiles/*.json", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

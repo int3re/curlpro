@@ -178,6 +178,7 @@ func okFrame(resp *client.Response) []byte {
 		Proto:   resp.Proto,
 		Headers: resp.Headers,
 		URL:     resp.URL,
+		History: resp.History,
 	}, resp.Body, nil)
 }
 

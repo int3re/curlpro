@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import time
 from typing import Any, Callable, Iterable, Mapping
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
-from ._ffi import _call, call_framed, encode
+from ._ffi import HTTPError, _call, call_framed, encode
 from .cookies import Cookies
 from .encoding import detect as detect_encoding
 from .headers import SessionHeaders
@@ -114,11 +117,52 @@ def _build_multipart(
     return meta, bytes(blob)
 
 
+def _with_params(url: str, params: Mapping[str, Any] | Iterable[tuple[str, Any]] | None) -> str:
+    """Дописывает параметры запроса к адресу.
+
+    Уже имеющаяся строка запроса сохраняется: в requests так же, и адрес
+    вида "/search?lang=ru" с параметрами не теряет свой lang.
+    """
+    if not params:
+        return url
+    items: list[tuple[str, str]] = []
+    pairs = params.items() if hasattr(params, "items") else params
+    for key, value in pairs:
+        if value is None:
+            continue
+        if isinstance(value, (list, tuple, set)):
+            items.extend((key, str(v)) for v in value if v is not None)
+        elif isinstance(value, bool):
+            items.append((key, "true" if value else "false"))
+        else:
+            items.append((key, str(value)))
+    if not items:
+        return url
+    parts = urlsplit(url)
+    query = urlencode(items, doseq=False)
+    if parts.query:
+        query = parts.query + "&" + query
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+
+
+def _auth_header(auth: tuple[str, str] | str | None) -> str | None:
+    """Базовая авторизация: пара превращается в заголовок, строка идёт как есть."""
+    if auth is None:
+        return None
+    if isinstance(auth, str):
+        return auth
+    user, password = auth
+    token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+    return "Basic " + token
+
+
 def _request_meta(
     method: str,
     url: str,
     *,
     headers: Mapping[str, str] | None = None,
+    params: Mapping[str, Any] | Iterable[tuple[str, Any]] | None = None,
+    auth: tuple[str, str] | str | None = None,
     data: bytes | str | None = None,
     json_body: Any = None,
     files: Mapping[str, Any] | None = None,
@@ -138,6 +182,12 @@ def _request_meta(
     proxy: str | bool | None = None,
     mode: str | None = None,
 ) -> tuple[dict[str, Any], bytes]:
+    # params и auth — привычные аргументы requests; здесь они превращаются
+    # в адрес со строкой запроса и в обычный заголовок, дальше всё как обычно.
+    url = _with_params(url, params)
+    if credentials := _auth_header(auth):
+        headers = dict(headers or {})
+        headers.setdefault("Authorization", credentials)
     """Собирает кадр запроса. Общий для request() и stream(): раньше у потока
     была своя урезанная копия без таймаута, прокси, повторов и файлов."""
     hdrs = dict(headers or {})
@@ -186,19 +236,57 @@ def _request_meta(
     return meta, data or b""
 
 
+class Redirect:
+    """Шаг цепочки редиректов: куда ответил сервер и каким статусом."""
+
+    __slots__ = ("status", "url", "location")
+
+    def __init__(self, status: int, url: str, location: str):
+        self.status = status
+        self.url = url
+        self.location = location
+
+    def __repr__(self) -> str:
+        return f"<Redirect {self.status} {self.url} → {self.location}>"
+
+
 class Response:
     """Ответ сервера."""
 
-    __slots__ = ("status", "proto", "headers", "content", "url", "_encoding")
+    __slots__ = ("status", "proto", "headers", "content", "url", "elapsed",
+                 "history", "_encoding")
 
     def __init__(self, status: int, proto: str, headers: dict[str, list[str]],
-                 content: bytes, url: str = ""):
+                 content: bytes, url: str = "", elapsed: float = 0.0,
+                 history: list | None = None):
         self.status = status
         self.proto = proto
         self.headers = headers
         self.content = content
         self.url = url
+        #: Время запроса целиком, включая редиректы и повторы, в секундах.
+        self.elapsed = elapsed
+        #: Промежуточные ответы цепочки редиректов, от первого к последнему.
+        self.history: list[Redirect] = history or []
         self._encoding: str | None = None
+
+    @property
+    def cookies(self) -> dict[str, str]:
+        """Куки, установленные этим ответом.
+
+        Именно этим, а не всей сессией: у сессии для этого есть свой
+        ``cookies``, куда попадают в том числе куки прошлых запросов.
+        """
+        out: dict[str, str] = {}
+        for name, values in self.headers.items():
+            if name.lower() != "set-cookie":
+                continue
+            for v in values:
+                pair = v.split(";", 1)[0]
+                key, _, value = pair.partition("=")
+                if key.strip():
+                    out[key.strip()] = value.strip()
+        return out
 
     @property
     def encoding(self) -> str:
@@ -234,8 +322,9 @@ class Response:
         return 200 <= self.status < 400
 
     def raise_for_status(self) -> "Response":
+        """Поднимает :class:`HTTPError` при статусе 4xx или 5xx."""
         if not self.ok:
-            raise RuntimeError(f"HTTP {self.status} для {self.url}")
+            raise HTTPError(f"HTTP {self.status} для {self.url}", response=self)
         return self
 
     def header(self, name: str) -> str | None:
@@ -254,7 +343,15 @@ class Session:
     """Сессия с одним профилем и переиспользованием соединений.
 
     :param impersonate: имя профиля
-    :param verify: проверять сертификат сервера
+    :param verify: проверять сертификат сервера. ``True`` — системные корни,
+        путь к файлу PEM — доверять только этому корню, ``False`` — не
+        проверять вовсе
+    :param cert: пара путей ``(сертификат, ключ)`` для взаимной
+        аутентификации (mTLS)
+    :param trust_env: брать прокси из переменных окружения ``HTTPS_PROXY``,
+        ``ALL_PROXY`` с учётом ``NO_PROXY``. Явно заданный ``proxy`` сильнее
+    :param max_response_size: предел размера тела в байтах; 0 — без предела.
+        Без него сервер с бесконечным ответом съедает память процесса
     :param timeout: предел на запрос целиком, включая редиректы, в секундах
     :param proxy: ``http://``, ``https://`` или ``socks5://``, можно с user:pass
     :param default_headers: подставлять заголовки профиля. Выключите, чтобы
@@ -306,7 +403,10 @@ class Session:
         self,
         impersonate: str = DEFAULT_PROFILE,
         *,
-        verify: bool = True,
+        verify: bool | str = True,
+        cert: tuple[str, str] | None = None,
+        trust_env: bool = True,
+        max_response_size: int = 0,
         timeout: float = 30.0,
         proxy: str | None = None,
         default_headers: bool = True,
@@ -341,7 +441,14 @@ class Session:
             encode(
                 {
                     "profile": impersonate,
-                    "insecure_skip_verify": not verify,
+                    # verify=True — системные корни, строка — свой корень,
+                    # False — без проверки вовсе.
+                    "insecure_skip_verify": verify is False,
+                    "ca_cert": verify if isinstance(verify, str) else "",
+                    "client_cert": cert[0] if cert else "",
+                    "client_key": cert[1] if cert else "",
+                    "trust_env": trust_env,
+                    "max_response_size": int(max_response_size),
                     "timeout_ms": int(timeout * 1000),
                     "proxy": proxy or "",
                     "default_headers": default_headers,
@@ -389,6 +496,8 @@ class Session:
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
+        params: Mapping[str, Any] | Iterable[tuple[str, Any]] | None = None,
+        auth: tuple[str, str] | str | None = None,
         data: bytes | str | None = None,
         json_body: Any = None,
         files: Mapping[str, Any] | None = None,
@@ -412,7 +521,8 @@ class Session:
             raise RuntimeError("сессия закрыта")
 
         meta, body = _request_meta(
-            method, url, headers=headers, data=data, json_body=json_body,
+            method, url, headers=headers, params=params, auth=auth,
+            data=data, json_body=json_body,
             files=files, fields=fields, body_file=body_file,
             header_order=header_order, default_headers=default_headers,
             timeout=timeout, allow_redirects=allow_redirects,
@@ -426,13 +536,18 @@ class Session:
             if replaced is not None:
                 meta = replaced
 
+        started = time.perf_counter()
         payload, content = call_framed("curlpro_request", self._id, body=body, meta=meta)
+        spent = time.perf_counter() - started
         return self._after(Response(
             status=payload["status"],
             proto=payload.get("proto", ""),
             headers=payload.get("headers") or {},
             content=content,
             url=payload.get("url") or url,
+            elapsed=spent,
+            history=[Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
+                     for h in payload.get("history") or []],
         ))
 
     def _after(self, response: Response) -> Response:

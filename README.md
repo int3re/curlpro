@@ -148,6 +148,23 @@ curlpro.Session(resolve={"example.com:443": "10.0.0.7"}, ip_version="4")
 
 Имя в SNI и заголовке `Host` остаётся прежним, поэтому отпечаток не меняется.
 
+Привычные аргументы requests на месте, и ответ отвечает тем же:
+
+```python
+r = s.get(url, params={"page": 2}, auth=("user", "pw"))
+r.raise_for_status()                  # curlpro.HTTPError со статусом и ответом
+r.elapsed, r.history, r.cookies       # время, цепочка редиректов, куки ответа
+with s.stream("GET", url) as chunked:
+    for line in chunked.iter_lines(): # построчно, не собирая тело
+        ...
+```
+
+Сетевая часть тоже без сюрпризов: свой корневой сертификат
+(`verify="ca.pem"`), взаимная аутентификация (`cert=("client.pem", "key.pem")`),
+прокси из переменных окружения с учётом `NO_PROXY` (`trust_env=True`),
+предел размера ответа (`max_response_size`) — без него сервер с бесконечным
+телом съедает память процесса.
+
 Разбор HTML сюда намеренно не входит: это работа `selectolax` или `lxml`.
 
 ## Два набора заголовков
@@ -250,6 +267,7 @@ fhttp и quic-go/qpack (MIT), и содержит копию пакета `http3
 | [docs/STAGE14-RESULTS.md](docs/STAGE14-RESULTS.md) | Внешний аудит: 20 подтверждённых находок и что по ним исправлено |
 | [docs/STAGE15-RESULTS.md](docs/STAGE15-RESULTS.md) | Закрытие долгов: набор `fetch`, динамическая таблица QPACK, GOAWAY, захват QUIC |
 | [docs/STAGE16-RESULTS.md](docs/STAGE16-RESULTS.md) | Порядок заголовков HTTP/3, CONNECT после 407, окно deflate, `keep_alive` |
+| [docs/RELEASE.md](docs/RELEASE.md) | Выпуск версии: колёса на пяти платформах, доверенная публикация на PyPI |
 | [docs/STAGE8-RESULTS.md](docs/STAGE8-RESULTS.md) | CI и колёса: почему валидация по расписанию, сборка на пяти платформах |
 | [docs/STAGE9-RESULTS.md](docs/STAGE9-RESULTS.md) | HTTP/1.1 (регистр заголовков), потоковая отправка, WebSocket |
 | [docs/STAGE10-RESULTS.md](docs/STAGE10-RESULTS.md) | Повторы, переопределения на запрос, заголовки сессии; два найденных бага |

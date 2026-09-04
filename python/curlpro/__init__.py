@@ -17,10 +17,10 @@
 
 from __future__ import annotations
 
-from ._ffi import CurlProError, WebSocketClosed
+from ._ffi import HTTPError, Timeout, CurlProError, WebSocketClosed
 from .aio import AsyncSession
 from .cookies import Cookie, Cookies
-from .session import Response, Session, delete, get, head, options, patch, post, put
+from .session import Redirect, Response, Session, delete, get, head, options, patch, post, put
 from .profiles import Profile, ensure_loaded, list_profiles, load_profiles, register_profile
 from .stream import StreamResponse
 from .websocket import WebSocket
@@ -30,6 +30,9 @@ __all__ = [
     "Cookie",
     "Cookies",
     "CurlProError",
+    "HTTPError",
+    "Redirect",
+    "Timeout",
     "Profile",
     "Response",
     "Session",

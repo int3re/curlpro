@@ -9,6 +9,7 @@ package client
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -60,6 +61,26 @@ type Options struct {
 	// IdleConnTimeout — сколько держать неиспользуемое соединение. 0 — 300 с,
 	// столько же держит Chrome.
 	IdleConnTimeout time.Duration
+	// CACert — путь к своему корневому сертификату (PEM) вместо системных.
+	//
+	// Нужен для стендов, корпоративных сетей и перехватывающих прокси:
+	// без него оставалось только выключить проверку целиком.
+	CACert string
+	// ClientCert и ClientKey включают взаимную аутентификацию (mTLS).
+	ClientCert string
+	ClientKey  string
+
+	// TrustEnv разрешает брать прокси из переменных окружения
+	// HTTPS_PROXY, HTTP_PROXY и NO_PROXY, как это делают curl и requests.
+	// Явно заданный Proxy всегда сильнее.
+	TrustEnv bool
+
+	// MaxResponseSize ограничивает тело ответа. 0 — без предела.
+	//
+	// Без ограничения враждебный или сломанный сервер с бесконечным телом
+	// съедает память процесса целиком: для парсера это не теория.
+	MaxResponseSize int64
+
 	// DisableAltSvc выключает автопереход на HTTP/3 по заголовку Alt-Svc.
 	//
 	// По умолчанию переход включён: так делает браузер — первый запрос
@@ -201,6 +222,24 @@ func (s *Session) proxyFor(r *Request) string {
 	return s.opts.Proxy
 }
 
+// proxyForHost возвращает прокси с учётом переменных окружения.
+//
+// Явно заданный прокси всегда сильнее: окружение — это умолчание, а не
+// приказ. Пустая строка в запросе означает «идти напрямую», и окружение
+// её тоже не перебивает.
+func (s *Session) proxyForHost(r *Request, host string) string {
+	if r != nil && r.Proxy != nil {
+		return *r.Proxy
+	}
+	if s.opts.Proxy != "" {
+		return s.opts.Proxy
+	}
+	if s.opts.TrustEnv {
+		return proxyFromEnv(host)
+	}
+	return ""
+}
+
 // timeout возвращает предел для запроса с учётом переопределения.
 //
 // Ноль отвергается на входе (New и validate), поэтому здесь он означать ничего
@@ -252,6 +291,8 @@ type Response struct {
 	Body    []byte
 	Proto   string
 	URL     string // конечный URL после редиректов
+	// History — пройденные редиректы, от первого к последнему.
+	History []Redirect
 }
 
 // Session выполняет запросы с одним профилем.
@@ -288,6 +329,11 @@ type Session struct {
 
 	// altSvc — объявления HTTP/3 по origin вместе с пометкой «сломан».
 	altSvc map[string]altSvcEntry
+
+	// roots и clientCerts готовятся один раз при создании сессии: читать
+	// файлы на каждое соединение — лишний ввод-вывод в горячем пути.
+	roots       *x509.CertPool
+	clientCerts []utls.Certificate
 
 	h3 h3Transport
 }
@@ -346,6 +392,18 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if opts.ForceHTTP1 {
 		s.alpn = []string{"http/1.1"}
 	}
+	// Файлы читаются до первого запроса: ошибка в пути должна вскрываться
+	// при создании сессии, а не на середине работы парсера.
+	roots, err := loadRoots(opts.CACert)
+	if err != nil {
+		return nil, err
+	}
+	certs, err := loadClientCert(opts.ClientCert, opts.ClientKey)
+	if err != nil {
+		return nil, err
+	}
+	s.roots, s.clientCerts = roots, certs
+
 	if opts.Cookies {
 		jar, err := newCookieJar()
 		if err != nil {
@@ -416,11 +474,22 @@ func (s *Session) Do(r *Request) (*Response, error) {
 	}
 	defer stream.Close()
 
-	data, err := io.ReadAll(stream)
+	// Предел на тело: без него сервер с бесконечным ответом съедает память
+	// процесса целиком. Читаем на байт больше, чтобы отличить «ровно предел»
+	// от «больше предела».
+	var reader io.Reader = stream
+	if limit := s.opts.MaxResponseSize; limit > 0 {
+		reader = io.LimitReader(stream, limit+1)
+	}
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, fmt.Errorf("чтение ответа: %w", err)
 	}
+	if limit := s.opts.MaxResponseSize; limit > 0 && int64(len(data)) > limit {
+		return nil, fmt.Errorf("тело ответа больше предела %d байт", limit)
+	}
 	return &Response{
+		History: stream.History,
 		Status:  stream.Status,
 		Headers: stream.Headers,
 		Body:    data,
@@ -530,7 +599,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// Заголовки для неё собирает sendH3 сам: fhttp-запрос ей не нужен.
 	// Автопереход по Alt-Svc действует только на прямые соединения: через
 	// прокси QUIC не проходит, и предлагать его там нечего.
-	viaAltSvc := !s.opts.HTTP3 && s.proxyFor(r) == "" && s.altSvcH3(u)
+	viaAltSvc := !s.opts.HTTP3 && s.proxyForHost(r, u.Host) == "" && s.altSvcH3(u)
 	if s.opts.HTTP3 || viaAltSvc {
 		if r.Proxy != nil && *r.Proxy != "" {
 			return fail(fmt.Errorf("прокси для HTTP/3 не поддерживается " +
@@ -549,7 +618,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		s.markAltSvcBroken(u)
 	}
 
-	spec := s.newDialSpec(u, s.proxyFor(r), s.opts.ForceHTTP1)
+	spec := s.newDialSpec(u, s.proxyForHost(r, u.Host), s.opts.ForceHTTP1)
 	c, err := s.conn(req.Context(), u, spec)
 	if err != nil {
 		// Соединения нет — запрос до сервера не дошёл, повтор безопасен.
@@ -611,6 +680,8 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 	cfg := &utls.Config{
 		ServerName:         u.Hostname(),
 		InsecureSkipVerify: s.opts.InsecureSkipVerify,
+		RootCAs:            s.roots,
+		Certificates:       s.clientCerts,
 		// Профили, снятые с возобновлённого соединения, содержат pre_shared_key.
 		// На первом соединении тикета ещё нет, и uTLS по умолчанию отказывается
 		// слать пустое расширение. Браузер в этой ситуации его просто не шлёт —

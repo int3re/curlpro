@@ -17,11 +17,23 @@ import (
 // Обычный Do() материализует тело целиком: для мегабайтных загрузок это лишняя
 // память и задержка до первого байта. Stream отдаёт тело потоком, но требует
 // обязательного Close, иначе соединение останется занятым.
+// Redirect — шаг цепочки: чем ответил сервер и куда отправил.
+//
+// Клиент проходит цепочку сам, и без этого вызывающий видел только конечный
+// ответ: понять, был ли переход и через какие адреса, было нельзя.
+type Redirect struct {
+	Status   int    `json:"status"`
+	URL      string `json:"url"`
+	Location string `json:"location"`
+}
+
 type Stream struct {
 	Status  int
 	Headers map[string][]string
 	Proto   string
 	URL     string
+	// History — промежуточные ответы, от первого к последнему.
+	History []Redirect
 
 	body io.ReadCloser
 
@@ -203,6 +215,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 	}
 	// Инициатор цепочки: от него считается sec-fetch-site на каждом хопе.
 	initiator := current.URL
+	var history []Redirect
 
 	policy := s.retryPolicy(r)
 
@@ -243,6 +256,11 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 				switch {
 				case err == nil:
 					next = target
+					history = append(history, Redirect{
+						Status:   resp.StatusCode,
+						URL:      current.URL,
+						Location: location,
+					})
 				case errors.Is(err, errRedirectUnsupported):
 					// Переход невозможен по нашим возможностям, а не по
 					// протоколу: ответ отдаётся как есть, с Location внутри.
@@ -263,6 +281,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 				Headers: resp.Header,
 				Proto:   resp.Proto,
 				URL:     current.URL,
+				History: history,
 				body:    resp.Body,
 				cancel:  cancel,
 				conn:    used,
