@@ -3,9 +3,9 @@ package h3
 import (
 	"context"
 	// [uQUIC] use utls instead of crypto/tls for API compatibility
-	tls "github.com/refraction-networking/utls"
 	"errors"
 	"fmt"
+	tls "github.com/refraction-networking/utls"
 	"io"
 	"log/slog"
 	"net"
@@ -211,8 +211,8 @@ func (t *Transport) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 		return nil, fmt.Errorf("http3: invalid method %q", req.Method)
 	}
 	for k, vv := range req.Header {
-	// The service order keys never reach the wire and deliberately contain a
-	// colon, which is illegal in a header name.
+		// The service order keys never reach the wire and deliberately contain a
+		// colon, which is illegal in a header name.
 		if k == HeaderOrderKey || k == PseudoHeaderOrderKey {
 			continue
 		}

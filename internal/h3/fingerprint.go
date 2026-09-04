@@ -67,7 +67,7 @@ func (f *Fingerprint) applySettings(sf *settingsFrame) {
 	}
 	id := greaseSettingID()
 	sf.Other[id] = greaseSettingValue()
-		// GREASE goes last — that is how Chrome sends it.
+	// GREASE goes last — that is how Chrome sends it.
 	sf.Order = append(append([]uint64{}, sf.Order...), id)
 }
 

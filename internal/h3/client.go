@@ -154,8 +154,8 @@ func newClientConn(
 		lastStreamID:       invalidStreamID,
 		logger:             logger,
 		qlogger:            qlogger,
-	// The table capacity is our own advertised SETTINGS_QPACK_MAX_TABLE_CAPACITY
-	// (0x01): the server encoder may not set more.
+		// The table capacity is our own advertised SETTINGS_QPACK_MAX_TABLE_CAPACITY
+		// (0x01): the server encoder may not set more.
 		decoder: qp.NewDecoder(additionalSettings[settingQPACKMaxTableCapacity]),
 	}
 	// Blocked sections wait for the encoder's insertions; closing the connection
@@ -178,7 +178,7 @@ func newClientConn(
 		qlogger,
 		c.logger,
 	)
-		// The server's encoder stream feeds our dynamic table.
+	// The server's encoder stream feeds our dynamic table.
 	c.rawConn.onEncoderStream = func(str *quic.ReceiveStream) {
 		if err := c.decoder.ReadEncoderStream(str); err != nil {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeQPACKEncoderStreamError), err.Error())
@@ -193,10 +193,10 @@ func newClientConn(
 		}
 		c.fingerprint.applySettings(sf)
 
-	// Browsers append two more frames to the control stream right after
-	// SETTINGS: GREASE and, in Chrome, PRIORITY_UPDATE. Their absence
-	// identifies a client no less reliably than the settings themselves, so
-	// they go out in the same packet.
+		// Browsers append two more frames to the control stream right after
+		// SETTINGS: GREASE and, in Chrome, PRIORITY_UPDATE. Their absence
+		// identifies a client no less reliably than the settings themselves, so
+		// they go out in the same packet.
 		var extra []byte
 		if c.fingerprint != nil && c.fingerprint.SendGreaseFrame {
 			extra = append(extra, greaseFrame()...)
@@ -206,10 +206,10 @@ func newClientConn(
 		c.controlMx.Lock()
 		c.controlStream = str
 		c.controlMx.Unlock()
-	// The QPACK streams open right after the control one, as in Chrome:
-	// the encoder (0x02) and the decoder (0x03). The first stays empty — our
-	// requests do not use the dynamic table; the second carries section
-	// acknowledgements, without which the server encoder cannot evict entries.
+		// The QPACK streams open right after the control one, as in Chrome:
+		// the encoder (0x02) and the decoder (0x03). The first stays empty — our
+		// requests do not use the dynamic table; the second carries section
+		// acknowledgements, without which the server encoder cannot evict entries.
 		if err == nil {
 			if enc, e := c.rawConn.OpenUniStream(); e == nil {
 				_, _ = enc.Write(quicvarint.Append(nil, streamTypeQPACKEncoderStream))

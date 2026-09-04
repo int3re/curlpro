@@ -183,9 +183,9 @@ func (c *rawConn) handleUnidirectionalStream(str *quic.ReceiveStream, isServer b
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK encoder stream")
 			return
 		}
-			// The encoder instructions fill the decoder's dynamic table;
-			// upstream ignored them, and any reference to the table in a
-			// response ended in a decompression error.
+		// The encoder instructions fill the decoder's dynamic table;
+		// upstream ignored them, and any reference to the table in a
+		// response ended in a decompression error.
 		if c.onEncoderStream != nil {
 			c.onEncoderStream(str)
 		}
@@ -194,8 +194,8 @@ func (c *rawConn) handleUnidirectionalStream(str *quic.ReceiveStream, isServer b
 		if isFirst := c.rcvdQPACKDecoderStr.CompareAndSwap(false, true); !isFirst {
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK decoder stream")
 		}
-			// Our encoder is static, there is nothing to acknowledge to the
-			// server: the stream is read into nowhere so its window does not fill up.
+		// Our encoder is static, there is nothing to acknowledge to the
+		// server: the stream is read into nowhere so its window does not fill up.
 		go io.Copy(io.Discard, str)
 		return
 	case streamTypePushStream:

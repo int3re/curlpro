@@ -132,8 +132,8 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 	// potentially pollute our hpack state. (We want to be able to
 	// continue to reuse the hpack encoder for future requests)
 	for k, vv := range req.Header {
-	// The service order keys never reach the wire and deliberately contain a
-	// colon, which is illegal in a header name — they fail validation.
+		// The service order keys never reach the wire and deliberately contain a
+		// colon, which is illegal in a header name — they fail validation.
 		if k == HeaderOrderKey || k == PseudoHeaderOrderKey {
 			continue
 		}
@@ -148,9 +148,9 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 	}
 
 	enumerateHeaders := func(f func(name, value string)) {
-	// The pseudo-header order tells browsers apart: Chrome sends
+		// The pseudo-header order tells browsers apart: Chrome sends
 		// :method,:authority,:scheme,:path, Firefox — :method,:scheme,:authority,:path.
-	// Upstream wrote :authority first, which matches neither.
+		// Upstream wrote :authority first, which matches neither.
 		pseudo := map[string]string{
 			":authority": host,
 			":method":    req.Method,
@@ -168,7 +168,7 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 				delete(pseudo, name)
 			}
 		}
-	// Those not mentioned in the order must still go out, or the request is broken.
+		// Those not mentioned in the order must still go out, or the request is broken.
 		for _, name := range []string{":method", ":authority", ":scheme", ":path", ":protocol"} {
 			if v, ok := pseudo[name]; ok {
 				f(name, v)
@@ -180,9 +180,9 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 		}
 
 		var didUA, didCL bool
-	// Ordinary headers follow the given order too: iterating a map produced a
-	// random sequence on every request — the very thing bogdanfinn has open as a
-	// bug for HTTP/3.
+		// Ordinary headers follow the given order too: iterating a map produced a
+		// random sequence on every request — the very thing bogdanfinn has open as a
+		// bug for HTTP/3.
 		seq := headerSequence(req)
 		sendCL := shouldSendReqContentLength(req.Method, contentLength)
 		if sendCL {
@@ -194,8 +194,8 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 				// Host is :authority, already sent.
 				continue
 			} else if strings.EqualFold(k, "content-length") {
-			// The value is always the computed one, never the user's: it could
-			// disagree with the body. The position comes from the profile order.
+				// The value is always the computed one, never the user's: it could
+				// disagree with the body. The position comes from the profile order.
 				if !didCL {
 					didCL = true
 					f("content-length", strconv.FormatInt(contentLength, 10))
