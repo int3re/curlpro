@@ -9,7 +9,34 @@ on:
 # the target platform's toolchain. So every platform is built on itself rather
 # than by one machine with GOOS/GOARCH flags.
 jobs:
+  # The tag and the version in pyproject must be the same thing. Nothing used
+  # to compare them: tagging v0.3.0 while pyproject still said 0.2.0 would
+  # build and publish a 0.2.0 wheel — silently, and a version on PyPI can never
+  # be reused or freed by deleting it. So the check runs before anything is
+  # built, and everything else waits on it.
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: the tag matches pyproject
+        shell: bash
+        run: |
+          declared=$(grep -m1 '^version = ' python/pyproject.toml | cut -d'"' -f2)
+          echo "pyproject: $declared"
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "not a tag (${GITHUB_REF}) — nothing to compare, publishing is off anyway"
+            exit 0
+          fi
+          tagged="${GITHUB_REF_NAME#v}"
+          echo "tag:       $tagged"
+          if [ "$declared" != "$tagged" ]; then
+            echo "::error::tag v$tagged does not match version $declared in python/pyproject.toml."
+            echo "::error::The wheel would carry $declared, and that version on PyPI cannot be reused."
+            exit 1
+          fi
+
   build:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -117,6 +144,7 @@ jobs:
   # the library. pip still does not build it for you: that would require Go on
   # the user's machine at install time, which pip cannot promise either.
   sdist:
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
