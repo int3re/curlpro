@@ -49,14 +49,19 @@ jobs:
             goarch: arm64
             lib: libcurlpro.so
             plat: manylinux_2_28_aarch64
-          - os: macos-13
+          # macos-15-intel, not macos-13: GitHub keeps only the two latest
+          # versions of an OS, and the macos-13 label is gone from the image
+          # list entirely. A job asking for it is never scheduled — it simply
+          # sits queued, and since publish needs every wheel, the release would
+          # have stalled there for good. The dry run is what found this.
+          - os: macos-15-intel
             goarch: amd64
             lib: libcurlpro.dylib
-            plat: macosx_10_15_x86_64
+            plat: macosx_13_0_x86_64
           - os: macos-latest
             goarch: arm64
             lib: libcurlpro.dylib
-            plat: macosx_11_0_arm64
+            plat: macosx_13_0_arm64
           - os: windows-latest
             goarch: amd64
             lib: curlpro.dll
@@ -97,6 +102,11 @@ jobs:
           python -m build --wheel
           # The platform tag is set explicitly: the wheel carries native code
           # and is not universal.
+          #
+          # The macOS floor is 13, not 10.15 or 11.0 as it used to say: Go 1.27
+          # requires macOS 13 Ventura or later. The old tags were a promise the
+          # binary could not keep — pip on macOS 12 would install the wheel and
+          # then fail to load the library.
           python -m pip install wheel
           for w in dist/*.whl; do
             python -m wheel tags --platform-tag ${{ matrix.plat }} --remove "$w"
