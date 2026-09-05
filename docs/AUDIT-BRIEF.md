@@ -404,10 +404,12 @@ go run ./cmd/curlpro validate -oracle https://localhost:8443/json -insecure `
 ### Чего проверка не покрывает
 
 - Порядок обычных заголовков в **HTTP/3** публичные оракулы не показывают:
-  они отдают `perk` (SETTINGS, псевдо-заголовки, transport parameters).
-  Проверяется своим стендом `cmd/hcapture`, который поднимает QUIC и разбирает
-  HEADERS через `internal/qpack`; сверка с живым Chrome 152 делается вручную,
-  в автоматические тесты не входит. Для HTTP/1.1 и HTTP/2 порядок на проводе
+  они отдают `perk` (SETTINGS, псевдо-заголовки, transport parameters). С
+  2026-09-05 порядок нашего клиента проверяется своим стендом на `uquic`
+  (`internal/client/h3stand_test.go`, четыре теста в `h3order_test.go`) — тем
+  же разбором HEADERS через `internal/qpack`, каким `cmd/hcapture` снимает
+  живой браузер. Ручной остаётся сверка с **живым браузером** по HTTP/3: она
+  снимает эталон, а не проверяет нас. Для HTTP/1.1 и HTTP/2 порядок на проводе
   проверяется постоянно (`test_http1.py`, `test_h2_headers.py`).
 - Конкурентность покрыта с 2026-09-05: `internal/client/concurrency_test.go`,
   восемь тестов под `-race` — параллельные запросы, потоки вперемешку с

@@ -438,11 +438,14 @@ live Chrome 152 over HTTP/2 and HTTP/3. The audit results are in
 ### What the checking does not cover
 
 - Public oracles do not show the order of ordinary headers in **HTTP/3**: they
-  return `perk` (SETTINGS, pseudo-headers, transport parameters). It is checked
-  by our own `cmd/hcapture` stand, which raises QUIC and parses HEADERS through
-  `internal/qpack`; the comparison against live Chrome 152 is done by hand and
-  is not part of the automated tests. For HTTP/1.1 and HTTP/2 the wire order is
-  checked continuously (`test_http1.py`, `test_h2_headers.py`).
+  return `perk` (SETTINGS, pseudo-headers, transport parameters). Since
+  2026-09-05 our own client's order is checked by a stand of ours on `uquic`
+  (`internal/client/h3stand_test.go`, four tests in `h3order_test.go`) — by the
+  same HEADERS parsing through `internal/qpack` that `cmd/hcapture` uses on a
+  live browser. What stays manual is the comparison against a **live browser**
+  over HTTP/3: that captures a reference rather than checking us. For HTTP/1.1
+  and HTTP/2 the wire order is checked continuously (`test_http1.py`,
+  `test_h2_headers.py`).
 - Concurrency has been covered since 2026-09-05:
   `internal/client/concurrency_test.go`, eight tests under `-race` — parallel
   requests, streams interleaved with requests, closing a session under load, the
