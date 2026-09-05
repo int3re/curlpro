@@ -100,9 +100,11 @@ def _load() -> ctypes.CDLL:
     raise CurlProError(
         "native library not found. Looked in:\n  "
         + "\n  ".join(tried)
-        + "\nBuild it: go build -buildmode=c-shared -o dist/"
+        + "\nBuild it: CGO_ENABLED=1 go build -buildmode=c-shared -o dist/"
         + _library_name()
         + " ./lib\n"
+        + "(cgo needs a C compiler; without CGO_ENABLED=1 the build fails with\n"
+        + "\"build constraints exclude all Go files\", which names neither)\n"
         + "or point CURLPRO_LIBRARY at an existing build"
     )
 

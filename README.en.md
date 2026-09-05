@@ -97,6 +97,18 @@ There is no PyPI release yet — build from source. Go and a C compiler are requ
 cd python; $env:PYTHONPATH='.'; python -m pytest tests
 ```
 
+From the source archive (`curlpro-*.tar.gz`) it is one command: the archive
+carries the Go module and the profiles, and the native part is built in place.
+
+```bash
+tar -xzf curlpro-0.2.0.tar.gz && cd curlpro-0.2.0/go
+CGO_ENABLED=1 go build -buildmode=c-shared -o ../curlpro/lib/libcurlpro.so ./lib
+```
+
+`CGO_ENABLED=1` is not decoration: without it the build fails with "build
+constraints exclude all Go files", a message that names neither the cause nor
+the cure.
+
 Profiles live in `profiles/` and load themselves when the library is installed from
 a wheel. Running from the repository, point at them explicitly:
 

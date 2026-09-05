@@ -94,6 +94,17 @@ curlpro.register_profile({
 cd python; $env:PYTHONPATH='.'; python -m pytest tests
 ```
 
+Из архива с исходниками (`curlpro-*.tar.gz`) — то же самое одной командой:
+в архив входят Go-модуль и профили, нативная часть собирается на месте.
+
+```bash
+tar -xzf curlpro-0.2.0.tar.gz && cd curlpro-0.2.0/go
+CGO_ENABLED=1 go build -buildmode=c-shared -o ../curlpro/lib/libcurlpro.so ./lib
+```
+
+`CGO_ENABLED=1` здесь не для красоты: без него сборка падает с «build
+constraints exclude all Go files», и по этой фразе причину не найти.
+
 Профили лежат в `profiles/` и подхватываются сами, если библиотека установлена
 колесом. При запуске из репозитория их указывают явно:
 

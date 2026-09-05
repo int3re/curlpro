@@ -5,9 +5,9 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
-# Нативная библиотека собирается cgo, а cgo не кросс-компилируется без
-# тулчейна целевой платформы. Поэтому каждая платформа собирается на себе,
-# а не одной машиной с флагами GOOS/GOARCH.
+# The native library is built by cgo, and cgo does not cross-compile without
+# the target platform's toolchain. So every platform is built on itself rather
+# than by one machine with GOOS/GOARCH flags.
 jobs:
   build:
     strategy:
@@ -55,9 +55,9 @@ jobs:
           go build -buildmode=c-shared -o "python/curlpro/lib/${{ matrix.lib }}" ./lib
           ls -la python/curlpro/lib/
 
-      # Профили едут внутри пакета: без них библиотека бесполезна,
-      # а требовать от пользователя отдельной загрузки — лишний шаг.
-      - name: вложить профили
+      # The profiles travel inside the package: without them the library is
+      # useless, and asking the user to fetch them separately is a step too many.
+      - name: bundle the profiles
         shell: bash
         run: cp -r profiles python/curlpro/profiles
 
@@ -68,15 +68,20 @@ jobs:
           cd python
           cp ../LICENSE ../NOTICE .
           python -m build --wheel
-          # Тег платформы проставляется явно: колесо содержит нативный
-          # код и не является universal.
+          # The platform tag is set explicitly: the wheel carries native code
+          # and is not universal.
           python -m pip install wheel
           for w in dist/*.whl; do
             python -m wheel tags --platform-tag ${{ matrix.plat }} --remove "$w"
           done
           ls -la dist/
 
-      - name: проверить, что колесо ставится и работает
+      # The check must pass on a day when browserleaks is down: a release
+      # that waits for someone else's service is not a release. So the part
+      # that must hold is local — the native library loads, the profiles are
+      # inside the package, a session starts — and the oracle is asked
+      # afterwards, for information only.
+      - name: check the wheel installs and works
         shell: bash
         run: |
           python -m pip install python/dist/*.whl
@@ -84,8 +89,18 @@ jobs:
           import curlpro, pathlib
           names = curlpro.load_profiles(pathlib.Path(curlpro.__file__).parent / 'profiles')
           assert 'chrome-151-windows' in names, names
-          r = curlpro.get('https://tls.browserleaks.com/json')
-          print('JA4:', r.json()['ja4'])
+          assert len(names) > 40, names
+          with curlpro.Session('chrome-151-windows') as s:
+              assert s.impersonate == 'chrome-151-windows'
+          print('profiles:', len(names))
+          "
+      - name: ask the oracle (informational)
+        shell: bash
+        continue-on-error: true
+        run: |
+          python -c "
+          import curlpro
+          print('JA4:', curlpro.get('https://tls.browserleaks.com/json').json()['ja4'])
           "
 
       - uses: actions/upload-artifact@v4
@@ -93,9 +108,14 @@ jobs:
           name: wheel-${{ matrix.plat }}
           path: python/dist/*.whl
 
-  # Исходный архив нужен тем, у кого нет готового колеса: он собирает
-  # нативную часть сам. Без него pip на неподдержанной платформе просто
-  # разводит руками.
+  # The source archive is for platforms with no wheel. It used to carry
+  # neither the Go sources nor the profiles — 0 .go files, measured — so the
+  # promise that it "builds the native part itself" was false: pip would
+  # install a package that fails at import. It now carries the whole Go module
+  # and the profiles, and building the native part is one command, named in
+  # the README and in the error message the library raises when it cannot find
+  # the library. pip still does not build it for you: that would require Go on
+  # the user's machine at install time, which pip cannot promise either.
   sdist:
     runs-on: ubuntu-latest
     steps:
@@ -103,7 +123,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: собрать исходный архив
+      - name: bundle the sources and the profiles
+        shell: bash
+        run: |
+          cp -r profiles python/curlpro/profiles
+          mkdir -p python/go
+          cp -r internal lib go.mod go.sum python/go/
+      - name: build the source archive
         shell: bash
         run: |
           python -m pip install --upgrade build
@@ -111,17 +137,33 @@ jobs:
           cp ../LICENSE ../NOTICE .
           python -m build --sdist
           ls -la dist/
+      # What is inside is checked, not assumed: this is exactly where the
+      # archive was empty before.
+      - name: check the archive carries what it promises
+        shell: bash
+        run: |
+          python - <<'PY'
+          import glob, tarfile
+          path = glob.glob("python/dist/*.tar.gz")[0]
+          names = tarfile.open(path).getnames()
+          go = [n for n in names if n.endswith(".go")]
+          profiles = [n for n in names if "/profiles/" in n]
+          print(f"{path}: {len(go)} .go, {len(profiles)} profiles")
+          assert len(go) > 50, "no Go sources in the archive"
+          assert len(profiles) > 40, "no profiles in the archive"
+          assert any(n.endswith("go/go.mod") for n in names), "no go.mod"
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
           path: python/dist/*.tar.gz
 
-  # Публикация идёт доверенным способом: PyPI проверяет подпись самого
-  # запуска в GitHub, и хранить токен в секретах не нужно вовсе.
+  # Publishing goes the trusted way: PyPI verifies the signature of the run
+  # itself in GitHub, and no token needs to be kept in secrets at all.
   #
-  # Окружение pypi настраивается в репозитории с обязательным подтверждением:
-  # выкладка в общий индекс необратима, и один неверный тег иначе занял бы
-  # версию навсегда.
+  # The pypi environment is configured in the repository with a required
+  # approval: a push to the public index cannot be taken back, and without it
+  # one wrong tag would occupy a version for good.
   publish:
     needs: [build, sdist]
     if: startsWith(github.ref, 'refs/tags/v')
@@ -134,7 +176,7 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: что публикуем
+      - name: what is being published
         run: ls -la dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:

@@ -1,0 +1,9 @@
+# Что кладётся в исходный архив сверх того, что setuptools берёт сам.
+#
+# Каталог go/ — не пакет Python, и без явного graft setuptools его не увидит:
+# именно поэтому в архиве было ноль файлов Go, а обещание «соберёт нативную
+# часть сам» не выполнялось. Каталог наполняется в .github/workflows/wheels.yml
+# перед сборкой; в дереве репозитория его нет.
+graft go
+recursive-include curlpro/profiles *.json
+include LICENSE NOTICE py.typed
