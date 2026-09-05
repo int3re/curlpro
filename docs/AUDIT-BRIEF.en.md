@@ -67,6 +67,14 @@ Go 1.27, cgo (MinGW-w64 on Windows, kept in `D:\mingw64`). The dependencies are
 in `go.mod`; `uquic` and `utls` are pinned to master revisions rather than to
 tags.
 
+This is regularly read as "the build will break on its own": it will not. A
+pseudo-version (`v1.8.3-0.20260802151714-23b1dac19c06`) is an exact commit, and
+`go.sum` holds its hash; upstream may move master as much as it likes. The real
+risk is a different and narrower one: a force-push or the disappearance of the
+repository makes the build unreproducible, and the cure for that is vendoring
+(`go mod vendor`) or a fork of our own — not a move to tags, since the tags do
+not yet carry the features we need.
+
 ### What still requires Go changes
 
 Not every browser is data-only. Code is needed for a new type of TLS extension
