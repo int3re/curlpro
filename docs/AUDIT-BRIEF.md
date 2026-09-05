@@ -71,39 +71,53 @@ Go 1.27, cgo (MinGW-w64 на Windows, лежит в `D:\mingw64`). Зависи�
 
 ### Go-ядро
 
+Строки перемерены 2026-09-05; прежние числа отставали примерно вдвое.
+
 | Путь | Строк | Роль |
 |---|---|---|
-| `internal/profile/profile.go` | 361 | типы профиля, реестр, наследование `based_on`, слияние дельт |
-| `internal/profile/build.go` | 196 | сборка `ClientHelloSpec` из JSON, 22 типа расширений |
-| `internal/profile/spec.go` | 175 | пост-процессор ECH — uTLS не грузит его из JSON |
-| `internal/profile/quic.go` | 129 | transport parameters QUIC |
-| `internal/client/client.go` | 532 | сессия, `Do`, диспетчер транспортов |
-| `internal/client/headers.go` | 290 | **сборка заголовков: порядок, регистр, слоты, якорь** |
-| `internal/client/websocket.go` | 359 | WebSocket поверх того же TLS |
-| `internal/client/stream.go` | 208 | потоковое чтение тела, цикл повторов |
-| `internal/client/pool.go` | 202 | пул соединений, вытеснение, занятость |
-| `internal/client/retry.go` | 169 | политика повторов |
-| `internal/client/conn.go` | 150 | соединение, HTTP/1.1 round-trip |
-| `internal/client/redirect.go` | 118 | редиректы, смена `sec-fetch-*` |
-| `internal/client/proxy.go` | 117 | CONNECT, TLS до прокси |
-| `internal/client/multipart.go` | 106 | границы форм в стиле WebKit/Firefox |
-| `internal/client/http3.go` | 219 | путь HTTP/3, мост между `net/http` и `fhttp` |
-| `internal/client/decompress.go` | 62 | распаковка на пути HTTP/3 |
-| `internal/client/body.go`, `bridge.go`, `sessionheaders.go` | 38/47/105 | тело запроса, мост типов, заголовки сессии |
-| `internal/h3/` | 3519 | **вендоренный** `uquic/http3` — 18 файлов, см. ниже |
+| `internal/profile/profile.go` | 758 | типы профиля, реестр, наследование `based_on`, слияние дельт |
+| `internal/profile/build.go` | 256 | сборка `ClientHelloSpec` из JSON, 22 типа расширений |
+| `internal/profile/spec.go` | 222 | пост-процессор ECH — uTLS не грузит его из JSON |
+| `internal/profile/quic.go` | 165 | transport parameters QUIC |
+| `internal/client/client.go` | 922 | сессия, `Do`, диспетчер транспортов |
+| `internal/client/headers.go` | 477 | **сборка заголовков: порядок, регистр, слоты, якорь** |
+| `internal/client/websocket.go` | 780 | WebSocket поверх того же TLS |
+| `internal/client/stream.go` | 328 | потоковое чтение тела, цикл повторов |
+| `internal/client/pool.go` | 299 | пул соединений, вытеснение, занятость |
+| `internal/client/http3.go` | 338 | путь HTTP/3, мост между `net/http` и `fhttp` |
+| `internal/client/proxy.go` | 252 | CONNECT, TLS до прокси |
+| `internal/client/conn.go` | 250 | соединение, HTTP/1.1 round-trip |
+| `internal/client/retry.go` | 238 | политика повторов |
+| `internal/client/redirect.go` | 235 | редиректы, смена `sec-fetch-*` |
+| `internal/client/decompress.go` | 139 | распаковка на пути HTTP/3 |
+| `internal/client/multipart.go` | 120 | границы форм в стиле WebKit/Firefox |
+| `internal/client/body.go`, `bridge.go`, `sessionheaders.go` | 43/52/122 | тело запроса, мост типов, заголовки сессии |
+| `internal/qpack/` | 1105 | **свой** декодер QPACK (RFC 9204) с динамической таблицей |
+| `internal/h3/` | 4074 | **вендоренный** `uquic/http3` — 19 файлов, см. ниже |
+
+`internal/qpack` появился потому, что `quic-go/qpack` знает только статическую
+таблицу, а профиль объявляет ёмкость 65536, как Chrome: сервер вправе кодировать
+против таблицы, и без своего декодера ответ не разбирался.
 
 ### FFI и Python
 
-`lib/` (368+127+120+63 строк) экспортирует 19 функций: `curlpro_version`,
-`curlpro_profiles_load_dir`, `curlpro_profile_register`, `curlpro_profiles_list`,
-`curlpro_session_new/close`, `curlpro_request`, `curlpro_stream_open/read/close`,
-`curlpro_ws_connect/send/recv/close`, `curlpro_session_set_header/remove_header/
-reset_headers/headers`, `curlpro_free`.
+`lib/` (611+275+240+240+76 строк) экспортирует 33 функции. Профили:
+`curlpro_profiles_load_dir`, `curlpro_profile_register`, `curlpro_profiles_list`.
+Сессия: `curlpro_session_new/close`, `curlpro_request`, заголовки сессии
+(`set_header`, `remove_header`, `reset_headers`, `headers`), куки
+(`session_cookies`, `session_set_cookies`, `session_clear_cookies`). Потоки:
+`curlpro_stream_open/read/close`. WebSocket: `curlpro_ws_connect/send/recv/close`
+и их асинхронные двойники. Асинхронный слой: `curlpro_*_start`,
+`curlpro_result_wait/take`, `curlpro_request_cancel`, `curlpro_async_pending`.
+Служебные: `curlpro_version`, `curlpro_free`, `curlpro_debug_counts` (размеры
+всех реестров — для поиска утечек хендлов).
 
 `python/curlpro/`: `_ffi.py` (ctypes, кадры, сверка версий), `session.py`
 (`Session`, `Response`, модульные `get/post/...`), `aio.py` (`AsyncSession`),
-`stream.py`, `websocket.py`, `headers.py` (`SessionHeaders` как `MutableMapping`),
-`profiles.py`.
+`stream.py`, `websocket.py`, `cookies.py` (банка, снимки, формат Netscape),
+`expect.py` (ожидания к ответу), `headers.py` (`SessionHeaders` как
+`MutableMapping`), `timeouts.py`, `encoding.py`, `proxies.py`, `profiles.py`,
+`_completions.py` (приёмник асинхронных результатов).
 
 ### Данные и инструменты
 
@@ -344,12 +358,14 @@ DLL получасовой давности. Теперь есть сверка 
 go test ./internal/...                    # юнит-тесты, сеть не нужна
 $env:CGO_ENABLED=1; $env:CC="D:\mingw64\bin\gcc.exe"; $env:PATH="D:\mingw64\bin;$env:PATH"
 go test -race ./internal/...              # -race требует cgo и gcc в PATH
-cd python; $env:PYTHONPATH="."; python -m pytest tests    # 118 тестов
+cd python; $env:PYTHONPATH="."; python -m pytest tests -m "not network"   # 240 тестов
+cd python; $env:PYTHONPATH="."; python -m pytest tests -m network         # 49, ходят наружу
 ```
 
-Часть Python-тестов требует локального стенда, часть — интернета
-(`httpbin.org`, `quic.browserleaks.com`); без них они **пропускаются**, а не
-падают. Собственные серверы-стенды лежат в `python/tests/`: `rawserver.py`
+Сетевые тесты помечены маркером `network` и вынесены отдельно: 49 из 289 ходят
+в `httpbin.org`, `quic.browserleaks.com` и `cloudflare-quic.com`, и падение
+чужого сервиса выглядело ровно как поломка библиотеки. Без сети они
+**пропускаются**, а не падают. Собственные серверы-стенды лежат в `python/tests/`: `rawserver.py`
 (сырые заголовки — публичные оракулы имена нормализуют; `persistent=True`
 держит соединение и считает принятые, этим проверяется keep-alive),
 `flakyserver.py` (сценарии отказов для повторов), `proxyserver.py`,
@@ -378,8 +394,8 @@ go run ./cmd/curlpro validate -oracle https://localhost:8443/json -insecure `
 (`-auto` поднимает Chrome сам, `-h3` уводит его на QUIC) — это единственный
 способ увидеть порядок в HTTP/3.
 
-Текущее состояние (после этапа 16): `go test` — ok (в том числе `-race`),
-pytest — 112 passed и 6 skipped без сети, `validate` — 47/47 с проверкой
+Текущее состояние (замер 2026-09-05): `go test -race ./internal/...` — ok на
+четырёх пакетах, pytest без сети — 230 passed и 10 skipped, `validate` — 47/47 с проверкой
 стабильности порядка расширений, `probe` и `h3probe` — совпадение с эталоном,
 порядок заголовков совпал с живым Chrome 152 на HTTP/2 и HTTP/3. Итоги аудита —
 в [STAGE14-RESULTS.md](STAGE14-RESULTS.md), закрытие долгов роадмапа —
@@ -393,9 +409,11 @@ pytest — 112 passed и 6 skipped без сети, `validate` — 47/47 с пр
   HEADERS через `internal/qpack`; сверка с живым Chrome 152 делается вручную,
   в автоматические тесты не входит. Для HTTP/1.1 и HTTP/2 порядок на проводе
   проверяется постоянно (`test_http1.py`, `test_h2_headers.py`).
-- Конкурентность: `go test -race` проходит чисто, но Go-тесты покрывают только
-  профиль и сборку заголовков. Пул соединений и параллельные запросы
-  тестируются лишь через Python, где race detector не работает.
+- Конкурентность покрыта с 2026-09-05: `internal/client/concurrency_test.go`,
+  восемь тестов под `-race` — параллельные запросы, потоки вперемешку с
+  запросами, закрытие сессии под нагрузкой, предел пула, `orphans`, банка кук,
+  гонка двух закрытий, отмены. Своего кода детектор не поймал; нашлась гонка
+  в `fhttp` при закрытии HTTP/2 — см. долги.
 - Поведение против настоящих анти-бот систем. Проверяется совпадение с
   эталоном, а не «проходимость».
 
