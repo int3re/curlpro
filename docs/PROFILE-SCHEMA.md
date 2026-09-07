@@ -1,28 +1,33 @@
-# Схема профиля
+# The profile schema
 
-Профиль — это JSON-файл. Движок его интерпретирует; ничего компилировать не нужно,
-пока браузер не приносит принципиально новый примитив.
+A profile is a JSON file. The engine interprets it; nothing needs compiling until
+a browser brings a genuinely new primitive.
 
-Схема заимствует дельта-модель `based_on` у `sardanioss/httpcloak` (MIT), где она
-доказала работоспособность: месячный бамп Chrome, меняющий только UA и sigalgs, —
-файл на ~40 строк.
+The schema borrows the `based_on` delta model from `sardanioss/httpcloak` (MIT),
+where it had proven itself: a monthly Chrome bump that changes only the UA and
+the sigalgs is a file of ~40 lines.
 
-## Разрешение и наследование
+## Resolution and inheritance
 
 ```
-LookupCustom(name)                    // рантайм-реестр, зарегистрирован из Python
-  ↓ нет
-embedded/<name>.json                  // //go:embed, вшит при сборке
-  ↓ нет
-based_on → рекурсивно вверх           // цепочка дельт
-  ↓ дно
-Go-литерал                            // полный пресет с реальными байтами
+LookupCustom(name)                    // the runtime registry, registered from Python
+  ↓ not there
+the loaded directory                  // profiles/ inside the wheel, or one of your own
+  ↓ not there
+based_on → recursively upwards        // the chain of deltas
+  ↓ the bottom
+a Go literal                          // a full preset with real bytes
 ```
 
-Обязательна защита от циклов в `based_on` — цепочка может быть длинной
+Cycle protection in `based_on` is mandatory — the chain can be long
 (chrome-152 → 151 → 150 → … → 146).
 
-## Пример дельты
+> The original design put the profiles into the binary through `//go:embed`, and
+> older notes still say so. It was not done that way: the profiles ship as data
+> inside the wheel and are read from disk. There is not one `go:embed` in the
+> repository.
+
+## An example delta
 
 ```jsonc
 {
@@ -57,148 +62,149 @@ Go-литерал                            // полный пресет с р�
 
 `2308/2309/2310` = `0x0904/0x0905/0x0906` = ML-DSA-44/65/87.
 
-### Пустое значение — это слот
+### An empty value is a slot
 
-`"value": ""` означает «позиция без значения». Слот держит место для
-заголовка, который придёт позже: от сессии, от запроса или от самого
-транспорта. Слот без значения в запрос не попадает. Несколько имён
-заполняются самой библиотекой:
+`"value": ""` means "a position with no value". A slot holds a place for a header
+that will arrive later: from the session, from the request, or from the transport
+itself. A slot with nothing behind it does not reach the request. A few names are
+filled by the library:
 
-- `user-agent` — из `headers.user_agent`;
-- `cookie` — из jar сессии, а если jar пуст, заголовок не отправляется;
-- `origin` — origin запроса, на любой метод кроме GET и HEAD (браузер шлёт
-  `Origin` на всё, что с телом, включая навигационный POST формы);
-- `content-length` — его добавляет транспорт уже после сборки, слот лишь
-  задаёт позицию;
-- `content-type` и любое другое имя — значение из заголовков сессии или
-  запроса; без него слот выпадает.
+- `user-agent` — from `headers.user_agent`;
+- `cookie` — from the session jar, and if the jar is empty the header is not sent;
+- `origin` — the request's origin, on any method except GET and HEAD (a browser
+  sends `Origin` on anything with a body, including a navigational form POST);
+- `content-length` — added by the transport after the assembly; the slot only
+  fixes the position;
+- `content-type` and any other name — the value from the session or request
+  headers; without one the slot drops out.
 
-Слот нужен потому, что иначе заголовок дописывался бы в конец: Chrome шлёт
-`cookie` между `accept-language` и `priority`, а `Content-Length` — третьим,
-сразу за `Connection` (замер Chromium 148, STAGE14). Профили Chrome/Edge
-несут слоты `content-length`, `content-type`, `origin`; у Firefox и Safari
-их позиции не замерены.
+The slot is needed because otherwise the header would be appended at the end:
+Chrome sends `cookie` between `accept-language` and `priority`, and
+`Content-Length` third, right after `Connection` (measured against Chromium 148,
+STAGE14). The Chrome and Edge profiles carry `content-length`, `content-type` and
+`origin` slots; the positions for Firefox and Safari are not measured.
 
 ### `custom_anchor`
 
-Имя заголовка, **перед** которым встают заголовки, добавленные пользователем
-(через сессию или аргумент запроса). Пустое значение означает «в конец».
+The name of the header **before** which user-supplied headers are placed (through
+the session or a request argument). An empty value means "at the end".
 
-Замер Chromium 148 и Chrome 152: кастомные заголовки fetch/XHR попадают
-в кластер рендерера вместе с `sec-ch-ua*`, `User-Agent` и `Content-Type`.
-Порядок внутри кластера задаёт хеш-таблица Blink, и точно его не
-воспроизвести. У навигационного набора якорь `accept` — ближайшее
-приближение; настоящий кластер живёт в секции `fetch`.
+Measured against Chromium 148 and Chrome 152: custom fetch/XHR headers land in
+the renderer's cluster together with `sec-ch-ua*`, `User-Agent` and
+`Content-Type`. The order inside that cluster is decided by Blink's hash table
+and cannot be reproduced exactly. The navigational set uses the anchor `accept`
+as the closest approximation; the real cluster lives in the `fetch` section.
 
-Якорь — **список через запятую**: берётся первое имя, которое есть в наборе.
-Так у Firefox кастомные заголовки встают перед `Connection` на HTTP/1.1
-и перед `Upgrade-Insecure-Requests` в HTTP/2, где `Connection` нет.
+The anchor is a **comma-separated list**: the first name present in the set is
+taken. That is how Firefox puts custom headers before `Connection` over HTTP/1.1
+and before `Upgrade-Insecure-Requests` in HTTP/2, where there is no `Connection`.
 
-Список порядка при этом трактуется как **желаемый**, а не как перечень
-имеющегося. Имя, которому не нашлось заголовка, просто пропускается.
+The order list is read as **what is wanted**, not as a list of what exists. A name
+with no header behind it is simply skipped.
 
 ### `websocket`
 
-Рукопожатие WebSocket — отдельный набор: Chrome не шлёт на нём ни
-`sec-ch-ua`, ни `sec-fetch-*`, ни `accept`, зато шлёт `Pragma` и
-`Cache-Control`, а `Sec-WebSocket-Key` ставит после `Accept-Language`.
-Секция `websocket.order` — список пар в порядке и регистре отправки;
-пустое значение — слот: `host`, `user-agent`, `origin`, `sec-websocket-key`,
-`sec-websocket-protocol` (выпадает без подпротоколов), `cookie`; любое другое
-пустое имя берёт значение из `headers.order` (`accept-encoding`,
-`accept-language`). Шаблон Chrome/Edge замерен (STAGE14), Firefox/Tor — из
-известных захватов, Safari секции не имеет и получает RFC-минимум из кода.
+The WebSocket handshake is a set of its own: Chrome sends neither `sec-ch-ua` nor
+`sec-fetch-*` nor `accept` on it, but does send `Pragma` and `Cache-Control`, and
+puts `Sec-WebSocket-Key` after `Accept-Language`. The `websocket.order` section is
+a list of pairs in send order and send case; an empty value is a slot: `host`,
+`user-agent`, `origin`, `sec-websocket-key`, `sec-websocket-protocol` (which drops
+out without subprotocols), `cookie`; any other empty name takes its value from
+`headers.order` (`accept-encoding`, `accept-language`). The Chrome/Edge template
+is measured (STAGE14), Firefox/Tor come from known captures, and Safari has no
+section and gets the RFC minimum from the code.
 
 ### `fetch`
 
-Второй набор заголовков — для запросов `fetch()` и `XMLHttpRequest`.
-Навигационный для них не годится: браузер шлёт `accept: */*`,
-`sec-fetch-mode: cors`, `sec-fetch-dest: empty`, `Origin` и `Referer`, а
-`upgrade-insecure-requests` и `sec-fetch-user` не шлёт вовсе. Кастомный
-заголовок в браузере бывает **только** у таких запросов, поэтому запрос с ним
-поверх навигационного набора аномален при любом якоре.
+The second header set — for `fetch()` and `XMLHttpRequest` requests. The
+navigational one does not suit them: the browser sends `accept: */*`,
+`sec-fetch-mode: cors`, `sec-fetch-dest: empty`, `Origin` and `Referer`, while
+sending no `upgrade-insecure-requests` and no `sec-fetch-user` at all. In a
+browser a custom header occurs **only** on such requests, which is why a request
+carrying one on top of the navigational set is anomalous whatever the anchor.
 
-| Поле | Назначение |
+| Field | Purpose |
 |---|---|
-| `order` | пары в порядке отправки; пустое значение — слот |
-| `http1_order` | порядок и регистр для HTTP/1.1, включая `Host` и `Connection` |
-| `custom_anchor` | якорь кастомных заголовков, список через запятую |
+| `order` | pairs in send order; an empty value is a slot |
+| `http1_order` | the order and case for HTTP/1.1, including `Host` and `Connection` |
+| `custom_anchor` | the anchor for custom headers, a comma-separated list |
 
-Слот с именем, известным навигационному набору (`sec-ch-ua*`,
-`accept-encoding`, `accept-language`, `user-agent`), берёт значение оттуда:
-дельта на новую версию Chrome правит `sec-ch-ua` один раз. Остальные
-(`content-type`, `content-length`, `origin`, `referer`, `cookie`) заполняются
-запросом, библиотекой или транспортом.
+A slot whose name is known to the navigational set (`sec-ch-ua*`,
+`accept-encoding`, `accept-language`, `user-agent`) takes its value from there: a
+delta for a new Chrome version fixes `sec-ch-ua` once. The rest
+(`content-type`, `content-length`, `origin`, `referer`, `cookie`) are filled by
+the request, the library or the transport.
 
-Режим выбирается автоматически: fetch, если метод не GET, HEAD или POST, тело
-не похоже на форму, либо задан заголовок, которого в навигационном наборе нет.
-Явно — `mode="navigate"` или `mode="fetch"`. Профиль без секции `fetch` всегда
-навигационный.
+The mode is chosen automatically: fetch, if the method is not GET, HEAD or POST,
+if the body does not look like a form, or if a header is set that the
+navigational set does not know. Explicitly — `mode="navigate"` or
+`mode="fetch"`. A profile with no `fetch` section is always navigational.
 
-### Что обязательно
+### What is mandatory
 
-`tls.permute_extensions` задаётся явно — на самом профиле или у предка.
-Умолчания нет: перемешивание верно для Chrome ≥ 110 и неверно для остальных,
-а профиль без поля раньше перемешивался молча. `Resolve` отвергает профиль
-без него, а также `stream_weight` вне 0..256 и `http3.settings_order`,
-не покрывающий `settings`.
+`tls.permute_extensions` is set explicitly — on the profile itself or on an
+ancestor. There is no default: shuffling is right for Chrome ≥ 110 and wrong for
+everyone else, and a profile without the field used to be shuffled silently.
+`Resolve` rejects a profile without it, as it does a `stream_weight` outside
+0..256 and an `http3.settings_order` that does not cover `settings`.
 
-`tls.allow_blunt_mimicry` разрешает воспроизвести расширение, которого uTLS
-не знает, сырыми байтами из `raw_client_hello`. Без него новый кодпоинт
-(`trust_anchors` 0xCA34 у Chrome 152) роняет разбор захвата с «unsupported
-extension», и профиль потребовал бы правки Go. Риск ограничен: ключевой
-материал (`key_share`, ECH) uTLS знает и генерирует сам, сырыми уходят
-только статические расширения. `curlpro capture` включает поле сам, когда
-без него спека не собирается, и печатает об этом.
+`tls.allow_blunt_mimicry` permits reproducing an extension uTLS does not know,
+as raw bytes from `raw_client_hello`. Without it a new codepoint
+(`trust_anchors` 0xCA34 in Chrome 152) breaks the parsing of a capture with
+"unsupported extension", and the profile would need Go changes. The risk is
+bounded: uTLS knows and generates the key material (`key_share`, ECH) itself, and
+only static extensions go out raw. `curlpro capture` turns the field on by itself
+when the spec will not build without it, and says so.
 
-Булевы поля, которые дельта может **выключить**, — указатели:
+Boolean fields that a delta may **turn off** are pointers:
 `send_grease_frame`, `priority_param`, `send_initial_rtt`,
-`legacy_version_information_id`. С голым bool «false» был неотличим
-от «не задано».
+`legacy_version_information_id`. With a bare bool, "false" was indistinguishable
+from "not set".
 
-## Поля
+## The fields
 
-⚠ Таблицы ниже описывают **замысел схемы**, а не текущий разбор. Загрузчик
-включает `DisallowUnknownFields`, поэтому поле, которого нет в Go-структурах
-`internal/profile`, отвергается. Реализовано сегодня: `tls` — `raw_client_hello`,
-`client_hello_spec`, `cipher_suites`, `compression_methods`, `extensions`,
-`signature_algorithms`, `alpn`, `permute_extensions`; `http1` — `order`,
-`connection`; `http2` — `settings`, `connection_window_update`, `pseudo_order`,
-`stream_weight`, `stream_exclusive`; `http3` — `settings`, `settings_order`,
-`pseudo_order`, `send_grease_frame`, `priority_param`; `quic` — `parrot`,
-`connection_options`, `send_initial_rtt`, `legacy_version_information_id`,
-`grease_version_first`; `headers` — `user_agent`, `order`, `form_boundary`,
-`custom_anchor`; `websocket` — `order`. Остальное — план.
+⚠ The tables below describe the **intended schema** rather than the current
+parsing. The loader enables `DisallowUnknownFields`, so a field absent from the
+Go structures in `internal/profile` is rejected. Implemented today: `tls` —
+`raw_client_hello`, `client_hello_spec`, `cipher_suites`, `compression_methods`,
+`extensions`, `signature_algorithms`, `alpn`, `permute_extensions`; `http1` —
+`order`, `connection`; `http2` — `settings`, `connection_window_update`,
+`pseudo_order`, `stream_weight`, `stream_exclusive`; `http3` — `settings`,
+`settings_order`, `pseudo_order`, `send_grease_frame`, `priority_param`; `quic` —
+`parrot`, `connection_options`, `send_initial_rtt`,
+`legacy_version_information_id`, `grease_version_first`; `headers` —
+`user_agent`, `order`, `form_boundary`, `custom_anchor`; `websocket` — `order`.
+The rest is plan.
 
 ### `tls`
-| Поле | Назначение |
+| Field | Purpose |
 |---|---|
-| `client_hello` | имя uTLS-пресета (`HelloChrome_133`) — быстрый путь |
-| `client_hello_spec` | нативный JSON uTLS `ClientHelloSpec` — точный путь |
-| `raw_client_hello` | base64 сырого record — байт-точный путь |
-| `psk_client_hello`, `raw_psk_client_hello` | то же для соединения с возобновлением сессии |
-| `quic_client_hello`, `quic_psk_client_hello` | отдельные спеки для QUIC |
-| `allow_blunt_mimicry` | воспроизводить неизвестные расширения дословно (осторожно — протухшие key_share) |
-| `signature_algorithms` | sigalgs для TCP |
-| `quic_signature_algorithms` | **отдельно**: Chrome 150 шлёт ML-DSA по TCP, но не по QUIC |
+| `client_hello` | the name of a uTLS preset (`HelloChrome_133`) — the quick path |
+| `client_hello_spec` | uTLS's native JSON `ClientHelloSpec` — the exact path |
+| `raw_client_hello` | the raw record in base64 — the byte-exact path |
+| `psk_client_hello`, `raw_psk_client_hello` | the same for a resumed connection |
+| `quic_client_hello`, `quic_psk_client_hello` | separate specs for QUIC |
+| `allow_blunt_mimicry` | reproduce unknown extensions verbatim (carefully — stale key_shares) |
+| `signature_algorithms` | the sigalgs for TCP |
+| `quic_signature_algorithms` | **separately**: Chrome 150 sends ML-DSA over TCP but not over QUIC |
 | `delegated_credential_algorithms` | ext 34 (Firefox) |
-| `alpn`, `alps` | списки протоколов; ALPS — какой кодпоинт, 17513 или 17613 |
+| `alpn`, `alps` | the protocol lists; for ALPS, which codepoint — 17513 or 17613 |
 | `cert_compression` | `brotli` / `zlib` / `zstd` |
-| `key_share_curves` | группы и их количество |
-| `trust_anchors` | ext 0xCA34, новое в Chrome 152 |
-| `permute_extensions` | перемешивать ли (Chrome 110+) |
+| `key_share_curves` | the groups and how many of them |
+| `trust_anchors` | ext 0xCA34, new in Chrome 152 |
+| `permute_extensions` | whether to shuffle (Chrome 110+) |
 | `record_size_limit` | ext 28 (Firefox) |
-| `ja3`, `psk_ja3`, `ja3_extras` | путь через JA3 — **только для совместимости**, с потерями (см. FINGERPRINT-SPEC.md) |
+| `ja3`, `psk_ja3`, `ja3_extras` | the JA3 path — **for compatibility only**, and lossy (see FINGERPRINT-SPEC.md) |
 
 ### `http1`
 
-| Поле | Назначение |
+| Field | Purpose |
 |---|---|
-| `order` | имена заголовков в порядке **и регистре** отправки; допускает имена, которых в запросе может не быть (`Content-Length`) |
-| `connection` | значение `Connection`; пусто — заголовок не отправляется |
+| `order` | the header names in send order **and send case**; may name headers a request will not carry (`Content-Length`) |
+| `connection` | the `Connection` value; empty means the header is not sent |
 
-Отличается от `http2` сильнее, чем кажется. В HTTP/2 имена обязаны быть
-строчными, в HTTP/1.1 регистр произволен — и браузеры им пользуются:
+It differs from `http2` more than it looks. In HTTP/2 the names must be
+lowercase; in HTTP/1.1 the case is arbitrary — and browsers use that:
 
 ```
 Chrome:  Host, Connection, sec-ch-ua, …, Upgrade-Insecure-Requests,
@@ -206,26 +212,26 @@ Chrome:  Host, Connection, sec-ch-ua, …, Upgrade-Insecure-Requests,
 Firefox: Host, User-Agent, Accept, …, Priority, TE
 ```
 
-Chrome шлёт Title-Case для большинства имён, но `sec-ch-*` и `priority`
-оставляет строчными. Плюс появляются `Host` и `Connection`, которых
-в HTTP/2 нет вовсе.
+Chrome sends Title-Case for most names but leaves `sec-ch-*` and `priority`
+lowercase. And `Host` and `Connection` appear, which do not exist in HTTP/2 at
+all.
 
 ### `http2`
-| Поле | Назначение |
+| Field | Purpose |
 |---|---|
-| `akamai` | строка-шорткат `SETTINGS\|WU\|PRIORITY\|PSEUDO` — задаёт всё сразу |
-| `settings`, `settings_order` | пары id/value и **порядок отправки** |
-| `connection_window_update` | инкремент WINDOW_UPDATE (Chrome: 15663105) |
-| `priority_frames` | отдельные PRIORITY-кадры |
-| `header_priority` | PRIORITY на HEADERS-кадре: `{stream_dep, exclusive, weight}` |
-| `stream_weight`, `stream_exclusive` | приоритет на HEADERS-кадре. ⚠ на проводе вес на единицу меньше (RFC 7540): Chrome — 256, Firefox — 42. **Ноль означает «не отправлять»**: так ведёт себя Safari. Отсутствие поля отдаёт решение библиотеке, и её дефолт (255, exclusive) верен только для Chrome |
+| `akamai` | the shortcut string `SETTINGS\|WU\|PRIORITY\|PSEUDO` — sets everything at once |
+| `settings`, `settings_order` | the id/value pairs and **the send order** |
+| `connection_window_update` | the WINDOW_UPDATE increment (Chrome: 15663105) |
+| `priority_frames` | standalone PRIORITY frames |
+| `header_priority` | PRIORITY on the HEADERS frame: `{stream_dep, exclusive, weight}` |
+| `stream_weight`, `stream_exclusive` | the priority on the HEADERS frame. ⚠ on the wire the weight is one less (RFC 7540): Chrome 256, Firefox 42. **Zero means "do not send"**: that is how Safari behaves. An absent field hands the decision to the library, and its default (255, exclusive) is right only for Chrome |
 | `no_rfc7540_priorities` | Safari 26 |
 | `pseudo_order` | `[":method", ":authority", ":scheme", ":path"]` |
-| `header_order` | порядок обычных заголовков |
-| `hpack_header_order`, `hpack_indexing_policy`, `hpack_never_index` | тонкая настройка HPACK |
-| `disable_cookie_split` | «крошение» cookie по HPACK |
-| `data_frame_max_size`, `preface_ping_idle_ms`, `idle_ping_ms` | поведение соединения |
-| `priority_table` | приоритет по `sec-fetch-dest` → `{urgency, incremental, emit_header}` |
+| `header_order` | the order of the ordinary headers |
+| `hpack_header_order`, `hpack_indexing_policy`, `hpack_never_index` | fine HPACK tuning |
+| `disable_cookie_split` | the HPACK "crumbling" of cookies |
+| `data_frame_max_size`, `preface_ping_idle_ms`, `idle_ping_ms` | connection behaviour |
+| `priority_table` | priority by `sec-fetch-dest` → `{urgency, incremental, emit_header}` |
 
 ### `http3`
 `qpack_max_table_capacity`, `qpack_blocked_streams`, `max_field_section_size`,
@@ -234,38 +240,38 @@ Chrome шлёт Title-Case для большинства имён, но `sec-ch-
 `quic_allow_0rtt`, `quic_chrome_style_initial`.
 
 ### `headers`
-`user_agent`, `values` (map), `order` (упорядоченный список пар).
+`user_agent`, `values` (a map), `order` (an ordered list of pairs).
 
-Порядок и **регистр** — часть отпечатка. Chrome шлёт `sec-ch-ua` в нижнем регистре
-и `Upgrade-Insecure-Requests` в Title-Case; в HTTP/2 всё приводится к нижнему,
-но порядок сохраняется.
+The order **and the case** are part of the fingerprint. Chrome sends `sec-ch-ua`
+lowercase and `Upgrade-Insecure-Requests` in Title-Case; in HTTP/2 everything is
+lowercased, but the order is kept.
 
 ### `client_hints`
 `full_version_list`, `platform_version`, `arch`, `bitness`, `model`, `wow64`.
-Пустые поля выводятся из `sec-ch-ua` — иначе легко получить рассогласование
-между UA и client hints, которое само по себе сигнал.
+Empty fields are derived from `sec-ch-ua` — otherwise a mismatch between the UA
+and the client hints is easy to produce, and that mismatch is a signal in itself.
 
-### `tcp` (опционально, требует прав)
-`ttl` (128 Windows / 64 Linux), `mss`, `window_size`, `window_scale`, `df_bit`.
-Вне досягаемости обычного user-space процесса; поле зарезервировано.
+### `tcp` (optional, needs privileges)
+`ttl` (128 on Windows / 64 on Linux), `mss`, `window_size`, `window_scale`,
+`df_bit`. Out of reach of an ordinary user-space process; the field is reserved.
 
-## Устройства и подсказки высокой энтропии
+## Devices and high-entropy hints
 
-Chrome с версии 110 вырезал из `User-Agent` модель и версию системы: замер
-Pixel 7 на Android 17 даёт `Mozilla/5.0 (Linux; Android 10; K) …` — одну и ту
-же заглушку у всех телефонов. Настоящее устройство сообщается подсказками, и
-браузер шлёт их **только после того, как сайт их запросил** заголовком
-`Accept-CH` в ответе:
+From version 110 Chrome cut the model and the system version out of the
+`User-Agent`: a capture of a Pixel 7 on Android 17 gives
+`Mozilla/5.0 (Linux; Android 10; K) …` — the same placeholder on every phone. The
+real device is reported through the hints, and the browser sends them **only
+after the site has asked** with an `Accept-CH` header in a response:
 
 ```
 sec-ch-ua-model: "Pixel 7"
 sec-ch-ua-platform-version: "17.0.0"
-sec-ch-ua-arch: ""            ← на Android пусто
+sec-ch-ua-arch: ""            ← empty on Android
 sec-ch-ua-bitness: ""
 sec-ch-ua-form-factors: "Mobile"
 ```
 
-Профиль описывает это двумя секциями:
+The profile describes this in two sections:
 
 ```json
 "devices": [
@@ -273,20 +279,20 @@ sec-ch-ua-form-factors: "Mobile"
 ],
 "client_hints": {
   "values": { "sec-ch-ua-form-factors": "\"Mobile\"" },
-  "order":       [ … полный порядок навигации с подсказками … ],
-  "fetch_order": [ … то же для fetch и подресурсов … ]
+  "order":       [ … the full navigation order with the hints … ],
+  "fetch_order": [ … the same for fetch and subresources … ]
 }
 ```
 
-`order` хранится целиком, а не позициями: с появлением подсказок Chromium
-перестраивает **весь** кластер заголовков, и порядок оказывается функцией от
-набора имён. Два независимых прогона дали одинаковую последовательность, так
-что она снята замером. Если сайт просит подмножество подсказок, библиотека
-оставляет их относительный порядок — это приближение, точный порядок для
-каждого подмножества пришлось бы снимать отдельно.
+`order` is stored whole rather than as positions: once the hints appear Chromium
+rebuilds the **entire** header cluster, and the order turns out to be a function
+of the set of names. Two independent runs gave the same sequence, so it is a
+measurement. If a site asks for a subset of the hints, the library keeps their
+relative order — an approximation; the exact order for every subset would have to
+be captured separately.
 
-У браузеров, которые устройство из строки **не** вырезали, оно подставляется
-и туда. Такой профиль объявляет шаблон:
+Browsers that did **not** cut the device out of the string get it substituted
+there too. Such a profile declares a template:
 
 ```json
 "headers": {
@@ -295,19 +301,19 @@ sec-ch-ua-form-factors: "Mobile"
 }
 ```
 
-Понимаются `{model}`, `{android}` (мажор версии), `{platform_version}`
-и `{arch}`. Без `device=` строка остаётся ровно той, какой снята.
+`{model}`, `{android}` (the major version), `{platform_version}` and `{arch}` are
+understood. Without a `device=` the string stays exactly as captured.
 
-Подставлять модель в `User-Agent` там, где шаблона нет, библиотека не станет:
-у современного Chrome такой строки не бывает вовсе, и она выдала бы клиента
-быстрее, чем одинаковое устройство у всех сессий. Зато согласованность
-обязательна: если строка говорит «SM-S911B», то и `sec-ch-ua-model` скажет
-то же самое.
+The library will not substitute a model into a `User-Agent` where there is no
+template: a modern Chrome has no such string at all, and one would give the client
+away faster than an identical device on every session would. Consistency,
+however, is mandatory: if the string says "SM-S911B", `sec-ch-ua-model` says the
+same.
 
-## Значение, зависящее от метода
+## A value that depends on the method
 
-У пары в `headers.order` кроме `value` может быть `value_by_method` —
-переопределение для отдельных методов:
+Besides `value`, a pair in `headers.order` may carry `value_by_method` — an
+override for particular methods:
 
 ```json
 {
@@ -317,19 +323,21 @@ sec-ch-ua-form-factors: "Mobile"
 }
 ```
 
-Появилось из замера Яндекс.Браузера 26.8 на Pixel 7: `sdch` уходит на GET,
-HEAD, DELETE и PUT, но не на POST — включая POST с пустым телом. Правило
-не про тело, а именно про метод, поэтому и описывается методом.
+It came out of a capture of Yandex Browser 26.8 on a Pixel 7: `sdch` goes out on
+GET, HEAD, DELETE and PUT but not on POST — including a POST with an empty body.
+The rule is about the method rather than the body, which is why it is described by
+method.
 
-Имя метода сравнивается без учёта регистра. Пустая строка означает слот:
-на этом методе заголовок не уходит, если его нечем заполнить. Слот `fetch`,
-берущий значение из навигационного набора, переносит и переопределения.
+The method name is compared case-insensitively. An empty string means a slot: on
+that method the header does not go out if there is nothing to fill it with. A
+`fetch` slot that takes its value from the navigational set carries the overrides
+along with it.
 
-## Расширение trust_anchors
+## The trust_anchors extension
 
-Chrome 152 перечисляет в расширении 0xCA34 короткие идентификаторы корней,
-которым доверяет, — сервер по ним выбирает цепочку. В профиле это список
-относительных OID:
+Chrome 152 lists in extension 0xCA34 the short identifiers of the roots it
+trusts, and the server picks a chain by them. In a profile that is a list of
+relative OIDs:
 
 ```json
 "tls": {
@@ -337,26 +345,27 @@ Chrome 152 перечисляет в расширении 0xCA34 коротки�
 }
 ```
 
-Порядок в файле значения не имеет: он **разыгрывается заново на каждое
-соединение**, потому что так делает браузер. Замер Chrome 152 на трёх
-запусках дал один и тот же набор из 32 записей в трёх разных порядках;
-постоянная перестановка отличала бы клиента от браузера на любой выборке
-из нескольких соединений.
+The order in the file does not matter: it is **drawn afresh on every
+connection**, because that is what the browser does. A measurement of Chrome 152
+over three runs gave the same set of 32 entries in three different orders; a
+constant permutation would tell the client from the browser on any sample of
+several connections.
 
-Список меняется вместе с корневым хранилищем Chrome, то есть примерно раз
-в две недели, — и обновляется правкой данных, без пересборки.
+The list changes together with Chrome's root store — roughly every two weeks —
+and is updated by editing data, without a rebuild.
 
-## Что должно ломать загрузку профиля
+## What must break the loading of a profile
 
-Профиль обязан отвергаться, а не молча деградировать:
-- неизвестное имя расширения → ошибка (кроме явного `allow_blunt_mimicry`)
-- `pre_shared_key` среди расширений → ошибка: захват сделан на возобновлённой
-  сессии, у браузера на этом месте `padding`
-- `trust_anchors` в списке расширений → ошибка: список задаётся полем
-  `tls.trust_anchors`, потому что порядок в нём разыгрывается на соединение
-- цикл в `based_on`
-- `settings_order` не покрывает все ключи из `settings`
-- профиль объявляет `http3`, но не объявляет `alpn` с `h3`
+A profile has to be rejected rather than quietly degraded:
+- an unknown extension name → an error (unless `allow_blunt_mimicry` is explicit)
+- `pre_shared_key` among the extensions → an error: the capture was made on a
+  resumed session, whereas a browser has `padding` in that place
+- `trust_anchors` in the extension list → an error: the list is set by the
+  `tls.trust_anchors` field, because its order is drawn per connection
+- a cycle in `based_on`
+- a `settings_order` that does not cover every key in `settings`
+- a profile that declares `http3` but does not declare `alpn` with `h3`
 
-Тихая деградация — то, как curl-impersonate теряет нестандартный порядок TLS 1.3-шифров
-(падает в `kCiphersAESHardware` без единого предупреждения). Повторять эту ошибку не надо.
+Quiet degradation is how curl-impersonate loses a non-standard TLS 1.3 cipher
+order (it falls back to `kCiphersAESHardware` without a single warning). There is
+no need to repeat that mistake.
