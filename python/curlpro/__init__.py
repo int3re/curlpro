@@ -21,6 +21,7 @@ from __future__ import annotations
 from ._ffi import HTTPError, Timeout, CurlProError, WebSocketClosed
 from .expect import Expect, ExpectationFailed
 from .fingerprint import Fingerprint
+from .audit import Finding, audit
 from .persona import Persona, load_all
 from .aio import AsyncSession, AsyncStreamResponse, AsyncWebSocket
 from .cookies import Cookie, Cookies
@@ -37,6 +38,7 @@ __all__ = [
     "Cookies",
     "CurlProError",
     "Expect",
+    "Finding",
     "ExpectationFailed",
     "Fingerprint",
     "Persona",
@@ -49,6 +51,7 @@ __all__ = [
     "StreamResponse",
     "WebSocket",
     "WebSocketClosed",
+    "audit",
     "delete",
     "ensure_loaded",
     "get",

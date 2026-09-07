@@ -858,6 +858,15 @@ class Session:
             raise RuntimeError("session is closed")
         return Fingerprint(_call("curlpro_session_fingerprint", self._id, url.encode("utf-8")))
 
+    def audit(self) -> list:
+        """Contradictions in what this session would send.
+
+        The second question, after "does my fingerprint look right": does
+        anything here disagree with anything else. See :mod:`curlpro.audit`.
+        """
+        from .audit import audit as _audit
+        return _audit(self)
+
     def close(self) -> None:
         if not self._closed:
             _call("curlpro_session_close", self._id)

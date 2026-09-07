@@ -25,8 +25,8 @@ import (
 
 // HeaderKV is one header as it goes on the wire, case and order preserved.
 type HeaderKV struct {
-	Name  string
-	Value string
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 // JA4HRequest is what the fingerprint is computed from.

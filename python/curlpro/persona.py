@@ -218,6 +218,18 @@ class Persona:
         with self.open() as s:
             return s.fingerprint(url)
 
+    def audit(self) -> list:
+        """Contradictions inside this identity, without sending anything.
+
+            for f in p.audit():
+                print(f)
+
+        Cheap enough to run before a batch: an identity that contradicts itself
+        wastes the accounts that use it.
+        """
+        from .audit import audit as _audit
+        return _audit(self)
+
     def __repr__(self) -> str:
         where = f" at {self._path}" if self._path else ""
         return (f"<Persona {self.name} {self.profile}"

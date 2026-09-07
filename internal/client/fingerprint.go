@@ -40,6 +40,13 @@ type Fingerprint struct {
 	// sends no priority there and Firefox no TE.
 	HeadersHTTP1 []string `json:"headers_http1"`
 
+	// HeaderValues is the same preview with the values, in send order.
+	//
+	// The audit reads these rather than our own configuration: what matters is
+	// what a server receives, and a check against internal state would pass
+	// while the wire said something else.
+	HeaderValues []fingerprint.HeaderKV `json:"header_values"`
+
 	// JA4H is the fingerprint of the request itself — for the same plain GET
 	// the header preview describes. Licensed differently from the rest: see
 	// internal/fingerprint/ja4h.go.
@@ -49,6 +56,16 @@ type Fingerprint struct {
 	JA4HHTTP1 string `json:"ja4h_http1"`
 
 	UserAgent string `json:"user_agent"`
+
+	// Device is the phone this session presents itself as, and Devices are the
+	// ones the profile offers.
+	//
+	// Both are reported because "no device chosen" only means something when
+	// there is something to choose: a Safari-on-iOS profile sends no client
+	// hints at all, and advising a device there would be advice that cannot be
+	// followed.
+	Device  string   `json:"device"`
+	Devices []string `json:"devices"`
 }
 
 // Fingerprint computes what this session looks like on the wire.
@@ -121,6 +138,11 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 	if s.opts.ForceHTTP1 {
 		proto, main = "HTTP/1.1", pairsH1
 	}
+	out.Device = s.opts.Device
+	for _, d := range s.profile.Devices {
+		out.Devices = append(out.Devices, d.Name)
+	}
+	out.HeaderValues = main
 	out.JA4H = fingerprint.JA4H(fingerprint.JA4HRequest{
 		Method: "GET", Proto: proto, Headers: main})
 	out.JA4HHTTP1 = fingerprint.JA4H(fingerprint.JA4HRequest{
