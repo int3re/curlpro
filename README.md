@@ -2,7 +2,16 @@
 
 **HTTP-клиент с сетевым отпечатком браузера. Профиль браузера — JSON-файл, а не код.**
 
-*[English](README.en.md) · [Документы](#документы) · Apache 2.0*
+[![PyPI](https://img.shields.io/pypi/v/curlpro)](https://pypi.org/project/curlpro/)
+[![Python](https://img.shields.io/pypi/pyversions/curlpro)](https://pypi.org/project/curlpro/)
+[![tests](https://github.com/int3re/curlpro/actions/workflows/test.yml/badge.svg)](https://github.com/int3re/curlpro/actions/workflows/test.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+
+*[English](README.en.md) · [Документы](#документы)*
+
+```bash
+pip install curlpro
+```
 
 ```python
 import curlpro
@@ -86,18 +95,36 @@ curlpro.register_profile({
 
 ## Установка
 
-Релиза на PyPI пока нет — собирается из исходников. Нужны Go и C-компилятор
-(MinGW-w64 на Windows): cgo без него не соберёт `c-shared`.
-
-```powershell
-.\build.ps1                                        # → dist/curlpro.dll
-cd python; $env:PYTHONPATH='.'; python -m pytest tests
+```bash
+pip install curlpro
 ```
 
-Из архива с исходниками (`curlpro-*.tar.gz`) — то же самое одной командой:
-в архив входят Go-модуль и профили, нативная часть собирается на месте.
+Ни Go, ни компилятора не нужно: нативная библиотека и все 47 профилей уже
+внутри колеса. Готовые колёса собраны для пяти платформ:
+
+| Платформа | Колесо |
+|---|---|
+| Linux x86-64, glibc 2.28+ | `manylinux_2_28_x86_64` |
+| Linux ARM64, glibc 2.28+ | `manylinux_2_28_aarch64` |
+| macOS 13+, Intel | `macosx_13_0_x86_64` |
+| macOS 13+, Apple Silicon | `macosx_13_0_arm64` |
+| Windows x64 | `win_amd64` |
+
+Минимум macOS 13 задан не нами: столько требует Go 1.27, на котором собрана
+нативная часть.
+
+Те же файлы лежат на [странице релиза](https://github.com/int3re/curlpro/releases/latest) —
+если ставить нужно без обращения к индексу:
 
 ```bash
+pip install curlpro-0.2.0-py3-none-manylinux_2_28_x86_64.whl
+```
+
+**Платформы вне таблицы** — Alpine и другой musl, Windows на ARM, старые glibc
+или macOS — ставятся из исходного архива, и тогда Go и компилятор C нужны:
+
+```bash
+pip download curlpro --no-binary :all: --no-deps
 tar -xzf curlpro-0.2.0.tar.gz && cd curlpro-0.2.0/go
 CGO_ENABLED=1 go build -buildmode=c-shared -o ../curlpro/lib/libcurlpro.so ./lib
 ```
@@ -105,8 +132,17 @@ CGO_ENABLED=1 go build -buildmode=c-shared -o ../curlpro/lib/libcurlpro.so ./lib
 `CGO_ENABLED=1` здесь не для красоты: без него сборка падает с «build
 constraints exclude all Go files», и по этой фразе причину не найти.
 
-Профили лежат в `profiles/` и подхватываются сами, если библиотека установлена
-колесом. При запуске из репозитория их указывают явно:
+### Из репозитория
+
+Для разработки и для правки профилей:
+
+```powershell
+.\build.ps1                                        # → dist/curlpro.dll
+cd python; $env:PYTHONPATH='.'; python -m pytest tests
+```
+
+Профили подхватываются сами только из колеса. При запуске из репозитория
+их указывают явно:
 
 ```python
 curlpro.load_profiles("profiles")

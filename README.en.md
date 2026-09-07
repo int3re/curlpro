@@ -3,8 +3,16 @@
 **An HTTP client with a browser's network fingerprint. A browser profile is a JSON
 file, not code.**
 
-*[Русская версия](README.md) — the project documentation is written in Russian ·
-Apache 2.0*
+[![PyPI](https://img.shields.io/pypi/v/curlpro)](https://pypi.org/project/curlpro/)
+[![Python](https://img.shields.io/pypi/pyversions/curlpro)](https://pypi.org/project/curlpro/)
+[![tests](https://github.com/int3re/curlpro/actions/workflows/test.yml/badge.svg)](https://github.com/int3re/curlpro/actions/workflows/test.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+
+*[Русская версия](README.md) — the project documentation is written in Russian*
+
+```bash
+pip install curlpro
+```
 
 ```python
 import curlpro
@@ -89,18 +97,37 @@ maintainer's fault.
 
 ## Install
 
-There is no PyPI release yet — build from source. Go and a C compiler are required
-(MinGW-w64 on Windows): cgo cannot build `c-shared` without one.
-
-```powershell
-.\build.ps1                                        # → dist/curlpro.dll
-cd python; $env:PYTHONPATH='.'; python -m pytest tests
+```bash
+pip install curlpro
 ```
 
-From the source archive (`curlpro-*.tar.gz`) it is one command: the archive
-carries the Go module and the profiles, and the native part is built in place.
+Neither Go nor a compiler is needed: the native library and all 47 profiles are
+already inside the wheel. Wheels are built for five platforms:
+
+| Platform | Wheel |
+|---|---|
+| Linux x86-64, glibc 2.28+ | `manylinux_2_28_x86_64` |
+| Linux ARM64, glibc 2.28+ | `manylinux_2_28_aarch64` |
+| macOS 13+, Intel | `macosx_13_0_x86_64` |
+| macOS 13+, Apple Silicon | `macosx_13_0_arm64` |
+| Windows x64 | `win_amd64` |
+
+The macOS 13 floor is not ours to choose: that is what Go 1.27 requires, and the
+native part is built with it.
+
+The same files are attached to the [release page](https://github.com/int3re/curlpro/releases/latest),
+for installing without reaching the index:
 
 ```bash
+pip install curlpro-0.2.0-py3-none-manylinux_2_28_x86_64.whl
+```
+
+**Platforms outside the table** — Alpine and other musl distributions, Windows on
+ARM, older glibc or macOS — install from the source archive, and there Go and a C
+compiler are required:
+
+```bash
+pip download curlpro --no-binary :all: --no-deps
 tar -xzf curlpro-0.2.0.tar.gz && cd curlpro-0.2.0/go
 CGO_ENABLED=1 go build -buildmode=c-shared -o ../curlpro/lib/libcurlpro.so ./lib
 ```
@@ -109,8 +136,17 @@ CGO_ENABLED=1 go build -buildmode=c-shared -o ../curlpro/lib/libcurlpro.so ./lib
 constraints exclude all Go files", a message that names neither the cause nor
 the cure.
 
-Profiles live in `profiles/` and load themselves when the library is installed from
-a wheel. Running from the repository, point at them explicitly:
+### From the repository
+
+For development and for editing profiles:
+
+```powershell
+.\build.ps1                                        # → dist/curlpro.dll
+cd python; $env:PYTHONPATH='.'; python -m pytest tests
+```
+
+Profiles load themselves only from a wheel. Running from the repository, point at
+them explicitly:
 
 ```python
 curlpro.load_profiles("profiles")
