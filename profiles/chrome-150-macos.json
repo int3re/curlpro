@@ -233,7 +233,7 @@
       },
       {
         "key": "accept-language",
-        "value": "en-US,en;q=0.9"
+        "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
       },
       {
         "key": "cookie",

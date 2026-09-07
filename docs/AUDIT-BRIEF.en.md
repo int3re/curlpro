@@ -360,6 +360,16 @@ checked and has a reason.
   jar has no handle of its own, it reads the session; an empty list would mean
   "there are no cookies", when in fact they were not taken out in time. The
   message names the way out: `cookies.export()` before `close()`.
+- **Every profile's `accept-language` is Russian, except Tor's.** The library
+  was built for Russian sites, and `en-US` from a Russian address is a
+  mismatch rather than neutrality. The shape of the value differs per browser,
+  though, and one identical string everywhere would itself be a tell: Chrome
+  builds its q ladder in steps of 0.1 (`ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7`),
+  Firefox uses 0.8/0.5/0.3, Safari sends a short list. The language tags were
+  replaced; each browser kept its own ladder. **Tor was deliberately left
+  alone:** the Tor Browser sends `en-US,en;q=0.5` to everyone always — that is
+  its anti-fingerprinting defence — and Russian there would make the profile
+  unlike the Tor Browser, which is the opposite of why anyone picks it.
 - **The code and the error messages are in English, the documentation is in
   Russian.** That was decided deliberately: the library is open and its code is
   read by people who do not read Russian, while the project documentation is

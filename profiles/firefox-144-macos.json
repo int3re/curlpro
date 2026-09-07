@@ -12,7 +12,7 @@
       },
       {
         "key": "accept-language",
-        "value": "en-US,en;q=0.5"
+        "value": "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3"
       },
       {
         "key": "accept-encoding",

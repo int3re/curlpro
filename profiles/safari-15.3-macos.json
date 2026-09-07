@@ -160,7 +160,7 @@
       },
       {
         "key": "accept-language",
-        "value": "en-us"
+        "value": "ru-RU,ru;q=0.9"
       },
       {
         "key": "accept-encoding",

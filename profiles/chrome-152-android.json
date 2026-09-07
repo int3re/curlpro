@@ -118,7 +118,7 @@
       },
       {
         "key": "accept-language",
-        "value": "ru,en-US;q=0.9,en;q=0.8,zh-CN;q=0.7,zh;q=0.6"
+        "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
       },
       {
         "key": "cookie",
