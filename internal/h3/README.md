@@ -1,122 +1,125 @@
 # internal/h3
 
-Вендоренная копия `github.com/refraction-networking/uquic/http3` с правками
-под отпечаток браузера.
+A vendored copy of `github.com/refraction-networking/uquic/http3`, with changes
+for the browser fingerprint.
 
-## Почему копия, а не зависимость
+## Why a copy rather than a dependency
 
-Публичное API `http3.Transport` в uquic даёт только `AdditionalSettings`
-(обычная map, без порядка) и `EnableDatagrams`. Ни порядок SETTINGS, ни порядок
-псевдо-заголовков, ни GREASE-кадр, ни PRIORITY_UPDATE им не задаются — а это
-всё, из чего состоит отпечаток HTTP/3-слоя.
+The public `http3.Transport` API in uquic offers only `AdditionalSettings` (an
+ordinary map, with no order) and `EnableDatagrams`. Neither the SETTINGS order,
+nor the pseudo-header order, nor the GREASE frame, nor PRIORITY_UPDATE can be set
+through it — and those are everything the HTTP/3 layer's fingerprint is made of.
 
-Пакет не импортирует `internal/` из uquic, только публичные API, поэтому копия
-собирается и продолжает пользоваться апстримными `uquic`, `qlogwriter`
-и `quicvarint`.
+The package imports nothing from uquic's `internal/`, only public APIs, so the
+copy builds and goes on using the upstream `uquic`, `qlogwriter` and
+`quicvarint`.
 
-Серверная часть (`server.go`, `response_writer.go`, `server_conn.go`,
-`capsule.go`) не копировалась — мы клиент. Константы, которые жили в `server.go`
-и нужны клиенту, перенесены в [consts.go](consts.go).
+The server side (`server.go`, `response_writer.go`, `server_conn.go`,
+`capsule.go`) was not copied — we are a client. The constants that lived in
+`server.go` and are needed by a client moved to [consts.go](consts.go).
 
-## Правки против апстрима
+## Changes against upstream
 
-Свои файлы: [fingerprint.go](fingerprint.go), [order.go](order.go),
-[consts.go](consts.go). Изменённые: `frames.go`, `request_writer.go`,
-`client.go`, `transport.go`.
+Files of our own: [fingerprint.go](fingerprint.go), [order.go](order.go),
+[consts.go](consts.go). Modified: `frames.go`, `request_writer.go`, `client.go`,
+`transport.go`.
 
-| Что | Было | Стало |
+| What | Was | Is now |
 |---|---|---|
-| порядок SETTINGS | обход map — случайный на каждом соединении | поле `Order`, остальные по возрастанию |
-| QPACK-настройки `0x01`, `0x07` | не отправлялись вовсе | задаются через `AdditionalSettings` |
-| порядок псевдо-заголовков | жёстко `:authority,:method,:path,:scheme` | из `PseudoHeaderOrderKey`, по умолчанию порядок Chrome |
-| порядок обычных заголовков | обход map — случайный | из `HeaderOrderKey`, остальные по алфавиту |
-| GREASE-кадр | нет | `SendGreaseFrame`, идентификатор случайный на соединение |
-| PRIORITY_UPDATE | нет | `PriorityParam` |
-| позиция `Content-Length` | всегда в хвосте | слот из `HeaderOrderKey` (`withSlot`) |
-| разбор QPACK | статическая таблица `quic-go/qpack` | свой декодер `internal/qpack` с динамической |
+| SETTINGS order | a map walk — random per connection | the `Order` field, the rest ascending |
+| QPACK settings `0x01`, `0x07` | not sent at all | set through `AdditionalSettings` |
+| pseudo-header order | hard-coded `:authority,:method,:path,:scheme` | from `PseudoHeaderOrderKey`, Chrome's order by default |
+| ordinary header order | a map walk — random | from `HeaderOrderKey`, the rest alphabetical |
+| GREASE frame | none | `SendGreaseFrame`, the identifier drawn per connection |
+| PRIORITY_UPDATE | none | `PriorityParam` |
+| `Content-Length` position | always at the tail | a slot from `HeaderOrderKey` (`withSlot`) |
+| QPACK decoding | the static table of `quic-go/qpack` | our own `internal/qpack` decoder, with a dynamic table |
 
-Апстримный порядок псевдо-заголовков не совпадал ни с Chrome (`m,a,s,p`),
-ни с Firefox (`m,s,a,p`).
+The upstream pseudo-header order matched neither Chrome (`m,a,s,p`) nor Firefox
+(`m,s,a,p`).
 
-Случайный порядок обычных заголовков — тот самый дефект, который у
-`bogdanfinn/tls-client` до сих пор открыт багом
-([#264](https://github.com/bogdanfinn/tls-client/issues/264)): для HTTP/3 порядок
-не сохранялся, хотя для HTTP/1.1 и HTTP/2 работал.
+The random ordinary-header order is the very defect still open as a bug against
+`bogdanfinn/tls-client`
+([#264](https://github.com/bogdanfinn/tls-client/issues/264)): for HTTP/3 the
+order was not preserved, although it worked for HTTP/1.1 and HTTP/2.
 
-Идентификатор GREASE (`0x1f*N + 0x21`) разыгрывается на каждое соединение.
-У bogdanfinn `N` захардкожен как `1e9`, из-за чего идентификатор всегда один
-и тот же — постоянное значение само по себе примета.
+The GREASE identifier (`0x1f*N + 0x21`) is drawn per connection. In bogdanfinn's
+code `N` is hard-coded as `1e9`, so the identifier is always the same one — and a
+constant value is a tell in itself.
 
-## Почему не fhttp
+## Why not fhttp
 
-Первая попытка заменила `net/http` на `github.com/bogdanfinn/fhttp` ради его
-`HeaderOrderKey`. Не собралось: fhttp построен поверх `bogdanfinn/utls`, а uquic —
-поверх `refraction-networking/utls`, и их `tls.ConnectionState` несовместимы.
+The first attempt replaced `net/http` with `github.com/bogdanfinn/fhttp` for its
+`HeaderOrderKey`. It did not build: fhttp is built on `bogdanfinn/utls` while
+uquic is built on `refraction-networking/utls`, and their `tls.ConnectionState`
+types are incompatible.
 
-Раз пакет всё равно вендорится, служебные ключи объявлены свои
-([order.go](order.go)) — без второго форка utls в зависимостях. Ключи содержат
-двоеточие, недопустимое в имени заголовка, поэтому исключены из проверки
-в двух местах: `transport.go` и `request_writer.go`.
+Since the package is vendored anyway, the housekeeping keys are declared here
+([order.go](order.go)) — without a second utls fork among the dependencies. The
+keys contain a colon, which is illegal in a header name, so they are excluded
+from validation in two places: `transport.go` and `request_writer.go`.
 
-## Две гонки, которые пришлось закрыть
+## Two races that had to be closed
 
-Отпечаток сначала «плавал» — совпадал не в каждом запросе. Причины оказались
-разные, и обе видны только на живом сервере.
+The fingerprint "floated" at first — it matched on some requests and not others.
+The causes turned out to be different, and both are visible only against a live
+server.
 
-**Управляющий поток уходил параллельно запросу.** Апстрим открывает его
-в горутине, а запрос отправляется сразу; это разные потоки QUIC, и сервер
-успевал ответить, не увидев SETTINGS. Браузер открывает управляющий поток
-до первого запроса — теперь первый запрос ждёт записи (`settingsSent`,
-с предохранительным таймаутом).
+**The control stream left in parallel with the request.** Upstream opens it in a
+goroutine while the request is sent at once; these are different QUIC streams,
+and the server managed to answer without having seen SETTINGS. A browser opens
+the control stream before its first request — so now the first request waits for
+that write (`settingsSent`, with a safety timeout).
 
-**PRIORITY_UPDATE адресован потоку.** Кадр несёт идентификатор потока,
-к которому относится, поэтому Chrome отправляет его перед каждым запросом.
-Одна отправка с нулём при установке соединения давала совпадение **только
-для первого запроса** — характерная картина «1 из 5», которая и вывела
-на причину.
+**PRIORITY_UPDATE is addressed to a stream.** The frame carries the identifier of
+the stream it concerns, which is why Chrome sends it before every request. A
+single send with a zero at connection time gave a match **for the first request
+only** — the characteristic "1 out of 5" pattern that led to the cause.
 
-## QPACK: динамическая таблица
+## QPACK: the dynamic table
 
-Профиль объявляет `QPACK_MAX_TABLE_CAPACITY: 65536`, как Chrome, и сервер
-вправе таблицей воспользоваться. Апстримный декодер её не поддерживает
-(«Our QPACK implementation doesn't use the dynamic table yet»), и ответ
-`fp.impersonate.pro` со второго запроса не разбирался:
+The profile advertises `QPACK_MAX_TABLE_CAPACITY: 65536`, as Chrome does, and the
+server is entitled to use the table. The upstream decoder does not support it
+("Our QPACK implementation doesn't use the dynamic table yet"), and from the
+second request onwards the answer from `fp.impersonate.pro` could not be parsed:
 `qpack: expected Required Insert Count to be zero`.
 
-Занизить ёмкость значило бы разойтись с Chrome в первом же поле SETTINGS,
-поэтому вместо этого написан свой декодер — [internal/qpack](../qpack).
-Клиент открывает потоки кодировщика и декодировщика, шлёт Section
-Acknowledgement и Insert Count Increment. Стало 5 ответов из 5, было 1 из 5.
+Lowering the capacity would mean disagreeing with Chrome in the very first
+SETTINGS field, so a decoder of our own was written instead —
+[internal/qpack](../qpack). The client opens the encoder and decoder streams and
+sends Section Acknowledgement and Insert Count Increment. It became 5 answers out
+of 5, from 1 out of 5.
 
-## Позиция Content-Length
+## The Content-Length position
 
-Апстрим добавлял `content-length` последним, после всех заголовков запроса.
-Chrome в наборе fetch шлёт его **первым**, сразу за псевдо-заголовками —
-замер стендом [cmd/hcapture](../../cmd/hcapture) против живого Chrome 152
-по HTTP/3. На HTTP/2 позиция бралась из порядка профиля, на HTTP/3 нет:
-расхождение видно любому серверу, который сравнивает два транспорта.
+Upstream added `content-length` last, after every request header. In the fetch
+set Chrome sends it **first**, right after the pseudo-headers — measured with the
+[cmd/hcapture](../../cmd/hcapture) stand against live Chrome 152 over HTTP/3. On
+HTTP/2 the position came from the profile's order and on HTTP/3 it did not: a
+divergence visible to any server that compares the two transports.
 
-`withSlot` ([order.go](order.go)) вставляет имя на позицию из `HeaderOrderKey`,
-даже когда самого заголовка в `req.Header` нет: его добавляет транспорт.
+`withSlot` ([order.go](order.go)) inserts the name at the position given by
+`HeaderOrderKey` even when the header itself is absent from `req.Header`: the
+transport adds it later.
 
-## Результат
+## The result
 
-`quic.browserleaks.com/fp`, воспроизводится `cmd/h3probe`:
+`quic.browserleaks.com/fp`, reproduced by `cmd/h3probe`:
 
 ```
-получено: 1:65536;6:262144;7:100;51:1;GREASE|GREASE|984832|m,a,s,p
+received:   1:65536;6:262144;7:100;51:1;GREASE|GREASE|984832|m,a,s,p
 Chrome 144: 1:65536;6:262144;7:100;51:1;GREASE|GREASE|984832|m,a,s,p
 ```
 
-Совпадение байт-в-байт, стабильно на трёх прогонах.
+A byte-for-byte match, stable across three runs.
 
-**Это только H3-слой.** QUIC-слой (transport parameters, Initial-пакет) идёт
-от uquic и содержит три известных расхождения с Chrome — они разобраны
-в [docs/HTTP3-RESEARCH.md](../../docs/HTTP3-RESEARCH.md).
+**This is the H3 layer only.** The QUIC layer — transport parameters, the Initial
+packet — comes from uquic and holds three known divergences from Chrome; they are
+analysed in [docs/HTTP3-RESEARCH.md](../../docs/HTTP3-RESEARCH.md).
 
-## Обновление
+## Updating
 
-При обновлении uquic копию нужно переносить заново. Порядок: скопировать
-изменившиеся файлы, убрать серверные, вернуть правки из таблицы выше.
-Ориентир — эта таблица и комментарии в коде, каждый помечает, что и зачем
-отличается от апстрима.
+When uquic is updated the copy has to be carried over again. The order: copy the
+changed files, drop the server ones, restore the changes from the table above.
+That table and the comments in the code are the guide — each one marks what
+differs from upstream and why.

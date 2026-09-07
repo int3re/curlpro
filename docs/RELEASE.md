@@ -1,94 +1,99 @@
-# Выпуск версии
+# Releasing a version
 
-Пакет собирается и выкладывается рабочим процессом
-[.github/workflows/wheels.yml](../.github/workflows/wheels.yml) по тегу `v*`.
+The package is built and published by the
+[.github/workflows/wheels.yml](../.github/workflows/wheels.yml) workflow, on a
+`v*` tag.
 
-Первый выпуск — **0.2.0, 5 сентября 2026**:
-[pypi.org/project/curlpro](https://pypi.org/project/curlpro/). Текущий —
-**0.3.0**: свой отпечаток без запроса, персоны и совместимость с `requests`.
+The first release was **0.2.0, 5 September 2026**:
+[pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
+**0.3.0**: the offline fingerprint, personas, and `requests` compatibility.
 
-## Что происходит по тегу
+## What happens on a tag
 
-1. **version** — сверка тега с `version` в `python/pyproject.toml`. Идёт первой,
-   и всё остальное её ждёт: тег `v0.3.0` при `version = "0.2.0"` собрал бы и
-   выложил колесо `0.2.0` молча, а занятый на PyPI номер не освобождается
-   удалением.
-2. **build** — колёса на пяти платформах: Linux x86-64 и arm64, macOS Intel
-   и Apple Silicon, Windows x86-64. Каждая собирается на своей машине: cgo
-   без тулчейна целевой платформы не кросс-компилируется.
-3. Каждое колесо проверяется на месте: ставится, находит профили внутри пакета
-   и открывает сессию. Проверка **не зависит от чужого сервиса** — релиз обязан
-   проходить и в день, когда browserleaks лежит; отпечаток спрашивается
-   отдельным шагом с `continue-on-error`, для сведения.
-4. **sdist** — исходный архив для платформ вне списка. В него кладутся Go-модуль
-   и профили, а содержимое проверяется: было время, когда архив собирался пустым
-   (0 файлов Go), и обещание «соберёт нативную часть сам» не выполнялось.
-5. **publish** — выкладка на PyPI доверенным способом.
+1. **version** — compares the tag with `version` in `python/pyproject.toml`. It
+   runs first and everything waits on it: a `v0.3.0` tag while `version` still
+   said `0.2.0` would build and publish a `0.2.0` wheel silently, and a number
+   taken on PyPI is not freed by deleting it.
+2. **build** — wheels on five platforms: Linux x86-64 and arm64, macOS Intel and
+   Apple Silicon, Windows x86-64. Each is built on its own machine: cgo does not
+   cross-compile without the target platform's toolchain.
+3. Every wheel is checked where it was built: it installs, finds the profiles
+   inside the package and opens a session. The check **does not depend on anyone
+   else's service** — a release has to pass on a day when browserleaks is down;
+   the fingerprint is asked for in a separate step with `continue-on-error`, for
+   information only.
+4. **sdist** — the source archive for platforms outside the list. The Go module
+   and the profiles are put into it, and the contents are checked: there was a
+   time when the archive came out empty (0 Go files) and the promise that it
+   "builds the native part itself" was not kept.
+5. **publish** — the upload to PyPI, the trusted way.
 
-## Что настроено один раз
+## What is configured once
 
-Публикация идёт **доверенным способом** (trusted publishing): PyPI проверяет
-подпись самого запуска в GitHub, и хранить токен в секретах репозитория
-не нужно вовсе — красть будет нечего.
+Publishing goes the **trusted way** (trusted publishing): PyPI verifies the
+signature of the run itself in GitHub, and no token needs to be kept in the
+repository's secrets at all — there is nothing to steal.
 
-1. На PyPI в настройках проекта заведён издатель:
+1. A publisher is registered in the project's settings on PyPI:
 
-   | Поле | Значение |
+   | Field | Value |
    |---|---|
    | Owner | `int3re` |
    | Repository | `curlpro` |
    | Workflow | `wheels.yml` |
    | Environment | `pypi` |
 
-2. В репозитории создано окружение `pypi` с обязательным подтверждением
-   (*Required reviewers* → `int3re`). Выкладка в общий индекс необратима:
-   занятую версию не освободить, и один неверный тег иначе стоил бы номера
-   навсегда. Подтверждение — последнее место, где ошибку ещё можно остановить.
+2. A `pypi` environment with a required approval (*Required reviewers* →
+   `int3re`) is created in the repository. A push to the public index cannot be
+   taken back: an occupied version is never freed, and without the approval one
+   wrong tag would cost that number for good. The approval is the last place an
+   error can still be stopped.
 
-## Как выпускать
+## How to release
 
 ```bash
-# 1. Поднять версию в python/pyproject.toml
-# 2. Убедиться, что всё зелено
+# 1. Raise the version in python/pyproject.toml
+# 2. Make sure everything is green
 go test -race ./internal/... && cd python && python -m pytest tests -q -m "not network"
 
-# 3. Холостой прогон: собирает всё, но не публикует — publish включается только по тегу
+# 3. A dry run: builds everything but publishes nothing — publish only fires on a tag
 gh workflow run wheels.yml --ref main
 
-# 4. Тег и отправка — версия та же, что в pyproject, иначе задача version не пустит
+# 4. Tag and push — the same version as in pyproject, or the version job stops it
 git tag -a vX.Y.Z -m "curlpro X.Y.Z"
 git push origin vX.Y.Z
 ```
 
-Дальше рабочий процесс соберёт колёса и остановится на подтверждении окружения.
+The workflow then builds the wheels and stops at the environment approval.
 
-**Холостой прогон перед тегом — не формальность.** Первый же нашёл два дефекта,
-каждый из которых сорвал бы релиз: раннера `macos-13` больше не существует
-(GitHub держит две последние версии ОС), и задача с ним не падает, а вечно висит
-в очереди — а `publish` ждёт все пять колёс. И теги платформы macOS обещали
-`10.15` и `11.0`, тогда как Go 1.27 требует macOS 13: на 11–12 pip поставил бы
-колесо, которое не грузится.
+**The dry run before the tag is not a formality.** The very first one found two
+defects, either of which would have wrecked the release: the `macos-13` runner no
+longer exists (GitHub keeps the two latest versions of an OS), and a job asking
+for it does not fail but queues for ever — while `publish` waits for all five
+wheels. And the macOS platform tags promised `10.15` and `11.0` while Go 1.27
+requires macOS 13: on 11 and 12 pip would have installed a wheel that cannot
+load.
 
-## После выпуска
+## After the release
 
-Колёса и архив прикладываются к
-[релизу на GitHub](https://github.com/int3re/curlpro/releases) — чтобы
-поставить можно было и не обращаясь к индексу:
+The wheels and the archive are attached to the
+[GitHub release](https://github.com/int3re/curlpro/releases), so that installing
+without reaching the index is possible:
 
 ```bash
 gh release create vX.Y.Z --title "curlpro X.Y.Z" --notes-file NOTES.md dist/*
 ```
 
-Файлы берутся из артефактов того же прогона, что публиковался: тогда
-контрольные суммы сходятся с индексом побайтово, и это стоит проверить —
-`SHA256SUMS.txt` рядом с ними для того и лежит.
+The files are taken from the artefacts of the same run that was published: then
+the checksums agree with the index byte for byte, and that is worth verifying —
+`SHA256SUMS.txt` sits next to them for exactly that.
 
-## Версия нативной части
+## The native part's version
 
-У библиотеки есть своя версия ABI (`Version` в [lib/curlpro.go](../lib/curlpro.go)
-и `REQUIRED_VERSION` в `python/curlpro/_ffi.py`). Она **не** совпадает с версией
-пакета и поднимается тогда, когда Python начинает зависеть от нового экспорта
-или поля конфигурации. Без этого старая библиотека молча игнорирует незнакомые
-поля: опция передаётся, но не действует — и это выглядит как ошибка логики,
-а не как устаревшая сборка. На такой ловушке однажды был потерян час прогонов
-не того кода.
+The library has an ABI version of its own (`Version` in
+[lib/curlpro.go](../lib/curlpro.go) and `REQUIRED_VERSION` in
+`python/curlpro/_ffi.py`). It is **not** the package version, and it is raised
+when Python starts depending on a new export or a new configuration field.
+Without that an old library ignores unknown fields silently: an option is passed
+and does not take effect — which looks like a logic error rather than a stale
+build. An hour of runs against the wrong code was once lost to that trap.

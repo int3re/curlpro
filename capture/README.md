@@ -1,53 +1,57 @@
 # capture/
 
-Снятие эталонного отпечатка браузера.
+Capturing a reference browser fingerprint.
 
-## Обычный путь — одна команда
+## The ordinary way — one command
 
 ```powershell
 curlpro capture -name chrome-152-windows -samples 5
 ```
 
-Команда сама поднимает стенд, приводит браузер, собирает сэмплы, нормализует
-их и пишет профиль в `profiles/`. Дальше:
+The command raises the stand itself, brings the browser, collects the samples,
+normalises them and writes a profile into `profiles/`. Then:
 
 ```powershell
 curlpro validate -only chrome-152-windows -oracle https://localhost:8443/json -insecure
 ```
 
-Нужен `tools/echo-server*` (из релизов
-[wi1dcard/fingerproxy](https://github.com/wi1dcard/fingerproxy)) и сертификат
-в `certs/` — как его сгенерировать, написано в [docs/CAPTURE.md](../docs/CAPTURE.md).
+It needs `tools/echo-server*` (from the
+[wi1dcard/fingerproxy](https://github.com/wi1dcard/fingerproxy) releases) and a
+certificate in `certs/` — how to generate one is in
+[docs/CAPTURE.md](../docs/CAPTURE.md).
 
-## Что здесь лежит
+## What lives here
 
-Скрипты остались от ручного цикла, которым снимался первый эталон (этап 0).
-`curlpro capture` покрывает их целиком, но они полезны, когда нужно разобрать
-уже имеющийся лог или посмотреть на промежуточные данные:
+The scripts are left over from the manual cycle that captured the first
+reference (stage 0). `curlpro capture` covers all of it, but they are useful when
+an existing log needs taking apart, or when the intermediate data is worth
+looking at:
 
-| Файл | Назначение |
+| File | Purpose |
 |---|---|
-| `analyze.py` | разбор лога echo-server в набор сэмплов, с отбором по `:path` |
-| `normalize.py` | сведение сэмплов в эталон: вырезает GREASE, проверяет совпадение наборов расширений |
-| `make_profile.py` | сборка профиля из эталона и сэмплов |
-| `capture.ps1` | прогон браузера N раз с одноразовыми профилями |
+| `analyze.py` | turns an echo-server log into a set of samples, choosing by `:path` |
+| `normalize.py` | reduces the samples to a reference: cuts GREASE out, checks the extension sets agree |
+| `make_profile.py` | builds a profile from the reference and the samples |
+| `capture.ps1` | runs the browser N times with throwaway profiles |
 
-## Почему сэмплов нужно несколько
+## Why several samples are needed
 
-Chrome ≥110 перемешивает TLS-расширения на каждом соединении, а значения GREASE
-случайны. Один захват зафиксировал бы случайную перестановку — профиль из него
-описывал бы не браузер, а конкретное соединение.
+Chrome ≥110 shuffles its TLS extensions on every connection, and the GREASE
+values are random. A single capture would freeze one arbitrary permutation, and a
+profile built from it would describe a particular connection rather than a
+browser.
 
-Проверка, что стенд работает: пять сэмплов должны дать **разные JA3** и
-**одинаковый JA4**.
+The check that the stand is working: five samples must give **different JA3**
+values and **one JA4**.
 
-## Ручной режим
+## Manual mode
 
-Если браузер не запускается автоматически (или нужен другой — Firefox, Safari):
+If the browser does not start on its own — or if another one is wanted, Firefox
+or Safari:
 
 ```powershell
 curlpro capture -name firefox-145-windows -manual -wait 3m
 ```
 
-Команда напечатает адрес; открывать его нужно столько раз, сколько задано
-в `-samples`, каждый раз в новом окне.
+The command prints an address; open it as many times as `-samples` asks for, each
+time in a new window.

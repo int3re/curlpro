@@ -1,7 +1,7 @@
 # curlpro
 
-HTTP-клиент с сетевым отпечатком браузера: TLS ClientHello, кадры HTTP/2
-и HTTP/3, порядок и регистр заголовков.
+An HTTP client with a browser's network fingerprint: the TLS ClientHello, the
+HTTP/2 and HTTP/3 frames, header order and header case.
 
 ```bash
 pip install curlpro
@@ -15,14 +15,14 @@ with curlpro.Session("chrome-151-windows") as s:
     print(r.status, r.text[:200])
 ```
 
-Ни Go, ни компилятора не нужно: нативная библиотека и все 47 профилей уже
-внутри колеса, и профили подхватываются сами.
+Neither Go nor a compiler is needed: the native library and all 47 profiles are
+already inside the wheel, and the profiles load themselves.
 
-## Зачем ещё один
+## Why another one
 
-Существующие решения хранят профили браузеров в компилируемом коде: новый Chrome
-выходит каждые 4 недели, и каждый раз это правка C или Go, пересборка и релиз.
-Здесь профиль — данные, и его можно подключить в рантайме:
+The existing clients keep their browser profiles in compiled code: a new Chrome
+comes out every four weeks, and each time that means editing C or Go, rebuilding
+and releasing. Here a profile is data, and it can be registered at runtime:
 
 ```python
 curlpro.register_profile({
@@ -32,47 +32,95 @@ curlpro.register_profile({
 })
 ```
 
-## Что внутри
+## Your own fingerprint, without a request
 
-Тонкая ctypes-обёртка над нативной библиотекой на Go: рукопожатие ведёт
-[uTLS](https://github.com/refraction-networking/utls), HTTP/2 —
-[fhttp](https://github.com/bogdanfinn/fhttp), QUIC —
-[uquic](https://github.com/refraction-networking/uquic).
-
-Отпечаток сверен с `tls.browserleaks.com`: Chrome 151 даёт
-`t13d1516h2_8daaf6152771_806a8c22fdea` — тот же JA4, что живой браузер.
-
-## Границы
-
-Библиотека закрывает сетевой слой. Она **не** подделывает JS-отпечаток
-(canvas, WebGL, navigator) — это уровень браузера, там нужен Playwright.
-Совпадение сетевого отпечатка необходимо, но не достаточно: современные
-системы скорят JA4 вместе с JA4H, JA3S/JARM и поведенческим анализом.
-
-Поддерживаются HTTP/1.1, HTTP/2, HTTP/3 и WebSocket, куки, редиректы, прокси
-(HTTP CONNECT и SOCKS5), multipart, потоковое чтение и отправка, асинхронный API.
+What a server would see is computed locally, from the same ClientHello bytes that
+would go on the wire. No network, no oracle:
 
 ```python
-# WebSocket: рукопожатие по шаблону профиля браузера, permessage-deflate поддержан
+with curlpro.Session("chrome-151-windows") as s:
+    fp = s.fingerprint()
+    print(fp.ja4)       # t13d1516h2_8daaf6152771_806a8c22fdea
+    print(fp.akamai)    # 1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p
+```
+
+Checked against 47 captures: JA4 47/47, JA3N 47/47, Akamai 47/47.
+
+`audit()` answers the second question — the one people actually lose days to.
+Not "does my fingerprint look right" but "does anything here disagree with
+anything else", because that is what gives a client away:
+
+```python
+for finding in s.audit():
+    print(finding)
+```
+
+## Personas
+
+Profile, proxy, device, headers and cookies — one identity, one file:
+
+```python
+p = curlpro.Persona.new("chrome-151-windows", proxy="http://user:pass@host:8080")
+p.save("accounts/user42.json")
+
+p = curlpro.Persona.load("accounts/user42.json")
+with p.session() as s:
+    s.get("https://example.com/")
+p.save()          # the cookies moved on; the identity did not
+```
+
+## requests compatibility
+
+```python
+import curlpro.requests as requests
+
+r = requests.get("https://example.com/", timeout=10)
+```
+
+Existing code changes one import. It is a subset, and it says so: an argument the
+shim cannot honour is refused with a reason rather than ignored.
+
+## What is inside
+
+A thin ctypes wrapper over a native library written in Go: the handshake is
+driven by [uTLS](https://github.com/refraction-networking/utls), HTTP/2 by
+[fhttp](https://github.com/bogdanfinn/fhttp), QUIC by
+[uquic](https://github.com/refraction-networking/uquic).
+
+The fingerprint is checked against `tls.browserleaks.com`: Chrome 151 gives
+`t13d1516h2_8daaf6152771_806a8c22fdea` — the same JA4 as the live browser.
+
+## Boundaries
+
+The library covers the network layer. It does **not** forge the JS fingerprint
+(canvas, WebGL, navigator) — that is the browser's level, and the answer there is
+Playwright. Matching the network fingerprint is necessary but not sufficient:
+modern systems score JA4 together with JA4H, JA3S/JARM and behaviour.
+
+HTTP/1.1, HTTP/2, HTTP/3 and WebSocket are supported, along with cookies,
+redirects, proxies (HTTP CONNECT and SOCKS5), multipart, streaming reads and
+uploads, and an asynchronous API.
+
+```python
+# WebSocket: the handshake follows the profile's template, permessage-deflate works
 with curlpro.Session() as s:
     with s.websocket("wss://echo.websocket.org/", max_message_size=1 << 20) as ws:
-        ws.send("привет")        # str  → текстовый кадр
-        ws.send(b"\x00\xff")     # bytes → двоичный
-        for message in ws:       # до закрытия сервером — curlpro.WebSocketClosed;
-            print(message)       # таймаут тишины — CurlProError с .code == "timeout"
+        ws.send("hello")         # str   -> a text frame
+        ws.send(b"\x00\xff")     # bytes -> a binary one
+        for message in ws:       # until the server closes: curlpro.WebSocketClosed;
+            print(message)       # a silence timeout is CurlProError with .code == "timeout"
 
-# Большой файл уходит потоком, а не через память
+# A large file goes as a stream rather than through memory
 with curlpro.Session() as s:
     s.post("https://example.com/upload", body_file="archive.zip")
 
-# Соединение переиспользуется между запросами, как у браузера.
-# keep_alive=False даёт каждому запросу своё — нужно, когда балансировщик
-# прибивает клиента к одному узлу
+# The connection is reused between requests, as a browser's is. keep_alive=False
+# gives every request its own — needed when a balancer pins a client to one node.
 with curlpro.Session(keep_alive=False) as s:
     s.get("https://example.com/")
 ```
 
-Отпечаток HTTP/3 сверен с Chrome 144 на `quic.browserleaks.com`:
+The HTTP/3 fingerprint is checked against Chrome 144 on `quic.browserleaks.com`:
 
 ```python
 with curlpro.Session("chrome-151-windows", http3=True) as s:
@@ -80,17 +128,18 @@ with curlpro.Session("chrome-151-windows", http3=True) as s:
     # 1:65536;6:262144;7:100;51:1;GREASE|GREASE|984832|m,a,s,p
 ```
 
-Динамическая таблица QPACK поддержана своим декодером: профиль объявляет
-ёмкость, как Chrome, и ответ сервера, который ей пользуется, разбирается.
+The QPACK dynamic table is supported by a decoder of our own: the profile
+advertises a capacity as Chrome does, and a server that uses it gets parsed.
 
-## Установка
+## Install
 
-Готовые колёса собраны для Linux (x86-64 и ARM64, glibc 2.28+), macOS 13+
-(Intel и Apple Silicon) и Windows x64. Минимум macOS 13 задан не нами: столько
-требует Go 1.27, на котором собрана нативная часть.
+Wheels are built for Linux (x86-64 and ARM64, glibc 2.28+), macOS 13+ (Intel and
+Apple Silicon) and Windows x64. The macOS 13 floor is not ours to choose: that is
+what Go 1.27 requires, and the native part is built with it.
 
-Платформы вне этого списка — Alpine и другой musl, Windows на ARM, старые glibc
-или macOS — ставятся из исходного архива, и тогда нужны Go и компилятор C:
+Platforms outside that list — Alpine and other musl distributions, Windows on
+ARM, older glibc or macOS — install from the source archive, and there Go and a C
+compiler are required:
 
 ```bash
 pip download curlpro --no-binary :all: --no-deps
@@ -98,6 +147,7 @@ tar -xzf curlpro-*.tar.gz && cd curlpro-*/go
 CGO_ENABLED=1 go build -buildmode=c-shared -o ../curlpro/lib/libcurlpro.so ./lib
 ```
 
-Библиотека ищется по `CURLPRO_LIBRARY`, затем в `curlpro/lib/`, затем в `dist/`.
+The library is looked up through `CURLPRO_LIBRARY`, then in `curlpro/lib/`, then
+in `dist/`.
 
-Полная документация и исходники — [github.com/int3re/curlpro](https://github.com/int3re/curlpro).
+Full documentation and sources — [github.com/int3re/curlpro](https://github.com/int3re/curlpro).

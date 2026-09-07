@@ -1,4 +1,4 @@
-"""The Russian documents and their English twins must not drift apart.
+"""A document and its twin in the other language must not drift apart.
 
 A translation kept by hand is a second place for the truth to live, and this
 project has already paid for that: the debt table said the QPACK dynamic table
@@ -20,9 +20,12 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 
+#: Original first, twin second. English became the original on 2026-09-08:
+#: the code, the errors and the tooling were already English, and a reader who
+#: cannot read Russian was landing on a Russian front page.
 PAIRS = [
-    (REPO / "docs" / "AUDIT-BRIEF.md", REPO / "docs" / "AUDIT-BRIEF.en.md"),
-    (REPO / "README.md", REPO / "README.en.md"),
+    (REPO / "docs" / "AUDIT-BRIEF.md", REPO / "docs" / "AUDIT-BRIEF.ru.md"),
+    (REPO / "README.md", REPO / "README.ru.md"),
 ]
 
 HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
