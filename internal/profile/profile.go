@@ -438,7 +438,10 @@ func NewRegistry() *Registry {
 }
 
 // LoadFS loads every *.json from a filesystem directory.
-// Used both for the embedded profiles (go:embed) and for the user's own.
+//
+// Any fs.FS will do, which is what an embedded set would need — but nothing is
+// embedded: the profiles ship as data inside the wheel and are read from disk,
+// so that a new browser is a file rather than a rebuild.
 func (r *Registry) LoadFS(fsys fs.FS, dir string) error {
 	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
