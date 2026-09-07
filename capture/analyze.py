@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Разбор лога fingerproxy echo-server (-verbose) в набор эталонных сэмплов.
+"""Turns a fingerproxy echo-server log (-verbose) into a set of reference samples.
 
-Проверяет ключевую гипотезу этапа 0: Chrome >=110 перемешивает TLS-расширения
-на каждом соединении, поэтому JA3 нестабилен, а JA4 (сортирующий расширения) --
-стабилен. Если это подтверждается, стенд снимает настоящий браузер, а не артефакт.
+Checks the central assumption of stage 0: Chrome >=110 shuffles its TLS
+extensions on every connection, so JA3 is unstable while JA4 — which sorts them —
+is not. If that holds, the stand is capturing a real browser rather than an
+artefact of its own.
 
 Usage: python analyze.py <server.log> [--out samples/]
 """
@@ -30,12 +31,12 @@ def request_path(detail: dict) -> str:
 
 
 def parse(log_path: Path, want_path: str = "") -> dict[str, dict]:
-    """Собирает записи по client-адресу. Один адрес = одно TLS-соединение.
+    """Groups the records by client address. One address is one TLS connection.
 
-    По одному h2-соединению браузер шлёт несколько запросов (навигация, затем
-    /favicon.ico), и каждый даёт свою detail-запись. Заголовки у них разные:
-    у favicon нет upgrade-insecure-requests и другие sec-fetch-*. Поэтому
-    detail накапливаются, а нужный выбирается по :path.
+    A browser sends several requests over one h2 connection (the navigation,
+    then /favicon.ico), and each produces its own detail record. Their headers
+    differ: the favicon has no upgrade-insecure-requests and other sec-fetch-*
+    values. So the details accumulate and the right one is chosen by :path.
     """
     conns: dict[str, dict] = {}
     for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -65,31 +66,31 @@ def summarize(conns: dict[str, dict]) -> int:
         if (ua := d.get("detail", {}).get("user_agent", "")) and "curl" not in ua.lower()
     }
     if not browser:
-        print("Браузерных соединений в логе нет.", file=sys.stderr)
+        print("no browser connections in the log", file=sys.stderr)
         return 1
 
     ja3s = [d["ja3"] for d in browser.values() if "ja3" in d]
     ja4s = [d["ja4"] for d in browser.values() if "ja4" in d]
 
-    print(f"Браузерных соединений: {len(browser)}")
+    print(f"browser connections: {len(browser)}")
     ua = next(iter(browser.values())).get("detail", {}).get("user_agent", "?")
     print(f"User-Agent: {ua}\n")
 
-    print(f"Уникальных JA3: {len(set(ja3s))} из {len(ja3s)}")
+    print(f"distinct JA3: {len(set(ja3s))} of {len(ja3s)}")
     for h, n in Counter(ja3s).most_common():
         print(f"   {h}  x{n}")
-    print(f"\nУникальных JA4: {len(set(ja4s))} из {len(ja4s)}")
+    print(f"\ndistinct JA4: {len(set(ja4s))} of {len(ja4s)}")
     for h, n in Counter(ja4s).most_common():
         print(f"   {h}  x{n}")
 
     ok = len(set(ja3s)) > 1 and len(set(ja4s)) == 1
     print()
     if ok:
-        print("OK: JA3 нестабилен, JA4 стабилен - перемешивание расширений подтверждено.")
+        print("OK: JA3 unstable, JA4 stable — the extension shuffling is confirmed.")
     elif len(set(ja4s)) > 1:
-        print("ВНИМАНИЕ: JA4 нестабилен. Смешаны разные клиенты или версии.")
+        print("WARNING: JA4 is unstable. Different clients or versions are mixed in.")
     else:
-        print("ВНИМАНИЕ: JA3 стабилен. Мало сэмплов, либо соединение переиспользовалось.")
+        print("WARNING: JA3 is stable. Too few samples, or the connection was reused.")
 
     akamai = Counter()
     for d in browser.values():
@@ -107,9 +108,9 @@ def summarize(conns: dict[str, dict]) -> int:
 def akamai_fingerprint(detail: dict) -> str | None:
     """SETTINGS|WINDOW_UPDATE|PRIORITY|PSEUDO_HEADER_ORDER.
 
-    Две ловушки, на которых сыпались другие реализации:
-    вес PRIORITY на проводе на единицу меньше настоящего (RFC 7540), а пустой
-    WINDOW_UPDATE сериализуется как "00", а не "0".
+    Two traps other implementations fall into: the PRIORITY weight on the wire
+    is one less than the real one (RFC 7540), and an absent WINDOW_UPDATE
+    serialises as "00" rather than "0".
     """
     frames = detail.get("metadata", {}).get("HTTP2Frames") or {}
     settings = frames.get("Settings")
@@ -149,12 +150,12 @@ def main() -> int:
             if not ua or "curl" in ua.lower():
                 continue
             n += 1
-            # строки ja3/ja4 приходят отдельными строками лога, а не внутри detail
+            # the ja3/ja4 lines arrive as separate log lines, not inside the detail
             payload = dict(d["detail"], _ja3_hash=d.get("ja3"), _ja4=d.get("ja4"))
             (out / f"sample-{n:02d}.json").write_text(
                 json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
             )
-        print(f"Сохранено сэмплов: {n} -> {out}\n")
+        print(f"samples saved: {n} -> {out}\n")
 
     return summarize(conns)
 

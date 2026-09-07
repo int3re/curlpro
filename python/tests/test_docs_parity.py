@@ -28,7 +28,7 @@ PAIRS = [
 HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 FENCE = re.compile(r"^```")
 BULLET = re.compile(r"^- ")
-# A numbered section keeps its number in both languages: "## 4.2 Заголовки"
+# A numbered section keeps its number in both languages, so the number is
 # and "## 4.2 Headers" are the same section, and the number is what says so.
 NUMBER = re.compile(r"^(\d+(?:\.\d+)*)")
 

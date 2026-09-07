@@ -2,9 +2,9 @@
   "captured": {
     "browser": "Chrome 152.0.7977.65, Android 17, Pixel 7",
     "oracles": [
-      "локальный echo-server через USB (adb reverse) — TLS и HTTP/2, 5 сэмплов",
-      "локальный стенд сырых заголовков — HTTP/1.1, fetch, XHR, WebSocket",
-      "tls.browserleaks.com — публичный эталон JA4"
+      "a local echo-server over USB (adb reverse) — TLS and HTTP/2, 5 samples",
+      "the local raw-header stand — HTTP/1.1, fetch, XHR, WebSocket",
+      "tls.browserleaks.com — the public JA4 reference"
     ],
     "recorded": "2026-09-03",
     "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36",
@@ -12,7 +12,7 @@
       "t13d1517h2_8daaf6152771_cb7bf5808d99"
     ],
     "akamai": "1:65536;2:0;4:6291456;6:262144|15663105|1:1:0:256|m,a,s,p",
-    "note": "JA4 совпал с chrome-152-windows: TLS-стек один и тот же, платформа ClientHello не меняет. Профиль отличается только заголовками"
+    "note": "the JA4 matched chrome-152-windows: the TLS stack is the same one and the platform does not change the ClientHello. The profile differs only in its headers"
   },
   "tls": {
     "extensions_count": 19,
@@ -32,10 +32,10 @@
     ],
     "permute_extensions": true,
     "allow_blunt_mimicry": true,
-    "note": "GREASE в signature_algorithms меняется между запусками браузера: захват записал 0xAAAA, телефон позже слал 0xEAEA. В профиле стоит маркер 2570, значение разыгрывается на каждое соединение. Расширение trust_anchors (0xCA34) uTLS не знает — включён allow_blunt_mimicry",
+    "note": "the GREASE in signature_algorithms changes between browser runs: the capture recorded 0xAAAA and the phone later sent 0xEAEA. The profile holds the marker 2570 and the value is drawn per connection. uTLS does not know the trust_anchors extension (0xCA34), so allow_blunt_mimicry is on",
     "trust_anchors": {
       "count": 32,
-      "note": "набор совпал у настольного Chrome 152 и у Chrome на Pixel 7. Порядок браузер перемешивает: три запуска — три перестановки одного набора. То же расширение приходит и в QUIC-рукопожатии"
+      "note": "the set matched between desktop Chrome 152 and Chrome on a Pixel 7. The browser shuffles the order: three runs gave three permutations of one set. The same extension arrives in the QUIC handshake too"
     }
   },
   "headers": {
@@ -87,14 +87,14 @@
       "Sec-WebSocket-Key",
       "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits"
     ],
-    "note": "шаблоны HTTP/1.1, fetch, XHR и WebSocket совпали с десктопным Chrome имя в имя, поэтому унаследованы от chrome-152-windows. sec-fetch-site и sec-fetch-user в профиле проставлены под переход по набранному адресу: браузер приводился командой из другого приложения и потому слал cross-site без sec-fetch-user"
+    "note": "the HTTP/1.1, fetch, XHR and WebSocket templates matched desktop Chrome name for name, so they are inherited from chrome-152-windows. sec-fetch-site and sec-fetch-user in the profile are set for a typed-address navigation: the browser was launched by a command from another application and therefore sent cross-site without sec-fetch-user"
   },
   "not_measured": [
-    "HTTP/3 и QUIC: Chromium требует для QUIC цепочку к публично известному корню, а стенд подписан своим CA — см. docs/CAPTURE.md",
-    "заголовки на редиректе"
+    "HTTP/3 and QUIC: Chromium demands a chain to a publicly known root for QUIC, and the stand is signed by its own CA — see docs/CAPTURE.md",
+    "headers on a redirect"
   ],
   "client_hints": {
-    "requested_via": "Accept-CH в ответе стенда; Critical-CH заставляет повторить запрос сразу",
+    "requested_via": "Accept-CH in the stand's response; Critical-CH makes the request repeat at once",
     "values_measured": {
       "sec-ch-ua-full-version": "\"152.0.7977.65\"",
       "sec-ch-ua-arch": "\"\"",
@@ -106,10 +106,10 @@
     },
     "order_navigate": "upgrade-insecure-requests user-agent accept sec-ch-ua sec-ch-ua-mobile sec-ch-ua-full-version sec-ch-ua-arch sec-ch-ua-platform sec-ch-ua-platform-version sec-ch-ua-model sec-ch-ua-bitness sec-ch-ua-wow64 sec-ch-ua-full-version-list sec-ch-ua-form-factors sec-fetch-* accept-encoding accept-language priority",
     "order_subresource": "sec-ch-ua-full-version-list sec-ch-ua-platform sec-ch-ua sec-ch-ua-bitness sec-ch-ua-model sec-ch-ua-mobile sec-ch-ua-form-factors sec-ch-ua-wow64 sec-ch-ua-arch sec-ch-ua-full-version user-agent sec-ch-ua-platform-version accept sec-fetch-* referer accept-encoding accept-language priority",
-    "note": "с появлением подсказок Chromium перестраивает весь кластер: порядок зависит от набора имён, но для одного набора устойчив — два независимых прогона совпали"
+    "note": "once the hints appear Chromium rebuilds the whole cluster: the order depends on the set of names but is stable for one set — two independent runs agreed"
   },
   "devices": {
-    "measured": "Pixel 7 / 17.0.0 — снят с телефона",
-    "plausible": "остальные записи в профиле (Pixel 8, Pixel 6a, SM-S911B, SM-S901B, SM-A546E, 23021RAAEG, 2211133G) — правдоподобные пары «модель плюс версия», на устройствах не проверялись"
+    "measured": "Pixel 7 / 17.0.0 — taken from the phone",
+    "plausible": "the other entries in the profile (Pixel 8, Pixel 6a, SM-S911B, SM-S901B, SM-A546E, 23021RAAEG, 2211133G) are plausible model-and-version pairs and were not checked on devices"
   }
 }

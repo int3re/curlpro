@@ -1,12 +1,13 @@
 ﻿<#
-  Снятие эталонного отпечатка браузера с локального fingerproxy echo-server.
+  Captures a reference browser fingerprint from a local fingerproxy echo-server.
 
-  Данные берутся НЕ из stdout браузера (на Windows headless Chrome его не отдаёт),
-  а из лога echo-server, который при -verbose печатает полный detail-JSON.
+  The data comes NOT from the browser's stdout — headless Chrome does not give
+  it on Windows — but from the echo-server log, which prints the full detail
+  JSON with -verbose.
 
-  Каждый прогон — свежий процесс и одноразовый профиль, чтобы гарантировать
-  новое TLS-соединение: Chrome ≥110 перемешивает расширения на каждом соединении,
-  и профиль по одному сэмплу зафиксирует шум.
+  Every run is a fresh process and a throwaway profile, to guarantee a new TLS
+  connection: Chrome >=110 shuffles its extensions per connection, and a profile
+  built from a single sample would freeze the noise.
 
   Usage: .\capture.ps1 -Samples 5
 #>
@@ -17,10 +18,10 @@ param(
 )
 
 $chrome = 'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'
-if (-not (Test-Path $chrome)) { throw "Chrome не найден: $chrome" }
+if (-not (Test-Path $chrome)) { throw "Chrome not found: $chrome" }
 
 $ver = (Get-Item $chrome).VersionInfo.ProductVersion
-Write-Host "Chrome $ver -> $Url, $Samples прогонов" -ForegroundColor Cyan
+Write-Host "Chrome $ver -> $Url, $Samples runs" -ForegroundColor Cyan
 
 for ($i = 1; $i -le $Samples; $i++) {
     $prof = Join-Path $env:TEMP "curlpro-cap-$i"
@@ -43,7 +44,7 @@ for ($i = 1; $i -le $Samples; $i++) {
     Start-Sleep -Milliseconds 800
 
     Remove-Item -Recurse -Force $prof -ErrorAction SilentlyContinue
-    Write-Host "  прогон $i/$Samples готов"
+    Write-Host "  run $i/$Samples done"
 }
 
-Write-Host "Готово. Разбор: python analyze.py {путь-к-логу-echo-server}" -ForegroundColor Green
+Write-Host "Done. Analyse with: python analyze.py {path-to-echo-server-log}" -ForegroundColor Green

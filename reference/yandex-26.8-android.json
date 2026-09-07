@@ -1,9 +1,9 @@
 {
   "captured": {
-    "browser": "Яндекс.Браузер 26.8.2.121.00 (Chromium 150), Android 17, Pixel 7",
+    "browser": "Yandex Browser 26.8.2.121.00 (Chromium 150), Android 17, Pixel 7",
     "oracles": [
-      "https://tls.peet.ws/api/all — TLS, HTTP/2, навигационные заголовки, 2 сэмпла",
-      "локальный стенд по USB (adb reverse) — HTTP/1.1, fetch, XHR, WebSocket, 2 прогона"
+      "https://tls.peet.ws/api/all — TLS, HTTP/2, navigation headers, 2 samples",
+      "a local stand over USB (adb reverse) — HTTP/1.1, fetch, XHR, WebSocket, 2 runs"
     ],
     "recorded": "2026-09-03",
     "user_agent": "Mozilla/5.0 (Linux; arm_64; Android 17; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.121 YaBrowser/26.8.2.121.00 Mobile Safari/537.36",
@@ -16,7 +16,7 @@
     ],
     "peetprint_hash": "67c3e9111bed9e7f03d2f21d6d88994b",
     "akamai": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
-    "note": "peet.ws печатает секцию PRIORITY как 0; сам кадр HEADERS пришёл с флагом Priority (weight 256, exclusive, depends_on 0), что fingerproxy показывает как 1:1:0:256"
+    "note": "peet.ws prints the PRIORITY section as 0, while the HEADERS frame itself arrived with the Priority flag (weight 256, exclusive, depends_on 0), which fingerproxy shows as 1:1:0:256"
   },
   "tls": {
     "cipher_suites": [
@@ -79,7 +79,7 @@
       29
     ],
     "permute_extensions": true,
-    "note": "два сэмпла дали разный порядок расширений при одинаковом наборе — перемешивание подтверждено замером. Набор совпал с chrome-150-macos и JA4 с chrome-151-windows, поэтому профиль записан дельтой"
+    "note": "two samples gave different extension orders for the same set — the shuffling is confirmed by measurement. The set matched chrome-150-macos and the JA4 matched chrome-151-windows, so the profile is written as a delta"
   },
   "headers": {
     "navigate_h2": [
@@ -156,20 +156,20 @@
       "DELETE": "gzip, deflate, br, zstd, sdch",
       "PUT": "gzip, deflate, br, zstd, sdch",
       "POST": "gzip, deflate, br, zstd",
-      "note": "sdch — примета Яндекс.Браузера, Chromium его выбросил. Правило именно про метод, а не про тело: POST с пустым телом тоже без sdch, PUT с телом — с ним"
+      "note": "sdch is a Yandex Browser tell; Chromium dropped it. The rule is about the method rather than the body: a POST with an empty body also goes without sdch, while a PUT with a body carries it"
     },
     "accept_language_seen": [
       "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
       "ru"
     ],
-    "note": "порядок и регистр HTTP/1.1, набор fetch и рукопожатие WebSocket совпали с шаблонами Chrome имя в имя — секции унаследованы от chrome-151-windows осознанно, а не по умолчанию"
+    "note": "the HTTP/1.1 order and case, the fetch set and the WebSocket handshake matched Chrome's templates name for name — the sections are inherited from chrome-151-windows deliberately, not by default"
   },
   "not_measured": [
-    "HTTP/3 и QUIC. Снять не удалось: браузер отвергает сертификат стенда именно в QUIC (TLS alert 46, certificate unknown), тогда как по TCP тот же сертификат проходит проверку. Chromium требует для QUIC цепочку к публично известному корню, а ключа --ignore-certificate-errors-spki-list на Android нет. Секции http3 и quic унаследованы от chrome-151-windows",
-    "заголовки на редиректе"
+    "HTTP/3 and QUIC. Could not be captured: the browser rejects the stand's certificate specifically over QUIC (TLS alert 46, certificate unknown), while the same certificate passes over TCP. Chromium demands a chain to a publicly known root for QUIC, and there is no --ignore-certificate-errors-spki-list on Android. The http3 and quic sections are inherited from chrome-151-windows",
+    "headers on a redirect"
   ],
   "client_hints": {
-    "requested_via": "Accept-CH в ответе стенда, замер по USB",
+    "requested_via": "Accept-CH in the stand's response, measured over USB",
     "values_measured": {
       "sec-ch-ua-full-version": "\"26.8.2.121\"",
       "sec-ch-ua-full-version-list": "\"Not;A=Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"150.0.7871.121\", \"Yandex\";v=\"26.8.2.121\"",
@@ -180,11 +180,11 @@
       "sec-ch-ua-wow64": "?0",
       "sec-ch-ua-form-factors": "\"Mobile\""
     },
-    "note": "полная версия у Яндекса своя, а не хромовская — в отличие от Chrome, где sec-ch-ua-full-version равна версии браузера. Порядок кластера с подсказками совпал с Chrome 152"
+    "note": "Yandex's full version is its own rather than Chromium's, unlike Chrome where sec-ch-ua-full-version equals the browser version. The order of the cluster with the hints matched Chrome 152"
   },
   "devices": {
-    "measured": "Pixel 7 / Android 17 / arm_64 — снят с телефона",
-    "plausible": "остальные пары «модель плюс версия» в профиле не проверялись на устройствах",
-    "note": "у Яндекса устройство стоит и в User-Agent, поэтому оно подставляется в обе стороны: строка и подсказки обязаны совпадать"
+    "measured": "Pixel 7 / Android 17 / arm_64 — taken from the phone",
+    "plausible": "the other model-and-version pairs in the profile were not checked on devices",
+    "note": "Yandex puts the device in the User-Agent as well, so it is substituted in both places: the string and the hints have to agree"
   }
 }

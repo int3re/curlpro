@@ -1,11 +1,11 @@
 name: validate-profiles
 
-# Профили протухают не от коммитов, а от изменений на стороне браузеров
-# и сервисов проверки. Поэтому валидация идёт по расписанию, а не только
-# на push: иначе расхождение всплывёт у пользователя, а не в CI.
+# Profiles go stale not from commits but from changes on the browsers' and the
+# checking services' side. So the validation runs on a schedule rather than only
+# on push: otherwise a divergence would surface at a user rather than in CI.
 on:
   schedule:
-    - cron: "17 4 * * 1" # еженедельно, понедельник
+    - cron: "17 4 * * 1" # weekly, Monday
   workflow_dispatch:
   push:
     paths:
@@ -23,24 +23,24 @@ jobs:
           go-version: "1.27"
           cache: true
 
-      # Спека каждого профиля должна собираться — это проверка самих данных,
-      # не требующая сети.
-      - name: собрать все профили
+      # Every profile's spec must build — a check of the data itself, needing
+      # no network.
+      - name: build every profile
         run: go run ./cmd/curlpro list
 
-      # Внешний оракул срывается на серии запросов, поэтому пауза между
-      # профилями и умеренная частота запуска.
-      - name: сверить отпечатки
+      # The external oracle breaks down under a burst, hence the pause between
+      # profiles and the modest schedule.
+      - name: compare the fingerprints
         run: |
           go run ./cmd/curlpro validate \
             -oracle https://tls.browserleaks.com/json \
             -baselines reference/baselines \
             -pause 2s
 
-      - name: показать расхождения
+      - name: show the divergences
         if: failure()
         run: |
-          echo "Отпечаток разошёлся с эталоном."
-          echo "Если изменение ожидаемо (обновился профиль или сервис),"
-          echo "пополните эталон: curlpro validate -update"
+          echo "A fingerprint diverged from its reference."
+          echo "If the change is expected (a profile or a service moved on),"
+          echo "refresh the reference: curlpro validate -update"
           git diff --stat reference/baselines || true

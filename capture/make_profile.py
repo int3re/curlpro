@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Сборка профиля из нормализованного эталона и сырых сэмплов.
+"""Builds a profile from a normalised reference and the raw samples.
 
-На выходе — JSON в схеме docs/PROFILE-SCHEMA.md: базовый профиль несёт
-захваченные байты ClientHello, а заголовки и настройки HTTP/2 записываются
-декларативно, чтобы следующая версия браузера описывалась дельтой.
+The output is JSON in the docs/PROFILE-SCHEMA.md schema: the base profile
+carries the captured ClientHello bytes, while the headers and the HTTP/2
+settings are written declaratively, so that the next browser version can be
+described as a delta.
 
 Usage: python make_profile.py samples/chrome-151-windows reference/chrome-151-windows.json \
                              -o ../profiles/chrome-151-windows.json --name chrome-151-windows
@@ -23,7 +24,7 @@ def build(sample_dir: Path, ref_path: Path, name: str) -> dict:
     samples = [json.loads(p.read_text(encoding="utf-8"))
                for p in sorted(sample_dir.glob("sample-*.json"))]
     if not samples:
-        raise SystemExit(f"нет сэмплов в {sample_dir}")
+        raise SystemExit(f"no samples in {sample_dir}")
 
     frames = samples[0]["metadata"]["HTTP2Frames"]
 
@@ -37,10 +38,10 @@ def build(sample_dir: Path, ref_path: Path, name: str) -> dict:
     for h in headers:
         if h["Name"].startswith(":"):
             continue
-        # user-agent хранится один раз в headers.user_agent, здесь — только позиция
+        # the user-agent is stored once in headers.user_agent; only its position here
         order.append({"key": h["Name"], "value": "" if h["Name"] == "user-agent" else h["Value"]})
 
-    # Chrome ставит priority на HEADERS-кадре; на проводе вес на единицу меньше (RFC 7540).
+    # Chrome puts priority on the HEADERS frame; on the wire the weight is one less (RFC 7540).
     prio = (frames.get("Priorities") or [{}])[0]
 
     profile = {
@@ -76,14 +77,14 @@ def main() -> int:
         out = Path(sys.argv[sys.argv.index("-o") + 1])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(prof, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        print(f"профиль записан: {out}")
+        print(f"profile written: {out}")
 
     h2 = prof["http2"]
     print(f"name:     {prof['name']}")
     print(f"settings: {';'.join(f'{s['id']}:{s['value']}' for s in h2['settings'])}")
     print(f"window:   {h2['connection_window_update']}")
     print(f"pseudo:   {','.join(x[1] for x in h2['pseudo_order'])}")
-    print(f"headers:  {len(prof['headers']['order'])} шт.")
+    print(f"headers:  {len(prof['headers']['order'])}")
     for h in prof["headers"]["order"]:
         print(f"   {h['key']}")
     return 0

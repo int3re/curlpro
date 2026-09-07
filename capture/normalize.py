@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Сведение N сырых сэмплов в один нормализованный эталон.
+"""Reduces N raw samples to one normalised reference.
 
-Chrome >=110 перемешивает расширения и рандомизирует значения GREASE на каждом
-соединении. Поэтому эталон строится по пересечению сэмплов, а GREASE
-вырезается: сохраняются только его ПОЗИЦИИ (первая/последняя), но не значения.
+Chrome >=110 shuffles the extensions and draws fresh GREASE values on every
+connection. So the reference is built from the intersection of the samples and
+GREASE is cut out: only its POSITIONS (first/last) are kept, never its values.
 
 Usage: python normalize.py samples/chrome-151-windows [-o reference/chrome-151-windows.json]
 """
@@ -32,14 +32,14 @@ EXT_NAMES = {
 
 
 def is_grease(v: int) -> bool:
-    """RFC 8701: GREASE значения имеют вид 0x?A?A."""
+    """RFC 8701: GREASE values have the form 0x?A?A."""
     return (v & 0x0F0F) == 0x0A0A
 
 
 def build(sample_dir: Path) -> dict:
     paths = sorted(sample_dir.glob("sample-*.json"))
     if not paths:
-        raise SystemExit(f"нет сэмплов в {sample_dir}")
+        raise SystemExit(f"no samples in {sample_dir}")
 
     samples = [json.loads(p.read_text(encoding="utf-8")) for p in paths]
 
@@ -47,13 +47,13 @@ def build(sample_dir: Path) -> dict:
     ext_sets = {tuple(sorted(e for e in s["ja3"]["AllExtensions"] if not is_grease(e)))
                 for s in samples}
     if len(ext_sets) != 1:
-        raise SystemExit(f"наборы расширений расходятся ({len(ext_sets)} вариантов) — "
-                         "сэмплы сняты с разных клиентов или версий")
+        raise SystemExit(f"the extension sets disagree ({len(ext_sets)} variants): "
+                         "the samples come from different clients or versions")
 
     first = samples[0]
     exts = sorted(ext_sets)[0]
 
-    # позиции GREASE в исходном порядке — устойчивы, в отличие от значений
+    # GREASE positions in the original order are stable, unlike the values
     positions = Counter()
     for s in samples:
         order = s["ja3"]["AllExtensions"]
@@ -98,14 +98,14 @@ def main() -> int:
 
     c = ref["captured"]
     t = ref["tls"]
-    print(f"Сэмплов: {c['samples']}   JA4: {', '.join(c['ja4'])}")
-    print(f"Шифров: {len(t['cipher_suites'])}   Расширений: {len(t['extensions_normalized'])}")
-    print(f"GREASE-позиции: {t['grease_positions']}")
-    print("\nРасширения (нормализовано):")
+    print(f"samples: {c['samples']}   JA4: {', '.join(c['ja4'])}")
+    print(f"ciphers: {len(t['cipher_suites'])}   extensions: {len(t['extensions_normalized'])}")
+    print(f"GREASE positions: {t['grease_positions']}")
+    print("\nextensions (normalised):")
     for r in t["extensions_readable"]:
         print(f"   {r}")
     if out:
-        print(f"\nЭталон сохранён: {out}")
+        print(f"\nreference saved: {out}")
     return 0
 
 

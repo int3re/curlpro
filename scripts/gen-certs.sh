@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Сертификат локального стенда.
+# The local stand's certificate.
 #
-# В репозиторий он не входит: приватный ключ в открытом коде — плохая примета,
-# а сам сертификат самоподписанный и одноразовый. Тесты и стенды ждут его
-# в capture/certs/, поэтому здесь он и создаётся.
+# It is not in the repository: a private key in open code is a bad sign, and the
+# certificate itself is self-signed and single-use. The tests and the stands
+# expect it in capture/certs/, so this is where it is made.
 #
-# Имена в SAN: localhost и 127.0.0.1 — по ним ходят тесты; www.example.com
-# нужен проверкам редиректов и прокси.
+# The SAN names: localhost and 127.0.0.1, which the tests go to; www.example.com
+# is needed by the redirect and proxy checks.
 set -euo pipefail
 
 # Git Bash (MSYS) rewrites an argument that looks like a Unix path, so
@@ -21,7 +21,7 @@ dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/capture/certs"
 mkdir -p "$dir"
 
 if [ -f "$dir/tls.crt" ] && [ -f "$dir/tls.key" ]; then
-  echo "сертификат уже есть: $dir"
+  echo "certificate already present: $dir"
   exit 0
 fi
 
@@ -34,10 +34,10 @@ if ! openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:secp384r1 -days 365
   -nodes -keyout "$dir/tls.key" -out "$dir/tls.crt" -subj "/CN=localhost" \
   -addext "$san" 2>/dev/null
 then
-  echo "EC не вышел, беру RSA: $(openssl version)"
+  echo "EC did not work, falling back to RSA: $(openssl version)"
   openssl req -x509 -newkey rsa:2048 -days 3650 \
     -nodes -keyout "$dir/tls.key" -out "$dir/tls.crt" -subj "/CN=localhost" \
     -addext "$san"
 fi
 
-echo "создан: $dir/tls.crt"
+echo "created: $dir/tls.crt"
