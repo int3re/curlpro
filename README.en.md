@@ -44,7 +44,9 @@ curlpro.register_profile({
 [Response expectations](#response-expectations) · [Cookie rollback](#cookie-rollback) ·
 [Errors and hooks](#errors-and-hooks) · [Streaming](#streaming) ·
 [WebSocket](#websocket) · [Async](#async) · [HTTP/3](#http3) ·
-[Network](#network-proxies-address-override-tls) · [Cookies](#cookies-between-runs) ·
+[Network](#network-proxies-address-override-tls) ·
+[Own fingerprint](#your-own-fingerprint-without-a-request) · [Personas](#personas-an-identity-between-runs) ·
+[requests compatibility](#requests-compatibility) · [Cookies](#cookies-between-runs) ·
 [Mobile profiles](#mobile-profiles-and-client-hints) ·
 [Navigation vs fetch](#navigation-vs-fetch) · [Profiles as data](#profiles-as-data) ·
 [Measured, not assumed](#measured-not-assumed) · [Limits](#limits)
@@ -476,6 +478,81 @@ The address override does not change the fingerprint: the name in SNI and in the
 `Host` header stays the same, only the socket destination moves. Through an
 `https://` proxy the channel to the proxy itself is encrypted, and the first
 `CONNECT` goes without credentials, adding them only after a 407 — as Chrome does.
+
+## Your own fingerprint, without a request
+
+What a server would see is computed locally, from the same ClientHello bytes
+that would go on the wire. No network, no oracle:
+
+```python
+with curlpro.Session("chrome-151-windows") as s:
+    fp = s.fingerprint()
+    print(fp.ja4)       # t13d1516h2_8daaf6152771_806a8c22fdea
+    print(fp.akamai)    # 1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p
+    print(fp.headers)   # the order the names will go out in
+```
+
+These values used to be obtainable only from browserleaks, which made every
+check depend on someone else's service. The computation is checked against the
+47 captures in `reference/baselines`: **JA4 47/47, JA3N 47/47, Akamai 47/47**.
+
+`diff()` answers the question a profile edit actually raises — did a server
+notice:
+
+```python
+a = curlpro.Session("chrome-151-windows").fingerprint()
+b = curlpro.Session("chrome-152-windows").fingerprint()
+a.diff(b)["extensions"]      # ... -> 'ca34' appeared: trust_anchors
+```
+
+The session's own options count: `force_http1` restricts ALPN, and ALPN is two
+characters of JA4, so such a session has a different fingerprint — legitimately.
+
+One subtlety is deliberate: `fp.ja3` **moves** between connections for Chrome
+≥110, because the extensions are shuffled and twelve builds give twelve values.
+That is not a defect — a frozen order is itself an anomaly. Compare `ja4` or
+`ja3n`, which sort.
+
+## Personas: an identity between runs
+
+Profile, proxy, device, headers and cookies — one identity, one file:
+
+```python
+p = curlpro.Persona.new("chrome-151-windows", proxy="http://user:pass@host:8080")
+p.save("accounts/user42.json")
+
+# next run: the same fingerprint, the same exit, the same cookies
+p = curlpro.Persona.load("accounts/user42.json")
+with p.session() as s:
+    s.get("https://example.com/")
+p.save()
+```
+
+The cookies are captured even when the block raises: a half-finished login is
+still state. The write is atomic — a process killed mid-write would otherwise
+leave a lost account rather than a stale one.
+
+A persona deliberately rotates nothing: which one to use, when to retire it and
+how to spread them over proxies is policy, and policy is yours. A library would
+be guessing.
+
+## requests compatibility
+
+```python
+import curlpro.requests as requests
+
+r = requests.get("https://example.com/", timeout=10)
+print(r.status_code, r.text[:200])
+```
+
+Existing code changes one import. This is a subset, and it says so: an argument
+the shim cannot honour is **refused with a reason**, not ignored — a silently
+dropped `verify=False` looks like it worked right up until it matters. Transport
+adapters, requests hooks and `stream=True` are not implemented (for a real
+stream there is `Session.stream`, which holds the connection).
+
+The exceptions are not duplicated: `requests.HTTPError` *is*
+`curlpro.HTTPError`, so an existing `except` catches the new errors.
 
 ## Cookies between runs
 

@@ -224,3 +224,42 @@ def test_async_examples(server):
                 assert b"".join([chunk async for chunk in r.iter_content()])
 
     asyncio.run(run())
+
+
+# --- The fingerprint, personas and the requests face --------------------------
+
+def test_fingerprint_example():
+    """The README prints ja4, akamai and the header order; all three must exist."""
+    with curlpro.Session("chrome-151-windows") as s:
+        fp = s.fingerprint()
+    assert fp.ja4 == "t13d1516h2_8daaf6152771_806a8c22fdea", fp.ja4
+    assert fp.akamai == "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p"
+    assert fp.headers
+
+
+def test_fingerprint_diff_example():
+    """The README claims the diff names 'ca34' between Chrome 151 and 152."""
+    a = curlpro.Session("chrome-151-windows").fingerprint()
+    b = curlpro.Session("chrome-152-windows").fingerprint()
+    before, after = a.diff(b)["extensions"]
+    assert "ca34" in set(after) - set(before)
+
+
+def test_persona_example(tmp_path):
+    p = curlpro.Persona.new("chrome-151-windows")
+    p.save(tmp_path / "user42.json")
+
+    again = curlpro.Persona.load(tmp_path / "user42.json")
+    with again.session(verify=False, force_http1=True) as s:
+        assert s.impersonate == "chrome-151-windows"
+    again.save()
+
+
+def test_requests_face_example(server):
+    import curlpro.requests as requests
+
+    r = requests.get(server.url, timeout=10, verify=False, force_http1=True)
+    assert r.status_code == 200
+    assert isinstance(r.text, str)
+    # The README promises the old except still catches: the classes are one.
+    assert requests.HTTPError is curlpro.HTTPError
