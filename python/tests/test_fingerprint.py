@@ -127,3 +127,57 @@ def test_the_dict_form_is_serialisable():
         data = s.fingerprint().to_dict()
     json.dumps(data)  # storable next to a scraper's own state
     assert data["ja4"] and data["akamai"]
+
+
+# --- JA4H -----------------------------------------------------------------
+#
+# Licensed differently from the rest: FoxIO License 1.1, patent-pending. Free
+# for internal and academic use; commercial monetisation needs an OEM licence.
+# Said here as well as in the code, because a test file is where someone looks
+# to find out what a feature actually does.
+
+def test_ja4h_describes_the_request():
+    with curlpro.Session("chrome-151-windows") as s:
+        fp = s.fingerprint()
+
+    parts = fp.ja4h.split("_")
+    assert len(parts) == 4, fp.ja4h
+    assert parts[0].startswith("ge20"), parts[0]      # GET over HTTP/2
+    # No cookies on a bare session: both cookie hashes are the zero form rather
+    # than the hash of an empty string.
+    assert parts[2] == parts[3] == "000000000000", fp.ja4h
+
+
+def test_ja4h_follows_the_protocol_and_its_header_set():
+    """The version and the header list move together.
+
+    Chrome drops priority over HTTP/1.1 and gains Connection, so a session
+    forced to HTTP/1.1 has a different count and a different name hash. Taking
+    the version from one transport and the headers from the other would
+    describe a request nobody makes — which is exactly the bug this test was
+    written after.
+    """
+    with curlpro.Session("chrome-151-windows") as h2, \
+         curlpro.Session("chrome-151-windows", force_http1=True) as h1:
+        a, b = h2.fingerprint(), h1.fingerprint()
+
+    assert a.ja4h.startswith("ge20"), a.ja4h
+    assert b.ja4h.startswith("ge11"), b.ja4h
+    assert a.ja4h.split("_")[1] != b.ja4h.split("_")[1], "the name hashes did not move"
+
+
+def test_ja4h_separates_the_profiles():
+    """Different browsers send different header sets, and JA4H must show it."""
+    seen = {}
+    for name in ("chrome-151-windows", "firefox-133-macos", "safari-18.4-macos"):
+        with curlpro.Session(name) as s:
+            seen[name] = s.fingerprint().ja4h
+    assert len(set(seen.values())) == 3, seen
+
+
+def test_ja4h_is_stable_across_sessions():
+    values = set()
+    for _ in range(5):
+        with curlpro.Session("chrome-151-windows") as s:
+            values.add(s.fingerprint().ja4h)
+    assert len(values) == 1, values

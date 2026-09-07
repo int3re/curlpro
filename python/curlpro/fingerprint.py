@@ -112,6 +112,26 @@ class Fingerprint:
         return list(self._d.get("headers_http1") or [])
 
     @property
+    def ja4h(self) -> str:
+        """JA4H — the fingerprint of the request, for a plain GET.
+
+        Licensed differently from everything else here. JA4 for TLS is BSD-3
+        and free; JA4H falls under the FoxIO License 1.1 and is patent-pending:
+        internal and academic use is free, commercial monetisation needs an OEM
+        licence from FoxIO. Computing it in a product is therefore a decision,
+        not a detail — which is why it is said here rather than buried.
+
+        Two clients with identical TLS can still differ here, which is why the
+        two are scored together.
+        """
+        return self._d.get("ja4h", "")
+
+    @property
+    def ja4h_http1(self) -> str:
+        """The same over HTTP/1.1, where the header set and the version differ."""
+        return self._d.get("ja4h_http1", "")
+
+    @property
     def user_agent(self) -> str:
         return self._d.get("user_agent", "")
 
@@ -148,9 +168,9 @@ class Fingerprint:
         unequal.
         """
         out: dict[str, tuple[Any, Any]] = {}
-        for key in ("ja4", "ja3n", "akamai", "user_agent", "ciphers",
-                    "extensions", "curves", "sigalgs", "alpn", "headers",
-                    "headers_http1"):
+        for key in ("ja4", "ja3n", "akamai", "ja4h", "ja4h_http1", "user_agent",
+                    "ciphers", "extensions", "curves", "sigalgs", "alpn",
+                    "headers", "headers_http1"):
             mine, theirs = self._d.get(key), other._d.get(key)
             if key in self._UNORDERED and isinstance(mine, list) and isinstance(theirs, list):
                 if sorted(mine) == sorted(theirs):
@@ -176,6 +196,7 @@ class Fingerprint:
             f"JA4      {self.ja4}",
             f"JA3N     {self.ja3n}",
             f"Akamai   {self.akamai}",
+            f"JA4H     {self.ja4h}",
             f"ALPN     {', '.join(self.alpn)}",
             f"headers  {' '.join(self.headers)}",
         ]

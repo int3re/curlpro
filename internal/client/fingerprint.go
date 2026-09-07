@@ -40,6 +40,14 @@ type Fingerprint struct {
 	// sends no priority there and Firefox no TE.
 	HeadersHTTP1 []string `json:"headers_http1"`
 
+	// JA4H is the fingerprint of the request itself — for the same plain GET
+	// the header preview describes. Licensed differently from the rest: see
+	// internal/fingerprint/ja4h.go.
+	JA4H string `json:"ja4h"`
+	// JA4HHTTP1 is the same over HTTP/1.1, where the header set differs and so
+	// does the version code in the readable part.
+	JA4HHTTP1 string `json:"ja4h_http1"`
+
 	UserAgent string `json:"user_agent"`
 }
 
@@ -101,8 +109,22 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 		ALPN:       tls.ALPN,
 	}
 
-	out.Headers, out.UserAgent = s.headerPreview(u, false)
-	out.HeadersHTTP1, _ = s.headerPreview(u, true)
+	var pairs, pairsH1 []fingerprint.HeaderKV
+	out.Headers, out.UserAgent, pairs = s.headerPreview(u, false)
+	out.HeadersHTTP1, _, pairsH1 = s.headerPreview(u, true)
+
+	// The protocol and the header set move together. A session forced to
+	// HTTP/1.1 sends the HTTP/1.1 set — Chrome drops priority there, Firefox
+	// drops TE — so taking the version from one and the headers from the other
+	// would describe a request nobody makes.
+	proto, main := "HTTP/2.0", pairs
+	if s.opts.ForceHTTP1 {
+		proto, main = "HTTP/1.1", pairsH1
+	}
+	out.JA4H = fingerprint.JA4H(fingerprint.JA4HRequest{
+		Method: "GET", Proto: proto, Headers: main})
+	out.JA4HHTTP1 = fingerprint.JA4H(fingerprint.JA4HRequest{
+		Method: "GET", Proto: "HTTP/1.1", Headers: pairsH1})
 	return out, nil
 }
 
@@ -113,26 +135,31 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 // with a separate copy of the logic rather than with the code would be worse
 // than no preview — that is exactly how the custom-header anchor once passed
 // its tests while working on one transport only.
-func (s *Session) headerPreview(u *url.URL, h1 bool) ([]string, string) {
+func (s *Session) headerPreview(u *url.URL, h1 bool) ([]string, string, []fingerprint.HeaderKV) {
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, ""
+		return nil, "", nil
 	}
 	r := &Request{Method: "GET", URL: u.String()}
 	s.applyHeaders(req, r, u, h1)
 
 	order, _ := req.Header[http.HeaderOrderKey]
 	names := make([]string, 0, len(order))
+	pairs := make([]fingerprint.HeaderKV, 0, len(order))
 	for _, name := range order {
-		if _, ok := req.Header[http.CanonicalHeaderKey(name)]; ok {
-			names = append(names, name)
-			continue
+		vs := headerLookup(req.Header, name)
+		if len(vs) == 0 {
+			if canon, ok := req.Header[http.CanonicalHeaderKey(name)]; ok {
+				vs = canon
+			}
 		}
 		// A profile names more headers than any one request carries; a name
 		// with nothing behind it is a slot and does not reach the wire.
-		if vs := headerLookup(req.Header, name); len(vs) > 0 {
-			names = append(names, name)
+		if len(vs) == 0 {
+			continue
 		}
+		names = append(names, name)
+		pairs = append(pairs, fingerprint.HeaderKV{Name: name, Value: vs[0]})
 	}
 	// Not Header.Get: it canonicalises the name, and the profile prescribes
 	// the case — "user-agent" as written would not be found.
@@ -140,7 +167,7 @@ func (s *Session) headerPreview(u *url.URL, h1 bool) ([]string, string) {
 	if vs := headerLookup(req.Header, "user-agent"); len(vs) > 0 {
 		ua = vs[0]
 	}
-	return names, ua
+	return names, ua, pairs
 }
 
 // headerLookup finds a header by name without canonicalising it: the profile

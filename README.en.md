@@ -508,6 +508,21 @@ a.diff(b)["extensions"]      # ... -> 'ca34' appeared: trust_anchors
 The session's own options count: `force_http1` restricts ALPN, and ALPN is two
 characters of JA4, so such a session has a different fingerprint — legitimately.
 
+**JA4H** is the fingerprint of the request itself: method, protocol, whether
+cookies and a referer are present, how many headers there are, the language, and
+hashes of the header names and of the cookies. Two clients with identical TLS can
+still differ here, which is why defences score the two together.
+
+```python
+s.fingerprint().ja4h          # ge20nn13enus_0c2c1d640f3e_000000000000_000000000000
+```
+
+> **JA4H is licensed differently.** JA4 for TLS is BSD-3 and free. JA4H falls
+> under the [FoxIO License 1.1](https://github.com/FoxIO-LLC/ja4) and is
+> patent-pending: internal and academic use is free, commercial monetisation
+> requires an OEM licence from FoxIO. This library is Apache 2.0, so the
+> obligation lands on whoever ships a product that computes these values.
+
 One subtlety is deliberate: `fp.ja3` **moves** between connections for Chrome
 ≥110, because the extensions are shuffled and twelve builds give twelve values.
 That is not a defect — a frozen order is itself an anomaly. Compare `ja4` or
