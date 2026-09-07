@@ -21,6 +21,7 @@ from __future__ import annotations
 from ._ffi import HTTPError, Timeout, CurlProError, WebSocketClosed
 from .expect import Expect, ExpectationFailed
 from .fingerprint import Fingerprint
+from .persona import Persona, load_all
 from .aio import AsyncSession, AsyncStreamResponse, AsyncWebSocket
 from .cookies import Cookie, Cookies
 from .session import Redirect, Response, Session, delete, get, head, options, patch, post, put
@@ -38,6 +39,7 @@ __all__ = [
     "Expect",
     "ExpectationFailed",
     "Fingerprint",
+    "Persona",
     "HTTPError",
     "Redirect",
     "Timeout",
@@ -52,6 +54,7 @@ __all__ = [
     "get",
     "head",
     "list_profiles",
+    "load_all",
     "load_profiles",
     "options",
     "patch",
