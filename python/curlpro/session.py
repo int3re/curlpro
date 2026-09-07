@@ -14,6 +14,7 @@ from ._ffi import HTTPError, _call, call_framed, encode
 from .cookies import Cookies
 from .encoding import detect as detect_encoding
 from .expect import Expect
+from .fingerprint import Fingerprint
 from .headers import SessionHeaders
 from .profiles import ensure_loaded
 from .proxies import proxy_for as env_proxy
@@ -837,6 +838,25 @@ class Session:
 
     def options(self, url: str, **kw: Any) -> Response:
         return self.request("OPTIONS", url, **kw)
+
+    def fingerprint(self, url: str = "https://example.com/") -> "Fingerprint":
+        """What a server would see from this session — without sending anything.
+
+        The URL decides only the SNI and the Host header. It moves neither JA4
+        nor JA3N — that independence is why JA4 replaced JA3 — but it does
+        change the length of the ClientHello, so a name is used rather than
+        nothing.
+
+            with curlpro.Session("chrome-151-windows") as s:
+                print(s.fingerprint().ja4)
+
+        The session's own options are taken into account: ``force_http1``
+        restricts ALPN, and ALPN is two characters of JA4. A fingerprint that
+        ignored that would describe a different session.
+        """
+        if self._closed:
+            raise RuntimeError("session is closed")
+        return Fingerprint(_call("curlpro_session_fingerprint", self._id, url.encode("utf-8")))
 
     def close(self) -> None:
         if not self._closed:

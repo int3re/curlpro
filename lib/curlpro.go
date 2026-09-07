@@ -114,7 +114,7 @@ func curlpro_free(s *C.char) {
 // on, not only off).
 // 0.11.0: per-request switches for the session memory — the cookie jar
 // (cookies) and the session headers (session_headers).
-const Version = "0.12.0"
+const Version = "0.13.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -283,6 +283,26 @@ func curlpro_session_cookies(id C.longlong) (out *C.char) {
 		return respond(nil, err)
 	}
 	return respond(map[string]any{"cookies": s.Cookies()}, nil)
+}
+
+// curlpro_session_fingerprint reports what a server would see, without sending
+// anything.
+//
+// Until this existed the answer came only from an oracle, which made every check
+// depend on someone else's service being up.
+//
+//export curlpro_session_fingerprint
+func curlpro_session_fingerprint(id C.longlong, url *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	fp, err := s.Fingerprint(C.GoString(url))
+	if err != nil {
+		return respond(nil, err)
+	}
+	return respond(fp, nil)
 }
 
 // curlpro_session_set_cookies loads cookies into the session.

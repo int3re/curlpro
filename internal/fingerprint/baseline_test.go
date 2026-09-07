@@ -112,7 +112,7 @@ func TestFingerprintMatchesTheCaptures(t *testing.T) {
 			}
 		})
 	}
-	t.Logf("сошлось: JA4 %d, JA3N %d, Akamai %d из %d профилей",
+	t.Logf("matched: JA4 %d, JA3N %d, Akamai %d of %d profiles",
 		checkedJA4, checkedJA3N, checkedAkamai, len(files))
 }
 
@@ -178,7 +178,7 @@ func TestPlainJA3MovesForChrome(t *testing.T) {
 	if len(seen) < 2 {
 		t.Errorf("twelve builds gave %d distinct JA3 values; shuffling should give more", len(seen))
 	}
-	t.Logf("двенадцать сборок дали %d разных JA3 и один JA4 — так и должно быть", len(seen))
+	t.Logf("twelve builds gave %d distinct JA3 values and one JA4, as they should", len(seen))
 }
 
 func contains(list manyOrOne, v string) bool {
