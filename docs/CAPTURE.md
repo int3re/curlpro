@@ -1,47 +1,54 @@
-# Снятие эталонного отпечатка
+# Capturing a reference fingerprint
 
-Рецепт для случая «вышел новый Chrome, нужен профиль». Команды проверены на Windows/Git Bash.
+The recipe for "a new Chrome came out, a profile is needed". The commands were
+checked on Windows/Git Bash.
 
-## Быстрый путь: взять готовое
+## The quick way: take one that exists
 
-Прежде чем что-то захватывать — проверить, нет ли уже готовой сигнатуры:
+Before capturing anything, check whether a ready-made signature already exists:
 
 ```
 https://raw.githubusercontent.com/lexiforest/curl-impersonate/main/tests/signatures/<name>.yaml
 ```
 
-**43 файла**, Chrome 98→150 (включая android и разбивку по ОС), Safari 15.3→26.0.1
-(включая iOS), Firefox 133/135/144, Edge 98–120, Tor 14.5. Обычно появляется в течение
-нескольких дней после релиза браузера.
+**43 files**, Chrome 98→150 (including android and a split by OS), Safari
+15.3→26.0.1 (including iOS), Firefox 133/135/144, Edge 98–120, Tor 14.5. One
+usually appears within a few days of a browser release.
 
-Структура каждого файла: `browser{name,os,version}`, `signature.options.tls_permute_extensions`,
-`signature.http2.frames[]` (SETTINGS/WINDOW_UPDATE/HEADERS с `pseudo_headers` и полным
-списком заголовков в порядке), `signature.tls_client_hello{ciphersuites, comp_methods,
-extensions[] с декодированными полями, handshake_version, record_version, session_id_length}`,
-`third_party{akamai_hash, akamai_text, ja3_hash, ja3_text, ja3n_hash, ja3n_text, user_agent}`.
+The structure of each file: `browser{name,os,version}`,
+`signature.options.tls_permute_extensions`, `signature.http2.frames[]`
+(SETTINGS/WINDOW_UPDATE/HEADERS with `pseudo_headers` and the full ordered header
+list), `signature.tls_client_hello{ciphersuites, comp_methods, extensions[] with
+decoded fields, handshake_version, record_version, session_id_length}`,
+`third_party{akamai_hash, akamai_text, ja3_hash, ja3_text, ja3n_hash, ja3n_text,
+user_agent}`.
 
-Оговорки:
-- при `tls_permute_extensions: true` (Chrome) список `extensions:` — **одна наблюдённая
-  перестановка**; стабилен только JA3N. У Firefox/Safari блока `options` нет — порядок фиксирован
-  и авторитетен.
-- `curlpro capture` выводит `permute_extensions` из сэмплов: если порядок расширений
-  (с GREASE, сведённым к маркеру) различается хотя бы в двух сэмплах — `true`, иначе `false`.
-  Нужно не меньше двух сэмплов; раньше поле писалось как `true` всегда, и снятый Firefox
-  получал перемешивающийся профиль.
-- у Safari-файлов **нет блока `third_party:`** — готовых JA3 не будет
-- `4588` = `0x11EC` = X25519MLKEM768 (Chrome 124–130 использовал `25497` = X25519Kyber768Draft00)
-- ⚠ **`browsers.json` — это устаревший манифест сборки** (`{name, browser, binary, wrapper_script}`),
-  фингерпринт-данных в нём **ноль**. Не использовать. Живой список целей — `docs/fingerprints.rst`.
-- документация проекта отмечает: *«Chromium-based browsers all share the same fingerprints,
-  except for `User-Agent` and `sec-ch-ua-platform`»* — Edge/Brave/Opera не требуют отдельного
-  TLS-профиля.
+Caveats:
+- with `tls_permute_extensions: true` (Chrome) the `extensions:` list is **one
+  observed permutation**; only JA3N is stable. Firefox and Safari files have no
+  `options` block — their order is fixed and authoritative.
+- `curlpro capture` derives `permute_extensions` from the samples: if the
+  extension order (with GREASE reduced to a marker) differs in at least two
+  samples it is `true`, otherwise `false`. At least two samples are needed; the
+  field used to be written as `true` always, and a captured Firefox came out with
+  a shuffling profile.
+- the Safari files have **no `third_party:` block** — there will be no ready-made
+  JA3
+- `4588` = `0x11EC` = X25519MLKEM768 (Chrome 124–130 used `25497` =
+  X25519Kyber768Draft00)
+- ⚠ **`browsers.json` is a stale build manifest** (`{name, browser, binary,
+  wrapper_script}`) with **zero** fingerprint data in it. Do not use it. The live
+  list of targets is `docs/fingerprints.rst`.
+- the project's documentation notes: *"Chromium-based browsers all share the same
+  fingerprints, except for `User-Agent` and `sec-ch-ua-platform`"* — Edge, Brave
+  and Opera need no TLS profile of their own.
 
-## Полный путь: захват своими руками
+## The full way: capture it yourself
 
-### 1. Стенд
+### 1. The stand
 
-`echo-server` из релизов [wi1dcard/fingerproxy](https://github.com/wi1dcard/fingerproxy) —
-именно он, а не сам прокси.
+`echo-server` from the [wi1dcard/fingerproxy](https://github.com/wi1dcard/fingerproxy)
+releases — that one, not the proxy itself.
 
 ```bash
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:secp384r1 -days 3650 \
@@ -51,53 +58,57 @@ openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:secp384r1 -days 3650 \
 ./echo-server -listen-addr localhost:8443 -verbose
 ```
 
-Эндпоинты:
-- `GET /` — текст: User-Agent, полный hex ClientHello record, JA3, JA4, HTTP2-отпечаток
+The endpoints:
+- `GET /` — text: the User-Agent, the full ClientHello record in hex, JA3, JA4,
+  the HTTP/2 fingerprint
 - `GET /json` — `{"ja3":…,"ja4":…,"http2":…}`
-- **`GET /json/detail`** — главный. `detail.metadata.ClientHelloRecord` в base64
-  (сырой TLS record), полный `ConnectionState`, структура `HTTP2Frames`
-  (`Settings[]`, `WindowUpdateIncrement`, `Priorities[]`, `Headers[]` в порядке провода),
-  и разобранные объекты `ja3`/`ja4` с `ReadableCipherSuites`, `ReadableAllExtensions`,
-  `ReadableSupportedGroups`, `ReadableSignatureAlgorithms`, `ja3_raw`.
+- **`GET /json/detail`** — the important one.
+  `detail.metadata.ClientHelloRecord` in base64 (the raw TLS record), the full
+  `ConnectionState`, the `HTTP2Frames` structure (`Settings[]`,
+  `WindowUpdateIncrement`, `Priorities[]`, `Headers[]` in wire order), and the
+  parsed `ja3`/`ja4` objects with `ReadableCipherSuites`,
+  `ReadableAllExtensions`, `ReadableSupportedGroups`,
+  `ReadableSignatureAlgorithms`, `ja3_raw`.
 
-Одного ответа `/json/detail` достаточно, чтобы составить профиль.
+One `/json/detail` response is enough to compose a profile.
 
-⚠ Go канонизирует имена заголовков, поэтому бэкенд видит `X-Ja3-Fingerprint`,
-`X-Ja4-Fingerprint`, `X-Http2-Fingerprint` — сравнивать без учёта регистра.
-JA4H fingerproxy намеренно **не** считает (README: «Do not do it in the reverse proxy»).
+⚠ Go canonicalises header names, so the backend sees `X-Ja3-Fingerprint`,
+`X-Ja4-Fingerprint`, `X-Http2-Fingerprint` — compare them case-insensitively.
+fingerproxy deliberately does **not** compute JA4H (its README: "Do not do it in
+the reverse proxy").
 
-### 1б. Стенд для порядка заголовков: cmd/hcapture
+### 1b. The stand for header order: cmd/hcapture
 
-`echo-server` показывает HEADERS-кадр HTTP/2, но не HTTP/3, и не умеет отдавать
-страницу, которая сама сходит `fetch`-ем. Для этого свой стенд:
+`echo-server` shows the HTTP/2 HEADERS frame but not the HTTP/3 one, and it
+cannot serve a page that runs a `fetch` of its own. Hence a stand of ours:
 
 ```bash
-go run ./cmd/hcapture -auto              # TLS + ALPN h2, браузер поднимается сам
-go run ./cmd/hcapture -auto -h3          # плюс QUIC, Chrome уводится на HTTP/3
-go run ./cmd/hcapture -h3                # без браузера: открыть адрес руками
+go run ./cmd/hcapture -auto              # TLS + ALPN h2, the browser starts itself
+go run ./cmd/hcapture -auto -h3          # plus QUIC, Chrome is moved onto HTTP/3
+go run ./cmd/hcapture -h3                # without a browser: open the address by hand
 ```
 
-Стенд разбирает HEADERS вручную — HPACK для HTTP/2, свой `internal/qpack`
-для HTTP/3 — и печатает имена в порядке провода. Страница делает `fetch`,
-XHR и переход по ссылке, поэтому за прогон снимаются оба набора заголовков,
-навигационный и fetch. Кука ставится на первой странице: её позиция
-в наборе тоже была догадкой.
+The stand parses HEADERS by hand — HPACK for HTTP/2, our own `internal/qpack` for
+HTTP/3 — and prints the names in wire order. The page performs a `fetch`, an XHR
+and a link navigation, so one run captures both header sets, the navigational one
+and the fetch one. A cookie is set on the first page: its position in the set was
+a guess too.
 
-Две ловушки, обе стоили по прогону:
+Two traps, each of which cost a run:
 
-- **Chrome ходит на `localhost` по `::1`.** Слушатель только на `127.0.0.1`
-  не получает ни одной датаграммы.
-- **`--ignore-certificate-errors` не действует на QUIC.** Датаграммы Chrome
-  шлёт, рукопожатие бросает молча. Нужен
-  `--ignore-certificate-errors-spki-list` с отпечатком ключа стенда;
-  hcapture считает его сам из `capture/certs/tls.crt`.
+- **Chrome reaches `localhost` over `::1`.** A listener bound only to
+  `127.0.0.1` receives not one datagram.
+- **`--ignore-certificate-errors` does not apply to QUIC.** Chrome sends the
+  datagrams and drops the handshake silently. What is needed is
+  `--ignore-certificate-errors-spki-list` with the stand key's fingerprint;
+  hcapture computes it itself from `capture/certs/tls.crt`.
 
-Этим стендом снят Chrome 152 на обоих транспортах — см.
+Chrome 152 was captured on both transports with this stand — see
 [STAGE16-RESULTS.md](STAGE16-RESULTS.md).
 
-**Снятие с телефона по USB.** `adb reverse tcp:8443 tcp:8443` — и телефон
-видит стенд как `localhost`, то есть годится сертификат стенда с SAN на
-localhost, а браузер приводится командой:
+**Capturing from a phone over USB.** `adb reverse tcp:8443 tcp:8443` — and the
+phone sees the stand as `localhost`, so the stand's certificate with a localhost
+SAN will do, and the browser is brought by a command:
 
 ```bash
 adb shell am force-stop com.android.chrome
@@ -105,61 +116,64 @@ adb shell am start -a android.intent.action.VIEW -p com.android.chrome \
   -d https://localhost:8443/json/detail
 ```
 
-Между сэмплами процесс браузера нужно убивать: иначе соединение
-переиспользуется и все сэмплы дадут один и тот же ClientHello, а
-`permute_extensions` определить будет нечем. Так сняты `chrome-152-android`
-и `yandex-26.8-android`.
+The browser process has to be killed between samples: otherwise the connection is
+reused, every sample gives the same ClientHello, and there is nothing to derive
+`permute_extensions` from. `chrome-152-android` and `yandex-26.8-android` were
+captured this way.
 
-Две поправки к снятому таким способом профилю. Запуск по интенту браузер
-считает переходом с другого сайта, поэтому в захвате оказываются
-`sec-fetch-site: cross-site` и отсутствует `sec-fetch-user` — для профиля их
-надо привести к переходу по набранному адресу (`none` и `?1`). И `sec-ch-ua`
-с языками остаются как на устройстве замера.
+Two corrections to a profile captured like that. A launch by intent counts to the
+browser as a navigation from another site, so the capture contains
+`sec-fetch-site: cross-site` and no `sec-fetch-user` — for the profile they must
+be brought to a typed-address navigation (`none` and `?1`). And `sec-ch-ua` and
+the languages stay as they were on the measuring device.
 
-**HTTP/3 с чужого устройства своим сертификатом снять нельзя.** Для QUIC
-Chromium требует, чтобы цепочка вела к публично известному корню, и
-локально установленный CA не принимает — так он защищается от корпоративных
-перехватчиков, которые QUIC не умеют. По TCP тот же сертификат проходит без
-замечаний, страница открывается с замком, а QUIC закрывается сразу:
+**HTTP/3 cannot be captured from someone else's device with your own
+certificate.** For QUIC Chromium requires the chain to lead to a publicly known
+root and does not accept a locally installed CA — that is how it defends itself
+against corporate interceptors, which do not speak QUIC. Over TCP the same
+certificate passes without complaint, the page opens with a padlock, and QUIC
+closes at once:
 
 ```
 QUIC_SESSION_CLOSED: TLS handshake failure (ENCRYPTION_HANDSHAKE)
 46: certificate unknown … CERTIFICATE_VERIFY_FAILED
 ```
 
-(снято с Яндекс.Браузера 26.8 на Pixel 7 через `browser://net-export/`).
-На своей машине это обходится ключом `--ignore-certificate-errors-spki-list`,
-которого на Android нет. Остаются два пути: публично доверенный сертификат
-на имя, указывающее на локальный адрес, либо замер того же браузера на
-рабочей станции — слой HTTP/3 задаётся версией Chromium, а не платформой.
+(taken from Yandex Browser 26.8 on a Pixel 7 through `browser://net-export/`.)
+On your own machine this is worked around with
+`--ignore-certificate-errors-spki-list`, which does not exist on Android. Two
+paths remain: a publicly trusted certificate for a name that points at a local
+address, or measuring the same browser on a workstation — the HTTP/3 layer is set
+by the Chromium version, not by the platform.
 
-Побочно полезное: Chromium помнит неудачный QUIC-адрес и какое-то время
-больше в него не стучится (`ALT_SVC_FOUND … "is_broken": true`). Метка
-привязана к паре «хост плюс порт», поэтому следующую попытку надо делать
-на другом порту, иначе браузер даже не пришлёт датаграмму.
+Usefully incidental: Chromium remembers a QUIC address that failed and stops
+knocking on it for a while (`ALT_SVC_FOUND … "is_broken": true`). The mark is
+attached to the host-and-port pair, so the next attempt has to be made on another
+port, or the browser will not even send a datagram.
 
-### 2. Направить браузер
+### 2. Point the browser at it
 
-**SNI влияет на JA4** — это измерено:
+**SNI affects JA4** — this is measured:
 
-| Цель | SNI | JA4 |
+| Target | SNI | JA4 |
 |---|---|---|
 | `https://localhost:8443` | `localhost` | `t13d**15**16h2_8daaf6152771_806a8c22fdea` |
-| `https://127.0.0.1:8444` | нет | `t13**i**15**15**h2_8daaf6152771_806a8c22fdea` |
+| `https://127.0.0.1:8444` | none | `t13**i**15**15**h2_8daaf6152771_806a8c22fdea` |
 
-Подключение по голому IP меняет `d`→`i` **и** роняет счётчик расширений 16→15.
-Хеши `_b`/`_c` совпадают, потому что JA4 исключает SNI и ALPN из хешируемых списков.
+Connecting by a bare IP changes `d` to `i` **and** drops the extension count from
+16 to 15. The `_b` and `_c` hashes match, because JA4 excludes SNI and ALPN from
+the hashed lists.
 
-Для байт-точной реалистичности:
+For byte-exact realism:
 ```bash
 chrome --host-resolver-rules="MAP www.example.com 127.0.0.1:8443" \
        --user-data-dir=/tmp/p1 https://www.example.com
 ```
-(прав администратора не требует, в отличие от правки `hosts`)
+(this needs no administrator rights, unlike editing `hosts`)
 
-**Минимум 5 прогонов** — см. раздел про перемешивание.
+**At least 5 runs** — see the section on shuffling.
 
-### 3. Сырые байты ClientHello через tshark
+### 3. The raw ClientHello bytes through tshark
 
 ```bash
 export PATH="$PATH:/c/Program Files/Wireshark"
@@ -172,120 +186,129 @@ tshark -r /tmp/ch.pcapng -Y "tls.handshake.type == 1" \
 | head -1 | tr -d ':\n' | xxd -r -p > /tmp/ch.bin
 ```
 
-⚠ **Три подводных камня:**
+⚠ **Three pitfalls:**
 
-1. `-e tls.handshake` и `-e tls.record` имеют тип `FT_NONE` — печатают `1`, а не байты.
-2. **`-e tcp.payload` неверен для современных браузеров.** Измерено на Chrome 151:
-   ClientHello — 1766 байт в одном TLS-record, размазанном по двум TCP-сегментам,
-   потому что один только post-quantum key_share `X25519MLKEM768` занимает ~1216 байт.
-   `tcp.payload` вернёт лишь последний сегмент (366 байт) — молча усечёт.
-   Нужен `tcp.reassembled.data`.
-3. `-E occurrence=a` **обязателен** при извлечении списков, иначе печатается только первое значение.
+1. `-e tls.handshake` and `-e tls.record` are of type `FT_NONE` — they print `1`,
+   not bytes.
+2. **`-e tcp.payload` is wrong for a modern browser.** Measured on Chrome 151:
+   the ClientHello is 1766 bytes in one TLS record spread over two TCP segments,
+   because the post-quantum key_share `X25519MLKEM768` alone takes ~1216 bytes.
+   `tcp.payload` returns only the last segment (366 bytes) — a silent truncation.
+   `tcp.reassembled.data` is what is needed.
+3. `-E occurrence=a` is **mandatory** when extracting lists, or only the first
+   value is printed.
 
-Проверка целостности: `len(bytes) == 5 + 4 + tls.handshake.length` (проверено: `1766 == 5 + 4 + 1757`).
+An integrity check: `len(bytes) == 5 + 4 + tls.handshake.length` (verified:
+`1766 == 5 + 4 + 1757`).
 
-Байты начинаются с `16 0301 06e1 01 0006dd 0303…` — это ровно тот формат, который
-ждёт `utls.Fingerprinter`, обрезать ничего не надо.
+The bytes begin with `16 0301 06e1 01 0006dd 0303…` — exactly the format
+`utls.Fingerprinter` expects; nothing needs trimming.
 
-**Wireshark считает JA3 и JA4 сам** (в стоковом 4.4.6, без плагинов):
+**Wireshark computes JA3 and JA4 itself** (in a stock 4.4.6, without plugins):
 ```
-tls.handshake.ja3, ja3_full, ja3s, ja3s_full   (с 3.6.0)
-tls.handshake.ja4, ja4_r                        (с 4.2.0)
+tls.handshake.ja3, ja3_full, ja3s, ja3s_full   (since 3.6.0)
+tls.handshake.ja4, ja4_r                        (since 4.2.0)
 ```
-`-e tls.handshake.ja4_r` выдаёт нормализованные (отсортированные, без GREASE) списки
-шифров/расширений/sigalgs одной строкой. Для построения профиля это удобнее всего.
-`ja4_o`/`ja4_ro` и JA4H/S/X/T требуют плагина FoxIO (`ja4.dll` в `plugins\4.4\epan\`).
+`-e tls.handshake.ja4_r` gives the normalised (sorted, GREASE-free) lists of
+ciphers, extensions and sigalgs in one line. For building a profile that is the
+most convenient form. `ja4_o`/`ja4_ro` and JA4H/S/X/T need the FoxIO plugin
+(`ja4.dll` in `plugins\4.4\epan\`).
 
-### 4. HTTP/2 через SSLKEYLOGFILE
+### 4. HTTP/2 through SSLKEYLOGFILE
 
-ClientHello открытый и виден всегда — ключи для него не нужны. **Но Akamai-отпечаток
-и порядок заголовков лежат внутри шифрованного потока.**
+The ClientHello is in the clear and always visible — no keys are needed for it.
+**But the Akamai fingerprint and the header order live inside the encrypted
+stream.**
 
 ```bash
 export SSLKEYLOGFILE="C:\\Users\\$USERNAME\\AppData\\Local\\Temp\\sslkeys.log"
 "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" --user-data-dir=/tmp/p1 https://…
 "/c/Program Files/Mozilla Firefox/firefox.exe" -no-remote -profile /tmp/ffp1 https://…
 ```
-⚠ У Chrome **не должно быть запущенного экземпляра** — иначе он передаст URL существующему
-процессу, который переменную не видел. Всегда одноразовый `--user-data-dir`.
-Firefox требует `-no-remote`.
+⚠ Chrome must have **no running instance** — otherwise it hands the URL to the
+existing process, which never saw the variable. Always a throwaway
+`--user-data-dir`. Firefox needs `-no-remote`.
 
 ```bash
 tshark -r h2.pcapng -o "tls.keylog_file:$KL" -Y "http2.type==1" \
-  -T fields -e http2.header.name                     # порядок псевдо- и обычных заголовков
+  -T fields -e http2.header.name                     # the pseudo- and ordinary header order
 
 tshark -2 -r h2.pcapng -o "tls.keylog_file:$KL" -Y 'http2.type==8' \
-  -T fields -e http2.window_update.window_size_increment    # → 15663105
+  -T fields -e http2.window_update.window_size_increment    # -> 15663105
 ```
-⚠ `-2` (два прохода) обязателен для WINDOW_UPDATE, иначе молча пусто.
-`-e http2.settings.id` сломан в 4.4.6 — использовать `-V | grep`.
+⚠ `-2` (two passes) is mandatory for WINDOW_UPDATE, or the output is silently
+empty. `-e http2.settings.id` is broken in 4.4.6 — use `-V | grep`.
 
-### 5. Сырой TCP-листенер (запасной вариант)
+### 5. A raw TCP listener (the fallback)
 
-Читать 5 байт → проверить `0x16`, legacy version (на практике `0x0301`, **не** `0x0303`),
-2-байтная длина big-endian → дочитать ровно столько. Цикл по длине конструктивно
-не подвержен проблеме сегментации.
+Read 5 bytes → check for `0x16`, the legacy version (in practice `0x0301`, **not**
+`0x0303`), a 2-byte big-endian length → read exactly that many. A loop over the
+length is structurally immune to the segmentation problem.
 
-Handshake упадёт (ServerHello нет) — неважно, ClientHello уже на проводе.
-Chrome **не** делает retry-downgrade при чистом reset, так что одно соединение = один чистый сэмпл.
+The handshake will fail (there is no ServerHello) — which does not matter, the
+ClientHello is already on the wire. Chrome does **not** retry-downgrade on a clean
+reset, so one connection is one clean sample.
 
-### 6. Байты → спека
+### 6. Bytes into a spec
 
 ```go
 f := &tls.Fingerprinter{AllowBluntMimicry: false, RealPSKResumption: false}
-spec, err := f.RawClientHello(raw)      // raw начинается с 0x16
+spec, err := f.RawClientHello(raw)      // raw begins with 0x16
 ```
-Затем полезно сделать диф против `utls.UTLSIdToSpec(tls.HelloChrome_133)` — сразу видно,
-что именно изменилось между версиями.
+It is then worth diffing against `utls.UTLSIdToSpec(tls.HelloChrome_133)` — that
+shows at once what changed between versions.
 
-### 7. Валидация
+### 7. Validation
 
-Реплей спеки против `tls.browserleaks.com/tls`, сверка `ja3n_hash` / `ja4` / `akamai_text`
-с тем, что отдал настоящий браузер.
+Replay the spec against `tls.browserleaks.com/tls` and compare `ja3n_hash`, `ja4`
+and `akamai_text` with what the real browser produced.
 
-Дополнительно: `tls.tlsfingerprint.io/api/tls/fingerprints/{norm_hex_id}/exists` —
-подтверждает, что такой отпечаток вообще встречается в реальном трафике.
+Additionally: `tls.tlsfingerprint.io/api/tls/fingerprints/{norm_hex_id}/exists` —
+confirms that such a fingerprint occurs in real traffic at all.
 
-## Поведение браузеров, которое ломает наивный захват
+## Browser behaviour that breaks a naive capture
 
-**Перемешивание расширений (Chrome 110+).** Пять подряд соединений:
+**Extension shuffling (Chrome 110+).** Five consecutive connections:
 ```
-5 разных JA3:  d727c155…, b19d37c7…, c6250e25…, 7ec443df…, 638be043…
-1 одинаковый JA4: t13d1516h2_8daaf6152771_806a8c22fdea  (все пять)
+5 different JA3:  d727c155…, b19d37c7…, c6250e25…, 7ec443df…, 638be043…
+1 identical JA4:  t13d1516h2_8daaf6152771_806a8c22fdea  (all five)
 ```
-Отсортированные наборы расширений идентичны. **Никогда не строить профиль по одному
-захвату Chrome — этот порядок есть шум.** Firefox не перемешивает, ему одного захвата достаточно.
+The sorted extension sets are identical. **Never build a profile from a single
+Chrome capture — that order is noise.** Firefox does not shuffle; one capture is
+enough for it.
 
-**GREASE.** Наблюдённые значения `0xCACA, 0x2A2A, 0x9A9A, 0x6A6A, 0x4A4A, 0xBABA, 0xAAAA, 0x3A3A`
-— шаблон RFC 8701 `0x?A?A`. Значения случайны, **позиции нет**: Chrome всегда ставит один
-GREASE первым и один последним. Также присутствует в шифрах, supported_groups,
-supported_versions, key_share.
+**GREASE.** The values observed: `0xCACA, 0x2A2A, 0x9A9A, 0x6A6A, 0x4A4A, 0xBABA,
+0xAAAA, 0x3A3A` — the RFC 8701 pattern `0x?A?A`. The values are random, **the
+positions are not**: Chrome always puts one GREASE first and one last. It is also
+present in the ciphers, supported_groups, supported_versions and key_share.
 
-**Длина ClientHello нестабильна даже при одинаковом JA4** — GREASE-ECH (`0xfe0d`) добивает
-padding шагами по 32 байта. Стабильна только нормализованная структура.
-Не «чинить» это флагом `--disable-features=PostQuantumKyber` — реальный Chrome шлёт не это.
+**The ClientHello length is unstable even with an identical JA4** — GREASE-ECH
+(`0xfe0d`) pads in steps of 32 bytes. Only the normalised structure is stable. Do
+not "fix" this with `--disable-features=PostQuantumKyber` — a real Chrome does not
+send that.
 
-## Публичные эндпоинты
+## Public endpoints
 
-| Эндпоинт | Статус | Что отдаёт |
+| Endpoint | Status | What it gives |
 |---|---|---|
-| **`tls.browserleaks.com/json`**, **`/tls`** | ✅ эталон | `ja4, ja4_r, ja4_o, ja4_ro, ja3_hash, ja3_text, ja3n_hash, ja3n_text, akamai_hash, akamai_text`. `/tls` добавляет разобранный `tls{}` + статус ECH. **Единственный источник JA4_o/JA4_ro.** Самый спека-совместимый JA4 |
-| `tls.peet.ws/api/all` | ✅ | Единственный, кто отдаёт **TCP/IP и p0f**. JA4 не добивает нулями счётчики |
-| `tools.scrapfly.io/api/fp/anything` | ✅ только h2 | Поле **`capture` = base64(gzip(JSON))**, распаковывается в готовый uTLS `ClientHelloSpec`. Лучшая находка — сразу воспроизводимая спека, а не хеш |
-| `tools.scrapfly.io/api/fp/ja3` | ✅ | JA3 несопоставим с остальными (см. FINGERPRINT-SPEC.md) |
-| `fp.impersonate.pro/api/http2` | ✅ | Самая детальная разбивка h2-кадров: `settings[], window_updates[], priority, headers_frame.flags[], header_order[]`. Есть `/api/http3`. JA4 нет |
-| `tls.tlsfingerprint.io/api/client-fingerprint` | ✅ | Полный разбор + `num_id/hex_id` и `norm_num_id/norm_hex_id`. ⚠ именно поддомен `tls.` — без него 404 |
-| `check.ja3.zone/json` | ⚠ нестабилен | только JA3 + хеш |
-| `ja3er.com` | ❌ **мёртв** | DNS резолвится, TCP :443 и :80 в таймаут. Лежит с ~2022 |
-| `ja4db.com/api/read/` | ❌ | 301 → `ja4db.foxio.io`, bulk отдаёт 403, нужен аккаунт |
+| **`tls.browserleaks.com/json`**, **`/tls`** | ✅ the reference | `ja4, ja4_r, ja4_o, ja4_ro, ja3_hash, ja3_text, ja3n_hash, ja3n_text, akamai_hash, akamai_text`. `/tls` adds a parsed `tls{}` plus the ECH status. **The only source of JA4_o/JA4_ro.** The most specification-faithful JA4 |
+| `tls.peet.ws/api/all` | ✅ | The only one that returns **TCP/IP and p0f**. Its JA4 does not zero-pad the counts |
+| `tools.scrapfly.io/api/fp/anything` | ✅ h2 only | The **`capture` field = base64(gzip(JSON))**, which unpacks into a ready uTLS `ClientHelloSpec`. The best find — an immediately reproducible spec rather than a hash |
+| `tools.scrapfly.io/api/fp/ja3` | ✅ | Its JA3 is comparable with nobody else's (see FINGERPRINT-SPEC.md) |
+| `fp.impersonate.pro/api/http2` | ✅ | The most detailed h2 frame breakdown: `settings[], window_updates[], priority, headers_frame.flags[], header_order[]`. There is an `/api/http3`. No JA4 |
+| `tls.tlsfingerprint.io/api/client-fingerprint` | ✅ | A full parse plus `num_id/hex_id` and `norm_num_id/norm_hex_id`. ⚠ the `tls.` subdomain specifically — without it, 404 |
+| `check.ja3.zone/json` | ⚠ unstable | JA3 and its hash only |
+| `ja3er.com` | ❌ **dead** | DNS resolves, TCP :443 and :80 time out. Down since ~2022 |
+| `ja4db.com/api/read/` | ❌ | 301 → `ja4db.foxio.io`, the bulk endpoint returns 403, an account is needed |
 
-⚠ У `tls.peet.ws` пути `/api/http2`, `/api/ja3`, `/api/ja4`, `/api/request-info`
-возвращают **HTTP 200 с HTML-телом 404** — проверка по статус-коду обманет.
-Рабочие: `/api/all`, `/api/tls`, `/api/clean`.
+⚠ On `tls.peet.ws` the paths `/api/http2`, `/api/ja3`, `/api/ja4` and
+`/api/request-info` return **HTTP 200 with an HTML 404 body** — checking the
+status code will mislead. The working ones are `/api/all`, `/api/tls`,
+`/api/clean`.
 
-## Что диффать в исходниках Chromium
+## What to diff in the Chromium sources
 
-`net/socket/ssl_client_socket_impl.cc` — первоисточник:
+`net/socket/ssl_client_socket_impl.cc` is the primary source:
 ```cpp
 std::string command("ALL:!aPSK:!ECDSA+SHA1:!3DES");
 static const uint16_t kVerifyPrefs[] = {
@@ -296,23 +319,24 @@ SSL_CTX_set_grease_enabled(ssl_ctx_.get(), 1);
 SSL_set_enable_ech_grease(ssl_.get(), 1);
 SSL_set_alps_use_new_codepoint(...);
 ```
-Список шифров **не в Chromium** — он передаёт строку, порядок разрешает BoringSSL.
-Полный дифф требует ещё: `boringssl/ssl/ssl_cipher.cc` (порядок `kCiphers[]`),
-`boringssl/ssl/ssl_key_share.cc` + `net/ssl/ssl_config.cc` (группы и key_share —
-там Kyber переключался на ML-KEM), `net/spdy/spdy_session.cc` +
-`net/http/http_network_session.cc` (H2 SETTINGS и WINDOW_UPDATE).
+The cipher list is **not in Chromium** — it passes a string and lets BoringSSL
+decide the order. A full diff also needs `boringssl/ssl/ssl_cipher.cc` (the
+`kCiphers[]` order), `boringssl/ssl/ssl_key_share.cc` plus `net/ssl/ssl_config.cc`
+(the groups and key_share — that is where Kyber switched to ML-KEM), and
+`net/spdy/spdy_session.cc` plus `net/http/http_network_session.cc` (the H2
+SETTINGS and WINDOW_UPDATE).
 
-## Другие корпуса профилей
+## Other profile corpora
 
-| Источник | TLS | H2 | Порядок заголовков | По версиям | Замечание |
+| Source | TLS | H2 | Header order | By version | Note |
 |---|---|---|---|---|---|
-| `lexiforest/curl-impersonate` signatures | ✅ | ✅ | ✅ | ✅ | **лучший — всё вместе, машиночитаемо** |
-| `0x676e67/wreq-util` | ✅ | ✅ | ✅ по ОС | ✅ | **самое широкое покрытие версий** |
-| `sardanioss/httpcloak` `fingerprint/embedded/*.json` | ✅ | ✅ +H3 | ✅ | ✅ | **лучшая схема** — дельта-модель `based_on` |
-| `refraction-networking/utls` `u_parrots.go` | ✅ | ❌ | ❌ | ✅ | только TLS, 3526 строк |
-| `bogdanfinn/tls-client` | ✅ | ✅ | только псевдо | ✅ | Go-структуры, отстаёт |
-| `deedy5/primp` | ✅ | ✅ | ✅ | ✅ | Rust, Chrome 144–152, есть ML-DSA и ECH |
-| `tlsfingerprint.io` | ✅ | ❌ | ❌ | метки | 3.37M отпечатков, но **bulk-выгрузки нет** |
-| `browserforge` | ❌ | ❌ | ✅ | по имени | **TLS-данных ноль** (проверено грепом). Порядок заголовков — по имени браузера, не по версии. Данные переехали в `apify/fingerprint-suite` |
-| `salesforce/ja3` | хеши | ❌ | ❌ | ❌ | **архивирован 2025-05-01** |
-| FoxIO `ja4plus-mapping.csv` | хеши | ❌ | ❌ | ❌ | 66 строк, 4 браузерных без версий — бесполезно |
+| `lexiforest/curl-impersonate` signatures | ✅ | ✅ | ✅ | ✅ | **the best — everything together, machine-readable** |
+| `0x676e67/wreq-util` | ✅ | ✅ | ✅ by OS | ✅ | **the widest version coverage** |
+| `sardanioss/httpcloak` `fingerprint/embedded/*.json` | ✅ | ✅ +H3 | ✅ | ✅ | **the best schema** — the `based_on` delta model |
+| `refraction-networking/utls` `u_parrots.go` | ✅ | ❌ | ❌ | ✅ | TLS only, 3526 lines |
+| `bogdanfinn/tls-client` | ✅ | ✅ | pseudo only | ✅ | Go structures, lags behind |
+| `deedy5/primp` | ✅ | ✅ | ✅ | ✅ | Rust, Chrome 144–152, has ML-DSA and ECH |
+| `tlsfingerprint.io` | ✅ | ❌ | ❌ | labels | 3.37M fingerprints, but **no bulk export** |
+| `browserforge` | ❌ | ❌ | ✅ | by name | **zero TLS data** (checked by grep). The header order is by browser name rather than by version. The data moved to `apify/fingerprint-suite` |
+| `salesforce/ja3` | hashes | ❌ | ❌ | ❌ | **archived 2025-05-01** |
+| FoxIO `ja4plus-mapping.csv` | hashes | ❌ | ❌ | ❌ | 66 rows, 4 of them browsers without versions — useless |
