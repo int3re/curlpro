@@ -181,3 +181,19 @@ def test_ja4h_is_stable_across_sessions():
         with curlpro.Session("chrome-151-windows") as s:
             values.add(s.fingerprint().ja4h)
     assert len(values) == 1, values
+
+
+# --- TLS session resumption -----------------------------------------------
+
+def test_resume_does_not_change_the_first_handshake():
+    """The fingerprint of a first connection must be untouched.
+
+    The resuming ClientHello carries pre_shared_key; the first one cannot,
+    since there is nothing to resume with. If enabling resumption moved the
+    fingerprint, every stored baseline would be wrong for every session that
+    uses it — so this is the check that makes the option safe to turn on.
+    """
+    with curlpro.Session("chrome-151-windows") as plain, \
+         curlpro.Session("chrome-151-windows", resume=True) as resuming:
+        assert plain.fingerprint().ja4 == resuming.fingerprint().ja4
+        assert plain.fingerprint().ja3n == resuming.fingerprint().ja3n

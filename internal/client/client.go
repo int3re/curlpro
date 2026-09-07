@@ -124,6 +124,20 @@ type Options struct {
 	// ForceHTTP1 forbids h2 even when the server offers it.
 	ForceHTTP1 bool
 
+	// Resume turns on TLS session resumption.
+	//
+	// A browser talking to one host resumes constantly: it keeps the ticket the
+	// server issued and the next connection is abbreviated. A client that never
+	// resumes is an observable anomaly — and one that no fingerprint here
+	// measures, because JA3, JA4, JA4H and the Akamai string are all computed
+	// from the *first* handshake. The tell lives in the second.
+	//
+	// Off by default. Resuming changes the ClientHello: pre_shared_key appears,
+	// last, carrying the ticket. That is what a browser does too, but the shape
+	// of the resumed hello has not been measured against the oracles here, and
+	// this project does not turn on what it has not measured.
+	Resume bool
+
 	// HTTP3 sends requests over QUIC instead of TCP.
 	//
 	// This is a separate transport, not an ALPN variant, so it is chosen explicitly.
@@ -427,6 +441,11 @@ type Session struct {
 	alpn    []string
 	jar     *cookiejar.Jar
 
+	// tlsSessions holds the tickets servers issued to this session, so a second
+	// connection to the same host can be abbreviated the way a browser's is.
+	// Nil unless Options.Resume is set.
+	tlsSessions utls.ClientSessionCache
+
 	mu    sync.Mutex
 	conns map[dialSpec][]*conn
 
@@ -513,6 +532,11 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 		orphans: make(map[*conn]struct{}),
 		headers: newSessionHeaders(),
 		device:  dev,
+	}
+	if opts.Resume {
+		// Thirty-two hosts is generous for one identity and small enough that
+		// an abandoned session costs nothing.
+		s.tlsSessions = utls.NewLRUClientSessionCache(32)
 	}
 	if opts.ForceHTTP1 {
 		s.alpn = []string{"http/1.1"}
@@ -820,6 +844,15 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 		raw.Close()
 		return nil, err
 	}
+	// The resuming ClientHello is a different message from the first one, and
+	// no profile describes it: a browser's very first hello has nothing to
+	// resume with, so a capture never contains pre_shared_key. The extension is
+	// appended here, last, exactly where a browser puts it. With OmitEmptyPsk
+	// it stays off the wire until a ticket exists, so the first handshake is
+	// byte-for-byte what it was.
+	if s.opts.Resume {
+		spec.Extensions = append(spec.Extensions, &utls.UtlsPreSharedKeyExtension{})
+	}
 
 	// ALPN lives inside the spec, and ApplyPreset overrides Config.NextProtos.
 	// So restricting the protocol means editing the extension, not the config.
@@ -844,6 +877,14 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 		// default to send an empty extension. A browser in that situation simply
 		// does not send it — OmitEmptyPsk reproduces exactly that.
 		OmitEmptyPsk: true,
+	}
+	if s.opts.Resume {
+		// One cache per session: tickets belong to the identity, and sharing
+		// them between sessions would let two identities be linked by the very
+		// mechanism meant to make each look like a returning browser.
+		cfg.ClientSessionCache = s.tlsSessions
+	} else {
+		cfg.SessionTicketsDisabled = true
 	}
 	if len(s.alpn) > 0 {
 		cfg.NextProtos = s.alpn

@@ -433,6 +433,13 @@ class Session:
     :param max_redirects: limit on the length of a redirect chain
     :param cookies: enable the cookie jar shared by the session's requests
     :param force_http1: do not offer h2, even when the profile lists it
+    :param resume: reuse TLS session tickets, as a browser does.
+        A browser talking to one host resumes constantly; a client that
+        never resumes is an observable anomaly, and one no fingerprint
+        here measures — JA3, JA4, JA4H and the Akamai string all come
+        from the first handshake, while the tell lives in the second.
+        Off by default: resuming changes the ClientHello, and that shape
+        has not been measured against the oracles yet.
     :param http3: send requests over QUIC instead of TCP. The profile must
         describe an ``http3`` section or the session will not be created.
         This is a separate transport, not an ALPN variant, so it is explicit
@@ -488,6 +495,7 @@ class Session:
         max_redirects: int = 20,
         cookies: bool = True,
         force_http1: bool = False,
+        resume: bool = False,
         http3: bool = False,
         alt_svc: bool = True,
         resolve: Mapping[str, str] | None = None,
@@ -536,6 +544,7 @@ class Session:
                     "max_redirects": max_redirects,
                     "cookies": cookies,
                     "force_http1": force_http1,
+                    "resume": resume,
                     "http3": http3,
                     "alt_svc": alt_svc,
                     "resolve": dict(resolve) if resolve else None,

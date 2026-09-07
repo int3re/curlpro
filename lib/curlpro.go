@@ -114,7 +114,7 @@ func curlpro_free(s *C.char) {
 // on, not only off).
 // 0.11.0: per-request switches for the session memory — the cookie jar
 // (cookies) and the session headers (session_headers).
-const Version = "0.14.0"
+const Version = "0.15.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -162,6 +162,7 @@ type sessionConfig struct {
 	MaxRedirects       int      `json:"max_redirects"`
 	Cookies            bool     `json:"cookies"`
 	ForceHTTP1         bool     `json:"force_http1"`
+	Resume             bool     `json:"resume"`
 	HTTP3              bool     `json:"http3"`
 	MaxIdleConns       int      `json:"max_idle_conns"`
 	IdleConnTimeoutMS  int      `json:"idle_conn_timeout_ms"`
@@ -240,6 +241,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		MaxRedirects:       c.MaxRedirects,
 		Cookies:            c.Cookies,
 		ForceHTTP1:         c.ForceHTTP1,
+		Resume:             c.Resume,
 		HTTP3:              c.HTTP3,
 		ConnectTimeout:     time.Duration(c.ConnectTimeoutMS) * time.Millisecond,
 		CACert:             c.CACert,
