@@ -139,3 +139,16 @@ def test_the_session_underneath_is_reachable():
     with requests.Session("chrome-151-windows") as s:
         assert isinstance(s.curlpro, curlpro.Session)
         assert s.curlpro.fingerprint().ja4.startswith("t13d")
+
+
+def test_the_timeout_difference_is_documented():
+    """The one argument that is honoured but means something else.
+
+    requests reads (connect, read-silence); curlpro reads (connect, total).
+    The difference is in the direction of strictness, so carrying a value over
+    is safe — but the module whose promise is "your old code works" is exactly
+    the one that has to say so.
+    """
+    doc = requests.__doc__ or ""
+    assert "(connect, total)" in doc, "the timeout difference is not documented"
+    assert "silence between bytes" in doc

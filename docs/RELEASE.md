@@ -4,7 +4,8 @@
 [.github/workflows/wheels.yml](../.github/workflows/wheels.yml) по тегу `v*`.
 
 Первый выпуск — **0.2.0, 5 сентября 2026**:
-[pypi.org/project/curlpro](https://pypi.org/project/curlpro/).
+[pypi.org/project/curlpro](https://pypi.org/project/curlpro/). Текущий —
+**0.3.0**: свой отпечаток без запроса, персоны и совместимость с `requests`.
 
 ## Что происходит по тегу
 

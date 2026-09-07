@@ -27,6 +27,17 @@ looks like it worked until it matters. Not implemented, on purpose:
 * authentication objects — only the ``(user, password)`` tuple and a bearer
   string are understood.
 
+One argument is honoured but means something slightly different, and it is the
+kind of difference that is worth knowing before it surprises you:
+
+* ``timeout=(a, b)``. In requests the pair is *(connect, read)*, where the
+  second number is how much **silence between bytes** is tolerated. Here it is
+  *(connect, total)*: the second number caps the whole request. That is
+  stricter rather than looser, so a value carried over from requests is safe —
+  a request that used to be allowed 27 seconds of silence is now allowed 27
+  seconds altogether. Code that relied on a slow drip continuing indefinitely
+  will time out where it used to hang.
+
 The profile is chosen the usual way, and defaults to the library's default:
 
     with requests.Session(impersonate="firefox-133-macos") as s:
