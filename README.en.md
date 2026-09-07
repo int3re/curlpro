@@ -119,7 +119,7 @@ The same files are attached to the [release page](https://github.com/int3re/curl
 for installing without reaching the index:
 
 ```bash
-pip install curlpro-0.2.0-py3-none-manylinux_2_28_x86_64.whl
+pip install curlpro-*-manylinux_2_28_x86_64.whl
 ```
 
 **Platforms outside the table** — Alpine and other musl distributions, Windows on
@@ -128,7 +128,7 @@ compiler are required:
 
 ```bash
 pip download curlpro --no-binary :all: --no-deps
-tar -xzf curlpro-0.2.0.tar.gz && cd curlpro-0.2.0/go
+tar -xzf curlpro-*.tar.gz && cd curlpro-*/go
 CGO_ENABLED=1 go build -buildmode=c-shared -o ../curlpro/lib/libcurlpro.so ./lib
 ```
 

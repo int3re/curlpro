@@ -117,7 +117,7 @@ pip install curlpro
 если ставить нужно без обращения к индексу:
 
 ```bash
-pip install curlpro-0.2.0-py3-none-manylinux_2_28_x86_64.whl
+pip install curlpro-*-manylinux_2_28_x86_64.whl
 ```
 
 **Платформы вне таблицы** — Alpine и другой musl, Windows на ARM, старые glibc
@@ -125,7 +125,7 @@ pip install curlpro-0.2.0-py3-none-manylinux_2_28_x86_64.whl
 
 ```bash
 pip download curlpro --no-binary :all: --no-deps
-tar -xzf curlpro-0.2.0.tar.gz && cd curlpro-0.2.0/go
+tar -xzf curlpro-*.tar.gz && cd curlpro-*/go
 CGO_ENABLED=1 go build -buildmode=c-shared -o ../curlpro/lib/libcurlpro.so ./lib
 ```
 

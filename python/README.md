@@ -94,7 +94,7 @@ with curlpro.Session("chrome-151-windows", http3=True) as s:
 
 ```bash
 pip download curlpro --no-binary :all: --no-deps
-tar -xzf curlpro-0.2.0.tar.gz && cd curlpro-0.2.0/go
+tar -xzf curlpro-*.tar.gz && cd curlpro-*/go
 CGO_ENABLED=1 go build -buildmode=c-shared -o ../curlpro/lib/libcurlpro.so ./lib
 ```
 

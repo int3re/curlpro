@@ -54,9 +54,9 @@ go test -race ./internal/... && cd python && python -m pytest tests -q -m "not n
 # 3. Холостой прогон: собирает всё, но не публикует — publish включается только по тегу
 gh workflow run wheels.yml --ref main
 
-# 4. Тег и отправка
-git tag -a v0.2.0 -m "curlpro 0.2.0"
-git push origin v0.2.0
+# 4. Тег и отправка — версия та же, что в pyproject, иначе задача version не пустит
+git tag -a vX.Y.Z -m "curlpro X.Y.Z"
+git push origin vX.Y.Z
 ```
 
 Дальше рабочий процесс соберёт колёса и остановится на подтверждении окружения.
@@ -75,8 +75,12 @@ git push origin v0.2.0
 поставить можно было и не обращаясь к индексу:
 
 ```bash
-gh release create v0.2.0 --title "curlpro 0.2.0" --notes-file NOTES.md dist/*
+gh release create vX.Y.Z --title "curlpro X.Y.Z" --notes-file NOTES.md dist/*
 ```
+
+Файлы берутся из артефактов того же прогона, что публиковался: тогда
+контрольные суммы сходятся с индексом побайтово, и это стоит проверить —
+`SHA256SUMS.txt` рядом с ними для того и лежит.
 
 ## Версия нативной части
 
