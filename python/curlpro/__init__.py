@@ -66,4 +66,11 @@ __all__ = [
     "register_profile",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.4.0"
+
+try:  # an installed distribution is the authority; a source checkout has none
+    from importlib.metadata import version as _dist_version
+
+    __version__ = _dist_version("curlpro")
+except Exception:  # pragma: no cover - not installed, keep the literal above
+    pass

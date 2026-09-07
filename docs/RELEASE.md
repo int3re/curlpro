@@ -6,7 +6,7 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.3.0**: the offline fingerprint, personas, and `requests` compatibility.
+**0.4.0**: JA4H, Russian profiles, the profile audit and TLS session resumption.
 
 ## What happens on a tag
 
