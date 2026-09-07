@@ -1,29 +1,29 @@
 curlPro
 Copyright 2026 int3re
 
-Лицензия Apache 2.0, полный текст — в файле LICENSE.
+Licensed under Apache 2.0; the full text is in the LICENSE file.
 
-Проект использует сторонний код; его лицензии перечислены ниже.
+The project uses third-party code; its licences are listed below.
 
-Зависимости (подключаются модулем Go, в репозитории не хранятся):
+Dependencies (pulled in by the Go module, not stored in the repository):
   github.com/refraction-networking/utls   — BSD-3-Clause
-  github.com/refraction-networking/uquic  — BSD-3-Clause и MIT
+  github.com/refraction-networking/uquic  — BSD-3-Clause and MIT
   github.com/bogdanfinn/fhttp             — BSD-3-Clause
   github.com/quic-go/qpack                — MIT
   github.com/klauspost/compress           — Apache-2.0, BSD-3-Clause, MIT
   github.com/andybalholm/brotli           — MIT
   golang.org/x/net, golang.org/x/crypto   — BSD-3-Clause
-  gopkg.in/yaml.v3                        — MIT и Apache-2.0
+  gopkg.in/yaml.v3                        — MIT and Apache-2.0
 
-Код, скопированный в этот репозиторий:
-  internal/h3/        — копия http3 из github.com/refraction-networking/uquic
-                        (BSD-3-Clause и MIT). Список правок против исходной
-                        версии — в internal/h3/README.md
+Code copied into this repository:
+  internal/h3/        — a copy of http3 from github.com/refraction-networking/uquic
+                        (BSD-3-Clause and MIT). The list of changes against the
+                        original version is in internal/h3/README.md
   internal/qpack/static_table.go
-                      — статическая таблица из github.com/quic-go/qpack (MIT)
+                      — the static table from github.com/quic-go/qpack (MIT)
 
-Инструменты, которые скачиваются отдельно и в репозиторий не входят:
+Tools downloaded separately, not part of the repository:
   github.com/wi1dcard/fingerproxy (echo-server) — MIT
 
-Профили браузеров в profiles/ получены двумя путями: собственными замерами
-живых браузеров и импортом сигнатур curl-impersonate (MIT) — см. docs/.
+The browser profiles in profiles/ were obtained two ways: by our own measurements
+of live browsers and by importing the curl-impersonate signatures (MIT) — see docs/.

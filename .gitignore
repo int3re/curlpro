@@ -1,25 +1,26 @@
-# Скачиваемые бинарники стенда (см. docs/CAPTURE.md — берутся из релизов fingerproxy)
+# Downloaded stand binaries (see docs/CAPTURE.md — taken from the fingerproxy releases)
 tools/*.exe
 tools/echo-server_*
 tools/fingerproxy_*
 
-# Приватный ключ самоподписанного сертификата — генерируется локально
+# The private key of the self-signed certificate — generated locally
 capture/certs/tls.key
 capture/certs/tls.crt
 
-# Сырые сэмплы захвата: объёмны и воспроизводимы; в репозиторий идёт
-# только нормализованный эталон из reference/
+# Raw capture samples: bulky and reproducible; only the normalised reference
+# from reference/ goes into the repository
 capture/samples/
 
-# Исходный корпус curl-impersonate: скачивается ./cmd/import, в репозиторий
-# идут только полученные из него профили в profiles/
+# The curl-impersonate source corpus: downloaded by ./cmd/import, only the
+# profiles derived from it go into the repository, in profiles/
 corpus/
 
-# Эталоны, снятые с локального стенда: зависят от машины и сертификата.
-# Эталоны с публичного оракула (reference/baselines/) — наоборот, коммитятся.
+# References taken from the local stand: they depend on the machine and the
+# certificate. References from the public oracle (reference/baselines/) are
+# the opposite — those are committed.
 reference/baselines-local/
 
-# Go / нативная сборка
+# Go / the native build
 dist/
 *.exe
 *.dll
@@ -37,8 +38,8 @@ venv/
 build/
 .pytest_cache/
 
-# Наполняются на этапе сборки колеса: нативная библиотека и копия профилей.
-# Исходники живут в dist/ и profiles/ соответственно.
+# Filled in during the wheel build: the native library and a copy of the profiles.
+# The sources live in dist/ and profiles/ respectively.
 python/curlpro/lib/
 python/curlpro/profiles/
 python/LICENSE

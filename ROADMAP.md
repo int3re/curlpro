@@ -1,439 +1,460 @@
 # Roadmap
 
-Этапы упорядочены так, чтобы каждый заканчивался проверяемым результатом.
-Ключевой принцип: **валидация появляется рано**, иначе профили тихо протухают.
+The stages are ordered so that each one ends in a checkable result. The key
+principle: **validation appears early**, otherwise the profiles go stale silently.
 
-## Этап 0 — стенд для замеров ✅ выполнен 2026-08-31
+## Stage 0 — the measurement stand ✅ done 2026-08-31
 
-Без эталона писать движок бессмысленно — нечем проверить, что отпечаток сошёлся.
+Without a reference there is no point writing the engine — there is nothing to check
+the fingerprint against.
 
-Снят Chrome **151.0.7922.174**: 6 уникальных JA3 при одном JA4, наборы расширений
-сходятся в один после вырезания GREASE. Критерий выполнен.
+Chrome **151.0.7922.174** was captured: 6 unique JA3 values under one JA4, and the
+extension sets collapse into one once GREASE is cut out. The criterion is met.
 
-Артефакты: [capture/](capture/), [reference/chrome-151-windows.json](reference/chrome-151-windows.json).
-Подробности, разобранные расхождения и заметки по инструментам —
-[docs/STAGE0-RESULTS.md](docs/STAGE0-RESULTS.md). Рецепты — [docs/CAPTURE.md](docs/CAPTURE.md).
+Artefacts: [capture/](capture/), [reference/chrome-151-windows.json](reference/chrome-151-windows.json).
+The details, the divergences resolved and the notes on tooling —
+[docs/STAGE0-RESULTS.md](docs/STAGE0-RESULTS.md). The recipes — [docs/CAPTURE.md](docs/CAPTURE.md).
 
-Целевые значения для сверки на этапе 1:
+The target values to check against in stage 1:
 ```
 JA4     t13d1516h2_8daaf6152771_806a8c22fdea
 Akamai  1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p
 ```
 
-## Этап 1 — Go-ядро, один профиль, живой запрос ✅ выполнен 2026-09-01
+## Stage 1 — the Go core, one profile, a live request ✅ done 2026-09-01
 
-Спека строится из **захваченных байтов** через `utls.Fingerprinter`, а не из
-встроенного пресета. Отпечаток совпал с настоящим Chrome 151 полностью —
-и сам JA4, и характер изменчивости (6 уникальных JA3 при одном JA4).
+The spec is built from the **captured bytes** through `utls.Fingerprinter` rather
+than from a built-in preset. The fingerprint matched a real Chrome 151 completely —
+both the JA4 itself and the character of its variability (6 unique JA3 values under
+one JA4).
 
-Подробности и найденная ловушка с кешированием спеки —
-[docs/STAGE1-RESULTS.md](docs/STAGE1-RESULTS.md). Артефакт: [cmd/probe](cmd/probe/main.go).
+The details and the spec-caching trap that was found —
+[docs/STAGE1-RESULTS.md](docs/STAGE1-RESULTS.md). The artefact: [cmd/probe](cmd/probe/main.go).
 
-Открытым остаётся вопрос про GREASE-запись в SETTINGS (issue #260 в tls-client):
-на Chrome 151 через fingerproxy её не видно, но нужен разбор сырых кадров через tshark.
+The question of the GREASE entry in SETTINGS (issue #260 in tls-client) stays open:
+on Chrome 151 it is not visible through fingerproxy, but the raw frames need parsing
+with tshark.
 
-## Этап 2 — профили как данные ✅ выполнен 2026-09-01
+## Stage 2 — profiles as data ✅ done 2026-09-01
 
-Профиль переехал в [profiles/chrome-151-windows.json](profiles/chrome-151-windows.json),
-отпечаток не изменился. Реализованы наследование `based_on` с защитой от циклов,
-пост-процессор ECH (uTLS не умеет грузить его из JSON) и строгая валидация:
-неизвестное поле, промах оверрайда и обрыв цепочки — ошибки, а не тихая деградация.
+The profile moved into [profiles/chrome-151-windows.json](profiles/chrome-151-windows.json)
+and the fingerprint did not change. Implemented: `based_on` inheritance with cycle
+protection, an ECH post-processor (uTLS cannot load it from JSON) and strict
+validation — an unknown field, a missed override and a broken chain are errors, not
+silent degradation.
 
-Попутно исправлен дефект захвата: сэмплы этапа 0 содержали заголовки favicon
-вместо основного запроса. Подробности — [docs/STAGE2-RESULTS.md](docs/STAGE2-RESULTS.md).
+Along the way a capture defect was fixed: the stage-0 samples contained the favicon's
+headers instead of the main request's. The details — [docs/STAGE2-RESULTS.md](docs/STAGE2-RESULTS.md).
 
-Не сделано из запланированного: `//go:embed` (профиль пока грузится с диска)
-и `QUICTransportParametersExtension` — отложено до появления H3.
+Planned but not done: `//go:embed` (the profile is still loaded from disk) and
+`QUICTransportParametersExtension` — deferred until H3 arrives.
 
-## Этап 3 — импорт корпуса ✅ выполнен 2026-09-01
+## Stage 3 — importing the corpus ✅ done 2026-09-01
 
-43 сигнатуры импортированы без потерь, 17 сверены по JA3N. Вместе с собственным
-захватом — 44 профиля: Chrome 98–151, Edge, Firefox, Safari, Tor.
-Валидация поймала три ошибки вычисления JA3N и тихую потерю шести профилей
-из-за коллизии имён. Три файла корпуса оказались внутренне несогласованы —
-разобрано в [docs/STAGE3-RESULTS.md](docs/STAGE3-RESULTS.md).
+43 signatures imported without loss, 17 checked by JA3N. Together with our own
+capture that makes 44 profiles: Chrome 98–151, Edge, Firefox, Safari, Tor. Validation
+caught three JA3N computation errors and the silent loss of six profiles to a name
+collision. Three corpus files turned out to be internally inconsistent — analysed in
+[docs/STAGE3-RESULTS.md](docs/STAGE3-RESULTS.md).
 
-Известное ограничение: корпус не содержит priority с HEADERS, поэтому у
-импортированных профилей эта часть отпечатка берётся из умолчания fhttp
-и неверна для Firefox и Safari.
+A known limitation: the corpus does not carry the priority on HEADERS, so for the
+imported profiles that part of the fingerprint comes from fhttp's default and is
+wrong for Firefox and Safari.
 
-<details><summary>Исходный план этапа</summary>
+<details><summary>The original plan for the stage</summary>
 
-- парсер `lexiforest/curl-impersonate/tests/signatures/*.yaml` → наша схема
-- 43 файла: Chrome 98–150, Safari 15–26, Firefox, Edge, Tor
-- прогнать каждый импортированный профиль через валидатор, сверив с `third_party.ja3n_hash`
-  и `akamai_text` из самого YAML
+- a parser for `lexiforest/curl-impersonate/tests/signatures/*.yaml` → our schema
+- 43 files: Chrome 98–150, Safari 15–26, Firefox, Edge, Tor
+- run every imported profile through the validator, checking against
+  `third_party.ja3n_hash` and `akamai_text` from the YAML itself
 
-Оговорки: у Safari-файлов нет блока `third_party` (нечем сверять); при
-`tls_permute_extensions: true` авторитетен только JA3N.
+The caveats: the Safari files have no `third_party` block (nothing to check against);
+with `tls_permute_extensions: true` only JA3N is authoritative.
 
-**Результат:** ~40 рабочих профилей вместо одного, каждый с пройденной проверкой.
+**The result:** ~40 working profiles instead of one, each with a passed check.
 </details>
 
-## Этап 4 — FFI и Python ✅ выполнен 2026-09-01
+## Stage 4 — the FFI and Python ✅ done 2026-09-01
 
-`dist/curlpro.dll` (c-shared, 8 экспортов) и Python-обёртка на ctypes с API
-в стиле requests. Отпечаток проверен против **внешнего** оракула
-`tls.browserleaks.com`: Chrome, Firefox и Safari дали ровно те JA4 и Akamai-строки,
-что записаны в спецификации. Рантайм-регистрация профиля работает.
+`dist/curlpro.dll` (c-shared, 8 exports) and a Python wrapper over ctypes with a
+requests-style API. The fingerprint was checked against an **external** oracle,
+`tls.browserleaks.com`: Chrome, Firefox and Safari gave exactly the JA4 and Akamai
+strings written down in the specification. Runtime registration of a profile works.
 
-Заодно закрыт вопрос из этапа 0: секция PRIORITY — `0`, расходились не браузеры,
-а две реализации подсчёта. Подробности — [docs/STAGE4-RESULTS.md](docs/STAGE4-RESULTS.md).
+The stage-0 question was closed along the way: the PRIORITY section is `0`, and what
+diverged was not the browsers but two implementations' way of counting. The details —
+[docs/STAGE4-RESULTS.md](docs/STAGE4-RESULTS.md).
 
-Ограничения: только HTTP/2, без cookie-jar, редиректов и async; прокси не проверен.
+The limits: HTTP/2 only, no cookie jar, no redirects, no async; the proxy is
+unchecked.
 
-<details><summary>Исходный план этапа</summary>
+<details><summary>The original plan for the stage</summary>
 
 - `go build -buildmode=c-shared` → `libcurlpro.{so,dll,dylib}`
-- минимальный набор экспортов: session create/destroy, request, cookies, profile load/unregister
-  (у httpcloak их 102, у tls-client — 6; начать ближе к 6 и растить по нужде)
-- маршалинг запроса/ответа JSON-строками через `char*`, явное освобождение памяти
-- Python-обёртка на `ctypes`, API в стиле requests: `get/post`, `Session`, `AsyncSession`
-- `load_profile_from_json()` — регистрация профиля в рантайме **из Python**
+- a minimal set of exports: session create/destroy, request, cookies, profile
+  load/unregister (httpcloak has 102, tls-client has 6; start closer to 6 and grow as
+  needed)
+- marshal the request and the response as JSON strings through `char*`, with explicit
+  freeing
+- a Python wrapper over `ctypes`, requests-style: `get/post`, `Session`,
+  `AsyncSession`
+- `load_profile_from_json()` — registering a profile at runtime **from Python**
 
-Последнее — принципиально: пользователь выкатывает Chrome 153 у себя, не дожидаясь релиза.
-Именно этого нет ни у curl_cffi (платное API), ни у tls-client (нужен Go-код и мерж PR).
+The last one matters on principle: the user rolls out Chrome 153 on their own machine
+without waiting for a release. That is exactly what neither curl_cffi (a paid API)
+nor tls-client (Go code and a merged PR) has.
 
-**Результат:** `pip install -e .` и рабочий `curlpro.get(url, impersonate="chrome-150")`.
+**The result:** `pip install -e .` and a working `curlpro.get(url, impersonate="chrome-150")`.
 </details>
 
-## Этап 5 — полноценный клиент ✅ 5.1–5.5 выполнены 2026-09-01
+## Stage 5 — a full client ✅ 5.1–5.5 done 2026-09-01
 
-Клиент сопоставим с curl_cffi по возможностям и **быстрее его на 31%**
-(1775 против 1352 req/s на локальном стенде).
+The client is comparable with curl_cffi in features and **31% faster than it**
+(1775 against 1352 req/s on a local stand).
 
-Бенчмарк вскрыл порчу бинарных тел: они ехали строкой внутри JSON, и невалидный
-UTF-8 раздувался — 10 000 байт возвращались как 18 502. Исправлено бинарным
-кадром. Подробности — [docs/STAGE5-RESULTS.md](docs/STAGE5-RESULTS.md).
+The benchmark exposed the corruption of binary bodies: they travelled as a string
+inside JSON, and invalid UTF-8 inflated — 10,000 bytes came back as 18,502. Fixed
+with a binary frame. The details — [docs/STAGE5-RESULTS.md](docs/STAGE5-RESULTS.md).
 
-**5.6 HTTP/3 не сделан** — остаётся следующим шагом.
+**5.6 HTTP/3 is not done** — it stays the next step.
 
-### 5.1 Транспорт: HTTP/1.1 и согласование по ALPN
-Список ALPN берётся из профиля, а не задаётся кодом: у Safari 15 и старых
-Firefox в ClientHello нет `h2`, и сейчас такие профили отваливаются с ошибкой.
-Порядок и регистр заголовков в HTTP/1.1 тоже часть отпечатка — fhttp это умеет.
+### 5.1 The transport: HTTP/1.1 and ALPN negotiation
+The ALPN list comes from the profile rather than being set in code: Safari 15 and the
+older Firefoxes have no `h2` in their ClientHello, and such profiles currently fail
+with an error. The header order and case in HTTP/1.1 are part of the fingerprint too —
+fhttp can do that.
 
-### 5.2 Семантика HTTP
-- редиректы с сохранением порядка заголовков и корректной сменой `sec-fetch-*`
-- cookie-jar, разделяемый между запросами сессии
-- прокси: проверить живьём CONNECT, добавить SOCKS5
-- явные настройки проверки сертификата, таймаутов, лимита редиректов
+### 5.2 HTTP semantics
+- redirects that keep the header order and change `sec-fetch-*` correctly
+- a cookie jar shared between the session's requests
+- proxies: check CONNECT live, add SOCKS5
+- explicit settings for certificate verification, timeouts and the redirect limit
 
-### 5.3 Контроль заголовков
-Флаг «подставлять заголовки профиля» и возможность задать свой порядок целиком.
-Пользователю нужен доступ к порядку, потому что анти-боты смотрят и на него.
+### 5.3 Header control
+A "substitute the profile's headers" flag and the ability to set your own order
+outright. The user needs access to the order because anti-bots look at it too.
 
-### 5.4 Асинхронный API ✅ выполнен, схема сменилась 2026-09-04
-`AsyncSession` поверх того же ядра. Вопрос «не блокировать loop» решён
-не `run_in_executor`, а запуском работы в горутине: Python получает номер
-и ждёт завершения одним потоком на процесс. Так ходят и запросы,
-и потоковое чтение, и WebSocket.
+### 5.4 The asynchronous API ✅ done, the scheme changed 2026-09-04
+`AsyncSession` over the same core. The "do not block the loop" question was answered
+not with `run_in_executor` but by running the work in a goroutine: Python gets a
+number and waits for completion on one thread per process. Requests, streaming reads
+and WebSocket all travel that way.
 
-### 5.5 Производительность
-Текущий FFI гоняет тело запроса и ответа JSON-строкой — это лишнее копирование
-и экранирование на каждый килобайт. Для тел нужен бинарный путь (указатель +
-длина). Мерить против curl_cffi, tls-client и httpcloak на одинаковой нагрузке.
+### 5.5 Performance
+The current FFI runs the request and response bodies as a JSON string — an extra copy
+and an escape per kilobyte. Bodies need a binary path (pointer + length). Measure
+against curl_cffi, tls-client and httpcloak under the same load.
 
 ### 5.6 HTTP/3
-Самый тяжёлый пункт: нужен QUIC-стек с подменой ClientHello
-(`bogdanfinn/quic-go-utls`), плюс отпечаток уровня QUIC — transport parameters
-и их порядок, QPACK, GREASE-кадры. Схема профиля под это уже размечена
-в [PROFILE-SCHEMA.md](docs/PROFILE-SCHEMA.md), реализации нет.
+The heaviest item: a QUIC stack with ClientHello substitution
+(`bogdanfinn/quic-go-utls`) is needed, plus the QUIC-level fingerprint — the
+transport parameters and their order, QPACK, the GREASE frames. The profile schema is
+already marked up for it in [PROFILE-SCHEMA.md](docs/PROFILE-SCHEMA.md); the
+implementation is not there.
 
 ---
 
-# Дальнейший план
+# The plan from here
 
-Зафиксирован 2026-09-01, после закрытия прокси, multipart и стриминга.
+Fixed on 2026-09-01, after proxies, multipart and streaming were closed.
 
-Порядок обоснован так: сначала то, без чего профили тихо протухают, затем
-расширение охвата, затем дистрибуция.
+The order is justified like this: first the things without which the profiles go
+stale silently, then widening the coverage, then distribution.
 
-## Этап 6 — инструменты ✅ выполнен 2026-09-01
+## Stage 6 — the tools ✅ done 2026-09-01
 
-`curlpro validate` прогоняет все 44 профиля через оракула и сверяет отпечаток
-с записанным эталоном. Первый же прогон нашёл два **полностью нерабочих**
-профиля (`chrome-119-macos`, `chrome-120-macos`: пустой PSK ронял рукопожатие)
-и выяснил, что у двух других JA4 законно колеблется из-за `padding`.
+`curlpro validate` runs all 44 profiles through the oracle and checks the fingerprint
+against the recorded reference. The very first run found two **completely broken**
+profiles (`chrome-119-macos`, `chrome-120-macos`: an empty PSK brought the handshake
+down) and established that for two others the JA4 legitimately fluctuates because of
+`padding`.
 
-`curlpro diff` показал, что Chrome 133 и 150 различаются ровно двумя полями —
-подтверждение дельта-модели.
+`curlpro diff` showed that Chrome 133 and 150 differ in exactly two fields — a
+confirmation of the delta model.
 
-`curlpro capture` свёл снятие эталона к одной команде. Проверено сквозным
-прогоном: Chrome 151, снятый заново, совпал с профилем, собранным вручную
-на этапе 0, вплоть до JA4.
+`curlpro capture` reduced taking a reference to a single command. Checked end to end:
+Chrome 151, captured afresh, matched the profile assembled by hand in stage 0 down to
+the JA4.
 
-Подробности — [docs/STAGE6-RESULTS.md](docs/STAGE6-RESULTS.md).
+The details — [docs/STAGE6-RESULTS.md](docs/STAGE6-RESULTS.md).
 
-## Этап 7 — HTTP/3 ✅ выполнен 2026-09-01
+## Stage 7 — HTTP/3 ✅ done 2026-09-01
 
-**Сделано 2026-09-01.** Оба слоя приведены к Chrome.
+**Done on 2026-09-01.** Both layers are brought in line with Chrome.
 
-**H3-слой** — вендоринг `uquic/http3` в [internal/h3](internal/h3/) с правками.
-На `quic.browserleaks.com/fp` результат **байт-в-байт как Chrome 144**, стабильно:
+**The H3 layer** — `uquic/http3` vendored into [internal/h3](internal/h3/) with
+changes. On `quic.browserleaks.com/fp` the result is **byte-for-byte the same as
+Chrome 144**, stably:
 
 ```
 1:65536;6:262144;7:100;51:1;GREASE|GREASE|984832|m,a,s,p
 ```
 
-**QUIC-слой** — правка transport parameters через `ClientHelloSpec`
-([internal/profile/quic.go](internal/profile/quic.go)), без патча uquic.
-Из 13 параметров **12 совпадают с Chrome**; тринадцатый — порядок
-в version_information, где utls и curl-impersonate противоречат друг другу,
-поэтому вынесен в настройку профиля.
+**The QUIC layer** — the transport parameters changed through `ClientHelloSpec`
+([internal/profile/quic.go](internal/profile/quic.go)), with no patch to uquic. Of
+the 13 parameters **12 match Chrome**; the thirteenth is the order in
+version_information, where utls and curl-impersonate contradict each other, so it was
+moved into a profile setting.
 
-**Связано с профилями.** В схеме появились секции `http3` и `quic`,
-`chrome-151-windows` их заполняет, `client.Session` умеет ходить по QUIC
-(`Options.HTTP3`). Сквозная проверка — 5 запросов из 5 совпали с Chrome.
+**Tied to the profiles.** The schema gained the `http3` and `quic` sections,
+`chrome-151-windows` fills them in, and `client.Session` can travel over QUIC
+(`Options.HTTP3`). The end-to-end check: 5 requests out of 5 matched Chrome.
 
-Попутно закрыты две гонки (управляющий поток уходил параллельно запросу;
-PRIORITY_UPDATE отправлялся один раз вместо каждого запроса) и добавлена
-распаковка ответов: профиль объявляет `br` и `zstd`, а их никто не распаковывал.
+Two races were closed along the way (the control stream went out in parallel with the
+request; PRIORITY_UPDATE was sent once instead of per request) and response
+decompression was added: the profile announces `br` and `zstd` and nobody was
+decompressing them.
 
-**Осталось:** динамическая таблица QPACK (мы объявляем ёмкость, которую
-не поддерживаем) и разрешение последнего разногласия захватом.
+**What is left:** the QPACK dynamic table (we announce a capacity we do not support)
+and settling the last disagreement with a capture.
 
-HTTP/3 **работает**: `cmd/h3probe` устанавливает соединение и получает ответ
-через uquic. Отпечаток при этом ещё не Chrome — точная диагностика в
+HTTP/3 **works**: `cmd/h3probe` establishes a connection and gets a response through
+uquic. The fingerprint at that point is not yet Chrome's — the precise diagnosis is in
 [docs/HTTP3-RESEARCH.md](docs/HTTP3-RESEARCH.md).
 
-Итог замера против `fp.impersonate.pro/api/http3` (единственный оракул,
-отдающий разобранные transport parameters):
+The result of measuring against `fp.impersonate.pro/api/http3` (the only oracle that
+returns parsed transport parameters):
 
-- **QUIC-слой почти готов** — все значения совпадают с Chrome. Расходятся три
-  вещи: `12584` = `"10AF"` вместо `"ORIG"`, лишний `12583`, и главное —
-  version_information с устаревшим черновым ID `16741339` вместо `0x11`.
-- **H3-слой не совпадает ничем** — SETTINGS, порядок псевдо-заголовков,
-  GREASE-кадр, PRIORITY_UPDATE.
+- **the QUIC layer is nearly ready** — every value matches Chrome. Three things
+  diverge: `12584` = `"10AF"` instead of `"ORIG"`, a superfluous `12583`, and above
+  all version_information with the stale draft ID `16741339` instead of `0x11`.
+- **the H3 layer matches in nothing** — the SETTINGS, the pseudo-header order, the
+  GREASE frame, PRIORITY_UPDATE.
 
-### 7.1 Вендоринг пакета http3 ✅ выполнено
+### 7.1 Vendoring the http3 package ✅ done
 
-Заодно исправлено то, что у bogdanfinn открыто багом
-([#264](https://github.com/bogdanfinn/tls-client/issues/264)): порядок обычных
-заголовков в H3 брался из итерации по map.
+Along the way this fixed what is an open bug at bogdanfinn's
+([#264](https://github.com/bogdanfinn/tls-client/issues/264)): the order of the
+ordinary headers in H3 came from iterating a map.
 
-Отдельный вывод: перейти на fhttp ради его `HeaderOrderKey` не вышло — он
-построен поверх другого форка utls, типы несовместимы. Служебные ключи
-объявлены свои, что заодно избавило от второго форка utls в зависимостях.
+A separate conclusion: moving to fhttp for its `HeaderOrderKey` did not work out — it
+is built over a different utls fork and the types are incompatible. Sentinel keys of
+our own are declared instead, which also spared us a second utls fork in the
+dependencies.
 
-### 7.2 Схема профиля и импорт
+### 7.2 The profile schema and the import
 
-Принять формат `perk` (`SETTINGS|псевдо|transport params|длины CID`), чтобы
-напрямую импортировать четыре известные строки из curl-impersonate.
+Adopt the `perk` format (`SETTINGS|pseudo|transport params|CID lengths`) so that the
+four known strings from curl-impersonate can be imported directly.
 
-### 7.3 Разрешить последнее разногласие захватом ✅ выполнено 2026-09-03
+### 7.3 Settle the last disagreement with a capture ✅ done 2026-09-03
 
-`12583` и `12584` разрешены в пользу httpcloak и Chromium-дефолта. Порядок
-в version_information разрешён собственным захватом: `cmd/quiccapture` снял
-три соединения Chrome 152 и показал, что **позиция GREASE случайна** — в одном
-сэмпле `1,GREASE`, в двух `GREASE,1`. Правы обе стороны спора, каждая видела
-один захват. Теперь порядок разыгрывается на каждое соединение, а
-`grease_version_first` фиксирует его, если понадобится.
+`12583` and `12584` were settled in favour of httpcloak and the Chromium default. The
+order in version_information was settled by a capture of our own: `cmd/quiccapture`
+took three Chrome 152 connections and showed that **the GREASE position is random** —
+`1,GREASE` in one sample, `GREASE,1` in two. Both sides of the argument are right;
+each had seen one capture. The order is now drawn per connection, and
+`grease_version_first` pins it if that is ever needed.
 
-Тем же захватом подтверждены `google_connection_options: "ORIG"`, отсутствие
-`google_initial_rtt`, пустой SCID при DCID 8 байт, две Initial-датаграммы
-по 1230 байт и номер первого пакета 1. Подробности — [STAGE15](docs/STAGE15-RESULTS.md).
+The same capture confirmed `google_connection_options: "ORIG"`, the absence of
+`google_initial_rtt`, an empty SCID with an 8-byte DCID, two 1230-byte Initial
+datagrams and a first packet number of 1. The details — [STAGE15](docs/STAGE15-RESULTS.md).
 
-## Этап 8 — CI и дистрибуция ✅ выполнен 2026-09-05
+## Stage 8 — CI and distribution ✅ done 2026-09-05
 
-Три рабочих процесса в `.github/workflows/`: тесты на push, валидация профилей
-**по расписанию** (протухают они не от коммитов), колёса под пять платформ
-по тегу. Профили едут внутри колеса, `ensure_loaded()` подхватывает их сам.
+Three workflows in `.github/workflows/`: tests on push, profile validation **on a
+schedule** (they go stale from something other than commits), wheels for five
+platforms on a tag. The profiles travel inside the wheel and `ensure_loaded()` picks
+them up by itself.
 
-Проверено локально: колесо ставится в чистый venv, находит 44 профиля
-и отдаёт верный JA4. Подробности — [docs/STAGE8-RESULTS.md](docs/STAGE8-RESULTS.md).
+Checked locally: the wheel installs into a clean venv, finds 44 profiles and returns
+the right JA4. The details — [docs/STAGE8-RESULTS.md](docs/STAGE8-RESULTS.md).
 
-Эталоны `reference/baselines/` сняты с `tls.browserleaks.com` 2026-09-03 для
-всех 45 профилей — без них проверка по расписанию падала на первом же шаге.
-Версия Go в рабочих процессах поднята до 1.27: со стоявшей там 1.24 модуль
-не собирается вовсе.
+The `reference/baselines/` references were taken from `tls.browserleaks.com` on
+2026-09-03 for all 45 profiles — without them the scheduled check failed at the very
+first step. The Go version in the workflows was raised to 1.27: with the 1.24 that was
+there the module does not build at all.
 
-Репозиторий опубликован 2026-09-04 — github.com/int3re/curlpro под Apache 2.0,
-и рабочие процессы GitHub с этого момента запускаются на нём впервые.
+The repository was published on 2026-09-04 — github.com/int3re/curlpro under Apache
+2.0 — and the GitHub workflows run on it for the first time from that point.
 
-Выпуск **0.2.0 состоялся 2026-09-05**: пять колёс и исходный архив на
-[PyPI](https://pypi.org/project/curlpro/) и на
-[странице релиза](https://github.com/int3re/curlpro/releases/tag/v0.2.0),
-публикация доверенным способом с подтверждением окружения. Порядок и грабли —
-в [docs/RELEASE.md](docs/RELEASE.md).
+Release **0.2.0 happened on 2026-09-05**: five wheels and a source archive on
+[PyPI](https://pypi.org/project/curlpro/) and on the
+[release page](https://github.com/int3re/curlpro/releases/tag/v0.2.0), published the
+trusted way with an environment approval. The order of operations and the rakes — in
+[docs/RELEASE.md](docs/RELEASE.md).
 
-## Этап 15 — закрытие долгов ✅ выполнен 2026-09-03
+## Stage 15 — closing debts ✅ done 2026-09-03
 
-Закрыты пункт 7.3, QPACK, GOAWAY и четыре долга по заголовкам — все замером,
-а не рассуждением. Инструменты: `cmd/quiccapture` (расшифровка QUIC Initial
-живого браузера) и сервер захвата сырых заголовков из этапа 14, прогнанный
-по Chrome 152, Edge и Firefox 154.
+Item 7.3, QPACK, GOAWAY and four header debts were closed — all by measurement rather
+than by reasoning. The tools: `cmd/quiccapture` (decrypting a live browser's QUIC
+Initial) and the raw-header capture server from stage 14, run against Chrome 152, Edge
+and Firefox 154.
 
-Главное: у профиля появился второй набор заголовков — `fetch`. Кастомный
-заголовок в браузере бывает только у fetch/XHR, а набор у них другой целиком,
-поэтому запрос с ним поверх навигационного был аномален при любом якоре.
-Ещё: `http1.order` задаёт и набор (Chrome не шлёт `priority` на HTTP/1.1,
-Firefox — `TE`), появилась поддержка динамической таблицы QPACK, а порядок
-в `version_information` оказался случайным — этим и разрешился спор utls
-с curl-impersonate.
+The main thing: the profile gained a second header set, `fetch`. A custom header in a
+browser only ever appears on fetch/XHR, and their set is different in its entirety, so
+a request carrying one on top of the navigation set was anomalous under any anchor.
+Also: `http1.order` sets the set as well (Chrome does not send `priority` on
+HTTP/1.1, Firefox does not send `TE`), support for the QPACK dynamic table appeared,
+and the order in `version_information` turned out to be random — which is what settled
+the utls-versus-curl-impersonate argument.
 
-Подробности — [docs/STAGE15-RESULTS.md](docs/STAGE15-RESULTS.md).
+The details — [docs/STAGE15-RESULTS.md](docs/STAGE15-RESULTS.md).
 
-## Этап 16 — оставшиеся долги и keep-alive ✅ выполнен 2026-09-03
+## Stage 16 — the remaining debts and keep-alive ✅ done 2026-09-03
 
-Закрыты долги, оставшиеся после этапа 15, и добавлена опция `keep_alive`
-у сессии. Переиспользование соединений работало и до этого — замер показал
-одно соединение на пять запросов, — не хватало выключателя.
+The debts left over after stage 15 were closed and a `keep_alive` option was added to
+the session. Connection reuse worked before this too — a measurement showed one
+connection for five requests — what was missing was the switch.
 
-Появился стенд `cmd/hcapture`: TLS с ALPN `h2` и QUIC с ALPN `h3` на одном
-адресе, разбор HEADERS вручную. Порядок заголовков HTTP/3 впервые стало чем
-наблюдать, и первый же замер нашёл расхождение: `Content-Length` уходил
-последним, тогда как Chrome шлёт его первым в наборе fetch.
+The `cmd/hcapture` stand appeared: TLS with ALPN `h2` and QUIC with ALPN `h3` on one
+address, HEADERS parsed by hand. The HTTP/3 header order became observable for the
+first time, and the very first measurement found a divergence: `Content-Length` went
+out last for us while Chrome sends it first in the fetch set.
 
-Ещё: CONNECT больше не несёт `Proxy-Authorization` без спроса (Chrome шлёт
-его только после 407), `permessage-deflate` сжимает и при окне меньше
-32 КиБ, а два профиля корпуса оказались нерабочими — `pre_shared_key`
-на свежем соединении.
+Also: CONNECT no longer carries `Proxy-Authorization` unasked (Chrome sends it only
+after a 407), `permessage-deflate` compresses with a window smaller than 32 KiB too,
+and two corpus profiles turned out to be broken — `pre_shared_key` on a fresh
+connection.
 
-Подробности — [docs/STAGE16-RESULTS.md](docs/STAGE16-RESULTS.md).
+The details — [docs/STAGE16-RESULTS.md](docs/STAGE16-RESULTS.md).
 
-## Этап 17 — предел на соединение, асинхронные потоки, cookies.txt ✅ выполнен 2026-09-04
+## Stage 17 — the per-connection limit, asynchronous streams, cookies.txt ✅ done 2026-09-04
 
-Три пункта из списка «что осталось»:
+Three items from the "what is left" list:
 
-1. **`timeout=(соединение, всего)`** — как в requests, с одной оговоркой:
-   второй элемент у нас ограничивает запрос целиком, а не тишину между
-   байтами. Предел покрывает разрешение имени, TCP и рукопожатие TLS; первая
-   реализация ограничивала только TCP, и молчащий после `accept` узел съедал
-   весь бюджет — тест на это и завёл правку в рукопожатие.
-2. **Потоковое чтение и WebSocket в `AsyncSession`** — раньше их там просто
-   не было, а пул потоков на 32 задачи был потолком. Теперь у открытия
-   потока, чтения части тела, рукопожатия сокета, приёма и отправки есть
-   асинхронные близнецы в ядре; пул удалён.
-3. **Netscape `cookies.txt`** — читается и пишется формат `curl -c`, wget
-   и расширений браузера; `load_file` узнаёт его по содержимому.
+1. **`timeout=(connect, total)`** — as in requests, with one caveat: our second
+   element limits the request as a whole rather than the silence between bytes. The
+   limit covers name resolution, TCP and the TLS handshake; the first implementation
+   limited TCP only, and a peer that went silent after `accept` ate the whole budget —
+   the test for that is what drove the fix into the handshake.
+2. **Streaming reads and WebSocket in `AsyncSession`** — they simply were not there
+   before, and a 32-task thread pool was the ceiling. Now opening a stream, reading a
+   chunk of the body, the socket handshake, receiving and sending all have
+   asynchronous twins in the core; the pool is gone.
+3. **Netscape `cookies.txt`** — the format of `curl -c`, wget and the browser
+   extensions is read and written; `load_file` recognises it by its content.
 
-Попутно найдены и закрыты два дефекта, оба замером:
+Two defects were found and closed along the way, both by measurement:
 
-- **результат мог обогнать ожидающего** ([python/curlpro/_completions.py](python/curlpro/_completions.py)):
-  работа запускается и регистрируется двумя шагами, а чтение части тела
-  успевает закончиться между ними — приёмник выбрасывал такой результат,
-  и задача висела вечно. Ловилось на 24 одновременных чтениях;
-- **конфигурация сокета читалась уже в горутине** ([lib/websocket.go](lib/websocket.go)):
-  указатель на память Python к тому моменту протухал, и в разбор JSON
-  приходил мусор. Теперь разбор идёт до запуска.
+- **the result could outrun the waiter** ([python/curlpro/_completions.py](python/curlpro/_completions.py)):
+  the work is started and registered in two steps, and a chunk read manages to finish
+  between them — the receiver threw such a result away and the task hung forever.
+  Caught with 24 concurrent reads;
+- **the socket configuration was read inside the goroutine already** ([lib/websocket.go](lib/websocket.go)):
+  by that point the pointer into Python's memory had gone stale and the JSON parser
+  got garbage. The parsing now happens before the launch.
 
-ABI поднят до 0.9.0.
+The ABI was raised to 0.9.0.
 
-## Этап 18 — протокол и заголовки профиля на запрос ✅ выполнен 2026-09-04
+## Stage 18 — the protocol and the profile headers per request ✅ done 2026-09-04
 
-`protocol="http1" | "h2" | "h3"` (принимаются и `1.1`, `2`, `3`) выбирает
-транспорт для одного запроса; указание сильнее и опций сессии, и перехода
-по Alt-Svc. Замер против cloudflare-quic.com в одной сессии: `HTTP/2.0`,
-затем `HTTP/3.0` по Alt-Svc, затем `HTTP/2.0` с `protocol="h2"`, `HTTP/1.1`
-с `protocol=1.1` и снова `HTTP/3.0` с `protocol=3`.
+`protocol="http1" | "h2" | "h3"` (`1.1`, `2` and `3` are accepted too) picks the
+transport for one request; it outweighs both the session's options and an Alt-Svc
+switch. A measurement against cloudflare-quic.com within one session: `HTTP/2.0`, then
+`HTTP/3.0` over Alt-Svc, then `HTTP/2.0` with `protocol="h2"`, `HTTP/1.1` with
+`protocol=1.1` and `HTTP/3.0` again with `protocol=3`.
 
-`h2` при этом не урезает ALPN до одного значения — такого списка не шлёт
-ни один браузер, — а падает с ошибкой, если сервер согласовал http/1.1.
-Ошибка помечена как неповторяемая: со второй попытки будет то же самое.
+`h2` does not trim ALPN down to a single value while doing so — no browser sends such
+a list — but fails with an error if the server negotiated http/1.1. The error is
+marked non-retryable: a second attempt would give the same thing.
 
-`default_headers` стал трёхзначным на запрос: раньше запрос умел только
-выключать заголовки профиля, а вернуть их сессии, отключившей их целиком,
-было нечем. Поле FFI `no_default_headers` (bool) заменено на
-`default_headers` (указатель), ABI поднят до 0.10.0.
+`default_headers` became three-valued per request: previously a request could only
+switch the profile's headers off, and there was no way to give them back to a session
+that had turned them off wholesale. The FFI field `no_default_headers` (bool) was
+replaced by `default_headers` (a pointer), and the ABI was raised to 0.10.0.
 
-## Этап 19 — память сессии, ожидания и хук ошибки ✅ выполнен 2026-09-05
+## Stage 19 — session memory, expectations and the error hook ✅ done 2026-09-05
 
-Пять пунктов, которых не хватало против интерфейса BAS-подобных инструментов:
+Five items that were missing against the interface of BAS-like tools:
 
-1. **`cookies=False`** на запрос — банка не участвует ни в отправке, ни
-   в записи. `cookies=True` на сессии без банки отвергается ошибкой.
-2. **`session_headers=False`** — заголовки, добавленные сессии, не уходят;
-   профильные остаются (ими управляет `default_headers`).
-3. **`rollback_cookies=True`** и `s.cookies.transaction()` — откат банки, если
-   запрос или блок не удался. Снимок снимается до отправки: после сбоя банка
-   уже изменена.
-4. **`Expect`** — проверки статуса, тела и заголовков «содержит / не содержит»,
-   «тело не пусто», «разбирается как JSON». Несовпадение поднимает
-   `ExpectationFailed` с указанием, что именно не сошлось.
-5. **Хук `on_error`** — вызывается на любом сбое запроса, может подменить
-   исключение. Отмена задачи и Ctrl+C через него не проходят: подмена
-   `CancelledError` остановила бы отмену.
+1. **`cookies=False`** per request — the jar takes part neither in the sending nor in
+   the recording. `cookies=True` on a session without a jar is rejected with an error.
+2. **`session_headers=False`** — the headers added to the session do not go out; the
+   profile's remain (those are governed by `default_headers`).
+3. **`rollback_cookies=True`** and `s.cookies.transaction()` — the jar is rolled back
+   if the request or the block failed. The snapshot is taken before sending: after a
+   failure the jar has already changed.
+4. **`Expect`** — checks on the status, the body and the headers, "contains / does not
+   contain", "the body is not empty", "parses as JSON". A mismatch raises
+   `ExpectationFailed` saying exactly what did not match.
+5. **The `on_error` hook** — called on any request failure, and it may substitute the
+   exception. Task cancellation and Ctrl+C do not pass through it: substituting a
+   `CancelledError` would stop the cancellation.
 
-ABI поднят до 0.11.0 (поля запроса `cookies` и `session_headers`).
+The ABI was raised to 0.11.0 (the request fields `cookies` and `session_headers`).
 
-## Отдельный список: накопленный долг
+## A separate list: the accumulated debt
 
-Ничего из этого не блокировало выпуск 0.2.0 и не блокирует работу. Список
-живой: строки со ✅ закрыты, остальные ждут — в основном замера на железе,
-которого нет под рукой.
+None of this blocked release 0.2.0 and none of it blocks the work. The list is live:
+the ✅ lines are closed, the rest are waiting — mostly on a measurement on hardware
+that is not at hand.
 
-| Долг | Почему важно |
+| The debt | Why it matters |
 |---|---|
-| ~~43 профиля не задают `stream_weight`~~ ✅ закрыто 2026-09-01 | значения проставлены по семействам: Chrome/Edge 256 exclusive, Firefox/Tor 42, Safari — не шлёт вовсе. Проверено покадровой разбивкой `fp.impersonate.pro`: у Chrome флаг `Priority (0x20)` есть, у Safari его нет |
-| ~~Профили не схлопнуты в цепочки `based_on`~~ ✅ закрыто 2026-09-01 | `curlpro collapse` свёл 20 профилей в дельты, размер каталога упал со 161 до 116 КБ. Все 44 отпечатка не изменились. Наглядный итог: вся разница между Chrome 98 и 110 — это `permute_extensions: true` |
-| ~~Отпечаток HTTP/1.1 не проверялся~~ ✅ закрыто 2026-09-01 | появилась секция профиля `http1` с порядком **и регистром**; проверяется локальным сервером сырых заголовков, потому что публичные оракулы имена нормализуют |
-| ~~Тело запроса не потоковое~~ ✅ закрыто 2026-09-01 | `body_file` отправляет файл потоком с явным `Content-Length` — без него транспорт ушёл бы в chunked, чего браузер не делает |
-| ~~TLS до `https://`-прокси~~ ✅ закрыто 2026-09-01 | канал до прокси шифруется; раньше CONNECT с логином уходил открытым текстом в TLS-порт |
-| ~~Дренаж тела перед повтором без лимита~~ ✅ закрыто 2026-09-01 | ограничен 2 КБ, как в `net/http` |
-| ~~h2: `GOAWAY` после обработки неотличим от `GOAWAY` до неё~~ ✅ закрыто 2026-09-03 | различие «запрос обработан» и «не обработан» введено явно: повтор неидемпотентного метода разрешён только при заведомо необработанном запросе (нет соединения, GOAWAY с меньшим last-stream-id, `REFUSED_STREAM`) |
-| ~~Пул соединений растёт без предела~~ ✅ закрыто 2026-09-01 | `MaxIdleConns` (64) и `IdleConnTimeout` (300 с, как у Chrome); заодно введена занятость соединения — HTTP/1.1 больше не портит открытый поток параллельным запросом |
-| ~~`cookie` добавляется в конец, а не в позицию профиля~~ ✅ закрыто 2026-09-02 | профиль объявляет `cookie` пустым слотом — позицией без значения; пользовательские заголовки встают перед якорем `custom_anchor`. Заодно найдено, что якорь работал только на HTTP/1.1, а HTTP/3 терял `SuppressHeaders` — см. STAGE13 |
-| ~~Позиция `Content-Length` не подтверждена замером~~ ✅ закрыто 2026-09-02 | замер Chromium 148: третий, сразу за `Connection`; `Content-Type` перед `User-Agent`, `Origin` после. Слоты внесены в профили Chrome/Edge (`http1.order` и `headers.order`), `Origin` библиотека добавляет сама на любой метод кроме GET/HEAD — см. STAGE14 |
-| ~~Слоты POST у Firefox не замерены~~ ✅ закрыто 2026-09-03 | замер Firefox 154: `Content-Type`, `Content-Length`, `Origin` после `Accept-Encoding`. Слоты внесены в профили Firefox и Tor — см. STAGE15 |
-| Кластер fetch при двух и более своих заголовках | Chromium раскладывает подсказки и свои заголовки функцией от набора имён (замер Chrome 152: три прогона — один результат). Профиль ставит их в одну позицию, что совпадает с браузером только при одном заголовке |
-| Слоты POST у Safari не замерены | браузера нет на машине замера; `Content-Length` у Safari по-прежнему уходит последним. Закрывается на macOS одним прогоном `cmd/hcapture` |
-| ~~`custom_anchor: accept-encoding` — догадка, а не замер~~ ✅ частично 2026-09-02 | замер Chromium 148: кастомные заголовки fetch/XHR идут в кластере рендерера перед `Accept`, не перед `accept-encoding`. Chrome/Edge переведены на якорь `accept`; Firefox/Safari остались с догадкой |
-| ~~Профиль-навигация не знает «fetch-режима»~~ ✅ закрыто 2026-09-03 | появилась секция профиля `fetch` со своим набором, порядком и якорем; режим выбирается автоматически по методу, типу тела и кастомным именам, либо задаётся явно (`mode=`). Замер Chrome 152 и Firefox 154 — см. STAGE15 |
-| ~~Рукопожатие WebSocket Firefox не замерено~~ ✅ закрыто 2026-09-03 | замер Firefox 154 совпал с шаблоном, записанным по известным захватам, имя в имя |
-| Рукопожатие WebSocket и набор fetch у Safari | браузера нет на машине замера: Safari получает RFC-минимум из кода и навигационный набор. Закрывается там же, где и слоты POST |
-| ~~`fetch.order` Chrome: `priority` не замерен~~ ✅ закрыто 2026-09-03 | замер Chrome 152 стендом `cmd/hcapture`: в наборе fetch `priority` есть, значение `u=1, i`, идёт последним. Заодно подтверждена позиция `cookie` — после `accept-language` — см. STAGE16 |
-| ~~CONNECT: `Proxy-Authorization` уходит сразу~~ ✅ закрыто 2026-09-03 | первый CONNECT уходит без учётных данных, повтор — после 407. Соединение переиспользуется, если прокси его держит, иначе открывается заново — см. STAGE16 |
-| ~~permessage-deflate: окно клиента меньше 32 КиБ~~ ✅ закрыто 2026-09-03 | при окне меньше стандартного компрессор берётся у `klauspost/compress`. Проверка со своим сервером: RSV1 плюс разбор `zlib` с `wbits=-9` — окном 32 КиБ такой поток не прочитать |
-| Профиль без секции `http1` — не долг, а свойство | у всех 47 профилей секция есть (своя или по `based_on`). Приближение кодом остаётся для профилей, зарегистрированных в рантайме из трёх полей: порядку там взяться неоткуда |
-| ~~Набор HTTP/1.1 считался равным HTTP/2~~ ✅ закрыто 2026-09-03 | замер: Chrome не шлёт `priority` на HTTP/1.1, Firefox — `TE`. При заданном `http1.order` он задаёт и набор, а не только порядок |
-| ~~«Новый Python + старая DLL» тихо игнорирует опции~~ ✅ закрыто 2026-09-02 | `curlpro_version` = `0.2.0`, `_ffi.py` сверяет `REQUIRED_VERSION` при загрузке. Проблема не теоретическая: на ней потерян час прогонов не того кода — см. STAGE13 |
-| ~~QPACK: объявляем ёмкость таблицы, но не поддерживаем~~ ✅ закрыто 2026-09-03 | свой декодер `internal/qpack` с динамической таблицей и блокированными потоками, сверен с примерами приложения B RFC 9204. `fp.impersonate.pro` теперь отвечает 5 раз из 5, было 1 из 5 |
-| Гонка в `fhttp` при закрытии HTTP/2 под нагрузкой | найдена 2026-09-05 тестом `TestConcurrentCloseDuringRequests` под `-race`: `handleResponse` присваивает `cs.bufPipe = pipe{…}` без мьютекса соединения (`fhttp@v0.6.8/http2/transport.go:2361`), а `closeForError` закрывает ту же трубу под ним (`:1096` → `http2/pipe.go:105`). Закрытие сессии, пока приходит ответ HTTP/2, пишет структуру из двух горутин; потерянное закрытие означает читателя, который дождётся только таймаута запроса. Синхронизировать это со своей стороны нечем — либо патч зависимости, либо ожидание запросов в полёте при `Close`, что меняет смысл «закрыть сейчас». Подтест под детектором пропускается, поведение без него проверено пятью прогонами |
-| ~~Три файла корпуса несогласованы~~ ✅ закрыто 2026-09-03 | разобраны по одному. `chrome-119-macos` и `chrome-120-macos` содержали `pre_shared_key` — расширение возобновления сессии, из-за которого профиль не поднимал соединение вовсе; заменено на `padding`. У `chrome-131-android` исправлен `sec-ch-ua-mobile` — было `?0` при мобильном UA — см. STAGE16 |
+| ~~43 profiles do not set `stream_weight`~~ ✅ closed 2026-09-01 | the values were filled in by family: Chrome/Edge 256 exclusive, Firefox/Tor 42, Safari — does not send it at all. Verified by a frame-by-frame breakdown of `fp.impersonate.pro`: Chrome has the `Priority (0x20)` flag, Safari does not |
+| ~~The profiles are not collapsed into `based_on` chains~~ ✅ closed 2026-09-01 | `curlpro collapse` reduced 20 profiles to deltas and the catalogue shrank from 161 to 116 KB. All 44 fingerprints were unchanged. The vivid result: the whole difference between Chrome 98 and 110 is `permute_extensions: true` |
+| ~~The HTTP/1.1 fingerprint was not checked~~ ✅ closed 2026-09-01 | a profile section `http1` appeared, with the order **and the case**; it is checked against a local raw-header server, because the public oracles normalise names |
+| ~~The request body is not streamed~~ ✅ closed 2026-09-01 | `body_file` sends a file as a stream with an explicit `Content-Length` — without it the transport would go chunked, which a browser does not do |
+| ~~TLS to an `https://` proxy~~ ✅ closed 2026-09-01 | the channel to the proxy is encrypted; previously a CONNECT with credentials went out in the clear to a TLS port |
+| ~~The body is drained before a retry without a limit~~ ✅ closed 2026-09-01 | limited to 2 KB, as in `net/http` |
+| ~~h2: a `GOAWAY` after processing is indistinguishable from one before it~~ ✅ closed 2026-09-03 | the distinction between "the request was processed" and "was not" is now made explicitly: retrying a non-idempotent method is allowed only when the request is known not to have been processed (no connection, a GOAWAY with a smaller last-stream-id, `REFUSED_STREAM`) |
+| ~~The connection pool grows without a limit~~ ✅ closed 2026-09-01 | `MaxIdleConns` (64) and `IdleConnTimeout` (300 s, as in Chrome); connection busyness was introduced at the same time — HTTP/1.1 no longer spoils an open stream with a parallel request |
+| ~~`cookie` is appended at the end rather than at the profile's position~~ ✅ closed 2026-09-02 | the profile declares `cookie` as an empty slot — a position without a value; the user's headers go in front of the `custom_anchor`. It was also found that the anchor worked on HTTP/1.1 only and that HTTP/3 lost `SuppressHeaders` — see STAGE13 |
+| ~~The position of `Content-Length` is not confirmed by measurement~~ ✅ closed 2026-09-02 | a Chromium 148 measurement: third, right after `Connection`; `Content-Type` before `User-Agent`, `Origin` after. The slots were entered into the Chrome/Edge profiles (`http1.order` and `headers.order`), and the library adds `Origin` itself on any method but GET/HEAD — see STAGE14 |
+| ~~Firefox's POST slots are not measured~~ ✅ closed 2026-09-03 | a Firefox 154 measurement: `Content-Type`, `Content-Length`, `Origin` after `Accept-Encoding`. The slots were entered into the Firefox and Tor profiles — see STAGE15 |
+| The fetch cluster with two or more headers of one's own | Chromium lays out the hints and one's own headers as a function of the set of names (a Chrome 152 measurement: three runs, one result). The profile puts them in a single position, which coincides with the browser only when there is one header |
+| Safari's POST slots are not measured | the browser is not on the measuring machine; Safari's `Content-Length` still goes out last. Closed on macOS with a single run of `cmd/hcapture` |
+| ~~`custom_anchor: accept-encoding` is a guess, not a measurement~~ ✅ partly 2026-09-02 | a Chromium 148 measurement: the custom fetch/XHR headers go in the renderer's cluster before `Accept`, not before `accept-encoding`. Chrome/Edge were moved to the `accept` anchor; Firefox/Safari kept the guess |
+| ~~The navigation profile does not know about a "fetch mode"~~ ✅ closed 2026-09-03 | a profile section `fetch` appeared with its own set, order and anchor; the mode is chosen automatically by the method, the body type and the custom names, or set explicitly (`mode=`). Measured on Chrome 152 and Firefox 154 — see STAGE15 |
+| ~~Firefox's WebSocket handshake is not measured~~ ✅ closed 2026-09-03 | a Firefox 154 measurement matched the template recorded from the known captures, name for name |
+| Safari's WebSocket handshake and fetch set | the browser is not on the measuring machine: Safari gets the RFC minimum from the code and the navigation set. Closed in the same place as the POST slots |
+| ~~Chrome's `fetch.order`: `priority` is not measured~~ ✅ closed 2026-09-03 | a Chrome 152 measurement with the `cmd/hcapture` stand: `priority` is in the fetch set, its value is `u=1, i`, and it goes last. The position of `cookie` was confirmed at the same time — after `accept-language` — see STAGE16 |
+| ~~CONNECT: `Proxy-Authorization` goes out immediately~~ ✅ closed 2026-09-03 | the first CONNECT goes out without credentials, the retry after a 407. The connection is reused if the proxy holds it, otherwise it is opened again — see STAGE16 |
+| ~~permessage-deflate: a client window smaller than 32 KiB~~ ✅ closed 2026-09-03 | with a window smaller than the standard one the compressor is taken from `klauspost/compress`. Checked against a server of our own: RSV1 plus parsing the `zlib` stream with `wbits=-9` — such a stream cannot be read with a 32 KiB window |
+| A profile without an `http1` section — not a debt but a property | all 47 profiles have the section (their own or through `based_on`). The code's approximation stays for the profiles registered at runtime out of three fields: there is nowhere for an order to come from there |
+| ~~The HTTP/1.1 set was assumed equal to the HTTP/2 one~~ ✅ closed 2026-09-03 | measured: Chrome does not send `priority` on HTTP/1.1, Firefox does not send `TE`. When `http1.order` is given it sets the set as well, not just the order |
+| ~~"A new Python with an old DLL" silently ignores options~~ ✅ closed 2026-09-02 | `curlpro_version` = `0.2.0`, and `_ffi.py` checks `REQUIRED_VERSION` at load. The problem is not theoretical: an hour of runs of the wrong code was lost to it — see STAGE13 |
+| ~~QPACK: we announce a table capacity we do not support~~ ✅ closed 2026-09-03 | a decoder of our own, `internal/qpack`, with a dynamic table and blocked streams, checked against the appendix B examples of RFC 9204. `fp.impersonate.pro` now answers 5 times out of 5, where it was 1 out of 5 |
+| A race in `fhttp` when closing HTTP/2 under load | found on 2026-09-05 by the test `TestConcurrentCloseDuringRequests` under `-race`: `handleResponse` assigns `cs.bufPipe = pipe{…}` without the connection mutex (`fhttp@v0.6.8/http2/transport.go:2361`) while `closeForError` closes that same pipe under it (`:1096` → `http2/pipe.go:105`). Closing the session while an HTTP/2 response is arriving writes the struct from two goroutines; a lost close means a reader that will only be released by the request timeout. There is nothing on our side to synchronise it with — either patch the dependency or wait for the requests in flight on `Close`, which changes what "close now" means. The subtest is skipped under the detector and the behaviour without it was checked over five runs |
+| ~~Three corpus files are inconsistent~~ ✅ closed 2026-09-03 | taken apart one by one. `chrome-119-macos` and `chrome-120-macos` contained `pre_shared_key` — the session-resumption extension, because of which the profile did not bring a connection up at all; replaced with `padding`. `chrome-131-android` had its `sec-ch-ua-mobile` fixed — it was `?0` under a mobile UA — see STAGE16 |
 
 ---
 
-## Этап 6 — инструменты обновления
+## Stage 6 — the update tools
 
-- `curlpro capture` — обёртка над стендом этапа 0: поднять echo-server, дождаться браузера,
-  собрать ≥5 сэмплов, нормализовать, выдать JSON-профиль
-- `curlpro validate` — реплей профиля против browserleaks, диф с ожидаемыми хешами
-- `curlpro diff <a> <b>` — что изменилось между версиями (поверх `utls.UTLSIdToSpec`)
+- `curlpro capture` — a wrapper over the stage-0 stand: bring up the echo server, wait
+  for the browser, gather ≥5 samples, normalise, emit a JSON profile
+- `curlpro validate` — replay a profile against browserleaks, diff against the expected
+  hashes
+- `curlpro diff <a> <b>` — what changed between versions (over `utls.UTLSIdToSpec`)
 
-**Результат:** добавление нового Chrome — одна команда плюс ревью дельты.
+**The result:** adding a new Chrome is one command plus a review of the delta.
 
-## Этап 6 — CI и дистрибуция
+## Stage 6 — CI and distribution
 
-- матрица: каждый профиль × валидация против browserleaks, на расписании (не только на push) —
-  профили протухают от изменений на стороне сервисов, а не от коммитов
-- сборка wheels: linux x86_64/aarch64 (manylinux), macOS x86_64/arm64, Windows x86_64
-- бинарник кладётся в wheel через `package-data`, как у httpcloak
+- the matrix: every profile × validation against browserleaks, on a schedule (not only
+  on push) — profiles go stale from changes on the services' side, not from commits
+- building the wheels: linux x86_64/aarch64 (manylinux), macOS x86_64/arm64,
+  Windows x86_64
+- the binary goes into the wheel through `package-data`, as in httpcloak
 
-**Результат:** `pip install curlpro` работает без Go на машине пользователя.
+**The result:** `pip install curlpro` works without Go on the user's machine.
 
 ---
 
-## Что осознанно не делаем
+## What we deliberately do not do
 
-- **не патчим curl и BoringSSL** — билд-система съест месяцы, а профили останутся в C
-- **не поддерживаем JS/DOM-отпечаток** — это уровень браузера, не HTTP-клиента.
-  Для задач, где нужен canvas/WebGL, ответ — Playwright, а не эта библиотека
-- **JA4S внутри продукта не считаем** без разбора лицензии — FoxIO License 1.1,
-  patent-pending, коммерческая монетизация требует OEM (сам JA4 для TLS — BSD-3,
-  свободен). ~~JA4H~~ реализован 2026-09-08 по решению мейнтейнера: лицензия
-  та же, обязательство возникает у выпускающего продукт, и об этом сказано
-  в коде, в README и в документации модуля — чтобы для него это не стало
-  сюрпризом
-- **не гонимся за Safari/iOS на старте** — другой стек, отдельная боль; Chrome-stable
-  покрывает большинство задач, а Edge/Brave/Opera используют тот же отпечаток
-  (различаются только `User-Agent` и `sec-ch-ua-platform`)
+- **we do not patch curl and BoringSSL** — the build system would eat months and the
+  profiles would stay in C
+- **we do not support the JS/DOM fingerprint** — that is the browser's level, not an
+  HTTP client's. For tasks that need canvas/WebGL the answer is Playwright, not this
+  library
+- **we do not compute JA4S inside the product** without going through the licence —
+  FoxIO License 1.1, patent-pending, commercial monetisation requires an OEM licence
+  (JA4 itself, for TLS, is BSD-3 and free). ~~JA4H~~ was implemented on 2026-09-08 by
+  the maintainer's decision: the licence is the same, the obligation arises for
+  whoever ships a product, and that is said in the code, in the README and in the
+  module's documentation — so that it does not come as a surprise to them
+- **we are not chasing Safari/iOS at the start** — a different stack, a separate pain;
+  Chrome-stable covers most tasks, and Edge/Brave/Opera use the same fingerprint (only
+  the `User-Agent` and `sec-ch-ua-platform` differ)
 
-## Риски
+## The risks
 
-| Риск | Смягчение |
+| The risk | The mitigation |
 |---|---|
-| Новый браузер приносит новый тип расширения → нужен Go-код | Частота ~раз в 6–12 мес. (ECH 119, zstd 123, Kyber 124, MLKEM 130, ML-DSA 150, trust_anchors 152). Приемлемо |
-| uTLS upstream не тегирует свежие parrot'ы | Пинить коммит master, следить за форком `sardanioss/utls` |
-| fhttp — форк форка, может застрять | Слой HTTP/2 изолировать за интерфейсом, чтобы можно было заменить |
-| Совпадение отпечатка ≠ прохождение анти-бота | Осознанная граница: JA4+JA4H скорятся вместе, плюс JA3S/JARM и поведенческий анализ. Мы закрываем сетевой слой, не весь стек |
+| A new browser brings a new extension type → Go code needed | The frequency is about once every 6–12 months (ECH 119, zstd 123, Kyber 124, MLKEM 130, ML-DSA 150, trust_anchors 152). Acceptable |
+| uTLS upstream does not tag the fresh parrots | Pin a master commit, watch the `sardanioss/utls` fork |
+| fhttp is a fork of a fork and may get stuck | Isolate the HTTP/2 layer behind an interface so that it can be replaced |
+| A matching fingerprint ≠ getting past an anti-bot | A deliberate boundary: JA4 and JA4H are scored together, plus JA3S/JARM and behavioural analysis. We close the network layer, not the whole stack |
