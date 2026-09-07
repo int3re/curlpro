@@ -1,34 +1,42 @@
-# Форматы отпечатков — точные спецификации
+# Fingerprint formats — the exact specifications
 
-Всё выверено по первоисточникам (FoxIO JA4 spec, реализация fingerproxy, доклад Akamai
-на Black Hat EU 2017). Значения — на 2026-08-31.
+All of this is checked against primary sources (the FoxIO JA4 spec, the
+fingerproxy implementation, the Akamai talk at Black Hat EU 2017). The values are
+as of 2026-08-31.
 
-## JA3 (устаревает, но нужен для совместимости)
+## JA3 (obsolescent, but needed for compatibility)
 
 ```
 JA3 = SSLVersion,Ciphers,Extensions,EllipticCurves,ECPointFormats   → MD5
 ```
 
-Кодирует: legacy handshake version, список шифров **в порядке отправки**, ID расширений
-**в порядке отправки**, `supported_groups`, `ec_point_formats`. GREASE вырезается.
+It encodes: the legacy handshake version, the cipher list **in send order**, the
+extension IDs **in send order**, `supported_groups` and `ec_point_formats`.
+GREASE is cut out.
 
-**Что теряется** (важно, если строить профиль из JA3 — а так делают многие конвертеры):
-- полезная нагрузка почти всех расширений: список ALPN (`["h2","http/1.1"]` и `["http/1.1"]`
-  дают одинаковый JA3), sigalgs и их порядок, `supported_versions`, группы и размеры
-  `key_share`, `psk_key_exchange_modes`, алгоритмы `compress_certificate`,
-  протоколы `application_settings` **и какой из двух кодпоинтов** (17513 против 17613),
-  `record_size_limit`, ECH config_id / cipher suite / длина payload, длина padding
-- **позиции GREASE** — где именно Chrome вставил GREASE (первый шифр, первая группа,
-  первый элемент supported_versions, первый key_share, расширения на позициях 0 и n−1)
-- список compression methods — не поле JA3 вообще
+**What is lost** (important if a profile is built from a JA3 — and many
+converters do exactly that):
 
-**Post-quantum делает потерю драматичной:** два ClientHello с одинаковым JA3 радикально
-различаются, если у одного в key_share есть `X25519MLKEM768` (0x11EC) — это ~1216 байт,
-которые выталкивают ClientHello за пределы одного TCP-сегмента. JA3 этого не видит.
+- the payload of almost every extension: the ALPN list (`["h2","http/1.1"]` and
+  `["http/1.1"]` give the same JA3), the sigalgs and their order,
+  `supported_versions`, the groups and sizes in `key_share`,
+  `psk_key_exchange_modes`, the `compress_certificate` algorithms, the
+  `application_settings` protocols **and which of the two codepoints** is used
+  (17513 versus 17613), `record_size_limit`, the ECH config_id / cipher suite /
+  payload length, the padding length
+- **the GREASE positions** — where exactly Chrome put GREASE (the first cipher,
+  the first group, the first element of supported_versions, the first key_share,
+  the extensions at positions 0 and n−1)
+- the compression-method list — not a JA3 field at all
 
-**JA3 нестабилен для современного Chrome.** С Chrome 110 расширения перемешиваются
-на каждое соединение. Пять подряд захватов дали 5 разных JA3 и 1 одинаковый JA4.
-Использовать JA3N (с сортировкой) или JA4.
+**Post-quantum makes the loss dramatic:** two ClientHellos with the same JA3
+differ radically if one has `X25519MLKEM768` (0x11EC) in its key_share — that is
+~1216 bytes, which push the ClientHello past a single TCP segment. JA3 does not
+see it.
+
+**JA3 is unstable for a modern Chrome.** Since Chrome 110 the extensions are
+shuffled on every connection. Five consecutive captures gave 5 different JA3
+values and 1 identical JA4. Use JA3N (sorted) or JA4.
 
 ## JA4
 
@@ -37,130 +45,148 @@ JA4 = JA4_a _ JA4_b _ JA4_c
     = t13d1516h2 _ 8daaf6152771 _ e5627efa2ab1
 ```
 
-### JA4_a — 10 символов
+### JA4_a — 10 characters
 
-| Поз | Поле | Правило |
+| Pos | Field | Rule |
 |---|---|---|
-| 1 | протокол | `q`=QUIC, `d`=DTLS, `t`=TLS/TCP |
-| 2–3 | версия TLS | `0x0304`→`13`, `0303`→`12`, `0302`→`11`, `0301`→`10`, `0300`→`s3`, иначе `00`. **Источник — максимальное не-GREASE значение из ext 0x002b (supported_versions)**; если его нет — Protocol Version из record. Handshake version игнорируется |
-| 4 | SNI | `d` если ext 0x0000 есть, иначе `i` |
-| 5–6 | число шифров | с ведущим нулём, максимум `99`. Без GREASE, **но со** SCSV (0x00FF, 0x5600) и 0xFE00–0xFEFF |
-| 7–8 | число расширений | те же правила; **включая** SNI и ALPN |
-| 9–10 | ALPN | первый и последний ASCII-алфавитно-цифровой символ **первого** значения ALPN. `h2`→`h2`, `http/1.1`→`h1`, нет ALPN→`00`. Один символ дублируется. Если первый/последний байт вне `0x30-39, 0x41-5A, 0x61-7A` — берутся первый и последний символы **шестнадцатеричного представления** |
+| 1 | protocol | `q`=QUIC, `d`=DTLS, `t`=TLS/TCP |
+| 2–3 | TLS version | `0x0304`→`13`, `0303`→`12`, `0302`→`11`, `0301`→`10`, `0300`→`s3`, otherwise `00`. **The source is the highest non-GREASE value from ext 0x002b (supported_versions)**; if absent, the Protocol Version from the record. The handshake version is ignored |
+| 4 | SNI | `d` if ext 0x0000 is present, otherwise `i` |
+| 5–6 | cipher count | with a leading zero, capped at `99`. Without GREASE, **but with** the SCSVs (0x00FF, 0x5600) and 0xFE00–0xFEFF |
+| 7–8 | extension count | the same rules; **including** SNI and ALPN |
+| 9–10 | ALPN | the first and last ASCII alphanumeric character of the **first** ALPN value. `h2`→`h2`, `http/1.1`→`h1`, no ALPN→`00`. A single character is doubled. If the first or last byte is outside `0x30-39, 0x41-5A, 0x61-7A`, the first and last characters of the **hexadecimal representation** are taken instead |
 
 ### JA4_b
-Шифры 4-символьным нижним hex, GREASE убран, **отсортированы лексикографически по hex**,
-через запятую, SHA256, первые 12 символов. Пустой список → `000000000000`
-(не хеш пустой строки).
+The ciphers as 4-character lowercase hex, GREASE removed, **sorted
+lexicographically by hex**, comma-separated, SHA256, first 12 characters. An
+empty list gives `000000000000` (not the hash of an empty string).
 
 ### JA4_c
-`{отсортированные расширения}_{sigalgs В ИСХОДНОМ ПОРЯДКЕ}`, SHA256, первые 12.
+`{sorted extensions}_{sigalgs IN THEIR ORIGINAL ORDER}`, SHA256, first 12.
 
-Расширения сортируются, **sigalgs — нет**. **SNI (0000) и ALPN (0010) удаляются** из списка —
-они уже учтены в JA4_a. Именно это делает JA4_c стабильным при смене домена/IP и ALPN.
-Нет sigalgs → нет завершающего подчёркивания.
+The extensions are sorted, **the sigalgs are not**. **SNI (0000) and ALPN (0010)
+are removed** from the list — they are already accounted for in JA4_a. That is
+what makes JA4_c stable across a change of domain or of ALPN. No sigalgs means no
+trailing underscore.
 
-### Варианты
-- `JA4_r` — списки инлайн вместо хешей, отсортированные
-- `JA4_ro` — исходный порядок, GREASE убран, **SNI и ALPN включены**. При использовании
-  флага `-o` поле обязано называться `ja4_o`
+### Variants
+- `JA4_r` — the lists inline instead of hashed, sorted
+- `JA4_ro` — the original order, GREASE removed, **SNI and ALPN included**. When
+  the `-o` flag is used the field must be called `ja4_o`
 
-### Почему JA4 > JA3
-Порядок расширений сортируется → устойчив к перемешиванию Chrome 110+ (эмпирика: 5 JA3
-против 1 JA4 на пяти захватах). ALPN попадает в JA4_a, разделяя HTTP/2 и HTTP/1-клиентов.
-Sigalgs попадают в JA4_c. Части a/b/c ищутся независимо — возможен частичный матч по `a_b`.
+### Why JA4 beats JA3
+The extension order is sorted, so it survives the shuffling of Chrome 110+
+(empirically: 5 JA3 values against 1 JA4 over five captures). ALPN moves into
+JA4_a, separating HTTP/2 clients from HTTP/1 ones. The sigalgs move into JA4_c.
+The a/b/c parts are searchable independently — a partial match on `a_b` is
+possible.
 
-## JA4H (HTTP-клиент)
+## JA4H (the HTTP client)
 
 ```
 JA4H = {method}{version}{cookie}{referer}{nn}{lang} _ {hash_b} _ {hash_c} _ {hash_d}
 ```
-- `method` — первые 2 символа метода в нижнем регистре (`ge`, `po`)
-- `version` — `20` для h2, иначе `11`/`10`
-- `cookie` — `c` если есть Cookie, иначе `n`; `referer` — `r`/`n`
-- `nn` — число заголовков, **исключая Cookie, Referer и все псевдо-заголовки**, максимум 99
-- `lang` — Accept-Language: дефисы убраны, `;`→`,`, нижний регистр, первое значение,
-  **первые 4 символа с добивкой нулями справа** (`en-US,en;q=0.9` → `enus`); нет → `0000`
-- `_b` = SHA256(имена заголовков в порядке отправки, через запятую), 12 символов
-- `_c` = SHA256(**имена** cookie, отсортированные), 12; `000000000000` если cookie нет
-- `_d` = SHA256(пары `name=value`, отсортированные по имени), 12
+- `method` — the first 2 characters of the method, lowercased (`ge`, `po`)
+- `version` — `20` for h2, otherwise `11`/`10`
+- `cookie` — `c` if a Cookie is present, otherwise `n`; `referer` — `r`/`n`
+- `nn` — the header count, **excluding Cookie, Referer and every pseudo-header**,
+  capped at 99
+- `lang` — Accept-Language: hyphens removed, `;`→`,`, lowercased, the first value,
+  **the first 4 characters padded with zeros on the right** (`en-US,en;q=0.9` →
+  `enus`); none → `0000`
+- `_b` = SHA256(the header names in send order, comma-separated), 12 characters
+- `_c` = SHA256(the cookie **names**, sorted), 12; `000000000000` if there are no
+  cookies
+- `_d` = SHA256(the `name=value` pairs, sorted by name), 12
 
 ## Akamai HTTP/2
 
-Формат: `SETTINGS | WINDOW_UPDATE | PRIORITY | PSEUDO_HEADER_ORDER`
+The format: `SETTINGS | WINDOW_UPDATE | PRIORITY | PSEUDO_HEADER_ORDER`
 
-1. **SETTINGS** — пары `ID:Value` через **точку с запятой**, **в порядке отправки** (не отсортированные)
-2. **WINDOW_UPDATE** — инкремент connection-level WINDOW_UPDATE.
-   ⚠ Сериализуется как `%02d`: **отсутствие даёт `00`, а не `0`**. Отсюда `|00|` у browserleaks.
-   Часть реализаций пишет пустую строку — реальное расхождение между инструментами.
-3. **PRIORITY** — кортежи `StreamID:Exclusive:DepStreamID:Weight` через запятую; литерал `0` если нет.
-   ⚠ **Weight = значение_с_провода + 1** (RFC 7540: «add one to obtain a weight between 1 and 256»).
-   Самая частая ошибка в реализациях.
-4. **Порядок псевдо-заголовков** — **первая буква после двоеточия**, в порядке отправки, через запятую:
-   `m`=`:method`, `a`=`:authority`, `s`=`:scheme`, `p`=`:path`. Обычные заголовки пропускаются.
+1. **SETTINGS** — `ID:Value` pairs separated by **semicolons**, **in send order**
+   (not sorted)
+2. **WINDOW_UPDATE** — the connection-level WINDOW_UPDATE increment.
+   ⚠ It serialises as `%02d`: **an absent one gives `00`, not `0`**. Hence the
+   `|00|` at browserleaks. Some implementations write an empty string there — a
+   real disagreement between tools.
+3. **PRIORITY** — `StreamID:Exclusive:DepStreamID:Weight` tuples, comma-separated;
+   the literal `0` if there are none.
+   ⚠ **Weight = wire_value + 1** (RFC 7540: "add one to obtain a weight between 1
+   and 256"). The commonest mistake in implementations.
+4. **The pseudo-header order** — **the first letter after the colon**, in send
+   order, comma-separated: `m`=`:method`, `a`=`:authority`, `s`=`:scheme`,
+   `p`=`:path`. Ordinary headers are skipped.
 
-Существуют расширенные 6-секционные варианты, но канонической является 4-секционная форма —
-её используют browserleaks, scrapfly, peet, fingerproxy и curl-impersonate.
+Extended six-section variants exist, but the canonical form is the four-section
+one — used by browserleaks, scrapfly, peet, fingerproxy and curl-impersonate.
 
-## Текущие значения
+## Current values
 
-### Chrome 150 / 133 (байт-в-байт одинаковы)
+### Chrome 150 / 133 (byte-for-byte identical)
 ```
 1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p
 akamai_hash: 52d84b11737d980aef856699f885ca86
 ```
 `HEADER_TABLE_SIZE=65536`, `ENABLE_PUSH=0`, `INITIAL_WINDOW_SIZE=6291456`,
-`MAX_HEADER_LIST_SIZE=262144`; WINDOW_UPDATE `+15663105` (= 15 МБ − 65535);
-PRIORITY нет; порядок `m,a,s,p`.
+`MAX_HEADER_LIST_SIZE=262144`; WINDOW_UPDATE `+15663105` (= 15 MB − 65535); no
+PRIORITY; the order `m,a,s,p`.
 
-Chrome ≤119 дополнительно слал `3:1000` (MAX_CONCURRENT_STREAMS).
+Chrome ≤119 additionally sent `3:1000` (MAX_CONCURRENT_STREAMS).
 
-⚠ Открытый вопрос: issue #260 в tls-client утверждает, что реальный Chrome шлёт
-GREASE-запись в SETTINGS (`…;6:262144;GREASE|15663105|0|m,a,s,p`), но мейнтейнер
-не смог воспроизвести на peet. **Проверить самостоятельно при первом захвате.**
+⚠ An open question: issue #260 in tls-client claims that a real Chrome sends a
+GREASE entry in SETTINGS (`…;6:262144;GREASE|15663105|0|m,a,s,p`), but the
+maintainer could not reproduce it on peet. **Check this independently at the
+first capture.**
 
 ### Firefox 144
 ```
 1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s
 ```
-Отличия, которые легко пропустить: присутствует `MAX_FRAME_SIZE=16384`, окно сильно меньше,
-другой WINDOW_UPDATE, **порядок `m,p,a,s`**, первый HEADERS на **stream_id 15**
-(Chrome и Safari используют 1), присутствует заголовок `te: trailers`.
+The differences that are easy to miss: `MAX_FRAME_SIZE=16384` is present, the
+window is much smaller, the WINDOW_UPDATE differs, **the order is `m,p,a,s`**, the
+first HEADERS is on **stream_id 15** (Chrome and Safari use 1), and a `te:
+trailers` header is present.
 
 ### Safari 26
-Шлёт **второй пустой SETTINGS-кадр** после WINDOW_UPDATE, ключи `2,3,4,9`
-(`NO_RFC7540_PRIORITIES=1`), порядок `m,s,a,p`.
+Sends a **second, empty SETTINGS frame** after the WINDOW_UPDATE, with the keys
+`2,3,4,9` (`NO_RFC7540_PRIORITIES=1`), and the order `m,s,a,p`.
 
-### Сигнатурные алгоритмы Chrome 150+
-Список возглавляют ML-DSA: `0x0904, 0x0905, 0x0906` (= 2308, 2309, 2310) —
-ML-DSA-44/65/87. Подтверждено независимо в четырёх проектах (curl-impersonate YAML,
-tls-client Chrome_150, primp, httpcloak chrome-152).
+### The signature algorithms of Chrome 150+
+The list is led by ML-DSA: `0x0904, 0x0905, 0x0906` (= 2308, 2309, 2310) —
+ML-DSA-44/65/87. Confirmed independently in four projects (the curl-impersonate
+YAML, tls-client's Chrome_150, primp, httpcloak's chrome-152).
 
-Chrome 150 шлёт ML-DSA **по TCP, но не по QUIC** — из-за anti-amplification-лимитов QUIC
-большие PQ-цепочки сертификатов непрактичны. Значит sigalgs для TCP и QUIC — **разные поля профиля**.
+Chrome 150 sends ML-DSA **over TCP but not over QUIC** — QUIC's anti-amplification
+limits make large PQ certificate chains impractical. So the sigalgs for TCP and
+for QUIC are **separate profile fields**.
 
 ### Chrome 152
-Новое расширение `trust_anchors` (0xCA34, draft-ietf-tls-trust-anchor-ids).
+A new extension, `trust_anchors` (0xCA34, draft-ietf-tls-trust-anchor-ids).
 
-## Расхождения между сервисами проверки
+## Disagreements between the checking services
 
-Проверено на одном байт-идентичном ClientHello:
+Verified on one byte-identical ClientHello:
 
-- **версия в JA3:** browserleaks / peet / ja3.zone / impersonate.pro берут legacy
-  `client_version` (`771`); **scrapfly берёт максимум из `supported_versions` (`772`)** →
-  совершенно другой хеш. JA3 от scrapfly несопоставим ни с чьим.
-- **счётчик расширений в JA4:** browserleaks `t13d5911h2` против scrapfly `t13d5909h2` —
-  scrapfly ошибочно исключает SNI и ALPN из **счётчика**. По спеке их надо включать.
-  browserleaks прав.
-- **sigalgs в JA4:** scrapfly сортирует, спека запрещает. browserleaks и peet согласны против scrapfly.
-- **JA4 у peet:** не добивает нулями однозначные счётчики (`t12d219h1` вместо `t12d2109h1`).
-- **Akamai HTTP/2:** полное согласие у всех.
+- **the version in JA3:** browserleaks / peet / ja3.zone / impersonate.pro take
+  the legacy `client_version` (`771`); **scrapfly takes the highest from
+  `supported_versions` (`772`)** → an entirely different hash. A JA3 from scrapfly
+  is comparable with nobody's.
+- **the extension count in JA4:** browserleaks says `t13d5911h2`, scrapfly says
+  `t13d5909h2` — scrapfly wrongly excludes SNI and ALPN from the **count**. The
+  specification says to include them. browserleaks is right.
+- **the sigalgs in JA4:** scrapfly sorts them, the specification forbids it.
+  browserleaks and peet agree against scrapfly.
+- **peet's JA4:** does not zero-pad single-digit counts (`t12d219h1` instead of
+  `t12d2109h1`).
+- **Akamai HTTP/2:** everybody agrees.
 
-**Вывод: browserleaks — эталонный оракул для хешей. scrapfly полезен только полем `capture`.**
+**The conclusion: browserleaks is the reference oracle for the hashes. scrapfly is
+useful only for its `capture` field.**
 
-## Лицензии
+## Licences
 
-- **JA4** (TLS client) — BSD-3-Clause, патентных претензий нет
+- **JA4** (TLS client) — BSD-3-Clause, no patent claims
 - **JA4S / JA4H / JA4X / JA4T / JA4SSH** — FoxIO License 1.1, **patent-pending**.
-  Свободно для внутреннего и академического использования; коммерческая монетизация
-  требует OEM-лицензии. Существенно, если считать эти отпечатки внутри продукта.
+  Free for internal and academic use; commercial monetisation requires an OEM
+  licence. This matters here: the library computes JA4H — see
+  `internal/fingerprint/ja4h.go`.
