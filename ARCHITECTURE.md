@@ -166,6 +166,7 @@ hashes already computed.
 
 ## The stages
 
-All six points of the original plan are done; release 0.2.0 happened on
-5 September 2026. The chronology is in [ROADMAP.md](ROADMAP.md); the current
-state is in [docs/AUDIT-BRIEF.md](docs/AUDIT-BRIEF.md).
+All six points of the original plan are done. The first release, 0.2.0, was on
+5 September 2026; the current one is 0.4.2. The chronology is in
+[ROADMAP.md](ROADMAP.md); the current state is in
+[docs/AUDIT-BRIEF.md](docs/AUDIT-BRIEF.md).

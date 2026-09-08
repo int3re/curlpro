@@ -67,6 +67,14 @@ curlpro.register_profile({
   `raise_for_status()`.
 - **Scraper tooling**: response expectations, cookie rollback, `cookies.txt`, an
   error hook, host address override, retries honouring `Retry-After`.
+- **The fingerprint without a request**: `session.fingerprint()` returns JA3, JA3N,
+  JA4, JA4H and the Akamai string computed offline — no network, no oracle.
+- **A consistency audit**: `session.audit()` looks for contradictions inside the
+  identity, the reason a correct fingerprint still gets caught.
+- **Personas**: an identity — profile, device, cookies, headers — saved to a file
+  and reopened as it was.
+- **Cleartext `http://` and `ws://`** for a service of your own, so a solver or an
+  internal API needs no second HTTP client.
 - **Profile as data**: JSON with inheritance, runtime registration, and capturing a
   profile from a live browser with one command.
 

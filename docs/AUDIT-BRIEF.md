@@ -364,19 +364,23 @@ checked and has a reason.
   was built for Russian sites, and `en-US` from a Russian address is a
   mismatch rather than neutrality. The shape of the value differs per browser,
   though, and one identical string everywhere would itself be a tell: Chrome
-  builds its q ladder in steps of 0.1 (`ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7`),
-  Firefox uses 0.8/0.5/0.3, Safari sends a short list. The language tags were
-  replaced; each browser kept its own ladder. **Tor was deliberately left
+  builds its q ladder in steps of 0.1 (`ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7`)
+  and Safari sends a short list. Firefox was written as 0.8/0.5/0.3 from the
+  formula `1 - i/n` — and a measurement of Firefox 155 on 2026-09-08 disproved
+  it: asked with `intl.accept_languages` set explicitly, it answered with a flat
+  0.1 step, the same as Chrome. The three older Firefox profiles keep the
+  inferred ladder because nobody knows when the change landed; it is a debt in
+  ROADMAP.md, not a measured value. **Tor was deliberately left
   alone:** the Tor Browser sends `en-US,en;q=0.5` to everyone always — that is
   its anti-fingerprinting defence — and Russian there would make the profile
   unlike the Tor Browser, which is the opposite of why anyone picks it.
-- **The code and the error messages are in English, the documentation is in
-  Russian.** That was decided deliberately: the library is open and its code is
-  read by people who do not read Russian, while the project documentation is
-  kept in the language the project is discussed in. README and this brief have
-  full English twins whose structure is checked by a test. The errors name not
-  only the cause but the consequence: "timeout must be positive, got 0s (leave
-  it unset for no limit)".
+- **Everything is in English: the code, the messages and the documentation.**
+  The library is open, and its code and docs are read by people who do not read
+  Russian. README and this brief keep full Russian twins whose structure is
+  checked by a test; the stage journal in `docs/STAGE*-RESULTS.md` stays Russian
+  as a log of what happened rather than a document to maintain. The errors name
+  not only the cause but the consequence: "timeout must be positive, got 0s
+  (leave it unset for no limit)".
 - **The repository is public:** github.com/int3re/curlpro, licensed Apache 2.0.
   Until September 2026 it was local on purpose, and older notes still mention
   that restriction — it has been lifted.
@@ -445,7 +449,7 @@ The header order of a live browser is captured by the `cmd/hcapture` stand
 see the order in HTTP/3.
 
 Current state (measured 2026-09-05): `go test -race ./internal/...` — ok on all
-four packages, pytest without the network — 230 passed and 10 skipped,
+four packages, pytest without the network — 292 passed and 10 skipped,
 `validate` — 48/48 including a check that the extension order stays stable,
 `probe` and `h3probe` — a match with the reference, and the header order matched
 live Chrome 152 over HTTP/2 and HTTP/3. The audit results are in

@@ -97,6 +97,12 @@ The library covers the network layer. It does **not** forge the JS fingerprint
 Playwright. Matching the network fingerprint is necessary but not sufficient:
 modern systems score JA4 together with JA4H, JA3S/JARM and behaviour.
 
+Cleartext `http://` and `ws://` work too. There is no ClientHello and so no TLS
+fingerprint there, but the HTTP/1.1 half of the profile still applies — the
+header order and case — and that is all a plain-HTTP peer can see anyway. The
+point is not masking: a caller whose own service speaks plain HTTP, a solver or
+an internal API, should not need a second HTTP client beside this one.
+
 HTTP/1.1, HTTP/2, HTTP/3 and WebSocket are supported, along with cookies,
 redirects, proxies (HTTP CONNECT and SOCKS5), multipart, streaming reads and
 uploads, and an asynchronous API.

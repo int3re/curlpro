@@ -274,6 +274,86 @@ Release **0.2.0 happened on 2026-09-05**: five wheels and a source archive on
 trusted way with an environment approval. The order of operations and the rakes — in
 [docs/RELEASE.md](docs/RELEASE.md).
 
+## Stage 20 — what shipped after 0.2.0 ✅ done 2026-09-08
+
+Four releases in three days, each one on PyPI and on the release page, published
+the trusted way with an environment approval.
+
+**0.3.0** — the offline fingerprint, personas and `requests` compatibility.
+`Session.fingerprint()` computes JA3/JA3N/JA4 and the Akamai string from the
+ClientHello the session would actually send, with no network and no oracle,
+validated 47/47 against the recorded captures.
+
+**0.4.0** — JA4H, Russian profiles, the consistency audit, TLS session
+resumption, and English as the documentation's primary language.
+
+- **JA4H** is computed from the same header assembly that produces the wire
+  order. Its licence is not the rest's: JA4 for TLS is BSD-3, JA4H is FoxIO
+  License 1.1 and patent-pending, so the obligation falls on whoever ships a
+  product computing it. Said in the file that computes it, in the module docs,
+  in both READMEs and here.
+- **46 of 47 profiles gained a Russian `accept-language`.** One string for
+  everyone was not an option — the shape of the value is each browser's own
+  signature. Tor was left alone deliberately.
+- **`session.audit()`** looks for contradictions inside an identity: the TLS
+  says one browser and the User-Agent another, a phone profile with no device,
+  Tor with a language. It reads what the session would actually send rather than
+  our own configuration.
+- **`Session(resume=True)`** — off by default. A client that never resumes is an
+  observable anomaly none of our metrics can see, because JA3, JA4, JA4H and
+  Akamai all come from the first exchange. `OmitEmptyPsk` keeps the first
+  handshake byte-for-byte what it was, under its own test.
+
+**0.4.1** — the Install section on the package page begins with the install
+command. In 0.4.0 it opened with the platform list and a `go build`, and anyone
+jumping to the heading concluded that compiling was mandatory. Found by a reader
+doing exactly that. The same pass corrected all three READMEs on a related
+point: `pip install` does not build the source archive by itself — the backend
+is a plain `setuptools.build_meta` with no hook, so on a platform with no wheel
+the package installs without its native part and fails at the first call.
+
+**0.4.2** — cleartext `http://` and `ws://` are accepted. They used to be
+refused outright on the grounds that the library exists for the TLS fingerprint;
+in practice that forced a second HTTP client into any project whose own service
+speaks plain HTTP. There is no ClientHello over cleartext, but the HTTP/1.1 half
+of the profile still applies, which is all a plain-HTTP peer can see. The scheme
+joined the pool key — `http://host:8443` and `https://host:8443` share an
+address — and the default port follows the scheme. `protocol="h2"` over
+`http://` (h2c) and `protocol="h3"` (TLS by definition) are refused rather than
+quietly downgraded, and a redirect from `https://` to `http://` is handed back
+as a 3xx with its `Location` instead of being followed.
+
+## Stage 21 — the first Firefox captured by us ✅ done 2026-09-08
+
+`profiles/firefox-155-windows.json`: the first Firefox in the corpus that is not
+macOS and not imported. JA4 `t13d1517h2_8daaf6152771_3cbfd9057e0d`, Akamai
+`1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s`, checked against browserleaks
+and matching on a second run. 48 profiles now.
+
+It exposed two defects and settled one question:
+
+- **`capture` launched Chrome for `-name firefox-154-windows`.** The name only
+  set the output file; the browser came from a list holding Chrome alone. The
+  profile that came out was Chrome 152 under a Firefox name — not a weaker
+  profile but a false one. The family is now read from the name, each has its
+  own paths and its own switches, and an explicit `-browser` must agree with the
+  name or the command stops.
+- **The audit passed that profile in silence.** Its version check looked for the
+  family's token in the User-Agent and returned nothing when the token was
+  missing — which is the strongest form of the disagreement, not a reason to
+  skip. It now reports a different browser as `high` and an unrecognisable
+  User-Agent as `medium`.
+- **The browser turned out to be 155, not 154** — caught by that same repaired
+  check, which is what renamed the profile.
+
+Firefox 155's cipher list has converged with Chrome's: 15 rather than the 17 of
+Firefox 135, and the same `JA4_b`. Surprising enough to be worth a second
+source, and there is one — a third-party BAS module distributing its own preset
+data states the same 15 ciphers and the same `JA4_b` for Firefox 155, arrived at
+independently. Its `JA4_c` disagrees with ours, but it also disagrees with the
+extension and sigalg lists that same file declares: computing `JA4_c` from those
+lists by the FoxIO spec gives our value.
+
 ## Stage 15 — closing debts ✅ done 2026-09-03
 
 Item 7.3, QPACK, GOAWAY and four header debts were closed — all by measurement rather
@@ -404,7 +484,7 @@ that is not at hand.
 | ~~permessage-deflate: a client window smaller than 32 KiB~~ ✅ closed 2026-09-03 | with a window smaller than the standard one the compressor is taken from `klauspost/compress`. Checked against a server of our own: RSV1 plus parsing the `zlib` stream with `wbits=-9` — such a stream cannot be read with a 32 KiB window |
 | ~~Firefox's q ladder was inferred, not measured~~ ✅ closed 2026-09-08 | the audit read `0.8/0.5/0.3` as Firefox's signature and a 0.1 step as Chrome's. A live Firefox 155, asked with `intl.accept_languages` set explicitly, answered `ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7` for four languages and `ru-RU,ru;q=0.9` for two — a flat 0.1 step, the same as Chrome. The formula `1 - i/n` no longer holds, the shape no longer separates the two browsers, and the check was removed rather than narrowed: its other half ("a ladder holding 0.5 is Firefox's") misfires on a Chrome with six languages |
 | The Firefox 133/135/144 ladders are still inferred | the corpus only ever carried two-item lists (`en-US,en;q=0.5`), which say nothing about a four-item shape, and the Russian values in those three profiles were written from the old formula. Firefox 155 is measured; when the change landed is not known, so replacing one guess with another buys nothing. Closes with a capture of an older Firefox |
-| A profile without an `http1` section — not a debt but a property | all 47 profiles have the section (their own or through `based_on`). The code's approximation stays for the profiles registered at runtime out of three fields: there is nowhere for an order to come from there |
+| A profile without an `http1` section — not a debt but a property | all 48 profiles have the section (their own or through `based_on`). The code's approximation stays for the profiles registered at runtime out of three fields: there is nowhere for an order to come from there |
 | ~~The HTTP/1.1 set was assumed equal to the HTTP/2 one~~ ✅ closed 2026-09-03 | measured: Chrome does not send `priority` on HTTP/1.1, Firefox does not send `TE`. When `http1.order` is given it sets the set as well, not just the order |
 | ~~"A new Python with an old DLL" silently ignores options~~ ✅ closed 2026-09-02 | `curlpro_version` = `0.2.0`, and `_ffi.py` checks `REQUIRED_VERSION` at load. The problem is not theoretical: an hour of runs of the wrong code was lost to it — see STAGE13 |
 | ~~QPACK: we announce a table capacity we do not support~~ ✅ closed 2026-09-03 | a decoder of our own, `internal/qpack`, with a dynamic table and blocked streams, checked against the appendix B examples of RFC 9204. `fp.impersonate.pro` now answers 5 times out of 5, where it was 1 out of 5 |
