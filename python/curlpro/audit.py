@@ -144,7 +144,7 @@ def _check_user_agent_version(profile: str, ua: str) -> list[Finding]:
         return []
     got = pattern.search(ua)
     if not got:
-        return []
+        return _family_mismatch(profile, family, ua)
     have = int(got.group(1))
     if have == want:
         return []
@@ -156,6 +156,47 @@ def _check_user_agent_version(profile: str, ua: str) -> list[Finding]:
             "profile and say one version while the User-Agent says another. "
             "A server sees both and compares them for free",
         fix=f"drop the User-Agent override, or use a version {have} profile")]
+
+
+#: How to recognise the browser a User-Agent claims to be. Order matters: an
+#: Edge string carries "Chrome/" as well, and a Yandex one carries both, so the
+#: more specific token has to be tried first.
+_UA_FAMILY = (
+    ("edge", re.compile(r"Edg/")),
+    ("yandex", re.compile(r"YaBrowser/")),
+    ("firefox", re.compile(r"Firefox/")),
+    ("chrome", re.compile(r"Chrome/")),
+)
+
+
+def _family_mismatch(profile: str, family: str, ua: str) -> list[Finding]:
+    """The profile is one browser and the User-Agent is another one entirely.
+
+    Reached when the family's own token is missing from the User-Agent — a
+    stronger disagreement than a wrong version, and the one a mislabelled
+    capture produces: a profile named firefox-154 built from a Chrome
+    connection carries Chrome's TLS under a Firefox name.
+    """
+    for other, pattern in _UA_FAMILY:
+        if other != family and pattern.search(ua):
+            return [Finding(
+                code="ua_family",
+                level="high",
+                what=f"profile {profile} is {family}, but the User-Agent is {other}",
+                why="this is not a version disagreement but a different browser: "
+                    "the TLS fingerprint, the client hints and the header order "
+                    "all come from the profile and describe "
+                    f"{family}, while the User-Agent announces {other}. "
+                    "The two are compared for free by anything that reads both",
+                fix=f"use a {other} profile, or drop the User-Agent override")]
+    return [Finding(
+        code="ua_family",
+        level="medium",
+        what=f"profile {profile} is {family}, but the User-Agent names no browser",
+        why=f"a {family} profile is expected to carry a {family} User-Agent; this "
+            "one carries no recognisable browser at all, so the string does not "
+            "back up what the TLS layer says",
+        fix=f"restore the profile's User-Agent, or use a profile matching it")]
 
 
 _PLATFORMS = {

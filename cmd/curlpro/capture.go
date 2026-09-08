@@ -92,7 +92,7 @@ profile from a single capture would pin a random permutation.
 	certDir := fs.String("certs", "capture/certs", "directory holding tls.crt and tls.key")
 	out := fs.String("out", "profiles", "directory for the profile")
 	basedOn := fs.String("based-on", "", "parent profile: write a delta (tls and headers) instead of a full profile")
-	browser := fs.String("browser", "", "path to the browser (Chrome by default)")
+	browser := fs.String("browser", "", "path to the browser (found by the family in -name by default)")
 	manual := fs.Bool("manual", false, "do not launch a browser: open the page yourself")
 	wait := fs.Duration("wait", 90*time.Second, "how long to wait for samples in manual mode")
 	if err := fs.Parse(args); err != nil {
@@ -117,7 +117,7 @@ profile from a single capture would pin a random permutation.
 	fmt.Printf("stand:    %s on %s\n", filepath.Base(bin), *addr)
 	fmt.Printf("samples:  %d\n\n", *samples)
 
-	details, err := collect(bin, *addr, crt, key, *samples, *browser, *manual, *wait)
+	details, err := collect(bin, *addr, crt, key, *samples, *name, *browser, *manual, *wait)
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func toDelta(p *profile.Profile, basedOn, dir string) (*profile.Profile, error) 
 }
 
 // collect starts the stand, drives the browser and collects samples from its output.
-func collect(bin, addr, crt, key string, want int, browser string,
+func collect(bin, addr, crt, key string, want int, name, browser string,
 	manual bool, wait time.Duration) ([]echoDetail, error) {
 
 	cmd := exec.Command(bin, "-listen-addr", addr,
@@ -206,7 +206,15 @@ func collect(bin, addr, crt, key string, want int, browser string,
 	if manual {
 		fmt.Printf("open it in a browser %d times:\n  %s\n\n", want, url)
 	} else {
-		go driveBrowser(browser, url, want)
+		launcher, err := browserFor(name, browser)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Printf("browser:  %s\n", launcher.path)
+		if launcher.family == "firefox" {
+			fmt.Printf("%s\n", firefoxCertWarning)
+		}
+		go driveBrowser(launcher, url, want)
 	}
 
 	var details []echoDetail
@@ -244,29 +252,150 @@ func scanDetails(r io.Reader, out chan<- echoDetail) {
 	}
 }
 
+// launcher is a browser and the way to start it. The two travel together
+// because the switches are not interchangeable: a Chromium build takes
+// --user-data-dir, Firefox takes -profile, and passing one the other's flags
+// starts the browser with the wrong settings rather than failing loudly.
+type launcher struct {
+	family string
+	path   string
+}
+
+// firefoxCertWarning is printed instead of being worked around. Firefox has no
+// equivalent of --ignore-certificate-errors: an invalid certificate is refused
+// by an interstitial, and there is no preference that turns it off. The
+// ClientHello does reach the stand — the handshake completes before Firefox
+// judges the certificate — but no request follows, so the headers never arrive
+// and the profile would come out half-captured.
+const firefoxCertWarning = `
+warning:  Firefox refuses the stand's self-signed certificate with an
+          interstitial, and has no switch to ignore it. The TLS layer will be
+          captured, the headers will not. Click "Advanced" -> "Accept the Risk
+          and Continue" in the first window, or run with -manual and drive the
+          browser yourself.
+`
+
+// familyOf reads the browser family out of a profile name: chrome-152-windows
+// is Chrome, firefox-154-windows is Firefox. The name is the only statement of
+// intent the command gets, so it is what the browser is chosen by.
+func familyOf(name string) string {
+	i := strings.IndexByte(name, '-')
+	if i < 0 {
+		return name
+	}
+	return name[:i]
+}
+
+// browserFor picks the browser to drive. An explicit -browser wins, but its
+// family still has to agree with the name: a profile called firefox-154 built
+// from a Chrome connection is not a weaker profile, it is a false one — the
+// TLS says Chrome, the file says Firefox, and nothing downstream can tell.
+func browserFor(name, explicit string) (launcher, error) {
+	want := familyOf(name)
+	if explicit != "" {
+		got := familyOfPath(explicit)
+		if got != "" && want != "" && got != want && knownFamily(want) {
+			return launcher{}, fmt.Errorf(
+				"-name says %s but -browser points at %s (%s):"+
+					" the profile would carry the wrong browser's fingerprint",
+				want, got, explicit)
+		}
+		if got == "" {
+			got = want
+		}
+		return launcher{family: got, path: explicit}, nil
+	}
+	if !knownFamily(want) {
+		return launcher{}, fmt.Errorf(
+			"cannot tell which browser %q needs — pass -browser with a path", name)
+	}
+	for _, c := range browserPaths(want) {
+		if _, err := os.Stat(c); err == nil {
+			return launcher{family: want, path: c}, nil
+		}
+	}
+	return launcher{}, fmt.Errorf(
+		"%s not found in the usual places — pass -browser with a path, or use -manual", want)
+}
+
+func knownFamily(f string) bool {
+	switch f {
+	case "chrome", "edge", "firefox", "tor", "yandex":
+		return true
+	}
+	return false
+}
+
+// familyOfPath guesses the family from the executable's name. Only used to
+// catch a -browser that contradicts -name, so an unrecognised path is not an
+// error: it means "cannot tell", not "wrong".
+func familyOfPath(path string) string {
+	base := strings.ToLower(filepath.Base(path))
+	switch {
+	case strings.Contains(base, "firefox"):
+		return "firefox"
+	case strings.Contains(base, "msedge"), strings.Contains(base, "edge"):
+		return "edge"
+	case strings.Contains(base, "browser") && strings.Contains(strings.ToLower(path), "yandex"):
+		return "yandex"
+	case strings.Contains(base, "tor"):
+		return "tor"
+	case strings.Contains(base, "chrome"), strings.Contains(base, "chromium"):
+		return "chrome"
+	}
+	return ""
+}
+
+func browserPaths(family string) []string {
+	switch runtime.GOOS {
+	case "windows":
+		switch family {
+		case "firefox":
+			return []string{
+				`C:\Program Files\Mozilla Firefox\firefox.exe`,
+				`C:\Program Files (x86)\Mozilla Firefox\firefox.exe`,
+			}
+		case "edge":
+			return []string{
+				`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
+				`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
+			}
+		default:
+			return []string{
+				`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
+				`C:\Program Files\Google\Chrome\Application\chrome.exe`,
+			}
+		}
+	case "darwin":
+		switch family {
+		case "firefox":
+			return []string{"/Applications/Firefox.app/Contents/MacOS/firefox"}
+		case "edge":
+			return []string{"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"}
+		default:
+			return []string{"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}
+		}
+	default:
+		switch family {
+		case "firefox":
+			return []string{"/usr/bin/firefox", "/usr/bin/firefox-esr"}
+		case "edge":
+			return []string{"/usr/bin/microsoft-edge"}
+		default:
+			return []string{"/usr/bin/google-chrome", "/usr/bin/chromium"}
+		}
+	}
+}
+
 // driveBrowser opens the page the required number of times, each time in a new
 // browser profile, to guarantee a fresh TLS connection.
-func driveBrowser(path, url string, times int) {
-	if path == "" {
-		path = defaultBrowser()
-	}
-	if path == "" {
-		fmt.Fprintln(os.Stderr, "browser not found — use -manual")
-		return
-	}
+func driveBrowser(l launcher, url string, times int) {
 	for i := 0; i < times+2; i++ { // with a margin: some visits go to the favicon
 		dir, err := os.MkdirTemp("", "curlpro-capture-")
 		if err != nil {
 			return
 		}
-		cmd := exec.Command(path,
-			"--user-data-dir="+dir,
-			"--no-first-run",
-			"--no-default-browser-check",
-			"--ignore-certificate-errors",
-			"--new-window",
-			url,
-		)
+		cmd := exec.Command(l.path, browserArgs(l.family, dir, url)...)
 		if cmd.Start() == nil {
 			time.Sleep(4 * time.Second)
 			_ = cmd.Process.Kill()
@@ -276,25 +405,21 @@ func driveBrowser(path, url string, times int) {
 	}
 }
 
-func defaultBrowser() string {
-	var candidates []string
-	switch runtime.GOOS {
-	case "windows":
-		candidates = []string{
-			`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
-			`C:\Program Files\Google\Chrome\Application\chrome.exe`,
-		}
-	case "darwin":
-		candidates = []string{"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}
-	default:
-		candidates = []string{"/usr/bin/google-chrome", "/usr/bin/chromium"}
+// browserArgs is where the families actually differ. Firefox needs -no-remote,
+// or a running instance takes the URL and the throwaway profile is ignored —
+// which would silently capture the everyday browser instead of a fresh one.
+func browserArgs(family, dir, url string) []string {
+	if family == "firefox" || family == "tor" {
+		return []string{"-no-remote", "-profile", dir, "-new-window", url}
 	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c
-		}
+	return []string{
+		"--user-data-dir=" + dir,
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--ignore-certificate-errors",
+		"--new-window",
+		url,
 	}
-	return ""
 }
 
 func findEchoServer(explicit string) (string, error) {

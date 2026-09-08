@@ -229,6 +229,15 @@ export SSLKEYLOGFILE="C:\\Users\\$USERNAME\\AppData\\Local\\Temp\\sslkeys.log"
 existing process, which never saw the variable. Always a throwaway
 `--user-data-dir`. Firefox needs `-no-remote`.
 
+`curlpro capture` picks the browser from the family in `-name`, so
+`-name firefox-154-windows` looks for Firefox and starts it with Firefox's own
+switches. An explicit `-browser` still has to agree with the name: a profile
+called firefox-154 built from a Chrome connection is not a weaker profile but a
+false one, and nothing downstream can tell. Firefox has no equivalent of
+`--ignore-certificate-errors`, so the stand's self-signed certificate stops at
+an interstitial: the ClientHello is captured, the headers are not. Click through
+it once, or use `-manual`.
+
 ```bash
 tshark -r h2.pcapng -o "tls.keylog_file:$KL" -Y "http2.type==1" \
   -T fields -e http2.header.name                     # the pseudo- and ordinary header order

@@ -134,3 +134,50 @@ def test_findings_are_sorted_by_severity_and_readable():
 def test_a_persona_audits_without_being_opened_by_the_caller():
     p = curlpro.Persona.new("chrome-151-windows")
     assert p.audit() == []
+
+
+# ---------------------------------------------------------------- ua_family
+#
+# Added after a real mistake: `capture --name firefox-154-windows` launched
+# Chrome, because the name never selected the browser. The profile that came
+# out had Chrome's TLS under a Firefox name, and the audit said nothing — the
+# version check bailed out silently when the family's token was missing from
+# the User-Agent, which is the strongest form of the disagreement rather than
+# a reason to skip it.
+
+_CHROME_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36")
+_FIREFOX_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) "
+               "Gecko/20100101 Firefox/154.0")
+
+
+def _codes(profile, ua=None):
+    with curlpro.Session(impersonate=profile) as s:
+        if ua is not None:
+            s.headers["user-agent"] = ua
+        return [(f.code, f.level) for f in s.audit()]
+
+
+def test_firefox_profile_with_a_chrome_user_agent():
+    assert ("ua_family", "high") in _codes("firefox-144-macos", _CHROME_UA)
+
+
+def test_chrome_profile_with_a_firefox_user_agent():
+    assert ("ua_family", "high") in _codes("chrome-152-windows", _FIREFOX_UA)
+
+
+def test_user_agent_naming_no_browser_is_softer():
+    """Not the same thing: a custom string may be deliberate, a wrong browser is not."""
+    assert ("ua_family", "medium") in _codes("firefox-144-macos", "MyBot/1.0")
+
+
+def test_agreeing_profile_and_user_agent_are_silent():
+    assert not [c for c in _codes("chrome-152-windows", _CHROME_UA)
+                if c[0] == "ua_family"]
+
+
+def test_tor_and_safari_stay_silent():
+    """Tor 14 rides on Firefox 128 and Safari carries no engine token: both
+    would be false alarms, which is why neither family is checked."""
+    for profile in ("tor-14-macos", "safari-26.0-macos"):
+        assert not [c for c in _codes(profile) if c[0] == "ua_family"]
