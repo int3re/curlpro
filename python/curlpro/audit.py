@@ -103,7 +103,6 @@ def _audit(fp: Any, persona: Any) -> list[Finding]:
     out += _check_user_agent_version(profile, ua)
     out += _check_platform(profile, pairs, ua)
     out += _check_mobile_device(profile, data)
-    out += _check_language_pair(pairs, ua)
 
     order = {level: i for i, level in enumerate(LEVELS)}
     out.sort(key=lambda f: order[f.level])
@@ -252,36 +251,25 @@ def _check_mobile_device(profile: str, data: dict) -> list[Finding]:
         fix='set device="Pixel 8" (or "random") on the session or the persona')]
 
 
-def _check_language_pair(pairs: list, ua: str) -> list[Finding]:
-    """A language list whose shape belongs to another browser.
-
-    Chrome builds its q ladder in steps of 0.1, Firefox uses 0.8/0.5/0.3. One
-    shape on the wrong browser is the sort of detail nobody sets by hand and a
-    detector gets for free.
-    """
-    lang = _header(pairs, "accept-language") or ""
-    if not lang or ";q=" not in lang:
-        return []
-    steps = re.findall(r";q=([\d.]+)", lang)
-    if not steps:
-        return []
-    firefox_shape = "0.5" in steps or "0.3" in steps
-    is_firefox = "Firefox/" in ua
-    if firefox_shape and not is_firefox:
-        return [Finding(
-            code="language_shape",
-            level="medium",
-            what=f"accept-language is shaped like Firefox's: {lang!r}",
-            why="the q ladder is the browser's own signature: Chrome steps by "
-                "0.1, Firefox uses 0.8/0.5/0.3. A shape from another browser "
-                "stands out exactly as a foreign header order does",
-            fix="rewrite the value in this browser's own shape")]
-    if not firefox_shape and is_firefox:
-        return [Finding(
-            code="language_shape",
-            level="medium",
-            what=f"Firefox with a non-Firefox accept-language: {lang!r}",
-            why="Firefox builds its q ladder as 0.8/0.5/0.3; stepping by 0.1 "
-                "is Chrome's",
-            fix="rewrite the value in Firefox's shape")]
-    return []
+# The q-ladder check that used to live here has been removed.
+#
+# It read the shape of accept-language as a browser signature: Chrome steps by
+# 0.1, Firefox uses 0.8/0.5/0.3. The Firefox half was inferred from the formula
+# 1 - i/n, never measured — and a measurement of Firefox 155 on 2026-09-08 says
+# it is wrong. Asked with intl.accept_languages set explicitly, it answered:
+#
+#     ru-RU, ru, en-US, en  ->  ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7
+#     ru-RU, ru, en-US      ->  ru-RU,ru;q=0.9,en-US;q=0.8
+#     ru-RU, ru             ->  ru-RU,ru;q=0.9
+#     ru                    ->  ru
+#
+# A flat 0.1 step, the same as Chrome's. So the shape no longer separates the
+# two, and the check fired on the only Firefox profile ever captured live.
+#
+# The other half went with it rather than being kept: "a ladder containing 0.5
+# or 0.3 is Firefox's" holds only for short lists. Chrome with six languages
+# reaches 0.5 by stepping, and would have been reported for behaving normally.
+#
+# What is not known is when Firefox changed, so the inferred values in the
+# 133/135/144 profiles are left alone — replacing one guess with another buys
+# nothing. Recorded in ROADMAP.md as a debt to close by measurement.

@@ -108,11 +108,21 @@ def test_a_phone_profile_without_a_device():
     assert "mobile_no_device" not in codes(chosen.audit())
 
 
-def test_a_language_shaped_like_another_browser():
-    """The q ladder is the browser's own signature."""
-    with curlpro.Session("chrome-151-windows") as s:
-        s.headers["Accept-Language"] = "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3"
-        assert "language_shape" in codes(s.audit())
+def test_the_q_ladder_is_no_longer_read_as_a_signature():
+    """Firefox 155 steps by 0.1, the same as Chrome — measured 2026-09-08.
+
+    The check that read the ladder shape was removed with the measurement that
+    disproved it; see the note in audit.py. Both shapes now have to be silent
+    on both browsers, or the module would be reporting a browser for behaving
+    the way it actually behaves.
+    """
+    ladders = ("ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3",
+               "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7")
+    for profile in ("chrome-151-windows", "firefox-144-macos"):
+        for ladder in ladders:
+            with curlpro.Session(profile) as s:
+                s.headers["Accept-Language"] = ladder
+                assert "language_shape" not in codes(s.audit())
 
 
 # --- shape of the output --------------------------------------------------

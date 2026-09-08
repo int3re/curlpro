@@ -15,7 +15,7 @@ with curlpro.Session("chrome-151-windows") as s:
     print(r.status, r.text[:200])
 ```
 
-Neither Go nor a compiler is needed: the native library and all 47 profiles are
+Neither Go nor a compiler is needed: the native library and all 48 profiles are
 already inside the wheel, and the profiles load themselves.
 
 ## Why another one
@@ -44,7 +44,7 @@ with curlpro.Session("chrome-151-windows") as s:
     print(fp.akamai)    # 1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p
 ```
 
-Checked against 47 captures: JA4 47/47, JA3N 47/47, Akamai 47/47.
+Checked against 48 captures: JA4 48/48, JA3N 48/48, Akamai 48/48.
 
 `audit()` answers the second question — the one people actually lose days to.
 Not "does my fingerprint look right" but "does anything here disagree with
@@ -137,7 +137,7 @@ advertises a capacity as Chrome does, and a server that uses it gets parsed.
 pip install curlpro
 ```
 
-Nothing to compile: the native library and all 47 profiles travel inside the
+Nothing to compile: the native library and all 48 profiles travel inside the
 wheel. Wheels are built for Linux (x86-64 and ARM64, glibc 2.28+), macOS 13+
 (Intel and Apple Silicon) and Windows x64. The macOS 13 floor is not ours to
 choose: that is what Go 1.27 requires, and the native part is built with it.

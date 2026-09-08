@@ -131,7 +131,7 @@ Go 1.27, cgo (MinGW-w64 на Windows, лежит в `D:\mingw64`). Зависи�
 
 ### Данные и инструменты
 
-- `profiles/` — 47 профилей: Chrome 98–152, Edge, Firefox, Safari, Tor,
+- `profiles/` — 48 профилей: Chrome 98–152, Edge, Firefox 133–155, Safari, Tor,
   Яндекс.Браузер. Мобильные сняты с живого Pixel 7 по USB: `chrome-152-android`,
   `yandex-26.8-android`. Часть схлопнута в дельты через `based_on`.
 - `corpus/` — 43 исходные сигнатуры `curl-impersonate` (YAML).
@@ -407,7 +407,7 @@ tools/echo-server_windows_amd64.exe -listen-addr localhost:8443 \
 go run ./cmd/probe -n 2            # JA4 против эталона
 go run ./cmd/h3probe               # отпечаток HTTP/3
 go run ./cmd/curlpro validate -oracle https://localhost:8443/json -insecure `
-    -baselines reference/baselines-local -pause 0      # все 47 профилей
+    -baselines reference/baselines-local -pause 0      # все 48 профилей
 ```
 
 Порядок заголовков живого браузера снимается стендом `cmd/hcapture`

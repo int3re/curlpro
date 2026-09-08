@@ -1,0 +1,118 @@
+{
+  "name": "firefox-155-windows",
+  "tls": {
+    "raw_client_hello": "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",
+    "signature_algorithms": [
+      1027,
+      1283,
+      1539,
+      2052,
+      2053,
+      2054,
+      1025,
+      1281,
+      1537,
+      515,
+      513
+    ],
+    "permute_extensions": false
+  },
+  "http1": {},
+  "http2": {
+    "settings": [
+      {
+        "id": 1,
+        "value": 65536
+      },
+      {
+        "id": 2,
+        "value": 0
+      },
+      {
+        "id": 4,
+        "value": 131072
+      },
+      {
+        "id": 5,
+        "value": 16384
+      }
+    ],
+    "connection_window_update": 12517377,
+    "pseudo_order": [
+      ":method",
+      ":path",
+      ":authority",
+      ":scheme"
+    ]
+  },
+  "http3": {},
+  "quic": {},
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0",
+    "order": [
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      },
+      {
+        "key": "accept-language",
+        "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      },
+      {
+        "key": "te",
+        "value": "trailers"
+      }
+    ]
+  },
+  "websocket": {},
+  "client_hints": {},
+  "fetch": {}
+}

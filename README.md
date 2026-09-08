@@ -55,7 +55,7 @@ curlpro.register_profile({
 
 ## Features
 
-- **47 profiles**: Chrome 98-152, Edge, Firefox, Safari, Tor, Yandex Browser;
+- **48 profiles**: Chrome 98-152, Edge, Firefox 133-155, Safari, Tor, Yandex Browser;
   mobile — Chrome and Yandex for Android, Safari for iOS.
 - **Every fingerprint layer at once** — TLS, HTTP/2, HTTP/3, HTTP/1.1 and WebSocket
   (table below).
@@ -103,7 +103,7 @@ maintainer's fault.
 pip install curlpro
 ```
 
-Neither Go nor a compiler is needed: the native library and all 47 profiles are
+Neither Go nor a compiler is needed: the native library and all 48 profiles are
 already inside the wheel. Wheels are built for five platforms:
 
 | Platform | Wheel |
@@ -496,7 +496,7 @@ with curlpro.Session("chrome-151-windows") as s:
 
 These values used to be obtainable only from browserleaks, which made every
 check depend on someone else's service. The computation is checked against the
-47 captures in `reference/baselines`: **JA4 47/47, JA3N 47/47, Akamai 47/47**.
+48 captures in `reference/baselines`: **JA4 48/48, JA3N 48/48, Akamai 48/48**.
 
 `diff()` answers the question a profile edit actually raises — did a server
 notice:

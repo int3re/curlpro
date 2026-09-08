@@ -140,7 +140,7 @@ the Netscape format), `expect.py` (expectations about a response), `headers.py`
 
 ### Data and tools
 
-- `profiles/` — 47 profiles: Chrome 98–152, Edge, Firefox, Safari, Tor, Yandex
+- `profiles/` — 48 profiles: Chrome 98–152, Edge, Firefox 133–155, Safari, Tor, Yandex
   Browser. The mobile ones were captured from a live Pixel 7 over USB:
   `chrome-152-android`, `yandex-26.8-android`. Some are collapsed into deltas
   through `based_on`.
@@ -437,7 +437,7 @@ the HTTP/2 frames.
 go run ./cmd/probe -n 2            # JA4 against the reference
 go run ./cmd/h3probe               # the HTTP/3 fingerprint
 go run ./cmd/curlpro validate -oracle https://localhost:8443/json -insecure `
-    -baselines reference/baselines-local -pause 0      # all 47 profiles
+    -baselines reference/baselines-local -pause 0      # all 48 profiles
 ```
 
 The header order of a live browser is captured by the `cmd/hcapture` stand
@@ -446,7 +446,7 @@ see the order in HTTP/3.
 
 Current state (measured 2026-09-05): `go test -race ./internal/...` — ok on all
 four packages, pytest without the network — 230 passed and 10 skipped,
-`validate` — 47/47 including a check that the extension order stays stable,
+`validate` — 48/48 including a check that the extension order stays stable,
 `probe` and `h3probe` — a match with the reference, and the header order matched
 live Chrome 152 over HTTP/2 and HTTP/3. The audit results are in
 [STAGE14-RESULTS.md](STAGE14-RESULTS.md); the closing of the roadmap debts is in
