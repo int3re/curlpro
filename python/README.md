@@ -133,13 +133,20 @@ advertises a capacity as Chrome does, and a server that uses it gets parsed.
 
 ## Install
 
-Wheels are built for Linux (x86-64 and ARM64, glibc 2.28+), macOS 13+ (Intel and
-Apple Silicon) and Windows x64. The macOS 13 floor is not ours to choose: that is
-what Go 1.27 requires, and the native part is built with it.
+```bash
+pip install curlpro
+```
+
+Nothing to compile: the native library and all 47 profiles travel inside the
+wheel. Wheels are built for Linux (x86-64 and ARM64, glibc 2.28+), macOS 13+
+(Intel and Apple Silicon) and Windows x64. The macOS 13 floor is not ours to
+choose: that is what Go 1.27 requires, and the native part is built with it.
 
 Platforms outside that list — Alpine and other musl distributions, Windows on
-ARM, older glibc or macOS — install from the source archive, and there Go and a C
-compiler are required:
+ARM, older glibc or macOS — have no wheel. There the source archive is built by
+hand, and Go and a C compiler are required: `pip install` alone would leave the
+package without its native part, and the failure would come at the first call
+rather than at install time.
 
 ```bash
 pip download curlpro --no-binary :all: --no-deps

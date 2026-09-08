@@ -125,8 +125,10 @@ pip install curlpro-*-manylinux_2_28_x86_64.whl
 ```
 
 **Platforms outside the table** — Alpine and other musl distributions, Windows on
-ARM, older glibc or macOS — install from the source archive, and there Go and a C
-compiler are required:
+ARM, older glibc or macOS — have no wheel. There the source archive is built by
+hand, and Go and a C compiler are required: `pip install` alone would leave the
+package without its native part, and the failure would come at the first call
+rather than at install time.
 
 ```bash
 pip download curlpro --no-binary :all: --no-deps
