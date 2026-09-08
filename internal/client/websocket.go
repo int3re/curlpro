@@ -102,8 +102,10 @@ var errWSClosed = errors.New("connection closed")
 
 // DialWebSocket performs the handshake and returns the connection.
 //
-// The wss:// scheme is mandatory: ws:// without TLS makes no sense here,
-// because the whole point of the library is the TLS fingerprint.
+// wss:// and ws:// are both accepted. Over ws:// there is no ClientHello and
+// so no TLS fingerprint, but the HTTP/1.1 handshake still carries the
+// profile's header order and case — which is all a cleartext peer can see
+// anyway. Refusing it would only push the caller onto a second HTTP client.
 func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocket, error) {
 	if err := s.ensureOpen(); err != nil {
 		return nil, err
@@ -115,9 +117,11 @@ func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocke
 	switch u.Scheme {
 	case "wss":
 		u.Scheme = "https"
-	case "https":
+	case "ws":
+		u.Scheme = "http"
+	case "https", "http":
 	default:
-		return nil, fmt.Errorf("only wss:// is supported, got scheme %q", u.Scheme)
+		return nil, fmt.Errorf("only ws:// and wss:// are supported, got scheme %q", u.Scheme)
 	}
 
 	timeout := opts.Timeout

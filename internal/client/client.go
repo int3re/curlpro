@@ -691,8 +691,11 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("parsing URL: %w", err)
 	}
-	if u.Scheme != "https" {
-		return nil, nil, nil, fmt.Errorf("only https is supported, got scheme %q", u.Scheme)
+	switch u.Scheme {
+	case "https", "http":
+	default:
+		return nil, nil, nil, fmt.Errorf(
+			"only http and https are supported, got scheme %q", u.Scheme)
 	}
 
 	method := r.Method
@@ -755,7 +758,23 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// The Alt-Svc upgrade applies to direct connections only: QUIC does not pass
 	// through a proxy, and there is nothing to offer there.
 	forced := r.protocol()
-	viaAltSvc := forced == "" && !s.opts.HTTP3 &&
+	// Over cleartext there is no ALPN and no Alt-Svc to act on: h2c is not what
+	// a browser does, and QUIC is TLS by definition. Rather than negotiate down
+	// silently, an explicit demand for h2 or h3 is refused here — a request that
+	// went out as HTTP/1.1 while the caller asked for h3 is worse than an error.
+	plain := u.Scheme == "http"
+	if plain {
+		switch {
+		case forced == ProtoH3 || s.opts.HTTP3:
+			return fail(&fatalError{fmt.Errorf(
+				"HTTP/3 needs TLS: %s cannot be requested for an http:// URL", ProtoH3)})
+		case forced == ProtoH2:
+			return fail(&fatalError{fmt.Errorf(
+				"protocol=%s over http:// would be h2c, which no browser speaks; "+
+					"use https:// or let it be HTTP/1.1", ProtoH2)})
+		}
+	}
+	viaAltSvc := !plain && forced == "" && !s.opts.HTTP3 &&
 		s.proxyForHost(r, u.Host) == "" && s.altSvcH3(u)
 	if forced == ProtoH3 || (forced == "" && s.opts.HTTP3) || viaAltSvc {
 		// The session option was checked when it was created; a request's demand
@@ -787,6 +806,9 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		forceH1 = forced == ProtoHTTP1
 	}
 	spec := s.newDialSpec(u, s.proxyForHost(r, u.Host), forceH1)
+	if plain {
+		spec.plain = true
+	}
 	c, err := s.conn(req.Context(), u, spec)
 	if err != nil {
 		// No connection — the request never reached the server, a retry is safe.
@@ -835,6 +857,15 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 	raw, err := s.dialRaw(dialCtx, ds.addr, ds.proxy)
 	if err != nil {
 		return nil, err
+	}
+
+	// Cleartext: no ClientHello, so no TLS fingerprint — but the HTTP/1.1 half
+	// of the profile still applies, and that is the half a plain-HTTP server
+	// can see. The header order and case come from the profile exactly as they
+	// do over TLS, because the connection is an ordinary h1 connection from
+	// here on.
+	if ds.plain {
+		return newH1Conn(raw, ds), nil
 	}
 
 	// The spec is built per connection: ShuffleChromeTLSExtensions mutates the

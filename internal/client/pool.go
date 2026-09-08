@@ -37,6 +37,10 @@ type dialSpec struct {
 	addr       string // host:port, hostname lowercased
 	proxy      string // proxy address as given; empty means direct
 	forceHTTP1 bool
+	// plain is a cleartext http:// connection. Part of the key, and it has to
+	// be: http://host:8443 and https://host:8443 share an address, and handing
+	// one the other's socket would send the request into the wrong protocol.
+	plain bool
 	// target is where the socket actually opens after a name override.
 	// Part of the key: two rules for one name lead to different machines, and a
 	// shared connection would send the request to the wrong one.
@@ -48,15 +52,21 @@ type dialSpec struct {
 // The hostname is lowercased: otherwise https://Example.COM and
 // https://example.com would open two connections to one server.
 func (s *Session) newDialSpec(u *url.URL, proxy string, forceHTTP1 bool) dialSpec {
+	plain := u.Scheme == "http"
 	port := u.Port()
 	if port == "" {
-		port = "443"
+		if plain {
+			port = "80"
+		} else {
+			port = "443"
+		}
 	}
 	addr := strings.ToLower(u.Hostname()) + ":" + port
 	return dialSpec{
 		addr:       addr,
 		proxy:      proxy,
 		forceHTTP1: forceHTTP1,
+		plain:      plain,
 		target:     resolveAddr(s.opts.Resolve, addr),
 	}
 }

@@ -97,6 +97,22 @@ The source-level analysis lives in [docs/RESEARCH.md](docs/RESEARCH.md), includi
 why "profiles in compiled code" breaks down structurally rather than through any
 maintainer's fault.
 
+### Cleartext http://
+
+`http://` and `ws://` work. There is no ClientHello over cleartext and so no TLS
+fingerprint, but the HTTP/1.1 half of the profile still applies — the header
+order and case are the profile's, and that is all a plain-HTTP peer can see
+anyway. The point is not masking: it is that a caller whose own service speaks
+plain HTTP — a solver, an internal API — should not have to keep a second HTTP
+client beside this one.
+
+Two things are refused rather than quietly downgraded: `protocol="h2"` over
+`http://` would be h2c, which no browser speaks, and `protocol="h3"` needs TLS
+by definition. A redirect from `https://` to `http://` is not followed either —
+the 3xx is handed back with its `Location`, so the decision is the caller's;
+following it would put the request's cookies and credentials on the wire in
+clear text.
+
 ## Install
 
 ```bash

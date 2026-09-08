@@ -97,10 +97,13 @@ def test_close_is_idempotent():
             sock.send("too late")
 
 
-def test_requires_wss():
+def test_rejects_schemes_that_are_not_websocket():
+    """ws:// is accepted since 0.4.2 — a cleartext peer still sees the profile's
+    HTTP/1.1 handshake, and refusing it only pushed callers onto a second
+    client. Anything that is not a websocket or http scheme is still refused."""
     with curlpro.Session() as s:
-        with pytest.raises(curlpro.CurlProError, match="only wss"):
-            s.websocket("ws://echo.websocket.org/")
+        with pytest.raises(curlpro.CurlProError, match="ws:// and wss://"):
+            s.websocket("ftp://example.com/")
 
 
 def test_handshake_uses_profile_headers():

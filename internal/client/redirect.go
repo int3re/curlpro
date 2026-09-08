@@ -23,7 +23,7 @@ func isRedirect(code int) bool {
 // errRedirectUnsupported means the hop is valid by protocol but beyond the
 // client's abilities (Location points at http://). Such a response is handed to
 // the caller as it is: a 301 with a Location is more useful than an exception.
-var errRedirectUnsupported = errors.New("redirect outside https is not supported")
+var errRedirectUnsupported = errors.New("this redirect is not followed automatically")
 
 // redirectTarget resolves Location against the current URL.
 func redirectTarget(current, location string) (string, error) {
@@ -36,7 +36,22 @@ func redirectTarget(current, location string) (string, error) {
 		return "", fmt.Errorf("parsing Location %q: %w", location, err)
 	}
 	next := base.ResolveReference(loc)
-	if next.Scheme != "https" {
+	switch next.Scheme {
+	case "https":
+	case "http":
+		// Starting from http:// is the caller's choice, and the chain follows.
+		// Being moved off TLS by the server is another matter: the request
+		// carries the cookies and the Authorization header of a request made
+		// over TLS, and following the hop would put them on the wire in clear
+		// text. It is not raised as an error — the 3xx is handed to the caller
+		// through the same path a redirect to any unsupported scheme takes, so
+		// the Location is visible and the decision is theirs.
+		if base.Scheme != "http" {
+			return "", fmt.Errorf("%w: https:// to http:// would send the "+
+				"request's cookies and credentials in clear text",
+				errRedirectUnsupported)
+		}
+	default:
 		return "", fmt.Errorf("%w: %s", errRedirectUnsupported, next.Scheme)
 	}
 	return next.String(), nil
