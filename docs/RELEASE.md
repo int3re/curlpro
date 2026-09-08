@@ -6,7 +6,8 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.4.0**: JA4H, Russian profiles, the profile audit and TLS session resumption.
+**0.4.1**: the Install section on the package page begins with the install
+command — 0.4.0 opened it with the source build and read as if Go were required.
 
 ## What happens on a tag
 
