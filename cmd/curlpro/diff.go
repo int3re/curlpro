@@ -193,6 +193,19 @@ func headerKeys(p *profile.Profile) []string {
 func numsToStr(in []uint16) []string {
 	out := make([]string, len(in))
 	for i, v := range in {
+		// GREASE is a fresh random value on every connection while its
+		// position is fixed, so printing the number would report a change on
+		// every capture of the same browser. The automated capture made that
+		// concrete: the diff between Chrome 152 and 153 carried a sigalgs line
+		// that said nothing but 0x0a0a versus 0xfafa.
+		//
+		// The position still shows, because the marker keeps its place in the
+		// list. A GREASE that moved, or one that appeared or vanished, is a
+		// real difference and is still reported.
+		if v&0x0f0f == 0x0a0a {
+			out[i] = "GREASE"
+			continue
+		}
 		out[i] = fmt.Sprint(v)
 	}
 	return out

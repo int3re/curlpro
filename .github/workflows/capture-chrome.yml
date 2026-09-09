@@ -185,10 +185,16 @@ jobs:
             echo "navigation cannot measure — \`fetch\`, \`http1\`, \`client_hints\`,"
             echo "\`http3\`, \`quic\`, \`websocket\` — are inherited rather than emptied."
             echo
-            echo "**Check by hand:** the runner's Chrome runs in en-US, so its"
-            echo "\`accept-language\` was dropped from the delta and the parent's"
-            echo "Russian value is inherited. If this version changed the *shape*"
-            echo "of the q ladder rather than the language, that change is not here."
+            echo "**Check by hand:** the runner's Chrome runs in en-US, so the"
+            echo "captured \`accept-language\` was replaced with the value the"
+            echo "\`based_on\` chain declares — the entry keeps its position, only"
+            echo "the value changes. If this version altered the *shape* of the q"
+            echo "ladder rather than the language, that change is not in this diff."
+            echo
+            echo "GREASE prints as \`GREASE\` rather than as its number: the value is"
+            echo "redrawn on every connection, so printing it would report a change"
+            echo "on every capture of the same browser. A GREASE that moved, or"
+            echo "appeared, or vanished, is still shown."
           } > capture-diff.md
           cat capture-diff.md
 
