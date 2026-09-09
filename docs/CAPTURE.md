@@ -229,6 +229,51 @@ export SSLKEYLOGFILE="C:\\Users\\$USERNAME\\AppData\\Local\\Temp\\sslkeys.log"
 existing process, which never saw the variable. Always a throwaway
 `--user-data-dir`. Firefox needs `-no-remote`.
 
+### Chrome for Testing is not a substitute — measured 2026-09-09
+
+The obvious way to automate capture is to download the exact version from
+[Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/):
+2506 builds are published there, per platform, so "Chrome 153 shipped, capture
+it" needs no browser on the machine. It was measured before being trusted, and
+it does not hold.
+
+Consumer Chrome 152.0.7977.83 and Chrome for Testing 152.0.7977.82 were captured
+on the same machine, the same day, through the same stand. Five runs, three of
+CfT and two of consumer, each internally consistent:
+
+```
+consumer  t13d1517h2_8daaf6152771_cb7bf5808d99   17 extensions
+CfT       t13d1518h2_8daaf6152771_4980c97edce0   18 extensions
+```
+
+The lists are identical but for one entry: CfT also sends **`0x12e0`**, which no
+consumer Chrome does. It is there in every CfT run and in none of the consumer
+runs, so it is not noise.
+
+The consumer capture reproduced `profiles/chrome-152-windows.json` exactly —
+the profile shipped in the library, captured weeks earlier. So the stand is
+sound and the divergence is the browser's.
+
+A profile built from CfT would therefore carry an extension no real user sends:
+not a profile that is one version behind, but one that is confidently wrong,
+and wrong in a way that singles out every client using it. **Capture from the
+browser people actually run.** Google's own apt/choco/brew channels give exactly
+that, and a fresh throwaway user-data-dir does not change the result — the
+consumer captures above used one.
+
+Two practical notes from the same session, both of which cost a run:
+
+- **The unpacked browser needs the sandbox to be able to read it.** Files
+  extracted by a script inherit the parent directory's ACL, and Chrome fails
+  with `Sandbox cannot access executable`, after which the network service
+  crashes in a loop and only some of the samples arrive. On Windows:
+  `icacls <dir> /grant "*S-1-15-2-1:(OI)(CI)(RX)" /T`. Running with
+  `--no-sandbox` would also work and is the wrong fix — it changes the browser
+  being measured.
+- **A cold browser needs longer than a warm one.** `-dwell` sets how long each
+  window stays open; the default of 4 s is enough for an installed browser and
+  too short for one just unpacked.
+
 `curlpro capture` picks the browser from the family in `-name`, so
 `-name firefox-154-windows` looks for Firefox and starts it with Firefox's own
 switches. An explicit `-browser` still has to agree with the name: a profile

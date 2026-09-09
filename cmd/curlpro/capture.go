@@ -94,6 +94,7 @@ profile from a single capture would pin a random permutation.
 	basedOn := fs.String("based-on", "", "parent profile: write a delta (tls and headers) instead of a full profile")
 	browser := fs.String("browser", "", "path to the browser (found by the family in -name by default)")
 	manual := fs.Bool("manual", false, "do not launch a browser: open the page yourself")
+	dwell := fs.Duration("dwell", 4*time.Second, "how long to leave each browser window open")
 	wait := fs.Duration("wait", 90*time.Second, "how long to wait for samples in manual mode")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -117,7 +118,7 @@ profile from a single capture would pin a random permutation.
 	fmt.Printf("stand:    %s on %s\n", filepath.Base(bin), *addr)
 	fmt.Printf("samples:  %d\n\n", *samples)
 
-	details, err := collect(bin, *addr, crt, key, *samples, *name, *browser, *manual, *wait)
+	details, err := collect(bin, *addr, crt, key, *samples, *name, *browser, *manual, *wait, *dwell)
 	if err != nil {
 		return err
 	}
@@ -181,7 +182,7 @@ func toDelta(p *profile.Profile, basedOn, dir string) (*profile.Profile, error) 
 
 // collect starts the stand, drives the browser and collects samples from its output.
 func collect(bin, addr, crt, key string, want int, name, browser string,
-	manual bool, wait time.Duration) ([]echoDetail, error) {
+	manual bool, wait, dwell time.Duration) ([]echoDetail, error) {
 
 	cmd := exec.Command(bin, "-listen-addr", addr,
 		"-cert-filename", crt, "-certkey-filename", key, "-verbose")
@@ -214,7 +215,7 @@ func collect(bin, addr, crt, key string, want int, name, browser string,
 		if launcher.family == "firefox" {
 			fmt.Printf("%s\n", firefoxCertWarning)
 		}
-		go driveBrowser(launcher, url, want)
+		go driveBrowser(launcher, url, want, dwell)
 	}
 
 	var details []echoDetail
@@ -389,7 +390,13 @@ func browserPaths(family string) []string {
 
 // driveBrowser opens the page the required number of times, each time in a new
 // browser profile, to guarantee a fresh TLS connection.
-func driveBrowser(l launcher, url string, times int) {
+//
+// dwell is how long each window is left open. Four seconds is enough for a
+// browser that is already installed and warm; a freshly unpacked one — Chrome
+// for Testing on a CI runner, say — spends longer on its first run and misses
+// the request entirely. The measurement that found this collected 4 samples out
+// of 5 twice in a row.
+func driveBrowser(l launcher, url string, times int, dwell time.Duration) {
 	for i := 0; i < times+2; i++ { // with a margin: some visits go to the favicon
 		dir, err := os.MkdirTemp("", "curlpro-capture-")
 		if err != nil {
@@ -397,7 +404,7 @@ func driveBrowser(l launcher, url string, times int) {
 		}
 		cmd := exec.Command(l.path, browserArgs(l.family, dir, url)...)
 		if cmd.Start() == nil {
-			time.Sleep(4 * time.Second)
+			time.Sleep(dwell)
 			_ = cmd.Process.Kill()
 			_, _ = cmd.Process.Wait()
 		}
@@ -458,8 +465,17 @@ func buildProfile(name string, details []echoDetail) (*profile.Profile, error) {
 		sets[fmt.Sprint(clean)] = true
 	}
 	if len(sets) != 1 {
+		// Name what differs. "The sets diverge" sends the reader back to the
+		// samples with nothing to look for; printing the variants points
+		// straight at the extension, which is usually one and usually padding.
+		variants := make([]string, 0, len(sets))
+		for s := range sets {
+			variants = append(variants, s)
+		}
+		sort.Strings(variants)
 		return nil, fmt.Errorf("the extension sets diverge (%d variants) — "+
-			"the samples come from different browsers", len(sets))
+			"the samples come from different browsers:\n  %s",
+			len(sets), strings.Join(variants, "\n  "))
 	}
 
 	first := details[0]
