@@ -25,5 +25,13 @@ Code copied into this repository:
 Tools downloaded separately, not part of the repository:
   github.com/wi1dcard/fingerproxy (echo-server) — MIT
 
+JA4H is computed by internal/fingerprint/ja4h.go under the FoxIO License 1.1
+(patent-pending): free for internal and academic use, an OEM licence required
+for commercial monetisation. It is the only component under that licence, and
+it can be excluded from the build entirely with -tags nofoxio; nothing else
+changes. JA4 for TLS, computed elsewhere in the same package, is BSD-3.
+
+Dependencies are vendored in vendor/ and carry their own licence files there.
+
 The browser profiles in profiles/ were obtained two ways: by our own measurements
 of live browsers and by importing the curl-impersonate signatures (MIT) — see docs/.

@@ -43,6 +43,15 @@ jobs:
           pip install ruff
           ruff check python --select E9,F,B
 
+      # The nofoxio build leaves out the FoxIO-licensed JA4H code, so a legal
+      # department that objects to that licence can decline JA4H rather than
+      # the library. An option nobody builds is an option that rots: it is
+      # compiled and tested on every push, not only when someone remembers.
+      - name: build without the FoxIO-licensed code
+        run: |
+          go build -tags nofoxio ./...
+          go test -tags nofoxio ./internal/fingerprint/
+
   go:
     strategy:
       fail-fast: false

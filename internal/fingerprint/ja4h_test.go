@@ -1,3 +1,5 @@
+//go:build !nofoxio
+
 package fingerprint
 
 import "testing"

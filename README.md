@@ -121,6 +121,30 @@ the 3xx is handed back with its `Location`, so the decision is the caller's;
 following it would put the request's cookies and credentials on the wire in
 clear text.
 
+
+### Declining JA4H
+
+JA4 for TLS is BSD-3 and free. JA4H is not: FoxIO License 1.1, patent-pending —
+internal and academic use is free, commercial monetisation needs an OEM licence
+from FoxIO. This library is Apache 2.0, so the obligation lands on whoever ships
+a product computing the value, not on the library. A dependency review does not
+weigh obligations, though — it flags licences.
+
+So JA4H can be left out entirely:
+
+```bash
+go build -tags nofoxio -buildmode=c-shared -o dist/libcurlpro.so ./lib
+```
+
+None of the FoxIO-licensed code enters that binary. Everything else is
+unchanged: JA3, JA3N, JA4, the Akamai string, the header preview and the audit
+are computed exactly as before, checked by a test that runs under the tag in CI.
+`fingerprint().ja4h` comes back empty and `fingerprint().ja4h_available` is
+`False`, reported rather than left to be inferred — the real implementation
+never returns an empty string.
+
+The wheels on PyPI are built without the tag, so JA4H is present there.
+
 ## Install
 
 ```bash

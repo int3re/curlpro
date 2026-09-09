@@ -20,14 +20,19 @@ corpus/
 # the opposite — those are committed.
 reference/baselines-local/
 
-# Go / the native build
+# Go / the native build.
+#
+# vendor/ is NOT ignored: it is committed on purpose. utls and uquic are pinned
+# to pseudo-versions on master, because upstream does not tag the fresh parrots.
+# A pseudo-version is a pin — it names a commit and go.sum locks its hash — but
+# it survives only as long as that commit does. Vendoring makes the build
+# independent of the upstream repositories continuing to exist.
 dist/
 *.exe
 *.dll
 *.so
 *.dylib
 *.h
-vendor/
 
 # Python
 __pycache__/

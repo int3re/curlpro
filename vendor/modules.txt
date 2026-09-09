@@ -1,0 +1,124 @@
+# github.com/andybalholm/brotli v1.1.1
+## explicit; go 1.13
+github.com/andybalholm/brotli
+github.com/andybalholm/brotli/matchfinder
+# github.com/bogdanfinn/fhttp v0.6.8
+## explicit; go 1.24.1
+github.com/bogdanfinn/fhttp
+github.com/bogdanfinn/fhttp/cookiejar
+github.com/bogdanfinn/fhttp/http2
+github.com/bogdanfinn/fhttp/http2/hpack
+github.com/bogdanfinn/fhttp/httptrace
+github.com/bogdanfinn/fhttp/internal
+github.com/bogdanfinn/fhttp/internal/nettrace
+# github.com/bogdanfinn/utls v1.7.7-barnius
+## explicit; go 1.24
+github.com/bogdanfinn/utls
+github.com/bogdanfinn/utls/dicttls
+github.com/bogdanfinn/utls/internal/boring
+github.com/bogdanfinn/utls/internal/byteorder
+github.com/bogdanfinn/utls/internal/fips140tls
+github.com/bogdanfinn/utls/internal/helper
+github.com/bogdanfinn/utls/internal/hkdf
+github.com/bogdanfinn/utls/internal/hpke
+github.com/bogdanfinn/utls/internal/quicvarint
+github.com/bogdanfinn/utls/internal/quicvarint/protocol
+github.com/bogdanfinn/utls/internal/tls12
+github.com/bogdanfinn/utls/internal/tls13
+# github.com/google/gopacket v1.1.19
+## explicit; go 1.12
+github.com/google/gopacket
+github.com/google/gopacket/layers
+# github.com/klauspost/compress v1.18.0
+## explicit; go 1.22
+github.com/klauspost/compress
+github.com/klauspost/compress/flate
+github.com/klauspost/compress/fse
+github.com/klauspost/compress/huff0
+github.com/klauspost/compress/internal/cpuinfo
+github.com/klauspost/compress/internal/le
+github.com/klauspost/compress/internal/snapref
+github.com/klauspost/compress/zstd
+github.com/klauspost/compress/zstd/internal/xxhash
+# github.com/quic-go/qpack v0.6.0
+## explicit; go 1.24
+github.com/quic-go/qpack
+# github.com/refraction-networking/clienthellod v0.5.0-alpha2
+## explicit; go 1.21.0
+github.com/refraction-networking/clienthellod
+github.com/refraction-networking/clienthellod/internal/utils
+# github.com/refraction-networking/uquic v0.0.7-0.20260804184259-837c7ce1b72b
+## explicit; go 1.24
+github.com/refraction-networking/uquic
+github.com/refraction-networking/uquic/http3
+github.com/refraction-networking/uquic/http3/qlog
+github.com/refraction-networking/uquic/internal/ackhandler
+github.com/refraction-networking/uquic/internal/congestion
+github.com/refraction-networking/uquic/internal/flowcontrol
+github.com/refraction-networking/uquic/internal/handshake
+github.com/refraction-networking/uquic/internal/monotime
+github.com/refraction-networking/uquic/internal/protocol
+github.com/refraction-networking/uquic/internal/qerr
+github.com/refraction-networking/uquic/internal/utils
+github.com/refraction-networking/uquic/internal/utils/linkedlist
+github.com/refraction-networking/uquic/internal/utils/ringbuffer
+github.com/refraction-networking/uquic/internal/wire
+github.com/refraction-networking/uquic/qlog
+github.com/refraction-networking/uquic/qlogwriter
+github.com/refraction-networking/uquic/qlogwriter/jsontext
+github.com/refraction-networking/uquic/quicvarint
+# github.com/refraction-networking/utls v1.8.3-0.20260802151714-23b1dac19c06
+## explicit; go 1.24
+github.com/refraction-networking/utls
+github.com/refraction-networking/utls/dicttls
+github.com/refraction-networking/utls/internal/boring
+github.com/refraction-networking/utls/internal/byteorder
+github.com/refraction-networking/utls/internal/fips140tls
+github.com/refraction-networking/utls/internal/helper
+github.com/refraction-networking/utls/internal/hkdf
+github.com/refraction-networking/utls/internal/hpke
+github.com/refraction-networking/utls/internal/quicvarint
+github.com/refraction-networking/utls/internal/quicvarint/protocol
+github.com/refraction-networking/utls/internal/tls12
+github.com/refraction-networking/utls/internal/tls13
+# golang.org/x/crypto v0.55.0
+## explicit; go 1.25.0
+golang.org/x/crypto/chacha20
+golang.org/x/crypto/chacha20poly1305
+golang.org/x/crypto/cryptobyte
+golang.org/x/crypto/cryptobyte/asn1
+golang.org/x/crypto/hkdf
+golang.org/x/crypto/internal/alias
+golang.org/x/crypto/internal/poly1305
+golang.org/x/crypto/sha3
+# golang.org/x/net v0.58.0
+## explicit; go 1.25.0
+golang.org/x/net/bpf
+golang.org/x/net/http/httpguts
+golang.org/x/net/http/httpproxy
+golang.org/x/net/http2
+golang.org/x/net/http2/hpack
+golang.org/x/net/idna
+golang.org/x/net/internal/httpcommon
+golang.org/x/net/internal/httpsfv
+golang.org/x/net/internal/iana
+golang.org/x/net/internal/socket
+golang.org/x/net/internal/socks
+golang.org/x/net/ipv4
+golang.org/x/net/ipv6
+golang.org/x/net/proxy
+golang.org/x/net/publicsuffix
+# golang.org/x/sys v0.47.0
+## explicit; go 1.25.0
+golang.org/x/sys/cpu
+golang.org/x/sys/unix
+golang.org/x/sys/windows
+# golang.org/x/text v0.41.0
+## explicit; go 1.25.0
+golang.org/x/text/secure/bidirule
+golang.org/x/text/transform
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
+# gopkg.in/yaml.v3 v3.0.1
+## explicit
+gopkg.in/yaml.v3

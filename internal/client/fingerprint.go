@@ -54,6 +54,12 @@ type Fingerprint struct {
 	// JA4HHTTP1 is the same over HTTP/1.1, where the header set differs and so
 	// does the version code in the readable part.
 	JA4HHTTP1 string `json:"ja4h_http1"`
+	// JA4HAvailable is false in a build made with -tags nofoxio, where the
+	// FoxIO-licensed code is left out entirely and both JA4H fields are empty.
+	// Reported rather than inferred: an empty string could otherwise be read
+	// as "computed and came out empty", which the real implementation never
+	// returns.
+	JA4HAvailable bool `json:"ja4h_available"`
 
 	UserAgent string `json:"user_agent"`
 
@@ -147,6 +153,7 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 		Method: "GET", Proto: proto, Headers: main})
 	out.JA4HHTTP1 = fingerprint.JA4H(fingerprint.JA4HRequest{
 		Method: "GET", Proto: "HTTP/1.1", Headers: pairsH1})
+	out.JA4HAvailable = fingerprint.JA4HAvailable
 	return out, nil
 }
 

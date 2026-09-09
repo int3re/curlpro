@@ -454,6 +454,46 @@ Five items that were missing against the interface of BAS-like tools:
 
 The ABI was raised to 0.11.0 (the request fields `cookies` and `session_headers`).
 
+## Stage 22 — three items from the external review ✅ done 2026-09-09
+
+A review on 2026-09-08 scored the project 8.5 and named four open items. Three
+are closed here; the fourth, automated capture of a new Chrome, is the one that
+needs a decision rather than code.
+
+**Dependencies are vendored.** utls and uquic are pinned to pseudo-versions on
+master, because upstream does not tag the fresh parrots. The review read that as
+"the build will break when the author is not around", which overstates it: a
+pseudo-version *is* a pin — it names a commit and go.sum locks its hash — and
+proxy.golang.org keeps an immutable copy. What it does not survive is the
+upstream commit ceasing to exist. `vendor/` (24 MB, 1545 files) removes that
+dependency: `GOPROXY=off go build ./...` now succeeds. The source archive on
+PyPI is unaffected — the workflow copies only `internal lib go.mod go.sum` into
+it, so it stays at 311 KB.
+
+**JA4H can be excluded from the build.** `-tags nofoxio` replaces
+`internal/fingerprint/ja4h.go` with a stub, and no FoxIO-licensed code enters
+the binary. Everything else is computed as before — checked by a test that runs
+under the tag, and the tag is built in CI on every push so it cannot rot into an
+option that no longer compiles. `Fingerprint.ja4h_available` reports which build
+is in use, because an empty string would otherwise read as "computed and came
+out empty", which the real implementation never returns. The three Python tests
+that assert on JA4H skip themselves when it is absent.
+
+**Versioning is written down** in [docs/VERSIONING.md](docs/VERSIONING.md): what
+a patch and a minor may change, what is outside the contract (error wording,
+fingerprint values, `internal/`), how the ABI number differs from the package
+version, and why there is no 1.0 yet — the corpus is still updated by hand, and
+an API nobody has argued with is not worth freezing.
+
+One claim in the review was checked and did not hold. It suspected the "48/48"
+figure of being softer than it sounds, because the baseline schema allows a
+wildcard `"*"` and the reviewer had spot-checked three files. All 48 were
+checked: **no wildcard anywhere.** Four files carry two values for `ja4`/`ja3n` —
+`chrome-119-linux`, `chrome-119-macos`, `chrome-120-macos`, `edge-120-linux` —
+and that is not slack but a description of the browser: those profiles carry
+`padding`, so the ClientHello length, and the fingerprint with it, legitimately
+varies per connection. Found in stage 6 and recorded then.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

@@ -1,3 +1,5 @@
+//go:build !nofoxio
+
 package fingerprint
 
 // JA4H — the fingerprint of an HTTP request.
@@ -11,6 +13,12 @@ package fingerprint
 // the file that computes them, and in the documentation. See
 // https://github.com/FoxIO-LLC/ja4 for the licence text.
 //
+// Build with -tags nofoxio and none of this enters the binary: ja4h_off.go
+// takes its place, JA4H returns the empty string and JA4HAvailable is false.
+// Everything else — JA3, JA3N, JA4, the Akamai string, the header preview —
+// is unaffected. A legal department that objects to this licence should not
+// have to reject the whole library over it.
+//
 // The value describes a request rather than a connection: method, protocol,
 // whether cookies and a referer are present, how many headers there are, the
 // language, and hashes of the header names and of the cookies. Two clients with
@@ -23,20 +31,8 @@ import (
 	"strings"
 )
 
-// HeaderKV is one header as it goes on the wire, case and order preserved.
-type HeaderKV struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
-// JA4HRequest is what the fingerprint is computed from.
-type JA4HRequest struct {
-	Method string
-	// Proto is the wire protocol: "HTTP/2.0", "HTTP/1.1", "HTTP/1.0".
-	Proto string
-	// Headers in send order. Pseudo-headers may be present and are ignored.
-	Headers []HeaderKV
-}
+// JA4HAvailable reports whether this build computes JA4H. See ja4h_off.go.
+const JA4HAvailable = true
 
 // JA4H computes the fingerprint. The empty string is never returned: a request
 // with no headers at all still has a method and a protocol.

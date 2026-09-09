@@ -137,6 +137,11 @@ with curlpro.Session("chrome-151-windows", http3=True) as s:
 The QPACK dynamic table is supported by a decoder of our own: the profile
 advertises a capacity as Chrome does, and a server that uses it gets parsed.
 
+JA4H can be left out of the build: it is the one component under a different
+licence (FoxIO License 1.1, patent-pending), and `-tags nofoxio` excludes it
+while leaving every other fingerprint intact. `fingerprint().ja4h_available`
+says which build is in use. The wheels here are built with it.
+
 ## Install
 
 ```bash

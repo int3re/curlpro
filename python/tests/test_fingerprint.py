@@ -131,12 +131,25 @@ def test_the_dict_form_is_serialisable():
 
 # --- JA4H -----------------------------------------------------------------
 #
+# Skipped when the library was built with -tags nofoxio: there the
+# FoxIO-licensed code is not compiled in and both JA4H fields are empty by
+# design. Asserting on them would turn a supported build into a test failure.
+
+def _skip_without_ja4h():
+    """Asked at call time, not at import: the profiles are loaded by a fixture,
+    and a session built during collection would fail before they exist."""
+    with curlpro.Session() as s:
+        if not s.fingerprint("https://example.com").ja4h_available:
+            pytest.skip("built with -tags nofoxio: JA4H is not compiled in")
+
+#
 # Licensed differently from the rest: FoxIO License 1.1, patent-pending. Free
 # for internal and academic use; commercial monetisation needs an OEM licence.
 # Said here as well as in the code, because a test file is where someone looks
 # to find out what a feature actually does.
 
 def test_ja4h_describes_the_request():
+    _skip_without_ja4h()
     with curlpro.Session("chrome-151-windows") as s:
         fp = s.fingerprint()
 
@@ -157,6 +170,7 @@ def test_ja4h_follows_the_protocol_and_its_header_set():
     describe a request nobody makes — which is exactly the bug this test was
     written after.
     """
+    _skip_without_ja4h()
     with curlpro.Session("chrome-151-windows") as h2, \
          curlpro.Session("chrome-151-windows", force_http1=True) as h1:
         a, b = h2.fingerprint(), h1.fingerprint()
@@ -168,6 +182,7 @@ def test_ja4h_follows_the_protocol_and_its_header_set():
 
 def test_ja4h_separates_the_profiles():
     """Different browsers send different header sets, and JA4H must show it."""
+    _skip_without_ja4h()
     seen = {}
     for name in ("chrome-151-windows", "firefox-133-macos", "safari-18.4-macos"):
         with curlpro.Session(name) as s:

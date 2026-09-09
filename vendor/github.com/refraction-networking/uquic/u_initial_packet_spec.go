@@ -1,0 +1,200 @@
+package quic
+
+import (
+	"crypto/rand"
+
+	"github.com/refraction-networking/uquic/internal/protocol"
+)
+
+// InitialPacketSpec describes everything about the QUIC Initial flight except the
+// ClientHello itself: the long header's connection IDs, packet numbers and token, how
+// the CRYPTO stream is cut into frames, and how those frames are spread across
+// datagrams. It is the QUIC-header half of a QUICSpec.
+//
+// The fields fall into three groups:
+//
+//   - Long header: SrcConnIDLength, DestConnIDLength, InitPacketNumber,
+//     InitPacketNumberLengths, and the token (TokenStore / ClientTokenLength /
+//     ClientTokenPrefix).
+//   - Framing inside a packet: FrameBuilder.
+//   - Datagram layout of the flight: InitialPackets.
+//
+// The zero value produces a default-shaped Initial: a single datagram carrying one
+// CRYPTO frame, no token, and library-chosen connection ID lengths.
+type InitialPacketSpec struct {
+	// SrcConnIDLength specifies how many bytes should the SrcConnID be
+	SrcConnIDLength int
+
+	// DestConnIDLength specifies how many bytes should the DestConnID be
+	DestConnIDLength int
+
+	// InitPacketNumberLength specifies how many bytes should the InitPacketNumber
+	// be interpreted as. It is usually 1 or 2 bytes. If unset, UQUIC will use the
+	// default algorithm to compute the length which is at least 2 bytes.
+	//
+	// Deprecated: Use InitPacketNumberLengths for per-packet control. This field is
+	// ignored when InitPacketNumberLengths is non-empty.
+	InitPacketNumberLength PacketNumberLen
+
+	// InitPacketNumberLengths specifies the PN encoding length for each successive
+	// Initial packet. Entry [0] applies to PN=InitPacketNumber, [1] to the next
+	// Initial packet, etc. If the packet index exceeds the slice length, the last
+	// entry repeats. Overrides InitPacketNumberLength when non-empty.
+	//
+	// Example (Chrome 146): []PacketNumberLen{1, 2} — 1-byte encoding for PN=1,
+	// 2-byte encoding for PN=2.
+	InitPacketNumberLengths []PacketNumberLen // [UQUIC]
+
+	// InitPacketNumber is the packet number of the first Initial packet. Following
+	// Initial packets, if any, will increment the Packet Number accordingly.
+	InitPacketNumber uint64 // [UQUIC]
+
+	// TokenStore is used to store and retrieve tokens. If set, will override the
+	// one set in the Config.
+	//
+	// Use this when the token must be computed per connection rather than described
+	// statically — ClientTokenLength and ClientTokenPrefix cover the common cases and
+	// need no implementation. NewClientToken builds the *ClientToken to return from
+	// Pop; ClientToken's fields are unexported, so a store outside this package
+	// cannot construct one any other way.
+	TokenStore TokenStore
+
+	// If ClientTokenLength is set when TokenStore is not set, a dummy TokenStore
+	// will be created to randomly generate tokens of the specified length for
+	// Pop() calls with any key and silently drop any Put() calls.
+	//
+	// However, the tokens will not be stored anywhere and are expected to be
+	// invalid since not assigned by the server.
+	ClientTokenLength int
+
+	// ClientTokenPrefix pins the leading bytes of the generated token; the rest stays
+	// random and is regenerated per connection. A real token is a server-issued opaque
+	// blob, but its first bytes are typically a fixed version/type prefix — Chrome's
+	// tokens from Google servers are 70 bytes starting with 0x00 — so a token that is
+	// random all the way to byte 0 is a trivial tell.
+	//
+	// The token is ClientTokenPrefix followed by random bytes, up to whichever of
+	// ClientTokenLength and len(ClientTokenPrefix) is larger. The prefix is never
+	// truncated, so putting the whole token here (with ClientTokenLength unset) sends
+	// exactly those bytes on every connection:
+	//
+	//	ClientTokenPrefix: []byte{0x00}, ClientTokenLength: 70 // Chrome
+	//
+	// Setting only ClientTokenPrefix installs the dummy TokenStore just as
+	// ClientTokenLength does; an explicit TokenStore still takes priority over both.
+	// [UQUIC]
+	ClientTokenPrefix []byte
+
+	// FrameBuilder specifies how the frames should be encapsulated for each Initial
+	// packet.
+	//
+	// If FrameBuilder implements QUICFrameBuilderEx, BuildForDatagram is called once
+	// per Initial datagram with the datagram index and base CRYPTO stream offset,
+	// enabling correct multi-datagram fingerprinting (e.g. Chrome 146 with two Initials).
+	//
+	// If nil, there will be only one single Crypto frame in the first Initial packet.
+	FrameBuilder QUICFrameBuilder
+
+	// InitialPackets, when non-empty, pins the per-datagram fragmentation of the
+	// Initial flight: entry [i] controls the i-th Initial datagram. This lets a spec
+	// reproduce a client whose Initials have specific CRYPTO split offsets and exact
+	// wire sizes — e.g. Chrome's X25519MLKEM768 flight of two 1200-byte Initials with
+	// the ClientHello split at CRYPTO offset 999:
+	//
+	//	[]InitialPacketPlan{{CryptoLength: 999, PacketSize: 1200}, {PacketSize: 1200}}
+	//
+	// If the datagram index exceeds the slice length, the last entry repeats. [UQUIC]
+	InitialPackets []InitialPacketPlan
+}
+
+// InitialPacketPlan pins, for one Initial datagram, how much of the CRYPTO stream it
+// carries and the exact QUIC packet (UDP payload) size it is padded to. See
+// InitialPacketSpec.InitialPackets. [UQUIC]
+type InitialPacketPlan struct {
+	// CryptoLength caps the CRYPTO data bytes placed in this datagram, which fixes
+	// the next datagram's CRYPTO offset (the split point). 0 = all remaining CRYPTO.
+	CryptoLength int
+
+	// PacketSize forces the exact serialized QUIC packet size (UDP payload bytes) by
+	// padding the payload with PADDING frames. 0 = no exact-size padding. Must leave
+	// room: the CRYPTO assigned to this datagram (+ header/AEAD) must not exceed it.
+	PacketSize int
+}
+
+// planFor returns the InitialPacketPlan for datagram index idx (last entry repeats),
+// or a zero plan if none is configured.
+func (ps *InitialPacketSpec) planFor(idx int) InitialPacketPlan {
+	if len(ps.InitialPackets) == 0 {
+		return InitialPacketPlan{}
+	}
+	if idx >= len(ps.InitialPackets) {
+		idx = len(ps.InitialPackets) - 1
+	}
+	return ps.InitialPackets[idx]
+}
+
+// initialPN returns the packet number the first Initial packet must carry, i.e. the
+// value the Initial packet number space is seeded with at dial time. Chrome starts its
+// Initial flight at PN=1 rather than 0 — most visibly when a token is present, since a
+// client that already got a Retry has necessarily sent a PN=0 Initial before it — so a
+// spec that sets InitPacketNumber must have that value reach the wire, not just serve as
+// the index base for InitPacketNumberLengths. [UQUIC]
+func (ps *InitialPacketSpec) initialPN() protocol.PacketNumber {
+	const maxPN = uint64(1)<<62 - 1 // RFC 9000 §17.1: packet numbers are in [0, 2^62-1]
+	if ps.InitPacketNumber > maxPN {
+		return 0
+	}
+	return protocol.PacketNumber(ps.InitPacketNumber)
+}
+
+// UpdateConfig installs the spec's token source into conf, resolved by getTokenStore:
+// an explicit TokenStore wins, otherwise ClientTokenLength/ClientTokenPrefix synthesize
+// one. A spec that requests no token leaves conf.TokenStore untouched, so a caller's own
+// store survives.
+func (ps *InitialPacketSpec) UpdateConfig(conf *Config) {
+	// Only override the Config's TokenStore when the spec actually provides one
+	// (an explicit TokenStore or a ClientTokenLength). Otherwise leave any
+	// user-supplied conf.TokenStore intact instead of clobbering it with nil.
+	if ts := ps.getTokenStore(); ts != nil {
+		conf.TokenStore = ts
+	}
+}
+
+func (ps *InitialPacketSpec) getTokenStore() TokenStore {
+	if ps.TokenStore != nil {
+		return ps.TokenStore
+	}
+
+	if n := ps.tokenLength(); n > 0 {
+		return &dummyTokenStore{
+			tokenLength: n,
+			prefix:      ps.ClientTokenPrefix,
+		}
+	}
+
+	return nil
+}
+
+// tokenLength is the size of the synthesized token: ClientTokenLength, but never
+// short enough to truncate ClientTokenPrefix.
+func (ps *InitialPacketSpec) tokenLength() int {
+	return max(ps.ClientTokenLength, len(ps.ClientTokenPrefix))
+}
+
+type dummyTokenStore struct {
+	tokenLength int
+	prefix      []byte // fixed leading bytes; the remainder is random
+}
+
+func (d *dummyTokenStore) Pop(key string) (token *ClientToken) {
+	var data []byte = make([]byte, d.tokenLength)
+	rand.Read(data[copy(data, d.prefix):])
+
+	return &ClientToken{
+		data: data,
+	}
+}
+
+func (d *dummyTokenStore) Put(_ string, _ *ClientToken) {
+	// Do nothing
+}

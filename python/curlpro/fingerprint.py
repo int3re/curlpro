@@ -123,6 +123,9 @@ class Fingerprint:
 
         Two clients with identical TLS can still differ here, which is why the
         two are scored together.
+
+        Empty in a library built with ``-tags nofoxio``, where none of the
+        FoxIO-licensed code is compiled in — see :attr:`ja4h_available`.
         """
         return self._d.get("ja4h", "")
 
@@ -130,6 +133,18 @@ class Fingerprint:
     def ja4h_http1(self) -> str:
         """The same over HTTP/1.1, where the header set and the version differ."""
         return self._d.get("ja4h_http1", "")
+
+    @property
+    def ja4h_available(self) -> bool:
+        """Whether this build computes JA4H at all.
+
+        False in a library built with ``-tags nofoxio``: a dependency review
+        that objects to the FoxIO License 1.1 can drop JA4H without dropping
+        the library, and everything else is computed as before. Reported rather
+        than inferred from an empty string, which the real implementation never
+        returns.
+        """
+        return bool(self._d.get("ja4h_available", True))
 
     @property
     def user_agent(self) -> str:
