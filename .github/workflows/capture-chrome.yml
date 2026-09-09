@@ -1,0 +1,198 @@
+# A new Chrome ships, and a profile for it arrives as a pull request.
+#
+# This is the claim the library is built on — profiles are data, updated without
+# a release — turned into a property of the system rather than a promise. Until
+# it existed, the corpus was updated by hand, and it fell behind: Chrome stable
+# reached 153 while the newest profile here was 152.
+#
+# Two things it deliberately does not do.
+#
+# It does not merge. The output is a pull request carrying the new profile and
+# a diff against its predecessor, for a person to look at. A fingerprint that
+# lands unread is how a wrong profile becomes a release.
+#
+# It does not use Chrome for Testing, though that would be far easier — every
+# version is published there, per platform, so no browser would have to be
+# installed at all. It was measured on 2026-09-09 and does not match: CfT sends
+# an extra extension (0x12e0) that no consumer Chrome sends, giving a different
+# JA4. A profile from it would not be one version behind but confidently wrong.
+# See docs/CAPTURE.md.
+
+name: capture-chrome
+
+on:
+  schedule:
+    # Daily. Chrome stable moves every few weeks, so most runs decide there is
+    # nothing to do and stop in the first job, which costs seconds.
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "capture even if the profile already exists (overwrites it)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      needed: ${{ steps.decide.outputs.needed }}
+      major: ${{ steps.decide.outputs.major }}
+      full: ${{ steps.decide.outputs.full }}
+      previous: ${{ steps.decide.outputs.previous }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: is there a Chrome newer than the corpus
+        id: decide
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://versionhistory.googleapis.com/v1/chrome/platforms/win64/channels/stable/versions?pageSize=1"
+          full=$(curl -fsSL "$api" | python3 -c 'import json,sys; print(json.load(sys.stdin)["versions"][0]["version"])')
+          major=${full%%.*}
+
+          # The newest chrome-N-windows already in the corpus.
+          have=$(ls profiles/chrome-*-windows.json 2>/dev/null \
+            | sed -E 's|.*/chrome-([0-9]+)-windows\.json|\1|' | sort -n | tail -1)
+          have=${have:-0}
+
+          echo "stable is $full (major $major), the corpus has $have"
+          echo "full=$full"        >> "$GITHUB_OUTPUT"
+          echo "major=$major"      >> "$GITHUB_OUTPUT"
+          echo "previous=$have"    >> "$GITHUB_OUTPUT"
+
+          if [ "$major" -gt "$have" ] || [ "${{ inputs.force }}" = "true" ]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "nothing to do"
+          fi
+
+  capture:
+    needs: check
+    if: needs.check.outputs.needed == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+
+      # The runner image carries a Chrome, but it is whatever was current when
+      # the image was built. Update it, then check what actually got installed.
+      - name: install the current stable Chrome
+        shell: pwsh
+        run: choco upgrade googlechrome -y --no-progress --ignore-checksums
+
+      # The guard that matters. Capturing under the name chrome-153-windows
+      # whatever browser happens to be on the machine is exactly the defect that
+      # once produced a Chrome fingerprint in a file called firefox-154: not a
+      # weaker profile but a false one, and nothing downstream can tell.
+      - name: the installed browser is the version we are naming
+        shell: pwsh
+        run: |
+          $paths = @(
+            "C:\Program Files\Google\Chrome\Application\chrome.exe",
+            "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+          )
+          $exe = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $exe) { throw "Google Chrome is not installed" }
+          $v = (Get-Item $exe).VersionInfo.ProductVersion
+          $got = $v.Split(".")[0]
+          $want = "${{ needs.check.outputs.major }}"
+          Write-Host "installed $v at $exe"
+          if ($got -ne $want) {
+            throw "the runner has Chrome $got but the profile would be named for $want — refusing to capture"
+          }
+          "CHROME_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: the stand
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools
+          gh release download --repo wi1dcard/fingerproxy \
+            --pattern 'echo-server_windows_amd64.exe' --pattern 'echo-server.sha256sum' \
+            --dir tools --clobber
+          bash scripts/gen-certs.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # -dwell is raised above the default: a runner is slower than a desktop,
+      # and a window that closes before the request goes out costs a sample.
+      - name: capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run ./cmd/curlpro capture \
+            --name "chrome-${{ needs.check.outputs.major }}-windows" \
+            --browser "$CHROME_EXE" \
+            --samples 5 --dwell 10s --wait 300s
+
+      # What changed against the version before it. This is the whole review:
+      # a new Chrome is usually a header diff over the previous one, and a
+      # surprise in the TLS section is what a person needs to see.
+      - name: what changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          prev="chrome-${{ needs.check.outputs.previous }}-windows"
+          new="chrome-${{ needs.check.outputs.major }}-windows"
+          {
+            echo "### \`$prev\` → \`$new\`"
+            echo
+            echo '```'
+            go run ./cmd/curlpro diff "$prev" "$new" || echo "(diff failed)"
+            echo '```'
+          } > capture-diff.md
+          cat capture-diff.md
+
+      # Informational only. The oracle is somebody else's service and it is
+      # down often enough that a release must not depend on it; the recorded
+      # baseline is what the scheduled validation compares against later.
+      - name: record the baseline from the oracle
+        continue-on-error: true
+        shell: bash
+        run: |
+          go run ./cmd/curlpro validate \
+            -only "chrome-${{ needs.check.outputs.major }}-windows" -update
+
+      - name: open the pull request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          major="${{ needs.check.outputs.major }}"
+          full="${{ needs.check.outputs.full }}"
+          branch="capture/chrome-$major-windows"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add "profiles/chrome-$major-windows.json" \
+                  "reference/baselines/chrome-$major-windows.json" || true
+          git commit             -m "Профиль Chrome $major под Windows, снятый автоматически"             -m "Chrome stable $full. Снят стендом на раннере: живой браузер из канала Google, пять сэмплов, наборы расширений сведены после вырезания GREASE."             -m "Слияние вручную: отпечаток, попавший в корпус непрочитанным, — это способ выпустить неверный профиль."
+
+          git push -u origin "$branch" --force
+
+          gh pr create \
+            --title "Chrome $major под Windows" \
+            --body-file capture-diff.md \
+            --base main --head "$branch" || \
+          gh pr edit "$branch" --body-file capture-diff.md
+
+      - name: keep the samples when something went wrong
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-debug
+          path: |
+            capture/samples/
+            capture-diff.md
+          if-no-files-found: ignore
