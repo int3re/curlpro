@@ -56,14 +56,32 @@ func loadClientCert(certPath, keyPath string) ([]utls.Certificate, error) {
 // The order is curl's: HTTPS_PROXY (we always speak https), then ALL_PROXY.
 // NO_PROXY excludes the hosts it lists; "*" excludes everything.
 // The names are read in both cases: conventions differ between systems.
-func proxyFromEnv(host string) string {
+func proxyFromEnv(scheme, host string) string {
 	if host == "" {
 		return ""
 	}
 	if noProxy(host) {
 		return ""
 	}
-	for _, name := range []string{"HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"} {
+	// The variable follows the request's scheme, as curl and requests do.
+	// Only HTTPS_PROXY used to be read, which was consistent while the library
+	// refused http:// altogether. Since cleartext became supported, a plain
+	// request was quietly going out direct while HTTP_PROXY sat in the
+	// environment saying otherwise.
+	names := []string{"HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"}
+	if scheme == "http" {
+		names = []string{"HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"}
+	}
+	// httpoxy (CVE-2016-5385): under CGI a client's "Proxy:" request header
+	// arrives as HTTP_PROXY, so an attacker could route the process's traffic
+	// through a host of their choosing. REQUEST_METHOD is the marker of a CGI
+	// environment; there the variable is not trusted. This is what net/http
+	// does, and the cost of copying it is two lines.
+	cgi := os.Getenv("REQUEST_METHOD") != ""
+	for _, name := range names {
+		if cgi && (name == "HTTP_PROXY" || name == "http_proxy") {
+			continue
+		}
 		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
 			return v
 		}

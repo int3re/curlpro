@@ -6,8 +6,10 @@ so ``os.environ[...] = ...`` from Python no longer changes it. On Windows it
 does. A Python user may set the variable at runtime and expect it to take
 effect, so the proxy address is picked here and passed down explicitly.
 
-The rules are the ones curl and requests use: HTTPS_PROXY, then ALL_PROXY;
-NO_PROXY excludes the hosts it lists, and "*" excludes everything.
+The rules are the ones curl and requests use: the variable follows the
+request's scheme — HTTPS_PROXY for https://, HTTP_PROXY for http:// — and
+ALL_PROXY covers both. NO_PROXY excludes the hosts it lists, and "*" excludes
+everything.
 """
 
 from __future__ import annotations
@@ -15,15 +17,31 @@ from __future__ import annotations
 import os
 from urllib.parse import urlsplit
 
-_PROXY_VARS = ("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")
+_HTTPS_VARS = ("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")
+_HTTP_VARS = ("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy")
 
 
 def proxy_for(url: str) -> str | None:
-    """Proxy for this address, or None to go directly."""
-    host = urlsplit(url).hostname or ""
+    """Proxy for this address, or None to go directly.
+
+    Until cleartext ``http://`` was supported there was nothing to read
+    HTTP_PROXY for, and only the HTTPS variables were consulted. A plain
+    request then went out direct while HTTP_PROXY sat in the environment
+    saying otherwise — silently, which is the worst way for a proxy setting
+    to be wrong.
+    """
+    parts = urlsplit(url)
+    host = parts.hostname or ""
     if not host or no_proxy(host):
         return None
-    for name in _PROXY_VARS:
+    names = _HTTP_VARS if parts.scheme == "http" else _HTTPS_VARS
+    # httpoxy (CVE-2016-5385): under CGI a client's "Proxy:" header arrives as
+    # HTTP_PROXY, so it is not trusted there. REQUEST_METHOD marks a CGI
+    # environment. The same guard is in the native side.
+    cgi = bool(os.environ.get("REQUEST_METHOD"))
+    for name in names:
+        if cgi and name.upper() == "HTTP_PROXY":
+            continue
         value = os.environ.get(name, "").strip()
         if value:
             return value

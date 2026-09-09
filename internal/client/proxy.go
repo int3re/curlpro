@@ -35,9 +35,9 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, er
 		return d.DialContext(ctx, network, resolveAddr(s.opts.Resolve, addr))
 	}
 
-	pu, err := url.Parse(proxy)
+	pu, err := parseProxy(proxy)
 	if err != nil {
-		return nil, fmt.Errorf("parsing proxy address: %w", err)
+		return nil, err
 	}
 
 	switch strings.ToLower(pu.Scheme) {
@@ -48,6 +48,31 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, er
 	default:
 		return nil, fmt.Errorf("unsupported proxy scheme %q (use http, https or socks5)", pu.Scheme)
 	}
+}
+
+// parseProxy reads a proxy address, supplying http:// when no scheme is given.
+//
+// "1.2.3.4:8080" is how people write a proxy, and it used to fail with
+// `parse "1.2.3.4:8080": first path segment in URL cannot contain colon` —
+// a message about URL grammar for what is a perfectly ordinary address. The
+// switch below even had a branch for an empty scheme, but url.Parse never got
+// far enough to reach it.
+//
+// http:// is the assumption because it is the only one that can be made: a
+// bare address says nothing about SOCKS, and guessing wrong would open a
+// connection that talks the wrong protocol.
+func parseProxy(raw string) (*url.URL, error) {
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+	pu, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parsing proxy address: %w", err)
+	}
+	if pu.Host == "" {
+		return nil, fmt.Errorf("proxy address %q has no host", raw)
+	}
+	return pu, nil
 }
 
 // resolveAddr applies the override table to a "host:port" address.

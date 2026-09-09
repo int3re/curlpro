@@ -323,7 +323,7 @@ func (s *Session) proxyFor(r *Request) string {
 // An explicitly set proxy always wins: the environment is a default, not an
 // order. An empty string in the request means "go directly", and the
 // environment does not override that either.
-func (s *Session) proxyForHost(r *Request, host string) string {
+func (s *Session) proxyForHost(r *Request, scheme, host string) string {
 	if r != nil && r.Proxy != nil {
 		return *r.Proxy
 	}
@@ -331,7 +331,7 @@ func (s *Session) proxyForHost(r *Request, host string) string {
 		return s.opts.Proxy
 	}
 	if s.opts.TrustEnv {
-		return proxyFromEnv(host)
+		return proxyFromEnv(scheme, host)
 	}
 	return ""
 }
@@ -775,7 +775,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		}
 	}
 	viaAltSvc := !plain && forced == "" && !s.opts.HTTP3 &&
-		s.proxyForHost(r, u.Host) == "" && s.altSvcH3(u)
+		s.proxyForHost(r, u.Scheme, u.Host) == "" && s.altSvcH3(u)
 	if forced == ProtoH3 || (forced == "" && s.opts.HTTP3) || viaAltSvc {
 		// The session option was checked when it was created; a request's demand
 		// only here: before it the profile might never have been needed.
@@ -784,7 +784,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 				"protocol=%s: profile %q has no http3 section",
 				ProtoH3, s.profile.Name)})
 		}
-		if s.proxyForHost(r, u.Host) != "" {
+		if s.proxyForHost(r, u.Scheme, u.Host) != "" {
 			return fail(&fatalError{fmt.Errorf("HTTP/3 through a proxy is not supported " +
 				"(QUIC needs CONNECT-UDP, RFC 9298)")})
 		}
@@ -805,7 +805,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if forced != "" {
 		forceH1 = forced == ProtoHTTP1
 	}
-	spec := s.newDialSpec(u, s.proxyForHost(r, u.Host), forceH1)
+	spec := s.newDialSpec(u, s.proxyForHost(r, u.Scheme, u.Host), forceH1)
 	if plain {
 		spec.plain = true
 	}

@@ -421,7 +421,10 @@ class Session:
         handshake. Here the second element caps the whole request rather than
         the silence between bytes as in requests: that is stricter, so the
         familiar value is safe to keep
-    :param proxy: ``http://``, ``https://`` or ``socks5://``, user:pass allowed
+    :param proxy: ``http://``, ``https://``, ``socks5://`` or ``socks5h://``,
+        with ``user:pass`` allowed. An address with no scheme is read as
+        ``http://``: a bare one says nothing about SOCKS, and guessing wrong
+        would open a connection speaking the wrong protocol
     :param default_headers: send the profile's headers. Turn it off to control
         the set and the order yourself — anti-bot systems look at the order
         too. Without your own ``user-agent`` no such header is sent at all:
