@@ -148,37 +148,22 @@ jobs:
       # carries a Russian accept-language. Keeping the captured value would
       # revert that silently, one version at a time.
       #
+      # The value is replaced, not the entry removed. Removing it is what the
+      # first version of this step did, and because a delta's order replaces
+      # the parent's wholesale, the profile went out sending no Accept-Language
+      # at all — JA4H fell from ge20nn13ruru to ge20nn120000. A browser that
+      # sends none is a louder anomaly than one sending the wrong language.
+      #
       # The shape of the q ladder is the browser's own signature and would be
-      # worth having — but it cannot be told apart from the locale here, so it
-      # is dropped and named in the pull request instead of being guessed at.
-      - name: drop the runner's locale from the delta
+      # worth having, but it cannot be told apart from the runner's locale
+      # here. So it is named in the pull request instead of being guessed at.
+      - name: take the language from the parent, not from the runner
         shell: bash
         run: |
           set -euo pipefail
-          python3 - "profiles/chrome-${{ needs.check.outputs.major }}-windows.json" <<'PY'
-          import json, sys
-          path = sys.argv[1]
-          with open(path, encoding="utf-8") as f:
-              p = json.load(f)
-          removed = []
-          for section in ("headers", "fetch", "http1"):
-              order = (p.get(section) or {}).get("order")
-              if not isinstance(order, list):
-                  continue
-              kept = []
-              for item in order:
-                  if isinstance(item, dict) and item.get("key") == "accept-language":
-                      removed.append(item.get("value", ""))
-                      continue
-                  kept.append(item)
-              p[section]["order"] = kept
-              if not p[section]:
-                  del p[section]
-          with open(path, "w", encoding="utf-8", newline="\n") as f:
-              json.dump(p, f, ensure_ascii=False, indent=2)
-              f.write("\n")
-          print("dropped accept-language:", removed or "none present")
-          PY
+          python3 scripts/capture-language.py \
+            "profiles/chrome-${{ needs.check.outputs.major }}-windows.json" \
+            profiles
 
       # What changed against the version before it. This is the whole review:
       # a new Chrome is usually a header diff over the previous one, and a
