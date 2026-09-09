@@ -66,7 +66,7 @@ __all__ = [
     "register_profile",
 ]
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 
 try:  # an installed distribution is the authority; a source checkout has none
     from importlib.metadata import version as _dist_version

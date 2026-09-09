@@ -6,8 +6,8 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.4.2**: cleartext `http://` and `ws://` are accepted — a caller whose own
-service speaks plain HTTP no longer needs a second HTTP client beside this one.
+**0.4.3**: a proxy address without a scheme is accepted, and `HTTP_PROXY` is
+read for cleartext requests — which 0.4.2 had quietly left going out direct.
 
 ## What happens on a tag
 
