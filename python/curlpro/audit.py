@@ -195,7 +195,7 @@ def _family_mismatch(profile: str, family: str, ua: str) -> list[Finding]:
         why=f"a {family} profile is expected to carry a {family} User-Agent; this "
             "one carries no recognisable browser at all, so the string does not "
             "back up what the TLS layer says",
-        fix=f"restore the profile's User-Agent, or use a profile matching it")]
+        fix="restore the profile's User-Agent, or use a profile matching it")]
 
 
 _PLATFORMS = {
