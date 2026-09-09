@@ -177,7 +177,10 @@ jobs:
           git checkout -b "$branch"
           git add "profiles/chrome-$major-windows.json" \
                   "reference/baselines/chrome-$major-windows.json" || true
-          git commit             -m "Профиль Chrome $major под Windows, снятый автоматически"             -m "Chrome stable $full. Снят стендом на раннере: живой браузер из канала Google, пять сэмплов, наборы расширений сведены после вырезания GREASE."             -m "Слияние вручную: отпечаток, попавший в корпус непрочитанным, — это способ выпустить неверный профиль."
+          git commit \
+            -m "Профиль Chrome $major под Windows, снятый автоматически" \
+            -m "Chrome stable $full. Снят стендом на раннере: живой браузер из канала Google, пять сэмплов, наборы расширений сведены после вырезания GREASE." \
+            -m "Слияние вручную: отпечаток, попавший в корпус непрочитанным, — это способ выпустить неверный профиль."
 
           git push -u origin "$branch" --force
 
