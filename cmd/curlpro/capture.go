@@ -52,6 +52,17 @@ type echoDetail struct {
 }
 
 // path returns the request's :path — it separates navigation from the favicon.
+// resumed reports whether this ClientHello carries pre_shared_key (extension
+// 41), which only a resuming client sends.
+func (d echoDetail) resumed() bool {
+	for _, e := range d.JA3.AllExtensions {
+		if e == 41 {
+			return true
+		}
+	}
+	return false
+}
+
 func (d echoDetail) path() string {
 	for _, h := range d.Metadata.HTTP2Frames.Headers {
 		if h.Name == ":path" {
@@ -219,6 +230,7 @@ func collect(bin, addr, crt, key string, want int, name, browser string,
 	}
 
 	var details []echoDetail
+	resumed := 0
 	deadline := time.After(wait)
 	for len(details) < want {
 		select {
@@ -228,13 +240,40 @@ func collect(bin, addr, crt, key string, want int, name, browser string,
 			if d.path() != "/json/detail" {
 				continue
 			}
+			// A resumed handshake is a different message, and folding it into
+			// the profile is how two corpus profiles were once left unusable:
+			// chrome-119-macos and chrome-120-macos carried pre_shared_key and
+			// could not bring a connection up at all, because a first hello has
+			// no ticket to resume with.
+			//
+			// It happens on any stand the browser visits more than once, and it
+			// is why a capture used to fail with "the extension sets diverge"
+			// for no visible reason. Skipped rather than reported: more windows
+			// are opened than samples are needed, so the run simply uses the
+			// first-handshake ones.
+			if d.resumed() {
+				resumed++
+				continue
+			}
 			details = append(details, d)
 			fmt.Printf("  sample %d/%d\n", len(details), want)
 		case <-deadline:
+			reportResumed(resumed)
 			return details, nil
 		}
 	}
+	reportResumed(resumed)
 	return details, nil
+}
+
+// reportResumed says how many samples were dropped as resumed handshakes.
+// Silence would be worse: if a stand somehow returned nothing else, the run
+// would fail on "not enough samples" with no hint where they went.
+func reportResumed(n int) {
+	if n > 0 {
+		fmt.Printf("  (%d resumed handshakes skipped: a ticket exists after the "+
+			"first visit, and a resumed hello is not the message a profile describes)\n", n)
+	}
 }
 
 func scanDetails(r io.Reader, out chan<- echoDetail) {
