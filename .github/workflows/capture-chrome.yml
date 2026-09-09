@@ -125,14 +125,60 @@ jobs:
 
       # -dwell is raised above the default: a runner is slower than a desktop,
       # and a window that closes before the request goes out costs a sample.
+      # --based-on is not an optimisation, it is what makes the profile usable.
+      # A standalone capture describes one navigation request, so fetch, http1,
+      # client_hints, http3, quic and websocket come out empty — six sections
+      # measured by hand over stages 14-16 that a single visit cannot produce.
+      # The first run of this workflow wrote exactly such a profile, and it was
+      # not merged. As a delta the new version carries what actually changed and
+      # inherits the rest.
       - name: capture
         shell: bash
         run: |
           set -euo pipefail
           go run ./cmd/curlpro capture \
             --name "chrome-${{ needs.check.outputs.major }}-windows" \
+            --based-on "chrome-${{ needs.check.outputs.previous }}-windows" \
             --browser "$CHROME_EXE" \
             --samples 5 --dwell 10s --wait 300s
+
+      # The runner's Chrome speaks the runner's language, and that is en-US.
+      # The language tags in these profiles are a decision, not a measurement:
+      # the library is built for Russian sites, and every profile but Tor's
+      # carries a Russian accept-language. Keeping the captured value would
+      # revert that silently, one version at a time.
+      #
+      # The shape of the q ladder is the browser's own signature and would be
+      # worth having — but it cannot be told apart from the locale here, so it
+      # is dropped and named in the pull request instead of being guessed at.
+      - name: drop the runner's locale from the delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "profiles/chrome-${{ needs.check.outputs.major }}-windows.json" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          with open(path, encoding="utf-8") as f:
+              p = json.load(f)
+          removed = []
+          for section in ("headers", "fetch", "http1"):
+              order = (p.get(section) or {}).get("order")
+              if not isinstance(order, list):
+                  continue
+              kept = []
+              for item in order:
+                  if isinstance(item, dict) and item.get("key") == "accept-language":
+                      removed.append(item.get("value", ""))
+                      continue
+                  kept.append(item)
+              p[section]["order"] = kept
+              if not p[section]:
+                  del p[section]
+          with open(path, "w", encoding="utf-8", newline="\n") as f:
+              json.dump(p, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          print("dropped accept-language:", removed or "none present")
+          PY
 
       # What changed against the version before it. This is the whole review:
       # a new Chrome is usually a header diff over the previous one, and a
@@ -149,6 +195,15 @@ jobs:
             echo '```'
             go run ./cmd/curlpro diff "$prev" "$new" || echo "(diff failed)"
             echo '```'
+            echo
+            echo "Captured as a delta over \`$prev\`, so the sections a single"
+            echo "navigation cannot measure — \`fetch\`, \`http1\`, \`client_hints\`,"
+            echo "\`http3\`, \`quic\`, \`websocket\` — are inherited rather than emptied."
+            echo
+            echo "**Check by hand:** the runner's Chrome runs in en-US, so its"
+            echo "\`accept-language\` was dropped from the delta and the parent's"
+            echo "Russian value is inherited. If this version changed the *shape*"
+            echo "of the q ladder rather than the language, that change is not here."
           } > capture-diff.md
           cat capture-diff.md
 
@@ -184,11 +239,33 @@ jobs:
 
           git push -u origin "$branch" --force
 
-          gh pr create \
-            --title "Chrome $major под Windows" \
-            --body-file capture-diff.md \
-            --base main --head "$branch" || \
-          gh pr edit "$branch" --body-file capture-diff.md
+          # Opening the pull request needs "Allow GitHub Actions to create and
+          # approve pull requests" in the repository settings. Without it the
+          # branch is still pushed and everything above still ran, so the run
+          # reports where to look rather than failing: a red run would say the
+          # capture broke, which is not what happened.
+          if gh pr create \
+               --title "Chrome $major под Windows" \
+               --body-file capture-diff.md \
+               --base main --head "$branch"; then
+            :
+          elif gh pr edit "$branch" --body-file capture-diff.md 2>/dev/null; then
+            echo "the pull request already existed and was updated"
+          else
+            {
+              echo "### The branch is pushed, the pull request is not"
+              echo
+              echo "GitHub Actions may not open pull requests in this repository."
+              echo "Settings → Actions → General → Workflow permissions →"
+              echo "**Allow GitHub Actions to create and approve pull requests**."
+              echo
+              echo "Until then, open it by hand:"
+              echo "<https://github.com/${GITHUB_REPOSITORY}/compare/main...$branch?expand=1>"
+              echo
+              cat capture-diff.md
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::the branch is pushed; open the PR by hand (see the run summary)"
+          fi
 
       - name: keep the samples when something went wrong
         if: failure()
