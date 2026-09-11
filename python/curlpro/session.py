@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import base64
 import json
 import sys
@@ -23,6 +24,59 @@ from .timeouts import split_timeout as _split_timeout
 from .websocket import WebSocket, connect as ws_connect
 
 DEFAULT_PROFILE = "chrome-151-windows"
+
+
+def _ms(value: float | None, name: str) -> int | None:
+    """Seconds to whole milliseconds, with the answers a float can smuggle in.
+
+    ``int(nan * 1000)`` raised a bare ValueError and ``int(inf * 1000)`` an
+    OverflowError, both from three frames deep with no mention of the option.
+    NaN is not a duration and is refused by name; infinity is what "no limit"
+    means and is passed down as None, which is how no limit is spelled at the
+    boundary; a negative value is refused here with the same words the native
+    side uses, so the message does not depend on which side sees it first.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise TypeError(f"{name} must be a number of seconds, not a bool")
+    v = float(value)
+    if math.isnan(v):
+        raise ValueError(f"{name} must be a number of seconds, got nan")
+    if math.isinf(v):
+        if v < 0:
+            raise ValueError(f"{name} cannot be negative, got {value}")
+        return None
+    if v < 0:
+        raise ValueError(f"{name} cannot be negative, got {value}")
+    return int(v * 1000)
+
+
+def _size(value: Any) -> int:
+    """A byte limit: 0 means none, and the native side reads a signed 64-bit.
+
+    A negative limit used to slip through as "no limit"; 2**63 came back as a
+    JSON unmarshal error naming a Go struct field. Both are the caller's mistake
+    and are named as such, here.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"max_response_size must be an int of bytes, got {value!r}")
+    if value < 0:
+        raise ValueError(f"max_response_size cannot be negative, got {value}")
+    if value > 2**63 - 1:
+        raise ValueError(f"max_response_size is too large, got {value}")
+    return value
+
+
+def _count(value: Any, name: str) -> Any:
+    """A non-negative int, or None for "not set"."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{name} must be an int, got {value!r}")
+    if value < 0:
+        raise ValueError(f"{name} cannot be negative, got {value}")
+    return value
 
 
 def _proxy_override(proxy: str | bool | None) -> str | None:
@@ -263,8 +317,8 @@ def _request_meta(
         "body_file": body_file or "",
         # None means "take the session's"; zero is a meaningful value, so
         # absence is what travels, not a substituted default.
-        "timeout_ms": None if timeout is None else int(timeout * 1000),
-        "connect_timeout_ms": None if connect_timeout is None else int(connect_timeout * 1000),
+        "timeout_ms": _ms(timeout, "timeout"),
+        "connect_timeout_ms": _ms(connect_timeout, "connect_timeout"),
         "follow_redirects": allow_redirects,
         "max_redirects": max_redirects,
         "retry": _retry_config(
@@ -536,15 +590,14 @@ class Session:
                     # sees it as it was when the process started, so an
                     # os.environ change at runtime never reaches it.
                     "trust_env": False,
-                    "max_response_size": int(max_response_size),
-                    "timeout_ms": int(session_total * 1000) if session_total else 0,
-                    "connect_timeout_ms":
-                        int(session_connect * 1000) if session_connect else 0,
+                    "max_response_size": _size(max_response_size),
+                    "timeout_ms": _ms(session_total, "timeout") or 0,
+                    "connect_timeout_ms": _ms(session_connect, "connect_timeout") or 0,
                     "proxy": proxy or "",
                     "default_headers": default_headers,
                     "header_order": list(header_order) if header_order else None,
                     "follow_redirects": allow_redirects,
-                    "max_redirects": max_redirects,
+                    "max_redirects": _count(max_redirects, "max_redirects"),
                     "cookies": cookies,
                     "force_http1": force_http1,
                     "resume": resume,
@@ -556,7 +609,7 @@ class Session:
                     "device": device or "",
                     "devices": [dict(d) for d in devices] if devices else None,
                     "max_idle_conns": max_idle_conns,
-                    "idle_conn_timeout_ms": int(idle_conn_timeout * 1000),
+                    "idle_conn_timeout_ms": _ms(idle_conn_timeout, "idle_conn_timeout") or 0,
                     "retry": _retry_config(
                         retries or None, retry_statuses, retry_methods,
                         retry_backoff, retry_max_backoff, respect_retry_after,
@@ -570,7 +623,7 @@ class Session:
         self._closed = False
         # Kept for the streaming path: the limit lives in the native part,
         # which never sees a stream read as a whole body.
-        self._max_response_size = int(max_response_size)
+        self._max_response_size = _size(max_response_size)
         #: Headers added to every request of the session. Kept apart from
         #: the profile's, so clear() restores the plain fingerprint.
         self.headers = SessionHeaders(self._id)

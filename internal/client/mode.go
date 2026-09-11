@@ -1,7 +1,6 @@
 package client
 
 import (
-	"net/url"
 	"strings"
 
 	"github.com/curlpro/curlpro/internal/profile"
@@ -100,7 +99,7 @@ func (s *Session) hintsForRequest(r *Request) map[string]bool {
 	if r == nil || !s.profile.ClientHints.Enabled() {
 		return nil
 	}
-	u, err := url.Parse(r.URL)
+	u, err := parseURL(r.URL)
 	if err != nil {
 		return nil
 	}

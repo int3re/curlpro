@@ -110,7 +110,7 @@ func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocke
 	if err := s.ensureOpen(); err != nil {
 		return nil, err
 	}
-	u, err := url.Parse(rawURL)
+	u, err := parseURL(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("parsing URL: %w", err)
 	}

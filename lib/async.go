@@ -57,7 +57,7 @@ func startAsync(cancel context.CancelFunc, discard func([]byte), work func(rid i
 	asyncMu.Unlock()
 
 	go func() {
-		payload := work(rid)
+		payload := runGuarded(rid, work)
 
 		asyncMu.Lock()
 		call.frame, call.done = payload, true
@@ -80,6 +80,26 @@ func startAsync(cancel context.CancelFunc, discard func([]byte), work func(rid i
 	}()
 
 	return respond(map[string]any{"request": rid}, nil)
+}
+
+// runGuarded runs the work of an asynchronous call and turns a panic into an
+// error frame.
+//
+// The synchronous exports are covered by respond()'s recover, but that only
+// catches a panic on the calling goroutine. Work started here runs on its own
+// goroutine, and a Go panic that nothing recovers does not raise in Python —
+// it aborts the whole process. Every request an AsyncSession makes goes
+// through this path, so a single panicking code path anywhere below Do would
+// have killed the interpreter instead of surfacing as CurlProError. The
+// completion sequence after this still runs, so the waiter is released with
+// the error rather than left waiting for a number that never arrives.
+func runGuarded(rid int64, work func(rid int64) []byte) (payload []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			payload = errorFrame(fmt.Errorf("internal library error: %v", r))
+		}
+	}()
+	return work(rid)
 }
 
 var (

@@ -86,7 +86,7 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 	if rawURL == "" {
 		rawURL = "https://example.com/"
 	}
-	u, err := url.Parse(rawURL)
+	u, err := parseURL(rawURL)
 	if err != nil {
 		return Fingerprint{}, fmt.Errorf("parsing %q: %w", rawURL, err)
 	}

@@ -24,8 +24,22 @@ def split_timeout(
         if len(value) != 2:
             raise ValueError("timeout as a pair is (connect, total)")
         connect, total = value
+        _not_bool(connect)
+        _not_bool(total)
         return (
             float(connect) if connect else None,
             float(total) if total else None,
         )
+    _not_bool(value)
     return None, float(value)
+
+
+def _not_bool(value: object) -> None:
+    """``timeout=True`` is a mistake, not one second.
+
+    bool is an int in Python, so float(True) is 1.0 and the request would
+    quietly get a one-second limit. Refused before the conversion, where the
+    intent — "yes, use a timeout" — can still be named.
+    """
+    if isinstance(value, bool):
+        raise TypeError(f"timeout must be a number of seconds, not {value!r}")

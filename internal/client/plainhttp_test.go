@@ -21,7 +21,7 @@ import (
 // Two clients is worse than one, and the HTTP/1.1 half of the profile still
 // applies over cleartext.
 
-func parseURL(t *testing.T, raw string) *url.URL {
+func mustParseURL(t *testing.T, raw string) *url.URL {
 	t.Helper()
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -144,8 +144,8 @@ func indexOfHeader(names []string, want string) int {
 // would put it into the wrong protocol, so the scheme is part of the key.
 func TestPlainAndTLSDoNotShareAConnection(t *testing.T) {
 	s := auditSession(t, Options{DefaultHeaders: true})
-	tlsSpec := s.newDialSpec(parseURL(t, "https://example.com:8443/"), "", false)
-	plainSpec := s.newDialSpec(parseURL(t, "http://example.com:8443/"), "", false)
+	tlsSpec := s.newDialSpec(mustParseURL(t, "https://example.com:8443/"), "", false)
+	plainSpec := s.newDialSpec(mustParseURL(t, "http://example.com:8443/"), "", false)
 
 	if tlsSpec == plainSpec {
 		t.Fatal("the pool key is the same for http:// and https:// on one address")
@@ -166,7 +166,7 @@ func TestPlainHTTPDefaultPort(t *testing.T) {
 		{"https://example.com/", "example.com:443"},
 		{"http://example.com:8080/", "example.com:8080"},
 	} {
-		got := s.newDialSpec(parseURL(t, tc.url), "", false).addr
+		got := s.newDialSpec(mustParseURL(t, tc.url), "", false).addr
 		if got != tc.addr {
 			t.Errorf("%s -> %s, want %s", tc.url, got, tc.addr)
 		}

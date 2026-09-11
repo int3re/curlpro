@@ -2453,7 +2453,9 @@ func (b transportResponseBody) Read(p []byte) (n int, err error) {
 	// Use dynamic connFlow logic
 	if v := cc.inflow.available(); v < int32(cc.connFlow/2) {
 		connAdd = int32(cc.connFlow) - v
-		cc.inflow.add(connAdd)
+		if !cc.inflow.add(connAdd) {
+			connAdd = 0 // curlpro: the window is at its maximum; nothing to send
+		}
 	}
 
 	if err == nil {
@@ -2481,7 +2483,9 @@ func (b transportResponseBody) Read(p []byte) (n int, err error) {
 		if isSmallWindow {
 			if unsent > aggressiveThreshold {
 				streamAdd = int32(unsent)
-				cs.inflow.add(streamAdd)
+				if !cs.inflow.add(streamAdd) {
+					streamAdd = 0 // curlpro: see e1
+				}
 			}
 		} else {
 			// Fallback to standard behavior for large windows (Chrome/Default).
@@ -2489,7 +2493,9 @@ func (b transportResponseBody) Read(p []byte) (n int, err error) {
 			// This ensures correct behavior if a user sets a custom Large window (e.g. 6MB).
 			if unsent > transportDefaultStreamMinRefresh && unsent > int(cc.streamFlow)/2 {
 				streamAdd = int32(unsent)
-				cs.inflow.add(streamAdd)
+				if !cs.inflow.add(streamAdd) {
+					streamAdd = 0 // curlpro: see e1
+				}
 			}
 		}
 	}

@@ -15,6 +15,10 @@ _autoloaded = False
 
 def load_profiles(directory: str | Path) -> list[str]:
     """Loads every *.json in a directory. Returns the names of all known profiles."""
+    if not Path(directory).is_dir():
+        # The native side opens the directory as a filesystem root and reports
+        # its failure as "open .", which names nothing the caller typed.
+        raise FileNotFoundError(f"profile directory not found: {directory}")
     data = _call("curlpro_profiles_load_dir", str(directory).encode("utf-8"))
     return data["profiles"]
 
@@ -51,7 +55,10 @@ def register_profile(profile: dict[str, Any] | str | bytes) -> list[str]:
         payload = profile
     # Parse on the Python side so a syntax error points at the line
     # instead of arriving from Go as a generic message.
-    json.loads(payload)
+    try:
+        json.loads(payload)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"profile is not valid JSON: {e}") from None
     data = _call("curlpro_profile_register", payload)
     return data["profiles"]
 

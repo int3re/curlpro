@@ -153,9 +153,17 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 		}
 		// The sleep is interrupted by the deadline: otherwise, at the end of the
 		// budget the client wakes past the limit and hits the server anyway.
+		// Timers rather than time.After: a time.After that loses the select is
+		// not collected until it fires, and the deadline one can be the whole
+		// request budget long. Bounded by the retry count, so a small leak —
+		// but a leak per attempt on a hot path is not worth keeping.
+		backoff := time.NewTimer(wait)
+		budget := time.NewTimer(time.Until(deadline))
 		select {
-		case <-time.After(wait):
-		case <-time.After(time.Until(deadline)):
+		case <-backoff.C:
+			budget.Stop()
+		case <-budget.C:
+			backoff.Stop()
 			if outcome.stream != nil {
 				return outcome.stream, nil
 			}

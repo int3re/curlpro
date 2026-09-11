@@ -83,6 +83,14 @@ jobs:
           CGO_ENABLED: "1"
         run: go test -race ./internal/...
 
+      # lib/ is the cgo boundary: its tests cover what a panic does on the
+      # asynchronous path (it must come back as an error frame, not take the
+      # process down). They need a C compiler, which this job already has.
+      - name: go test (the FFI boundary)
+        run: go test ./lib/
+        env:
+          CGO_ENABLED: "1"
+
       # A separate goal: build the native library. Without it a breakage in
       # internal/h3 or internal/client would only surface at wheel time.
       - name: build c-shared

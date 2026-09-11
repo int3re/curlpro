@@ -12,8 +12,11 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"golang.org/x/net/idna"
 	"io"
+	"net"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -683,13 +686,53 @@ func (s *Session) prepare(r *Request) (Request, error) {
 //
 // The response body stays open, and the context cancel is returned with it:
 // whoever closes the body must call it, or the timeout keeps ticking on a
+// parseURL is the one parser for every URL the client is given, and the place
+// where a non-ASCII host becomes what actually goes on the wire.
+//
+// Go's net/url and net do no IDNA: "https://пример.рф/" parsed and dialled as
+// written sends the raw Cyrillic name to the resolver and into SNI, and a
+// library built for Russian sites was timing out on exactly the hosts it is
+// for. Browsers send punycode — xn--e1afmkfd.xn--p1ai — and so does this,
+// through the same table (x/net/idna, already used on the HTTP/3 path). The
+// port and an IPv6 literal pass through untouched; a name IDNA rejects is an
+// error here rather than a DNS failure three layers down.
+func parseURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parsing URL: %w", err)
+	}
+	host := u.Hostname()
+	if host == "" || isASCII(host) || strings.HasPrefix(u.Host, "[") {
+		return u, nil
+	}
+	ascii, err := idna.Lookup.ToASCII(host)
+	if err != nil {
+		return nil, fmt.Errorf("invalid host %q: %w", host, err)
+	}
+	if port := u.Port(); port != "" {
+		u.Host = net.JoinHostPort(ascii, port)
+	} else {
+		u.Host = ascii
+	}
+	return u, nil
+}
+
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
+}
+
 // request that has already finished.
 // The connection is returned as well: the caller must release it through
 // Session.release once the body has been read.
 func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.CancelFunc, *conn, error) {
-	u, err := url.Parse(r.URL)
+	u, err := parseURL(r.URL)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("parsing URL: %w", err)
+		return nil, nil, nil, err
 	}
 	switch u.Scheme {
 	case "https", "http":

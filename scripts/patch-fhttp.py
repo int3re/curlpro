@@ -90,6 +90,49 @@ edits = [
 		// them here credited every buffered byte twice.
 		unsent := int(cc.streamFlow) - int(cs.inflow.available()) - cs.bufPipe.Len()
 '''),
+
+# (e) flow.add() returns false when the sum would pass 2^31-1, and every
+#     caller ignored the result: the window was left where it was while a
+#     WINDOW_UPDATE for the full amount still went on the wire. RFC 7540
+#     §6.9.1 makes that a FLOW_CONTROL_ERROR at the peer. With edits (a)-(d)
+#     the sum cannot run away any more, so this is a guard, not a fix — but a
+#     guard that turns a silent protocol violation into "send nothing" is
+#     worth its three lines.
+('e1',
+'''		connAdd = int32(cc.connFlow) - v
+		cc.inflow.add(connAdd)
+''',
+'''		connAdd = int32(cc.connFlow) - v
+		if !cc.inflow.add(connAdd) {
+			connAdd = 0 // curlpro: the window is at its maximum; nothing to send
+		}
+'''),
+('e2',
+'''			if unsent > aggressiveThreshold {
+				streamAdd = int32(unsent)
+				cs.inflow.add(streamAdd)
+			}
+''',
+'''			if unsent > aggressiveThreshold {
+				streamAdd = int32(unsent)
+				if !cs.inflow.add(streamAdd) {
+					streamAdd = 0 // curlpro: see e1
+				}
+			}
+'''),
+('e3',
+'''			if unsent > transportDefaultStreamMinRefresh && unsent > int(cc.streamFlow)/2 {
+				streamAdd = int32(unsent)
+				cs.inflow.add(streamAdd)
+			}
+''',
+'''			if unsent > transportDefaultStreamMinRefresh && unsent > int(cc.streamFlow)/2 {
+				streamAdd = int32(unsent)
+				if !cs.inflow.add(streamAdd) {
+					streamAdd = 0 // curlpro: see e1
+				}
+			}
+'''),
 ]
 
 applied, skipped = [], []

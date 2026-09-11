@@ -58,6 +58,7 @@ of `bufPipe.Len()` — which repairs the double count below but not the runaway.
 | b | `processData` | `cs.inflow.take(n)` alone (the link took the connection's share) | `cc.inflow` and `cs.inflow` checked and taken explicitly |
 | c | `transportResponseBody.Read` | `isSmallWindow := cc.initialWindowSize < 1 MiB` — the *peer's* send window | `cc.streamFlow < 1 MiB` — our receive window |
 | d | `transportResponseBody.Read` | `unsent := … + cs.bufPipe.Len()` | `… - cs.bufPipe.Len()` — buffered bytes were taken on arrival and are credited when read; adding them credited every one twice |
+| e | `transportResponseBody.Read`, three sites | `cc.inflow.add(connAdd)` / `cs.inflow.add(streamAdd)` with the result ignored | the `false` that `flow.add` returns past 2^31−1 now zeroes the increment, so nothing is sent for a window already at its maximum. With a–d the sum cannot get there; this turns a would-be protocol violation into a no-op rather than a reset |
 
 The send side (`cs.flow`, `cc.flow`) keeps its link: for sending, "no more than
 the smaller window allows" is exactly right.
@@ -85,12 +86,6 @@ test.
 off by default and needs `FLOWTRACE` pointing at a profile directory.
 
 ## Not carried
-
-The 2^31−1 guard itself. `flow.add()` returns `false` on overflow and every
-caller in fhttp ignores the result; with the link gone the sum can no longer run
-away, so the guard was left out of the patch to keep it to what the measurement
-required. It is the natural next edit if the window arithmetic is ever touched
-again.
 
 The second known fhttp defect — a data race between `handleResponse` writing
 `cs.bufPipe` and `closeForError` closing it, found under `-race` when closing a

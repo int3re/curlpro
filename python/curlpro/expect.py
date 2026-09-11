@@ -37,6 +37,16 @@ class ExpectationFailed(CurlProError):
         self.status = getattr(response, "status", None)
 
 
+def _statuses(value: Any, name: str) -> list[int]:
+    """Status codes are ints. Anything else was accepted and then failed every
+    response with a message quoting an object's repr as if it were a code."""
+    out = _as_list(value)
+    for x in out:
+        if isinstance(x, bool) or not isinstance(x, int):
+            raise TypeError(f"Expect({name}=...) takes HTTP status codes, got {x!r}")
+    return out
+
+
 def _as_list(value: Any) -> list[Any]:
     """One value or many: a string is a value, not a sequence of characters."""
     if value is None:
@@ -88,8 +98,8 @@ class Expect:
         non_empty: bool = False,
         json: bool = False,
     ):
-        self.status = _as_list(status)
-        self.not_status = _as_list(not_status)
+        self.status = _statuses(status, "status")
+        self.not_status = _statuses(not_status, "not_status")
         self.body = _as_list(body)
         self.not_body = _as_list(not_body)
         self.headers = _as_list(headers)
