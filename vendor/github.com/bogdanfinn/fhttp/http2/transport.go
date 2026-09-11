@@ -1998,7 +1998,13 @@ func (cc *ClientConn) newStreamWithID(streamID uint32, incNext bool) *clientStre
 	cs.flow.add(int32(cc.initialWindowSize))
 	cs.flow.setConnFlow(&cc.flow)
 	cs.inflow.add(int32(cc.streamFlow))
-	cs.inflow.setConnFlow(&cc.inflow)
+	// curlpro: not linked to cc.inflow on purpose. flow.available() returns
+	// the smaller of the two windows while flow.add() raises the stream's
+	// only, so a linked receive window re-credits the same bytes on every
+	// read once the connection window is the minimum: 3.2 GB of stream
+	// credit after 5 MB of data, and RST_STREAM(FLOW_CONTROL_ERROR) from any
+	// peer that keeps count. The connection window is taken explicitly in
+	// processData instead. See docs/FHTTP-PATCH.md.
 	cc.streams[cs.ID] = cs
 
 	if incNext {
@@ -2456,7 +2462,10 @@ func (b transportResponseBody) Read(p []byte) (n int, err error) {
 		// stream.
 
 		// Use dynamic streamFlow logic
-		unsent := int(cc.streamFlow) - int(cs.inflow.available()) + cs.bufPipe.Len()
+		// curlpro: buffered bytes are subtracted, not added — they were taken
+		// from the window on arrival and are credited when read, so counting
+		// them here credited every buffered byte twice.
+		unsent := int(cc.streamFlow) - int(cs.inflow.available()) - cs.bufPipe.Len()
 
 		// ------------------------------------------------------------------
 		// FIX: Adaptive Logic
@@ -2465,7 +2474,9 @@ func (b transportResponseBody) Read(p []byte) (n int, err error) {
 
 		// Check if the configured initial window is small (e.g. Firefox's 128KB or 65KB).
 		// If so, we need to be aggressive with updates.
-		isSmallWindow := cc.initialWindowSize < 1048576 // < 1MB
+		// curlpro: our receive window decides the strategy, not the peer's
+		// send window (cc.initialWindowSize is what the peer allows us to send).
+		isSmallWindow := cc.streamFlow < 1048576 // < 1MB
 
 		if isSmallWindow {
 			if unsent > aggressiveThreshold {
@@ -2589,7 +2600,10 @@ func (rl *clientConnReadLoop) processData(f *DataFrame) error {
 		}
 		// Check connection-level flow control.
 		cc.mu.Lock()
-		if cs.inflow.available() >= int32(f.Length) {
+		// curlpro: the stream window is no longer linked to the connection's
+		// (see newClientStream), so both are checked and taken here.
+		if cc.inflow.available() >= int32(f.Length) && cs.inflow.available() >= int32(f.Length) {
+			cc.inflow.take(int32(f.Length))
 			cs.inflow.take(int32(f.Length))
 		} else {
 			cc.mu.Unlock()

@@ -9,6 +9,7 @@ Dependencies (pulled in by the Go module, not stored in the repository):
   github.com/refraction-networking/utls   — BSD-3-Clause
   github.com/refraction-networking/uquic  — BSD-3-Clause and MIT
   github.com/bogdanfinn/fhttp             — BSD-3-Clause
+      (vendored with a local patch to HTTP/2 flow control — docs/FHTTP-PATCH.md)
   github.com/quic-go/qpack                — MIT
   github.com/klauspost/compress           — Apache-2.0, BSD-3-Clause, MIT
   github.com/andybalholm/brotli           — MIT
