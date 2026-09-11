@@ -212,3 +212,17 @@ def test_resume_does_not_change_the_first_handshake():
          curlpro.Session("chrome-151-windows", resume=True) as resuming:
         assert plain.fingerprint().ja4 == resuming.fingerprint().ja4
         assert plain.fingerprint().ja3n == resuming.fingerprint().ja3n
+
+
+def test_fingerprints_are_hashable_and_hash_like_they_compare():
+    """A set of fingerprints used to raise TypeError: __eq__ was defined and
+    __hash__ was not. Equal ones must land in the same bucket."""
+    with curlpro.Session("chrome-151-windows") as a, curlpro.Session("chrome-151-windows") as b:
+        x, y = a.fingerprint(), b.fingerprint()
+    assert x == y
+    assert hash(x) == hash(y)
+    assert len({x, y}) == 1
+    with curlpro.Session("firefox-144-macos") as c:
+        z = c.fingerprint()
+    assert len({x, z}) == 2
+

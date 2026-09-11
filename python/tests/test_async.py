@@ -165,3 +165,18 @@ def test_still_faster_than_the_old_thread_pool():
         old = old_way(srv)
         new = asyncio.run(new_way(srv))
     assert new < old, f"the new path {new:.2f} s against the old {old:.2f} s"
+
+
+def test_max_workers_warns_instead_of_being_ignored():
+    """The thread pool is gone; an argument that used to size it must say so
+    rather than be swallowed."""
+    import warnings
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        s = curlpro.AsyncSession("chrome-151-windows", max_workers=4)
+    assert any(issubclass(x.category, DeprecationWarning) and "max_workers" in str(x.message) for x in w)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        curlpro.AsyncSession("chrome-151-windows")
+    assert not [x for x in w if "max_workers" in str(x.message)]
+

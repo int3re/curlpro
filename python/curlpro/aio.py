@@ -13,6 +13,7 @@ short but it touches the network, so it goes to the default executor.
 from __future__ import annotations
 
 import asyncio
+import warnings
 from typing import Any, AsyncIterator, Iterable, Mapping
 
 from ._completions import settle
@@ -220,6 +221,15 @@ class AsyncSession:
         max_workers: int | None = None,
         **kwargs: Any,
     ):
+        if max_workers is not None:
+            # The thread pool this sized was removed in 0.2.0: requests run as
+            # goroutines and the process keeps one thread. Accepting the
+            # argument in silence would let a caller believe it still limits
+            # something. Warned now, removed in the next minor (VERSIONING.md).
+            warnings.warn(
+                "AsyncSession(max_workers=...) has no effect since 0.2.0 and "
+                "will be removed; requests are not bounded by a thread pool",
+                DeprecationWarning, stacklevel=2)
         self._session = Session(impersonate, **kwargs)
         self.impersonate = impersonate
 

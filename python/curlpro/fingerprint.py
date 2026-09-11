@@ -202,6 +202,25 @@ class Fingerprint:
         # sessions look different.
         return not self.diff(other)
 
+    def __hash__(self) -> int:
+        """Hashable, and consistent with equality.
+
+        Defining ``__eq__`` alone makes a class unhashable in Python, so a set
+        of fingerprints or a dict keyed by one raised ``TypeError`` — found by
+        lint, not by a user, which is the cheap way to find it. The hash covers
+        the same fields ``diff`` compares, with the unordered ones sorted, so
+        equal fingerprints always hash alike.
+        """
+        parts = []
+        for key in ("ja4", "ja3n", "akamai", "ja4h", "ja4h_http1", "user_agent",
+                    "ciphers", "extensions", "curves", "sigalgs", "alpn",
+                    "headers", "headers_http1"):
+            v = self._d.get(key)
+            if isinstance(v, list):
+                v = tuple(sorted(v) if key in self._UNORDERED else v)
+            parts.append((key, v))
+        return hash(tuple(parts))
+
     def __repr__(self) -> str:
         return f"<Fingerprint {self.profile or '?'} ja4={self.ja4}>"
 

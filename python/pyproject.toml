@@ -47,6 +47,9 @@ curlpro = ["lib/*", "profiles/*.json", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# pytest-asyncio changes the default loop scope of async fixtures in a future
+# release and warns until it is pinned. "function" is what the tests assume.
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     # Tests that need someone else's service: httpbin, browserleaks,
     # cloudflare-quic. The main run is -m "not network" and therefore

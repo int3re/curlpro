@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import asyncio
 from pathlib import Path
 
@@ -45,7 +47,7 @@ def test_http1_forced_per_request(server):
 def test_h2_on_http1_server_fails_clearly(server):
     """Travelling over HTTP/1.1 in silence is not allowed: the request asked for h2."""
     with curlpro.Session(verify=False) as s:
-        with pytest.raises(curlpro.CurlProError, match="http/1.1"):
+        with pytest.raises(curlpro.CurlProError, match=re.escape("http/1.1")):
             s.get(server.url, protocol=2)
 
 
@@ -72,7 +74,7 @@ def test_stream_takes_the_protocol_too(server):
 def test_async_session_takes_the_protocol_too(server):
     async def run():
         async with curlpro.AsyncSession(verify=False) as s:
-            with pytest.raises(curlpro.CurlProError, match="http/1.1"):
+            with pytest.raises(curlpro.CurlProError, match=re.escape("http/1.1")):
                 await s.get(server.url, protocol="h2")
             assert (await s.get(server.url, protocol="http1")).status == 200
 
