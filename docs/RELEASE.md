@@ -6,8 +6,10 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.4.3**: a proxy address without a scheme is accepted, and `HTTP_PROXY` is
-read for cleartext requests — which 0.4.2 had quietly left going out direct.
+**0.5.0**: the first non-browser profiles (okhttp 5.5, two TLS stacks), both
+fhttp defects fixed on the vendored copy — the receive-window runaway that every
+profile was exposed to, and the close race — plus Cyrillic domains, a panic
+guard on the asynchronous path, and option validation at the boundary.
 
 ## What happens on a tag
 
