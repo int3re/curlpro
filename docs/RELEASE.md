@@ -6,10 +6,10 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.5.0**: the first non-browser profiles (okhttp 5.5, two TLS stacks), both
-fhttp defects fixed on the vendored copy — the receive-window runaway that every
-profile was exposed to, and the close race — plus Cyrillic domains, a panic
-guard on the asynchronous path, and option validation at the boundary.
+**0.5.1**: a proxy that drops the connection on an unauthenticated CONNECT
+instead of answering 407 now gets the credentials on a second attempt, and a
+proxy that closes without any answer is named as such instead of "unexpected
+EOF". The first CONNECT still goes out without credentials, as Chrome's does.
 
 ## What happens on a tag
 

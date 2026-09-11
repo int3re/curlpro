@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curlpro"
-version = "0.5.0"
+version = "0.5.1"
 description = "HTTP client with a browser's network fingerprint: TLS ClientHello, HTTP/2 and HTTP/3 frames, header order"
 readme = "README.md"
 requires-python = ">=3.9"
