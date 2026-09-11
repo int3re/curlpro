@@ -21,6 +21,11 @@ type authProxy struct {
 	keepAlive bool
 	target    string // where to tunnel
 
+	// drop makes the proxy hang up on a CONNECT without credentials instead
+	// of answering 407 — the behaviour of some commercial gateways, which the
+	// RFC forbids and users meet anyway. dropAlways hangs up even with them.
+	drop, dropAlways bool
+
 	mu       sync.Mutex
 	connects []*stdhttp.Request // every CONNECT received
 	accepted atomic.Int32
@@ -69,6 +74,9 @@ func (p *authProxy) handle(c net.Conn) {
 		p.connects = append(p.connects, req)
 		p.mu.Unlock()
 
+		if p.dropAlways || (p.drop && req.Header.Get("Proxy-Authorization") == "") {
+			return // hang up: not a byte in reply, as the gateway in the field did
+		}
 		if req.Header.Get("Proxy-Authorization") == "" {
 			body := "authentication required"
 			hdr := "HTTP/1.1 407 Proxy Authentication Required\r\n" +

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"strings"
@@ -141,6 +142,25 @@ func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAg
 
 	err = connectProxy(conn, pu, addr, userAgent, false)
 
+	// A proxy that wants credentials must say so with a 407. Some close the
+	// socket instead, and to the caller that used to be "unexpected EOF" with
+	// nothing to act on — found against a real provider, where SOCKS5 on the
+	// same port worked only because SOCKS negotiates authentication up front.
+	// With credentials configured, a close before any byte is taken as the
+	// challenge it failed to send: a fresh socket, CONNECT with credentials.
+	// A well-behaved proxy never reaches this branch, so what it logs from us
+	// stays the browser's pair of requests.
+	var closed proxyClosedError
+	if errors.As(err, &closed) && !closed.withAuth && pu.User != nil {
+		clearDeadline(conn)
+		conn.Close()
+		if conn, err = dialProxyConn(ctx, d, pu); err != nil {
+			return nil, err
+		}
+		setDeadline(conn)
+		err = connectProxy(conn, pu, addr, userAgent, true)
+	}
+
 	// A 407 is not a refusal but a challenge: Chrome answers it by repeating
 	// the request with credentials. The first CONNECT goes without them, as in a browser.
 	var need needAuthError
@@ -209,6 +229,40 @@ func (e needAuthError) Error() string {
 	return "proxy requires authentication"
 }
 
+// proxyClosedError: the proxy hung up without answering CONNECT at all.
+//
+// withAuth says whether credentials were on that CONNECT. Without them the
+// likely cause is a proxy that wants authentication and drops instead of
+// challenging; with them, there is nothing further to send.
+type proxyClosedError struct {
+	withAuth bool
+}
+
+func (e proxyClosedError) Error() string {
+	if e.withAuth {
+		return "proxy closed the connection without answering CONNECT, " +
+			"with credentials sent on the second attempt as well"
+	}
+	return "proxy closed the connection without answering CONNECT: a proxy that " +
+		"requires authentication must answer 407, and some close instead — " +
+		"pass the credentials in the proxy URL (many such proxies also speak " +
+		"SOCKS5 on the same port, socks5h://)"
+}
+
+// closedWithoutBytes recognises the ways a hang-up before any response byte
+// surfaces from a Peek.
+func closedWithoutBytes(err error) bool {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var nerr net.Error
+	if errors.As(err, &nerr) && nerr.Timeout() {
+		return false // silence is a timeout, not a hang-up; reported as such
+	}
+	var opErr *net.OpError
+	return errors.As(err, &opErr) // reset by peer and the like
+}
+
 func defaultProxyPort(scheme string) string {
 	if strings.EqualFold(scheme, "https") {
 		return "443"
@@ -250,6 +304,14 @@ func connectProxy(conn net.Conn, pu *url.URL, target, userAgent string, withAuth
 	}
 
 	br := bufio.NewReader(conn)
+	// A proxy that closes before sending a single byte is a different failure
+	// from one that closes mid-response, and only the first is worth a retry:
+	// it is what a gateway that wants credentials but never sends the 407
+	// looks like. http.ReadResponse reports both as io.ErrUnexpectedEOF, so the
+	// distinction is made here, before it reads.
+	if _, err := br.Peek(1); err != nil && closedWithoutBytes(err) {
+		return withCode(CodeProxyClosed, proxyClosedError{withAuth: withAuth})
+	}
 	resp, err := http.ReadResponse(br, req)
 	if err != nil {
 		return fmt.Errorf("reading proxy response: %w", err)

@@ -284,6 +284,12 @@ checked and has a reason.
 - **The first CONNECT goes without `Proxy-Authorization`.** The credentials are
   added only after a 407 — that is what Chrome does. The extra round trip to the
   proxy is paid deliberately: it is the proxy that classifies clients (STAGE16).
+  A proxy that hangs up instead of answering 407 — some commercial gateways
+  do, against RFC 7235 — gets the credentials on a second CONNECT over a fresh
+  connection, the one sequence that can work with it; a proxy that behaves
+  never sees that branch, so what it logs from us stays Chrome's pair. Found
+  by a user, reproduced first: without the retry the test dies with the exact
+  `unexpected EOF` they saw.
 - **`cookies=False` on a request isolates it in both directions.** Cookies do
   not go out and `Set-Cookie` from the response is not remembered. One-way
   isolation would be a surprise: "do not use the memory" reads as "do not touch

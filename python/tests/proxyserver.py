@@ -109,6 +109,52 @@ class _ConnectHandler(socketserver.BaseRequestHandler):
             _tunnel(self.request, upstream)
 
 
+class _DropHandler(_ConnectHandler):
+    """A gateway that hangs up instead of answering 407.
+
+    RFC 7235 says a proxy that wants credentials must send 407. Some
+    commercial ones close the socket without a byte in reply, and a client
+    that waits for the challenge — as Chrome does, and as this one did — sees
+    "unexpected EOF". Found by a user against a real provider.
+    """
+
+    def handle(self) -> None:
+        f = self.request.makefile("rb")
+        line = f.readline().decode("latin-1").strip()
+        if not line.startswith("CONNECT "):
+            self.request.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
+            return
+        target = line.split()[1]
+        headers: dict[str, str] = {}
+        while (raw := f.readline()) not in (b"\r\n", b"\n", b""):
+            k, _, v = raw.decode("latin-1").partition(":")
+            headers[k.strip().lower()] = v.strip()
+
+        user, password = self.server.auth
+        want = "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
+        if headers.get("proxy-authorization") != want:
+            self.server.rejected += 1
+            return  # not a byte: the connection just closes
+
+        host, _, port = target.rpartition(":")
+        try:
+            upstream = socket.create_connection((host, int(port)), timeout=10)
+        except OSError:
+            self.request.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+            return
+        self.server.tunnels.append(target)
+        self.request.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
+        with upstream:
+            _tunnel(self.request, upstream)
+
+
+class DroppingHTTPProxy(_Base):
+    """An HTTP proxy that drops a CONNECT without credentials instead of 407."""
+
+    def __init__(self, auth: tuple[str, str]):
+        super().__init__(_DropHandler, auth)
+
+
 class HTTPProxy(_Base):
     """An HTTP proxy supporting CONNECT only."""
 

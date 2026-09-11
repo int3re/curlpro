@@ -31,6 +31,10 @@ const (
 	// path raises the same code from Python, so a caller that branches on it
 	// does not have to know which path produced the body.
 	CodeTooLarge ErrorCode = "too_large"
+	// CodeProxyClosed: the proxy closed the connection without answering
+	// CONNECT at all — usually a proxy that wants credentials and drops the
+	// socket instead of sending the 407 the RFC requires.
+	CodeProxyClosed ErrorCode = "proxy_closed"
 )
 
 // codedError carries a code next to the original error, without losing its text.

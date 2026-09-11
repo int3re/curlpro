@@ -241,7 +241,7 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 |---|---|
 | `impersonate` | profile name; `chrome-151-windows` by default |
 | `timeout` | limit for the whole request; a `(connect, total)` pair bounds establishing the connection separately |
-| `proxy` | `http://`, `https://`, `socks5://` or `socks5h://`, `user:pass` allowed. An address with no scheme — `1.2.3.4:8080` — is read as `http://`; there is no probing, a SOCKS proxy has to say so. `HTTP_PROXY` is read for `http://` requests and `HTTPS_PROXY` for `https://`, `ALL_PROXY` for both, `NO_PROXY` excludes |
+| `proxy` | `http://`, `https://`, `socks5://` or `socks5h://`, `user:pass` allowed. An address with no scheme — `1.2.3.4:8080` — is read as `http://`; there is no probing, a SOCKS proxy has to say so. `HTTP_PROXY` is read for `http://` requests and `HTTPS_PROXY` for `https://`, `ALL_PROXY` for both, `NO_PROXY` excludes. The first CONNECT goes without credentials and adds them after a 407, as Chrome does; a proxy that hangs up instead of challenging gets a second CONNECT with credentials on a fresh connection, and one that hangs up on that too is reported as such (`proxy_closed`) |
 | `trust_env` | take the proxy from `HTTPS_PROXY`/`ALL_PROXY`, honouring `NO_PROXY` |
 | `verify` | `True` — system roots, a PEM path — trust only that one, `False` — no verification |
 | `cert` | a `(certificate, key)` pair for mTLS |
