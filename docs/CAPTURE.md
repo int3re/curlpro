@@ -394,3 +394,23 @@ SETTINGS and WINDOW_UPDATE).
 | `browserforge` | ❌ | ❌ | ✅ | by name | **zero TLS data** (checked by grep). The header order is by browser name rather than by version. The data moved to `apify/fingerprint-suite` |
 | `salesforce/ja3` | hashes | ❌ | ❌ | ❌ | **archived 2025-05-01** |
 | FoxIO `ja4plus-mapping.csv` | hashes | ❌ | ❌ | ❌ | 66 rows, 4 of them browsers without versions — useless |
+
+## A client that is a library: okhttp
+
+okhttp needs no browser and no device — a JVM and four jars, and the same stand
+in `-manual` mode. The probe, the coordinates and the commands are in
+[capture/okhttp/](../capture/okhttp/README.md). Two things it taught that apply
+to any non-browser client:
+
+- **SNI is not a given.** SunJSSE sends no `server_name` for a host without a
+  dot, so a stand reached as `localhost` yields `t13i…` — JA4's "no SNI" — where
+  a deployment yields `t13d…`. Point the client at a dotted name the stand's
+  certificate carries (`www.example.com` is in the SAN) and resolve it yourself.
+- **A reused client resumes.** The second handshake carries `pre_shared_key`,
+  and the capture drops resumed handshakes on purpose. A fresh client is not
+  enough when the TLS context is shared: make the `SSLContext` fresh per run.
+
+The provider decides the ClientHello. On Android that is Conscrypt; on the JVM,
+SunJSSE unless Conscrypt is installed as a provider. Both were captured, and the
+profiles are named for the provider, not for a platform nobody measured on.
+

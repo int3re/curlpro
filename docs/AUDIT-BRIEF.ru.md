@@ -131,7 +131,7 @@ Go 1.27, cgo (MinGW-w64 на Windows, лежит в `D:\mingw64`). Зависи�
 
 ### Данные и инструменты
 
-- `profiles/` — 48 профилей: Chrome 98–152, Edge, Firefox 133–155, Safari, Tor,
+- `profiles/` — 50 профилей: Chrome 98–152, Edge, Firefox 133–155, Safari, Tor, okhttp,
   Яндекс.Браузер. Мобильные сняты с живого Pixel 7 по USB: `chrome-152-android`,
   `yandex-26.8-android`. Часть схлопнута в дельты через `based_on`.
 - `corpus/` — 43 исходные сигнатуры `curl-impersonate` (YAML).
@@ -411,7 +411,7 @@ tools/echo-server_windows_amd64.exe -listen-addr localhost:8443 \
 go run ./cmd/probe -n 2            # JA4 против эталона
 go run ./cmd/h3probe               # отпечаток HTTP/3
 go run ./cmd/curlpro validate -oracle https://localhost:8443/json -insecure `
-    -baselines reference/baselines-local -pause 0      # все 48 профилей
+    -baselines reference/baselines-local -pause 0      # все 50 профилей
 ```
 
 Порядок заголовков живого браузера снимается стендом `cmd/hcapture`
@@ -419,7 +419,7 @@ go run ./cmd/curlpro validate -oracle https://localhost:8443/json -insecure `
 способ увидеть порядок в HTTP/3.
 
 Текущее состояние (замер 2026-09-05): `go test -race ./internal/...` — ok на
-четырёх пакетах, pytest без сети — 292 passed и 10 skipped, `validate` — 48/48 с проверкой
+четырёх пакетах, pytest без сети — 292 passed и 10 skipped, `validate` — 50/50 с проверкой
 стабильности порядка расширений, `probe` и `h3probe` — совпадение с эталоном,
 порядок заголовков совпал с живым Chrome 152 на HTTP/2 и HTTP/3. Итоги аудита —
 в [STAGE14-RESULTS.md](STAGE14-RESULTS.md), закрытие долгов роадмапа —

@@ -8,7 +8,7 @@ question answerable only online.
 The ClientHello is ours to build, so the same values are computed locally, from
 the marshalled bytes rather than from the profile: key_share, ECH and padding
 materialise only when the handshake is assembled, and their sizes are part of
-the fingerprint. Checked against 48 captures in ``reference/baselines`` — JA4,
+the fingerprint. Checked against 50 captures in ``reference/baselines`` — JA4,
 JA3N and the Akamai string all match what the oracle reported.
 """
 

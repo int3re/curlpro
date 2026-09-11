@@ -494,6 +494,38 @@ and that is not slack but a description of the browser: those profiles carry
 `padding`, so the ClientHello length, and the fingerprint with it, legitimately
 varies per connection. Found in stage 6 and recorded then.
 
+## Stage 23 — okhttp, the first non-browser profile ✅ done 2026-09-11
+
+`okhttp-5.5-conscrypt` and `okhttp-5.5-jvm`, 50 profiles now. okhttp is a
+library rather than a browser, so it was measured the way nothing else in the
+corpus could be: Java 21 plus the jars from Maven Central, no Gradle, no
+device, a probe run against the stand five times with a fresh `SSLContext` each
+time. Reproducible by anyone with a JVM.
+
+**Two stacks, two fingerprints.** On Android okhttp's TLS comes from Conscrypt
+(BoringSSL); on a desktop JVM from SunJSSE. Both were captured. Conscrypt gives
+`t13d1512h2_8daaf6152771_40271e0a5736` — Chrome's cipher set to the hash, the
+same BoringSSL underneath, 12 extensions to Chrome's 17. SunJSSE gives
+`t13d1114h2_5e2a75874763_62776a4e08ff`. The HTTP/2 layer is okhttp's own and
+identical on both: `4:16777216|16711681|0|m,p,a,s`, two headers
+(`accept-encoding`, `user-agent: okhttp/5.5.0`). Both checked against
+browserleaks and matching on a second run.
+
+**Named for what was measured.** Not `android-okhttp`: Conscrypt on a desktop is
+the same library Android ships, but its own version, and nothing here was
+checked on a device. A name that promised Android would promise the unverified.
+
+Two traps on the way, both recorded in [docs/CAPTURE.md](docs/CAPTURE.md):
+SunJSSE sends no SNI for a name without a dot, so a stand on `localhost` gave
+`t13i` instead of `t13d` — the probe resolves `www.example.com` itself; and a
+reused connection resumes, so the resumed-handshake filter from stage 21 ate
+every sample but the first until the context was made fresh per run.
+
+The profile found the largest defect of the week: its 16 MiB stream window
+drove fhttp's receive accounting into a quadratic runaway that every browser
+profile had merely been too small to trigger — [docs/FHTTP-PATCH.md](docs/FHTTP-PATCH.md).
+The release was held until that was fixed.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:
@@ -524,11 +556,13 @@ that is not at hand.
 | ~~permessage-deflate: a client window smaller than 32 KiB~~ ✅ closed 2026-09-03 | with a window smaller than the standard one the compressor is taken from `klauspost/compress`. Checked against a server of our own: RSV1 plus parsing the `zlib` stream with `wbits=-9` — such a stream cannot be read with a 32 KiB window |
 | ~~Firefox's q ladder was inferred, not measured~~ ✅ closed 2026-09-08 | the audit read `0.8/0.5/0.3` as Firefox's signature and a 0.1 step as Chrome's. A live Firefox 155, asked with `intl.accept_languages` set explicitly, answered `ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7` for four languages and `ru-RU,ru;q=0.9` for two — a flat 0.1 step, the same as Chrome. The formula `1 - i/n` no longer holds, the shape no longer separates the two browsers, and the check was removed rather than narrowed: its other half ("a ladder holding 0.5 is Firefox's") misfires on a Chrome with six languages |
 | The Firefox 133/135/144 ladders are still inferred | the corpus only ever carried two-item lists (`en-US,en;q=0.5`), which say nothing about a four-item shape, and the Russian values in those three profiles were written from the old formula. Firefox 155 is measured; when the change landed is not known, so replacing one guess with another buys nothing. Closes with a capture of an older Firefox |
-| A profile without an `http1` section — not a debt but a property | all 48 profiles have the section (their own or through `based_on`). The code's approximation stays for the profiles registered at runtime out of three fields: there is nowhere for an order to come from there |
+| A profile without an `http1` section — not a debt but a property | all 48 browser profiles have the section (their own or through `based_on`). The code's approximation stays for the profiles registered at runtime out of three fields: there is nowhere for an order to come from there |
 | ~~The HTTP/1.1 set was assumed equal to the HTTP/2 one~~ ✅ closed 2026-09-03 | measured: Chrome does not send `priority` on HTTP/1.1, Firefox does not send `TE`. When `http1.order` is given it sets the set as well, not just the order |
 | ~~"A new Python with an old DLL" silently ignores options~~ ✅ closed 2026-09-02 | `curlpro_version` = `0.2.0`, and `_ffi.py` checks `REQUIRED_VERSION` at load. The problem is not theoretical: an hour of runs of the wrong code was lost to it — see STAGE13 |
 | ~~QPACK: we announce a table capacity we do not support~~ ✅ closed 2026-09-03 | a decoder of our own, `internal/qpack`, with a dynamic table and blocked streams, checked against the appendix B examples of RFC 9204. `fp.impersonate.pro` now answers 5 times out of 5, where it was 1 out of 5 |
 | ~~HTTP/2 receive window runs away under a large `INITIAL_WINDOW_SIZE`~~ ✅ closed 2026-09-11 | found by the okhttp profile (16 MiB window): a 45 MB body died with `FLOW_CONTROL_ERROR` where the real okhttp took 1.9 s. fhttp's `flow.available()` returns the smaller of the stream and connection windows while `add()` raises the stream only, so once the connection is the minimum every read re-credits the same bytes — 1250 WINDOW_UPDATEs, 3.2 GB of credit after 5 MB, RST at 2^31−1. Chrome profiles survived by arithmetic (6 MiB < half the connection window) and a control run shows them crediting 1.8 GB for a 24 MiB body — every profile was exposed. Four edits carried on the vendored fhttp, re-applied by `scripts/patch-fhttp.py`, guarded by `TestH2ReceiveWindowCreditIsNotRunaway`; upstream v0.6.9 does not fix it. Details in [docs/FHTTP-PATCH.md](docs/FHTTP-PATCH.md) |
+| okhttp over HTTP/1.1 is not measured | the profiles carry the HTTP/2 header set; okhttp on a server that offers only http/1.1 sends its own order and `Connection: Keep-Alive`, which the code approximates. Closes with one run of the probe against a stand offering `http/1.1` only |
+| okhttp on a real Android device is not verified | Conscrypt on the JVM is the library Android ships, but the version differs and the platform may configure it. Closes with a capture from a device or an emulator |
 | A race in `fhttp` when closing HTTP/2 under load | found on 2026-09-05 by the test `TestConcurrentCloseDuringRequests` under `-race`: `handleResponse` assigns `cs.bufPipe = pipe{…}` without the connection mutex (`fhttp@v0.6.8/http2/transport.go:2361`) while `closeForError` closes that same pipe under it (`:1096` → `http2/pipe.go:105`). Closing the session while an HTTP/2 response is arriving writes the struct from two goroutines; a lost close means a reader that will only be released by the request timeout. There is nothing on our side to synchronise it with — either patch the dependency or wait for the requests in flight on `Close`, which changes what "close now" means. The subtest is skipped under the detector and the behaviour without it was checked over five runs |
 | ~~Three corpus files are inconsistent~~ ✅ closed 2026-09-03 | taken apart one by one. `chrome-119-macos` and `chrome-120-macos` contained `pre_shared_key` — the session-resumption extension, because of which the profile did not bring a connection up at all; replaced with `padding`. `chrome-131-android` had its `sec-ch-ua-mobile` fixed — it was `?0` under a mobile UA — see STAGE16 |
 

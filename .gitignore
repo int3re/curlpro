@@ -34,6 +34,10 @@ dist/
 *.dylib
 *.h
 
+# okhttp probe: the jars are fetched from Maven Central, the classes are built
+capture/okhttp/lib/
+capture/okhttp/*.class
+
 # Python
 __pycache__/
 *.py[cod]

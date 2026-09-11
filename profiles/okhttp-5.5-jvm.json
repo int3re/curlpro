@@ -1,0 +1,62 @@
+{
+  "name": "okhttp-5.5-jvm",
+  "tls": {
+    "raw_client_hello": "FgMDAZwBAAGYAwOFkd64cGS1spH2OtZPJffyqvSaA/0cQNm6y+UE5TaxyCCNnnZQq7wdu/eCevKwhpgMyEKIPYQbVgAlu3ypx9lcJgAWEwETAhMDwCvAL8AswDDMqcyowBPAFAEAATkAAAAUABIAAA93d3cuZXhhbXBsZS5jb20ABQAFAQAAAAAACgAWABQAHQAXABgAGQAeAQABAQECAQMBBAALAAIBAAAQAA4ADAJoMghodHRwLzEuMQARAAkABwIABAAAAAAAFwAAACMAAAANACAAHgQDBQMGAwgHCAgIBAgFCAYICQgKCAsEAQUBBgEEAgArAAUEAwQDAwAtAAIBAQAyACYAJAQDBQMGAwgHCAgIBAgFCAYICQgKCAsEAQUBBgEEAgIDAgECAgAzAGsAaQAdACA47mewMcy2B29VJipNNqQbpgMca6h7mJQMhwSCroMTfgAXAEEEpDUDMl7bwjbez6m9+/w3oHk9WVLBcFjhUTBDG/6szIodAs04AebjlPV7d2IaDi3hKcnsg/SbvrLFgD/57fQ3IP8BAAEA",
+    "signature_algorithms": [
+      1027,
+      1283,
+      1539,
+      2055,
+      2056,
+      2052,
+      2053,
+      2054,
+      2057,
+      2058,
+      2059,
+      1025,
+      1281,
+      1537,
+      1026
+    ],
+    "permute_extensions": false
+  },
+  "http1": {},
+  "http2": {
+    "settings": [
+      {
+        "id": 4,
+        "value": 16777216
+      }
+    ],
+    "connection_window_update": 16711681,
+    "pseudo_order": [
+      ":method",
+      ":path",
+      ":authority",
+      ":scheme"
+    ]
+  },
+  "http3": {},
+  "quic": {},
+  "headers": {
+    "user_agent": "okhttp/5.5.0",
+    "order": [
+      {
+        "key": "accept-encoding",
+        "value": "gzip"
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      }
+    ]
+  },
+  "websocket": {},
+  "client_hints": {},
+  "fetch": {}
+}

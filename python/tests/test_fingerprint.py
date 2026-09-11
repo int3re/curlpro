@@ -5,7 +5,7 @@ The value of this is not only convenience. Until it existed, every check of
 the day this was written it was not, twice. A local answer turns a network
 question into an offline one.
 
-The arithmetic itself is checked in Go against 48 captures
+The arithmetic itself is checked in Go against 50 captures
 (internal/fingerprint/baseline_test.go); here the concern is the Python surface.
 """
 

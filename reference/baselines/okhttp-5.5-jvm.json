@@ -1,0 +1,13 @@
+{
+  "profile": "okhttp-5.5-jvm",
+  "oracle": "https://tls.browserleaks.com/json",
+  "ja4": [
+    "t13d1114h2_5e2a75874763_62776a4e08ff"
+  ],
+  "ja3n": [
+    "d26d47f731c0e074087365694b576703"
+  ],
+  "akamai": "4:16777216|16711681|0|m,p,a,s",
+  "recorded": "2026-09-11T14:56:17Z",
+  "user_agent": "okhttp/5.5.0"
+}

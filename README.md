@@ -55,7 +55,7 @@ curlpro.register_profile({
 
 ## Features
 
-- **48 profiles**: Chrome 98-152, Edge, Firefox 133-155, Safari, Tor, Yandex Browser;
+- **50 profiles**: Chrome 98-152, Edge, Firefox 133-155, Safari, Tor, Yandex Browser, okhttp 5.5;
   mobile — Chrome and Yandex for Android, Safari for iOS.
 - **Every fingerprint layer at once** — TLS, HTTP/2, HTTP/3, HTTP/1.1 and WebSocket
   (table below).
@@ -151,7 +151,7 @@ The wheels on PyPI are built without the tag, so JA4H is present there.
 pip install curlpro
 ```
 
-Neither Go nor a compiler is needed: the native library and all 48 profiles are
+Neither Go nor a compiler is needed: the native library and all 50 profiles are
 already inside the wheel. Wheels are built for five platforms:
 
 | Platform | Wheel |
@@ -544,7 +544,7 @@ with curlpro.Session("chrome-151-windows") as s:
 
 These values used to be obtainable only from browserleaks, which made every
 check depend on someone else's service. The computation is checked against the
-48 captures in `reference/baselines`: **JA4 48/48, JA3N 48/48, Akamai 48/48**.
+50 captures in `reference/baselines`: **JA4 50/50, JA3N 50/50, Akamai 50/50**.
 
 `diff()` answers the question a profile edit actually raises — did a server
 notice:

@@ -1,0 +1,56 @@
+{
+  "name": "okhttp-5.5-conscrypt",
+  "tls": {
+    "raw_client_hello": "FgMBBdQBAAXQAwMjE5ONWvDCnKGI+T7J5rG0/O5yVWqdVnYgPlvOWuVkjiApRxzV+y+uykvXIasFtGL8SvvHuk5zNneax5fGAFiXygAeEwETAhMDwCvAL8AswDDMqcyowBPAFACcAJ0ALwA1AQAFaQAAABQAEgAAD3d3dy5leGFtcGxlLmNvbQAXAAD/AQABAAAKAAoACBHsAB0AFwAYAAsAAgEAACMAAAAQAA4ADAJoMghodHRwLzEuMQAFAAUBAAAAAAANABQAEgQDCAQEAQUDCAUFAQgGBgECAQAzBOoE6BHsBMAZY2xCOkHZF0snB6rfIycvaBzPczFwkzpC46MaGrYnJCwyWB1Wyp0c4i2BNcAF53DcJ2mcKzk8E6GfNoka+XV9+7wzcEyxVS+lBr8NC31pIkCjoEUawWA/cmeiJq4B1nchFZW1VZpKFAfMBQnWBlZWKLFflpUXuqellR1N+TEcYSi47BMlbDS1oGE/LKyjnDaSQCKEsmOC2ncnSkbuGKZQRQGiEQ4uYEFnuhwaCq/HQTrHSV4Cx7ehemDBSTavh1UGtZxcF1OhCMgiScJ07LWBmGEHPKCQUQeRcUYNFGTZZw4nkBWOLEd9A7oY58dGZs5AKVYrmoey/KIzpUMvRHgKxY+okK8X/CJN4Aog+oLjaQXi44M9aLXcUpbXeYg+1yp9B4dOGV41qxp8Q8tRR84mSiYLkBMwt00k+rFyoHsE1mWbTG594Jpm6q/9R6VoQVx1ACHdQqIPVM5O3BPsPMuteHtN4s2aSqTtgMvmcYJZmLeJchOAlMtvSBqVU84Rda3hXB+UU1pBEG2HJK+N4rpDpzpuUmHE8cd4KWEdfGMieXZcM5VAEDaURA7M1BE46zCTR01IYiH9UBBDyk+dGJdXQKVV5oxBKgwYYUXqQCDX8ZrU4BLTYztYSowwGVWCqjWEBnyVjE0+q8N26rBARU5Lm3cqsTSvejmc6K0LFoDikahsEwRS8Gze+XBfcDMiIk0EyRrEcy6M8ljgOYrHs3XAGnWkBAb9Bzas1JKMO0JN1l4VgsISTCiC90xeRyKjKHXd0DD7+RM1lFJE93XaY1w5CSgyg5lPEzWOPEbJ90vJRZpbxwKVlUGeF4XnKAlY54kmwUGe2l8hjG8GpcPnYSy4N5zBAit6Y2htW7bzhYxkace316jEU2dV9aY3mCJB1DqkKpXt4cUl6RUnF7Cthbg1Kq5gEELitnxfla12mkkil4E3OSkLdkum1xn6eEUYBLjtOYDuEI2S7I8YcswC6EStg5ngNTwOMpSG0hRaNoK2pqcUpy8WGLvS1WlKsmCyVEEzdnINEAJDtr05yGy5tQ1plyNR5Uz+p0rMTKH0ib1faGNqGVD/o7L1yTdHu0gEJ3gI+AtiMxetK0q1YoHPXBQFa8cIdM4EBnZ8Y4kkpkPdSqjTdlG1pJ/zYsTQij8AkTF1gjky27kGiG8qnI0pdGkmVwhD0LoGTKI44Vc36T1L9cXgMwVtJHCY50IK5SNIzF0fK2hWHLNtKyv8wKFBNkLUaqjJ42wD0a0TlkzmS0Y3YrV/Yp+NI3RVdWdKl47GCQNQS4aNs23VBI/rEZpIQKR6xI0RxAYpw1jXpoIFZHNBCCw/m2xvDBbK+g5gEUi9U3yM9kWvmHjh8Gu05LPq1McSSaddIkQEIGDDUMCQcwaD58orWZN55IzQ2Zj4ExzrkjZ6IJhPgbpW5Cy66Z6w8Ek7kXSAJYbysFROk7jV9S/n6XlBUYuEQDznyD1NzLk7MgGItzuNlyJRyYqqsZa/tx07Ro4HModj4xtshiyUHJxuyh/chmKemYuKNUyrXCA6O8euJFPHHvm8zO9+8Udv25GAyqqApN2pp3jmKlaMlb9Zl7yz/JktqIGFnpBM4AcaFKCJ5nrCY5Em0RdQCmj8cs8KAB0AIBayqZIjtMroJ4P3v75Znv20suZ/WOKyS9GLUVcQ++5PAC0AAgEBACsABQQDBAMD",
+    "signature_algorithms": [
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537,
+      513
+    ],
+    "permute_extensions": false
+  },
+  "http1": {},
+  "http2": {
+    "settings": [
+      {
+        "id": 4,
+        "value": 16777216
+      }
+    ],
+    "connection_window_update": 16711681,
+    "pseudo_order": [
+      ":method",
+      ":path",
+      ":authority",
+      ":scheme"
+    ]
+  },
+  "http3": {},
+  "quic": {},
+  "headers": {
+    "user_agent": "okhttp/5.5.0",
+    "order": [
+      {
+        "key": "accept-encoding",
+        "value": "gzip"
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      }
+    ]
+  },
+  "websocket": {},
+  "client_hints": {},
+  "fetch": {}
+}
