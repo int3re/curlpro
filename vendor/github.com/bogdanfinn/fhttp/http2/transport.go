@@ -2364,7 +2364,9 @@ func (rl *clientConnReadLoop) handleResponse(cs *clientStream, f *MetaHeadersFra
 		return res, nil
 	}
 
-	cs.bufPipe = pipe{b: &dataBuffer{expected: res.ContentLength}}
+	// curlpro: install the buffer into the stream's pipe rather than replace
+	// the pipe. The assignment raced with closeForError; see pipe.setBuffer.
+	cs.bufPipe.setBuffer(&dataBuffer{expected: res.ContentLength})
 	cs.bytesRemain = res.ContentLength
 	res.Body = transportResponseBody{cs}
 	go cs.awaitRequestCancel(cs.req)

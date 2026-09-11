@@ -173,7 +173,7 @@ def test_max_workers_warns_instead_of_being_ignored():
     import warnings
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        s = curlpro.AsyncSession("chrome-151-windows", max_workers=4)
+        curlpro.AsyncSession("chrome-151-windows", max_workers=4)
     assert any(issubclass(x.category, DeprecationWarning) and "max_workers" in str(x.message) for x in w)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")

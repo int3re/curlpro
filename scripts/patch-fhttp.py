@@ -1,29 +1,30 @@
-"""Fix the HTTP/2 receive-window accounting in the vendored fhttp v0.6.8.
+"""The patch carried on the vendored fhttp v0.6.8.
 
-Four exact-anchor edits to vendor/github.com/bogdanfinn/fhttp/http2/transport.go.
-Idempotent: an edit whose result is already present is skipped, so the script
-can be re-run after a partial application. Line endings are preserved. It fails
-loudly if an anchor is missing and its result is absent — which is what happens
-after `go mod vendor` regenerates the tree; internal/client/h2flow_test.go fails
-in that case as well.
+Exact-anchor edits to vendor/github.com/bogdanfinn/fhttp/http2/. Idempotent:
+an edit whose result is already present is skipped, so the script can be
+re-run after a partial application or after `go mod vendor` regenerated the
+tree. Line endings are preserved. It fails loudly if an anchor is missing and
+its result is absent — the sign that the upstream text moved. Two tests fail
+against an unpatched tree as well: internal/client/h2flow_test.go for the
+window accounting, and TestConcurrentCloseDuringRequests under -race for the
+pipe. See docs/FHTTP-PATCH.md for why each edit exists.
 """
 import io
 import sys
 
-P = 'vendor/github.com/bogdanfinn/fhttp/http2/transport.go'
+ROOT = 'vendor/github.com/bogdanfinn/fhttp/http2/'
+TRANSPORT = ROOT + 'transport.go'
+PIPE = ROOT + 'pipe.go'
 
-raw = io.open(P, 'rb').read()
-nl = '\r\n' if b'\r\n' in raw else '\n'
-t = raw.decode('utf-8').replace('\r\n', '\n')
-
-edits = [
+# (tag, file, old, new)
+EDITS = [
 # (a) The receive window of a stream must not be linked to the connection's.
 #     flow.available() returns min(stream, conn) and flow.add() raises the
 #     stream only; once the stream is refreshed above the connection, the
 #     connection becomes the minimum and every later refresh re-credits bytes
 #     that were already credited. The link is right for the SEND side (cs.flow)
 #     and wrong for RECEIVE accounting, which x/net dropped in 2022.
-('a',
+('a', TRANSPORT,
 '''	cs.inflow.add(int32(cc.streamFlow))
 	cs.inflow.setConnFlow(&cc.inflow)
 ''',
@@ -40,7 +41,7 @@ edits = [
 # (b) With the link gone, cs.inflow.take no longer decrements the connection
 #     window, so the connection is checked and taken explicitly — the way
 #     x/net does it.
-('b',
+('b', TRANSPORT,
 '''		// Check connection-level flow control.
 		cc.mu.Lock()
 		if cs.inflow.available() >= int32(f.Length) {
@@ -69,7 +70,7 @@ edits = [
 #     PEER's advertised window for what WE send — nothing to do with our own
 #     receive window. Against pypi that read 65535 (the peer sent no value),
 #     so a 16 MiB receive window was handled by the "small window" branch.
-('c',
+('c', TRANSPORT,
 '''		isSmallWindow := cc.initialWindowSize < 1048576 // < 1MB
 ''',
 '''		// curlpro: our receive window decides the strategy, not the peer's
@@ -82,7 +83,7 @@ edits = [
 #     them now and again when they are read: with a full buffer the client
 #     handed out twice the body. They must be subtracted — the sign upstream
 #     flipped in v0.6.9 — so that what goes back is what was consumed.
-('d',
+('d', TRANSPORT,
 '''		unsent := int(cc.streamFlow) - int(cs.inflow.available()) + cs.bufPipe.Len()
 ''',
 '''		// curlpro: buffered bytes are subtracted, not added — they were taken
@@ -94,11 +95,10 @@ edits = [
 # (e) flow.add() returns false when the sum would pass 2^31-1, and every
 #     caller ignored the result: the window was left where it was while a
 #     WINDOW_UPDATE for the full amount still went on the wire. RFC 7540
-#     §6.9.1 makes that a FLOW_CONTROL_ERROR at the peer. With edits (a)-(d)
-#     the sum cannot run away any more, so this is a guard, not a fix — but a
-#     guard that turns a silent protocol violation into "send nothing" is
-#     worth its three lines.
-('e1',
+#     §6.9.1 makes that a FLOW_CONTROL_ERROR at the peer. With (a)-(d) the sum
+#     cannot run away any more, so this is a guard: a would-be protocol
+#     violation becomes "send nothing".
+('e1', TRANSPORT,
 '''		connAdd = int32(cc.connFlow) - v
 		cc.inflow.add(connAdd)
 ''',
@@ -107,7 +107,7 @@ edits = [
 			connAdd = 0 // curlpro: the window is at its maximum; nothing to send
 		}
 '''),
-('e2',
+('e2', TRANSPORT,
 '''			if unsent > aggressiveThreshold {
 				streamAdd = int32(unsent)
 				cs.inflow.add(streamAdd)
@@ -120,7 +120,7 @@ edits = [
 				}
 			}
 '''),
-('e3',
+('e3', TRANSPORT,
 '''			if unsent > transportDefaultStreamMinRefresh && unsent > int(cc.streamFlow)/2 {
 				streamAdd = int32(unsent)
 				cs.inflow.add(streamAdd)
@@ -132,20 +132,68 @@ edits = [
 					streamAdd = 0 // curlpro: see e1
 				}
 			}
+'''),
+
+# (f) The data race on ClientConn.Close during a response.
+#     handleResponse assigned cs.bufPipe = pipe{...} — a whole-struct write
+#     that replaces the pipe's mutex, condition and done channel — while
+#     closeForError, holding only cc.mu, called cs.bufPipe.CloseWithError,
+#     which locks the very mutex being overwritten. A close that lost the race
+#     was simply gone: the reader woke only on the request timeout. Upstream
+#     x/net fixed it by never replacing the pipe: the buffer is installed
+#     through a method under the pipe's own lock, and a pipe that is already
+#     closed refuses the buffer, so a close that won stays won.
+('f1', PIPE,
+'''func (p *pipe) Len() int {
+''',
+'''// setBuffer initializes the pipe buffer. It has no effect if the pipe is
+// already closed.
+//
+// curlpro: ported from golang.org/x/net/http2. handleResponse used to assign
+// a whole new pipe here, which raced with closeForError closing the old one.
+func (p *pipe) setBuffer(b pipeBuffer) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.err != nil || p.breakErr != nil {
+		return
+	}
+	p.b = b
+}
+
+func (p *pipe) Len() int {
+'''),
+('f2', TRANSPORT,
+'''	cs.bufPipe = pipe{b: &dataBuffer{expected: res.ContentLength}}
+''',
+'''	// curlpro: install the buffer into the stream's pipe rather than replace
+	// the pipe. The assignment raced with closeForError; see pipe.setBuffer.
+	cs.bufPipe.setBuffer(&dataBuffer{expected: res.ContentLength})
 '''),
 ]
 
-applied, skipped = [], []
-for tag, old, new in edits:
-    if new in t:
-        skipped.append(tag)
-        continue
-    if old not in t:
-        sys.exit(f'edit ({tag}): anchor not found and result absent:\n{old[:120]}')
-    if t.count(old) != 1:
-        sys.exit(f'edit ({tag}): anchor is not unique')
-    t = t.replace(old, new, 1)
-    applied.append(tag)
 
-io.open(P, 'wb').write(t.replace('\n', nl).encode('utf-8'))
-print(f'{P}: applied {applied or "-"}, already present {skipped or "-"}')
+def main():
+    files = {}
+    for tag, path, old, new in EDITS:
+        if path not in files:
+            raw = io.open(path, 'rb').read()
+            nl = '\r\n' if b'\r\n' in raw else '\n'
+            files[path] = [raw.decode('utf-8').replace('\r\n', '\n'), nl, [], []]
+        entry = files[path]
+        t = entry[0]
+        if new in t:
+            entry[3].append(tag)
+            continue
+        if old not in t:
+            sys.exit(f'edit ({tag}) in {path}: anchor not found and result absent:\n{old[:120]}')
+        if t.count(old) != 1:
+            sys.exit(f'edit ({tag}) in {path}: anchor is not unique')
+        entry[0] = t.replace(old, new, 1)
+        entry[2].append(tag)
+    for path, (t, nl, applied, skipped) in files.items():
+        io.open(path, 'wb').write(t.replace('\n', nl).encode('utf-8'))
+        print(f'{path}: applied {applied or "-"}, already present {skipped or "-"}')
+
+
+if __name__ == '__main__':
+    main()

@@ -161,20 +161,13 @@ func TestConcurrentCloseDuringRequests(t *testing.T) {
 		{"http2", true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.h2 && raceDetector {
-				// A race inside the dependency, found by this very test.
-				// fhttp v0.6.8 assigns the response pipe without the connection
-				// mutex (http2/transport.go:2361, cs.bufPipe = pipe{...}) while
-				// ClientConn.closeForError closes that same pipe holding it
-				// (http2/transport.go:1096 → http2/pipe.go:105). Closing a
-				// session while an HTTP/2 response is arriving therefore writes
-				// the struct from two goroutines at once; a lost close means a
-				// reader that waits for the request timeout instead of failing.
-				// Nothing on our side synchronises the two, so the subtest is
-				// skipped under the detector rather than silenced.
-				t.Skip("known data race in bogdanfinn/fhttp v0.6.8 on ClientConn.Close; " +
-					"see docs/AUDIT-QUESTIONS.md")
-			}
+			// The HTTP/2 case used to be skipped under -race: fhttp v0.6.8
+			// assigned the response pipe wholesale in handleResponse while
+			// closeForError closed the old one, and closing a session as a
+			// response arrived wrote the struct from two goroutines. The
+			// vendored fhttp now carries upstream's fix (docs/FHTTP-PATCH.md,
+			// edit f), and this subtest runs under the detector as its guard:
+			// a regenerated vendor tree without the patch fails here.
 			srv, _ := auditServer(t, tc.h2, echoHandler())
 			s, err := New(auditProfile(t, "chrome-151-windows"), Options{
 				DefaultHeaders: true, ForceHTTP1: tc.force,
