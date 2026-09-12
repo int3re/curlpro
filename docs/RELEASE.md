@@ -6,10 +6,10 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.5.1**: a proxy that drops the connection on an unauthenticated CONNECT
-instead of answering 407 now gets the credentials on a second attempt, and a
-proxy that closes without any answer is named as such instead of "unexpected
-EOF". The first CONNECT still goes out without credentials, as Chrome's does.
+**0.5.2**: a proxy that answers the 407 correctly and then closes the socket
+without announcing it — the case a relay trace showed after 0.5.1 fixed the
+wrong one — gets the authenticated CONNECT again on a fresh connection. The
+first CONNECT still goes out without credentials, as Chrome's does.
 
 ## What happens on a tag
 
