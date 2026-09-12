@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 import curlpro
-from proxyserver import DroppingHTTPProxy
+from proxyserver import CloseAfter407HTTPProxy, DroppingHTTPProxy
 from rawserver import RawHeaderServer
 
 REPO = Path(__file__).resolve().parents[2]
@@ -49,3 +49,18 @@ def test_without_credentials_the_error_names_the_proxy_and_the_407_rule():
     assert "407" in str(err)
     assert "unexpected EOF" not in str(err)
     assert proxy.rejected == 1
+
+
+def test_credentials_are_retried_on_a_fresh_socket_after_an_unannounced_close():
+    """The field case behind 0.5.2: the proxy answers 407 correctly and then
+    closes without Connection: close. 0.5.1 judged the socket reusable, wrote
+    the authenticated CONNECT into it and reported credentials "sent on the
+    second attempt" — while the proxy had seen one connection."""
+    with CloseAfter407HTTPProxy(("user", "pw")) as proxy, RawHeaderServer() as srv:
+        with curlpro.Session("chrome-151-windows", verify=False, force_http1=True,
+                             proxy=f"http://user:pw@{proxy.url_host}", timeout=10) as s:
+            r = s.get(srv.url)
+    assert r.status == 200
+    assert proxy.rejected == 1      # the browser-style first CONNECT, challenged
+    assert len(proxy.tunnels) == 1  # the credentials arrived on a fresh socket
+

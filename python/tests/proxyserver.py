@@ -148,6 +148,58 @@ class _DropHandler(_ConnectHandler):
             _tunnel(self.request, upstream)
 
 
+class _CloseAfter407Handler(_ConnectHandler):
+    """A gateway that answers the 407 and then closes without saying so.
+
+    What a relay trace of a real provider showed after the drop case was
+    fixed: a complete 407 - Proxy-Authenticate, Content-Length, a body - and
+    then EOF, with no Connection: close anywhere. A client that trusts the
+    missing header retries into a dead socket.
+    """
+
+    def handle(self) -> None:
+        f = self.request.makefile("rb")
+        line = f.readline().decode("latin-1").strip()
+        if not line.startswith("CONNECT "):
+            self.request.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
+            return
+        target = line.split()[1]
+        headers: dict[str, str] = {}
+        while (raw := f.readline()) not in (b"\r\n", b"\n", b""):
+            k, _, v = raw.decode("latin-1").partition(":")
+            headers[k.strip().lower()] = v.strip()
+
+        user, password = self.server.auth
+        want = "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
+        if headers.get("proxy-authorization") != want:
+            self.server.rejected += 1
+            body = b"Invalid User or Password"
+            self.request.sendall(
+                b"HTTP/1.1 407 Proxy Authentication Required\r\n"
+                b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+                b'Proxy-Authenticate: Basic realm=""\r\n\r\n' + body
+            )
+            return  # the socket closes here, and nothing announced it
+
+        host, _, port = target.rpartition(":")
+        try:
+            upstream = socket.create_connection((host, int(port)), timeout=10)
+        except OSError:
+            self.request.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+            return
+        self.server.tunnels.append(target)
+        self.request.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
+        with upstream:
+            _tunnel(self.request, upstream)
+
+
+class CloseAfter407HTTPProxy(_Base):
+    """An HTTP proxy that answers 407 and closes without a Connection: close."""
+
+    def __init__(self, auth: tuple[str, str]):
+        super().__init__(_CloseAfter407Handler, auth)
+
+
 class DroppingHTTPProxy(_Base):
     """An HTTP proxy that drops a CONNECT without credentials instead of 407."""
 

@@ -480,8 +480,9 @@ class Session:
         ``http://``: a bare one says nothing about SOCKS, and guessing wrong
         would open a connection speaking the wrong protocol. The first CONNECT
         carries no credentials and adds them after a 407, as a browser does; a
-        proxy that hangs up instead of challenging gets a second CONNECT with
-        them on a fresh connection
+        proxy that hangs up instead of challenging, or answers the 407 and then
+        closes without saying so, gets the CONNECT with them on a fresh
+        connection
     :param default_headers: send the profile's headers. Turn it off to control
         the set and the order yourself — anti-bot systems look at the order
         too. Without your own ``user-agent`` no such header is sent at all:

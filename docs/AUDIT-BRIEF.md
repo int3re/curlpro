@@ -289,7 +289,14 @@ checked and has a reason.
   connection, the one sequence that can work with it; a proxy that behaves
   never sees that branch, so what it logs from us stays Chrome's pair. Found
   by a user, reproduced first: without the retry the test dies with the exact
-  `unexpected EOF` they saw.
+  `unexpected EOF` they saw. That first report had the mechanism wrong, and
+  0.5.1 fixed a case the field proxy did not have: a relay trace then showed a
+  *complete* 407 — status, `Proxy-Authenticate`, `Content-Length`, body — and
+  then EOF, with no `Connection: close` anywhere. The client trusted the
+  missing header, reused the socket, and wrote the authenticated CONNECT into a
+  dead one. A transport-level death of a reused socket is now retried once on
+  a fresh connection; an HTTP answer is final. Both modes are in the test
+  proxies, Go and Python, and both fail without their fix.
 - **`cookies=False` on a request isolates it in both directions.** Cookies do
   not go out and `Set-Cookie` from the response is not remembered. One-way
   isolation would be a surprise: "do not use the memory" reads as "do not touch

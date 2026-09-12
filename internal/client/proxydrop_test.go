@@ -95,13 +95,56 @@ func TestProxyThatDropsEvenWithCredentialsSaysSo(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error")
 	}
-	if !strings.Contains(err.Error(), "second attempt") {
-		t.Errorf("the error does not say credentials were already sent: %v", err)
+	if !strings.Contains(err.Error(), "authenticated CONNECT on a fresh connection") {
+		t.Errorf("the error does not say credentials were already sent on a fresh socket: %v", err)
 	}
 	if Code(err) != CodeProxyClosed {
 		t.Errorf("code %q, want %q", Code(err), CodeProxyClosed)
 	}
 	if n := p.accepted.Load(); n != 2 {
 		t.Errorf("the proxy accepted %d connections, expected exactly 2", n)
+	}
+}
+
+// A proxy that answers the 407 and then closes without saying so.
+//
+// This is what a relay trace of a real gateway showed after 0.5.1 shipped:
+// "HTTP/1.1 407 … Content-Length: 24 … Proxy-Authenticate: Basic realm=\"\"",
+// the body, then EOF — and no Connection: close anywhere. The client judged
+// the socket reusable, wrote the authenticated CONNECT into it, read EOF, and
+// reported that credentials had been sent "on the second attempt as well"
+// while the proxy had seen one connection. The retry has to notice that the
+// reused socket is dead and go again on a fresh one.
+func TestConnectRetriesOnAFreshSocketWhenTheProxyClosesAfter407Unannounced(t *testing.T) {
+	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		io.WriteString(w, "ok")
+	})
+	srv, _ := auditServer(t, false, h)
+	target := strings.TrimPrefix(srv.URL, "https://")
+
+	p := newAuthProxy(t, target, true)
+	p.closeAfter407 = true
+	s := auditSession(t, Options{DefaultHeaders: true, ForceHTTP1: true,
+		Proxy: "http://user:pw@" + p.addr(), Timeout: 10 * time.Second})
+
+	resp, err := s.Do(&Request{Method: "GET", URL: auditURL(srv, "/")})
+	if err != nil {
+		t.Fatalf("request through a proxy that closes after an unannounced 407: %v", err)
+	}
+	if resp.Status != 200 {
+		t.Fatalf("status %d", resp.Status)
+	}
+	reqs := p.requests()
+	if len(reqs) != 2 {
+		t.Fatalf("the proxy received %d CONNECTs, expected 2", len(reqs))
+	}
+	if got := reqs[0].Header.Get("Proxy-Authorization"); got != "" {
+		t.Errorf("the first CONNECT carried Proxy-Authorization %q — a browser does not", got)
+	}
+	if got := reqs[1].Header.Get("Proxy-Authorization"); !strings.HasPrefix(got, "Basic ") {
+		t.Errorf("the retry had no credentials: %q", got)
+	}
+	if n := p.accepted.Load(); n != 2 {
+		t.Errorf("the proxy accepted %d connections, expected 2: the 407 socket was dead and the retry needed a new one", n)
 	}
 }

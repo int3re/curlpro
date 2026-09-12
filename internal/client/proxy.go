@@ -176,6 +176,24 @@ func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAg
 			setDeadline(conn)
 		}
 		err = connectProxy(conn, pu, addr, userAgent, true)
+
+		// The socket was judged reusable because the 407 announced no close —
+		// and some proxies close anyway. A relay trace of a real gateway showed
+		// it: a complete 407 with Content-Length and body, then EOF, no
+		// Connection: close. The authenticated CONNECT then went into a dead
+		// socket, and the failure read as if the proxy had refused credentials
+		// it never received. A transport-level death of the reused socket —
+		// nothing read, or the write itself failing — is retried once on a
+		// fresh connection; an HTTP answer (403, 5xx) is final.
+		if need.reusable && deadSocket(err) {
+			clearDeadline(conn)
+			conn.Close()
+			if conn, err = dialProxyConn(ctx, d, pu); err != nil {
+				return nil, err
+			}
+			setDeadline(conn)
+			err = connectProxy(conn, pu, addr, userAgent, true)
+		}
 	}
 	clearDeadline(conn)
 	if err != nil {
@@ -183,6 +201,22 @@ func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAg
 		return nil, err
 	}
 	return conn, nil
+}
+
+// deadSocket says the CONNECT failed at the transport, not at HTTP: the peer
+// hung up before a byte (proxyClosedError from the peek) or the write itself
+// failed because the peer had already closed (reset, broken pipe). An HTTP
+// status is never a dead socket.
+func deadSocket(err error) bool {
+	var closed proxyClosedError
+	if errors.As(err, &closed) {
+		return true
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var opErr *net.OpError
+	return errors.As(err, &opErr) && !opErr.Timeout()
 }
 
 // dialProxyConn opens the connection to the proxy itself.
@@ -240,8 +274,8 @@ type proxyClosedError struct {
 
 func (e proxyClosedError) Error() string {
 	if e.withAuth {
-		return "proxy closed the connection without answering CONNECT, " +
-			"with credentials sent on the second attempt as well"
+		return "proxy closed the connection without answering an authenticated " +
+			"CONNECT on a fresh connection"
 	}
 	return "proxy closed the connection without answering CONNECT: a proxy that " +
 		"requires authentication must answer 407, and some close instead — " +

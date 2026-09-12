@@ -25,6 +25,11 @@ type authProxy struct {
 	// of answering 407 — the behaviour of some commercial gateways, which the
 	// RFC forbids and users meet anyway. dropAlways hangs up even with them.
 	drop, dropAlways bool
+	// closeAfter407 answers the 407 properly — status, Proxy-Authenticate,
+	// Content-Length, a body — and then closes the socket without having said
+	// Connection: close. A relay trace of a real gateway showed exactly this;
+	// a client that believes the missing header retries into a dead socket.
+	closeAfter407 bool
 
 	mu       sync.Mutex
 	connects []*stdhttp.Request // every CONNECT received
@@ -76,6 +81,13 @@ func (p *authProxy) handle(c net.Conn) {
 
 		if p.dropAlways || (p.drop && req.Header.Get("Proxy-Authorization") == "") {
 			return // hang up: not a byte in reply, as the gateway in the field did
+		}
+		if p.closeAfter407 && req.Header.Get("Proxy-Authorization") == "" {
+			body := "Invalid User or Password"
+			io.WriteString(c, "HTTP/1.1 407 Proxy Authentication Required\r\n"+
+				"Content-Length: "+itoa(len(body))+"\r\n"+
+				"Proxy-Authenticate: Basic realm=\"\"\r\n\r\n"+body)
+			return // no Connection: close was announced; the socket goes anyway
 		}
 		if req.Header.Get("Proxy-Authorization") == "" {
 			body := "authentication required"
