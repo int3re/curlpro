@@ -52,6 +52,11 @@ jobs:
           go build -tags nofoxio ./...
           go test -tags nofoxio ./internal/fingerprint/
 
+      # The Android device pool is generated from a committed seed; a profile
+      # hand-edited out of sync with it is caught here rather than shipped.
+      - name: the device pool is in sync with its seed
+        run: python scripts/gen-devices.py --check
+
   go:
     strategy:
       fail-fast: false

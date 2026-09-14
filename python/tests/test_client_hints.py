@@ -103,6 +103,25 @@ class HintServer:
         self._thread.join(timeout=2)
 
 
+
+import json as _json
+from pathlib import Path as _Path
+
+_SEED = {d["name"]: d for d in _json.loads(
+    (_Path(__file__).resolve().parents[2] / "scripts" / "android-devices.json")
+    .read_text(encoding="utf-8"))}
+
+
+def _pv(name: str) -> str:
+    """The Android version the seed assigns a device — so a regenerated pool
+    does not break tests that only care that the value flows through intact."""
+    return _SEED[name]["platform_version"]
+
+
+def _model(name: str) -> str:
+    return _SEED[name]["model"]
+
+
 ALL_HINTS = (
     "sec-ch-ua-arch, sec-ch-ua-bitness, sec-ch-ua-form-factors, "
     "sec-ch-ua-full-version, sec-ch-ua-full-version-list, sec-ch-ua-model, "
@@ -118,7 +137,7 @@ def test_hints_appear_only_after_accept_ch():
             s.get(srv.url)
     assert srv.value(0, "sec-ch-ua-model") is None, "the hint went out before Accept-CH"
     assert srv.value(1, "sec-ch-ua-model") == '"Pixel 8"'
-    assert srv.value(1, "sec-ch-ua-platform-version") == '"16.0.0"'
+    assert srv.value(1, "sec-ch-ua-platform-version") == f'"{_pv("Pixel 8")}"'
 
 
 def test_critical_ch_makes_the_client_repeat_at_once():
@@ -193,9 +212,10 @@ def test_user_agent_stays_frozen():
                              force_http1=True, device="Galaxy S23") as s:
             s.get(srv.url)
             s.get(srv.url)
+    m = _model("Galaxy S23")
     ua = srv.value(1, "user-agent")
-    assert "Android 10; K" in ua and "SM-S911B" not in ua, ua
-    assert srv.value(1, "sec-ch-ua-model") == '"SM-S911B"'
+    assert "Android 10; K" in ua and m not in ua, ua
+    assert srv.value(1, "sec-ch-ua-model") == f'"{m}"'
 
 
 def test_yandex_puts_the_device_into_the_user_agent():
@@ -205,12 +225,14 @@ def test_yandex_puts_the_device_into_the_user_agent():
                              force_http1=True, device="Galaxy S23") as s:
             s.get(srv.url)
             s.get(srv.url)
+    m, v = _model("Galaxy S23"), _pv("Galaxy S23")
+    major = v.split(".")[0]
     ua = srv.value(1, "user-agent")
-    assert "Android 15; SM-S911B" in ua, ua
+    assert f"Android {major}; {m}" in ua, ua
     assert "Pixel 7" not in ua
     # The hint and the string must say the same thing.
-    assert srv.value(1, "sec-ch-ua-model") == '"SM-S911B"'
-    assert srv.value(1, "sec-ch-ua-platform-version") == '"15.0.0"'
+    assert srv.value(1, "sec-ch-ua-model") == f'"{m}"'
+    assert srv.value(1, "sec-ch-ua-platform-version") == f'"{v}"'
 
 
 def test_yandex_full_version_is_its_own():

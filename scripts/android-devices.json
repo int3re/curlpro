@@ -1,0 +1,232 @@
+[
+  {
+    "name": "Galaxy S24 Ultra",
+    "model": "SM-S928B",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "Galaxy S24",
+    "model": "SM-S921B",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "Galaxy S23 Ultra",
+    "model": "SM-S918B",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "Galaxy S23",
+    "model": "SM-S911B",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Galaxy S22 Ultra",
+    "model": "SM-S908B",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Galaxy S22",
+    "model": "SM-S901B",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Galaxy S21 FE 5G",
+    "model": "SM-G990B",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Galaxy A55 5G",
+    "model": "SM-A556B",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "Galaxy A54 5G",
+    "model": "SM-A546B",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Galaxy A34 5G",
+    "model": "SM-A346B",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Galaxy A35 5G",
+    "model": "SM-A356B",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "Galaxy A15",
+    "model": "SM-A155F",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Galaxy A14",
+    "model": "SM-A145F",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Galaxy A05s",
+    "model": "SM-A057F",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Xiaomi 14",
+    "model": "23127PN0CG",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "Xiaomi 13",
+    "model": "2211133G",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Xiaomi 13T",
+    "model": "2306EPN60G",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "Redmi Note 13 Pro",
+    "model": "23117RA68G",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Redmi Note 13",
+    "model": "23129RAA4G",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Redmi Note 12",
+    "model": "23021RAAEG",
+    "platform_version": "13.0.0"
+  },
+  {
+    "name": "Redmi Note 12 Pro",
+    "model": "2209116AG",
+    "platform_version": "13.0.0"
+  },
+  {
+    "name": "Redmi 13C",
+    "model": "23106RN0DA",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Redmi 12",
+    "model": "23053RN02A",
+    "platform_version": "13.0.0"
+  },
+  {
+    "name": "POCO X6 Pro 5G",
+    "model": "2311DRK48G",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "POCO X6 5G",
+    "model": "23122PCD1G",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Pixel 9 Pro",
+    "model": "Pixel 9 Pro",
+    "platform_version": "16.0.0"
+  },
+  {
+    "name": "Pixel 9",
+    "model": "Pixel 9",
+    "platform_version": "16.0.0"
+  },
+  {
+    "name": "Pixel 8 Pro",
+    "model": "Pixel 8 Pro",
+    "platform_version": "16.0.0"
+  },
+  {
+    "name": "Pixel 8",
+    "model": "Pixel 8",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "Pixel 7 Pro",
+    "model": "Pixel 7 Pro",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "Pixel 7",
+    "model": "Pixel 7",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Pixel 7a",
+    "model": "Pixel 7a",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "Pixel 6a",
+    "model": "Pixel 6a",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "HONOR 90",
+    "model": "REA-NX9",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "HONOR Magic6 Pro",
+    "model": "BVL-N49",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "realme 12 Pro+ 5G",
+    "model": "RMX3840",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "realme 12 Pro 5G",
+    "model": "RMX3842",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "realme C55",
+    "model": "RMX3710",
+    "platform_version": "13.0.0"
+  },
+  {
+    "name": "OnePlus 12",
+    "model": "CPH2573",
+    "platform_version": "15.0.0"
+  },
+  {
+    "name": "OnePlus Nord 3 5G",
+    "model": "CPH2491",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "V30",
+    "model": "V2318",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "Y36",
+    "model": "V2247",
+    "platform_version": "13.0.0"
+  },
+  {
+    "name": "SPARK 20",
+    "model": "TECNO KJ5",
+    "platform_version": "13.0.0"
+  },
+  {
+    "name": "CAMON 30",
+    "model": "TECNO CL6",
+    "platform_version": "14.0.0"
+  },
+  {
+    "name": "HOT 40 Pro",
+    "model": "Infinix X6837",
+    "platform_version": "13.0.0"
+  },
+  {
+    "name": "NOTE 40",
+    "model": "Infinix X6853",
+    "platform_version": "14.0.0"
+  }
+]

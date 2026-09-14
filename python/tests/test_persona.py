@@ -92,7 +92,7 @@ def test_the_device_reaches_the_wire():
     asks with Accept-CH. So that is the exchange the persona has to survive:
     ask, then look.
     """
-    from test_client_hints import ALL_HINTS, HintServer
+    from test_client_hints import ALL_HINTS, HintServer, _pv
 
     with HintServer(ALL_HINTS) as srv:
         p = curlpro.Persona.new("chrome-152-android", device="Pixel 8")
@@ -103,7 +103,7 @@ def test_the_device_reaches_the_wire():
 
     assert srv.value(0, "sec-ch-ua-model") is None, "the hint went out before Accept-CH"
     assert srv.value(1, "sec-ch-ua-model") == '"Pixel 8"'
-    assert srv.value(1, "sec-ch-ua-platform-version") == '"16.0.0"'
+    assert srv.value(1, "sec-ch-ua-platform-version") == f'"{_pv("Pixel 8")}"'
 
 
 def test_an_unknown_device_is_refused_by_name():

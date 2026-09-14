@@ -562,6 +562,54 @@ are one answer. The check that catches a Russian site handing back a cp1251
 page where the code expected UTF-8: `.text` would have decoded it into
 mojibake without a word.
 
+## Stage 25 — a large device pool, from real phones ✅ done 2026-09-14
+
+`device="random"` drew from eight phones; now from 46. The value of it: the
+device is the one identity axis that varies without touching the TLS a server
+scores, so a big pool is many believable clients behind one fingerprint — the
+question a user asked directly.
+
+The models are not invented. Each is the exact `ro.product.model` a phone
+reports — the string Chrome puts in `sec-ch-ua-model` and Yandex writes into the
+User-Agent — taken from Google's public Play device catalogue, the global
+variant (Samsung `…B`, not the US `…U`) because the library is for Russian
+sites, and weighted to that market: Samsung, Xiaomi/Redmi/POCO, Pixel, Honor,
+realme, OnePlus, vivo, Tecno, Infinix. Each on an Android version it plausibly
+runs, spread across 13–16 — a pool where every phone ran one version would
+itself be a tell.
+
+The pool is owned by `scripts/gen-devices.py` from a committed, verified seed
+(`scripts/android-devices.json`) and written into `chrome-152-android` and
+`yandex-26.8-android` — the latter with `arch`, where the 46 models become 46
+distinct User-Agent strings because Yandex writes the model into the string.
+`gen-devices.py --check` in CI fails if a profile drifts from the seed. Pure
+data: no ABI change, and the TLS fingerprints are untouched — checked by the
+audit, which still fires on exactly the two profiles it did before.
+
+## Stage 25 — a large device pool, from real phones ✅ done 2026-09-14
+
+`device="random"` drew from eight phones; now from 46. The value of it: the
+device is the one identity axis that varies without touching the TLS a server
+scores, so a big pool is many believable clients behind one fingerprint — the
+question a user asked directly.
+
+The models are not invented. Each is the exact `ro.product.model` a phone
+reports — the string Chrome puts in `sec-ch-ua-model` and Yandex writes into the
+User-Agent — taken from Google's public Play device catalogue, the global
+variant (Samsung `…B`, not the US `…U`) because the library is for Russian
+sites, and weighted to that market: Samsung, Xiaomi/Redmi/POCO, Pixel, Honor,
+realme, OnePlus, vivo, Tecno, Infinix. Each on an Android version it plausibly
+runs, spread across 13–16 — a pool where every phone ran one version would
+itself be a tell.
+
+The pool is owned by `scripts/gen-devices.py` from a committed, verified seed
+(`scripts/android-devices.json`) and written into `chrome-152-android` and
+`yandex-26.8-android` — the latter with `arch`, where the 46 models become 46
+distinct User-Agent strings because Yandex writes the model into the string.
+`gen-devices.py --check` in CI fails if a profile drifts from the seed. Pure
+data: no ABI change, and the TLS fingerprints are untouched — checked by the
+audit, which still fires on exactly the two profiles it did before.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

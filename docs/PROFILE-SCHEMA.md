@@ -277,6 +277,18 @@ The profile describes this in two sections:
 "devices": [
   { "name": "Pixel 7", "model": "Pixel 7", "platform_version": "17.0.0" }
 ],
+```
+
+The Android profiles carry a pool of 46 real phones, not one. The model is the
+exact `ro.product.model` — the string `sec-ch-ua-model` reports and Yandex
+writes into the User-Agent — taken from Google's public Play device catalogue,
+weighted to the Russian market. `scripts/gen-devices.py` owns the pool from a
+committed seed (`scripts/android-devices.json`) and writes it into
+`chrome-152-android` and `yandex-26.8-android` (the latter with `arch`);
+`python/tests/test_devices.py` fails if a profile drifts from the seed. To grow
+the pool, edit the seed and re-run the generator.
+
+```json
 "client_hints": {
   "values": { "sec-ch-ua-form-factors": "\"Mobile\"" },
   "order":       [ … the full navigation order with the hints … ],

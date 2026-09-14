@@ -658,7 +658,11 @@ with curlpro.Session("chrome-152-android", device="random") as s:
 ```
 
 The device is chosen once per session: a real client does not swap phones between
-requests. Your own list goes into the `devices` parameter.
+requests. The pool holds 46 real phones — exact `ro.product.model` strings from
+Google's Play device catalogue, weighted to the Russian market, each on a
+plausible Android version — so `device="random"` draws a believable phone while
+the TLS stays one. Your own list goes into the `devices` parameter, or you set
+one phone by name.
 
 ## Navigation vs fetch
 
