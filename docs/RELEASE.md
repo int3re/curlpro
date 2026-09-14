@@ -6,10 +6,11 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.5.2**: a proxy that answers the 407 correctly and then closes the socket
-without announcing it — the case a relay trace showed after 0.5.1 fixed the
-wrong one — gets the authenticated CONNECT again on a fresh connection. The
-first CONNECT still goes out without credentials, as Chrome's does.
+**0.6.0**: `response_timeout` — the wait for the response headers, the gap the
+other two limits left — with `connect_timeout` by name beside it;
+`Expect(encoding=)`; and a device pool of 46 real phones behind one TLS
+fingerprint. ABI 0.16.0: a wheel carries the matching library, a source build
+needs `go build` again.
 
 ## What happens on a tag
 
