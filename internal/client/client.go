@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	http "github.com/bogdanfinn/fhttp"
@@ -71,6 +72,14 @@ type Options struct {
 	// out its whole budget on a dead address, though everything is clear in a second.
 	// Reading the response is not bounded by it — Timeout covers that.
 	ConnectTimeout time.Duration
+	// ResponseTimeout caps waiting for the response headers: from the request
+	// going out to the status line arriving. 0 means the total limit only.
+	//
+	// The gap the other two leave: a server that accepts the connection and
+	// then thinks for a minute before answering is past ConnectTimeout and
+	// still inside Timeout. This is the limit for that silence. The body is
+	// not bounded by it — once the headers are in, only Timeout applies.
+	ResponseTimeout time.Duration
 
 	// CACert is the path to a root certificate (PEM) of your own, instead of the system ones.
 	//
@@ -223,6 +232,8 @@ type Request struct {
 	Timeout *time.Duration
 	// ConnectTimeout overrides the limit on establishing the connection.
 	ConnectTimeout *time.Duration
+	// ResponseTimeout overrides the limit on waiting for the response headers.
+	ResponseTimeout *time.Duration
 	// FollowRedirects overrides whether 3xx are followed.
 	FollowRedirects *bool
 	// MaxRedirects overrides the chain length limit.
@@ -378,6 +389,15 @@ func (s *Session) timeout(r *Request) time.Duration {
 	return s.opts.Timeout
 }
 
+// responseTimeout returns the limit on waiting for the response headers,
+// honouring the request's override.
+func (s *Session) responseTimeout(r *Request) time.Duration {
+	if r != nil && r.ResponseTimeout != nil {
+		return *r.ResponseTimeout
+	}
+	return s.opts.ResponseTimeout
+}
+
 // validate checks the request overrides before sending. hasJar says whether the
 // session has a cookie jar: without one, asking for cookies is a mistake worth
 // reporting rather than a silently ignored option.
@@ -392,6 +412,10 @@ func (r *Request) validate(hasJar bool) error {
 	if r.ConnectTimeout != nil && *r.ConnectTimeout <= 0 {
 		return fmt.Errorf("connect timeout must be positive, got %s "+
 			"(leave it unset for no limit)", *r.ConnectTimeout)
+	}
+	if r.ResponseTimeout != nil && *r.ResponseTimeout <= 0 {
+		return fmt.Errorf("response timeout must be positive, got %s "+
+			"(leave it unset for no limit)", *r.ResponseTimeout)
 	}
 	if r.Cookies != nil && *r.Cookies && !hasJar {
 		return fmt.Errorf("cookies=true: the session has no cookie jar " +
@@ -496,6 +520,9 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	}
 	if opts.Timeout < 0 {
 		return nil, fmt.Errorf("timeout cannot be negative, got %s", opts.Timeout)
+	}
+	if opts.ResponseTimeout < 0 {
+		return nil, fmt.Errorf("response timeout cannot be negative, got %s", opts.ResponseTimeout)
 	}
 	if opts.Timeout == 0 {
 		opts.Timeout = 30 * time.Second
@@ -777,6 +804,46 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if r != nil && r.ConnectTimeout != nil {
 		req = req.WithContext(withConnectLimit(req.Context(), *r.ConnectTimeout))
 	}
+
+	// ResponseTimeout bounds the wait for the response headers only. It is a
+	// timer that cancels the request if nothing has arrived by then, and is
+	// stopped the moment the headers are in; the body then reads under the
+	// total limit alone. A second context would not do: for HTTP/2 the body
+	// is bound to the request context, so cancelling a headers-only context
+	// after the headers would kill the read that follows.
+	//
+	// Armed right before a transport call and disarmed right after it, so no
+	// early failure leaves a timer pending, and an HTTP/3 attempt that falls
+	// back to TCP arms it afresh for the second try.
+	var headersLate atomic.Bool
+	var headersTimer *time.Timer
+	responseLimit := s.responseTimeout(r)
+	if responseLimit > 0 && cancel == nil {
+		var ctx context.Context
+		ctx, cancel = context.WithCancel(req.Context())
+		req = req.WithContext(ctx)
+	}
+	armHeaders := func() {
+		if responseLimit <= 0 {
+			return
+		}
+		stop := cancel
+		headersTimer = time.AfterFunc(responseLimit, func() {
+			headersLate.Store(true)
+			stop()
+		})
+	}
+	headersDone := func(err error) error {
+		if headersTimer != nil {
+			headersTimer.Stop()
+			headersTimer = nil
+		}
+		if err != nil && headersLate.Load() {
+			return withCode(CodeTimeout, fmt.Errorf(
+				"no response headers within %s (response_timeout)", responseLimit))
+		}
+		return err
+	}
 	// Without an explicit size the transport would switch to chunked encoding,
 	// which a browser does not use when uploading a file.
 	if size >= 0 {
@@ -831,7 +898,9 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 			return fail(&fatalError{fmt.Errorf("HTTP/3 through a proxy is not supported " +
 				"(QUIC needs CONNECT-UDP, RFC 9298)")})
 		}
+		armHeaders()
 		resp, err := s.sendH3(req.Context(), r, u)
+		err = headersDone(err)
 		if err == nil {
 			// HTTP/3 keeps its own connection inside the transport, nothing to release.
 			return fromStdResponse(resp), cancel, nil, nil
@@ -869,7 +938,9 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// case depend on what the server negotiated, not on an option.
 	s.applyHeaders(req, r, u, c.proto == "http/1.1")
 
+	armHeaders()
 	resp, err := c.roundTrip(req.Context(), req)
+	err = headersDone(err)
 	if err != nil {
 		// The connection is no longer usable. For HTTP/2 close it gently: a hard
 		// close would cut the streams of neighbouring requests.

@@ -19,8 +19,11 @@ the jar.
 
 from __future__ import annotations
 
+import codecs
+
 from typing import Any, Iterable, Mapping
 
+from .encoding import normalize
 from ._ffi import CurlProError
 
 
@@ -60,6 +63,21 @@ def _as_list(value: Any) -> list[Any]:
     return [value]
 
 
+def _charset(name: str | None) -> str | None:
+    """The canonical codec name for a charset, or None for none.
+
+    ``codecs.lookup`` is what makes ``utf8``, ``UTF-8`` and ``utf_8`` one
+    name; the detector's own table maps the web aliases first. An unknown
+    name is an error at construction rather than a check that never passes.
+    """
+    if name is None:
+        return None
+    known = normalize(name)
+    if known is None:
+        raise ValueError(f"unknown encoding {name!r}")
+    return codecs.lookup(known).name
+
+
 def _text(value: Any) -> str:
     return value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value)
 
@@ -81,10 +99,16 @@ class Expect:
     :param not_headers: substrings that must not appear there
     :param non_empty: the body must not be empty
     :param json: the body must parse as JSON
+    :param encoding: the body's charset — as detected from ``Content-Type``,
+        the BOM, then the document — must be this one. Names are compared
+        after normalisation, so ``cp1251`` and ``windows-1251`` are the same
+        answer. The check that catches a Russian site handing back a
+        cp1251 page where the code expects UTF-8: ``.text`` would decode it
+        into mojibake without a word of complaint
     """
 
     __slots__ = ("status", "not_status", "body", "not_body", "headers",
-                 "not_headers", "non_empty", "json")
+                 "not_headers", "non_empty", "json", "encoding")
 
     def __init__(
         self,
@@ -97,6 +121,7 @@ class Expect:
         not_headers: str | Iterable[str] | None = None,
         non_empty: bool = False,
         json: bool = False,
+        encoding: str | None = None,
     ):
         self.status = _statuses(status, "status")
         self.not_status = _statuses(not_status, "not_status")
@@ -106,6 +131,7 @@ class Expect:
         self.not_headers = _as_list(not_headers)
         self.non_empty = non_empty
         self.json = json
+        self.encoding = _charset(encoding)
 
     def check(self, response: Any) -> Any:
         """Checks the response and returns it, or raises :class:`ExpectationFailed`."""
@@ -115,6 +141,7 @@ class Expect:
             self._check_body,
             self._check_headers,
             self._check_json,
+            self._check_encoding,
         ):
             message = fail(response)
             if message:
@@ -175,6 +202,14 @@ class Expect:
             r.json()
         except Exception as exc:  # noqa: BLE001 — any parse failure is the answer
             return f"the body does not parse as JSON: {exc}"
+        return ""
+
+    def _check_encoding(self, r: Any) -> str:
+        if not self.encoding:
+            return ""
+        got = _charset(r.encoding)
+        if got != self.encoding:
+            return f"the body is {r.encoding}, expected {self.encoding}"
         return ""
 
     def __repr__(self) -> str:

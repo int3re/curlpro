@@ -66,6 +66,15 @@ def detect(content: bytes, content_type: str | None, default: str = "utf-8") -> 
     )
 
 
+def normalize(name: str) -> str | None:
+    """A charset name as Python knows it, or None if it knows it not.
+
+    Public so that an expectation can compare a declared charset with the
+    one it wants through the same table the detector uses.
+    """
+    return _normalize(name)
+
+
 def _normalize(name: str) -> str | None:
     """Maps a declared name onto something Python knows.
 

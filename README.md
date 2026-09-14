@@ -241,6 +241,7 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 |---|---|
 | `impersonate` | profile name; `chrome-151-windows` by default |
 | `timeout` | limit for the whole request; a `(connect, total)` pair bounds establishing the connection separately |
+| `connect_timeout`, `response_timeout` | the same limits by name: connecting (resolution, TCP, TLS) and the wait for the response headers. `response_timeout` covers the gap the other two leave — a server that accepts and then thinks — and does not bound the body: once the headers are in, only `timeout` applies |
 | `proxy` | `http://`, `https://`, `socks5://` or `socks5h://`, `user:pass` allowed. An address with no scheme — `1.2.3.4:8080` — is read as `http://`; there is no probing, a SOCKS proxy has to say so. `HTTP_PROXY` is read for `http://` requests and `HTTPS_PROXY` for `https://`, `ALL_PROXY` for both, `NO_PROXY` excludes. The first CONNECT goes without credentials and adds them after a 407, as Chrome does; a proxy that hangs up instead of challenging gets a second CONNECT with credentials on a fresh connection, and one that hangs up on that too is reported as such (`proxy_closed`) |
 | `trust_env` | take the proxy from `HTTPS_PROXY`/`ALL_PROXY`, honouring `NO_PROXY` |
 | `verify` | `True` — system roots, a PEM path — trust only that one, `False` — no verification |
@@ -271,6 +272,7 @@ s.get(url, timeout=(3, 30), protocol="h2", cookies=False, retries=0)
 | `headers`, `header_order` | your own headers and their order |
 | `protocol` | `1.1`/`http1`, `2`/`h2`, `3`/`h3` — the transport for this request |
 | `timeout` | a number or a `(connect, total)` pair |
+| `connect_timeout`, `response_timeout` | the connecting limit and the headers-wait limit by name; `connect_timeout` wins over the pair's first element |
 | `proxy` | an address, or `False` to bypass the session proxy |
 | `cookies` | `False` — neither send nor store cookies |
 | `session_headers` | `False` — without the headers added to the session |
@@ -348,6 +350,7 @@ r = s.get(url, expect=Expect(status=200, body="Dashboard",
 | `status`, `not_status` | the response code; several values mean "one of" |
 | `body`, `not_body` | a substring in the body; several mean "all of" |
 | `non_empty` | the body is not empty |
+| `encoding` | the body's charset — from `Content-Type`, the BOM, then the document — is this one; `cp1251` and `windows-1251` compare equal. Catches the page that came back in cp1251 where the code expected UTF-8 and `.text` would have decoded it into mojibake in silence |
 | `json` | the body parses as JSON |
 | `headers`, `not_headers` | a substring in the `name: value` lines |
 

@@ -120,3 +120,50 @@ def test_websocket_connect_timeout(stalled):
             s.websocket(stalled.url.replace("https://", "wss://"), timeout=(0.4, 30))
         spent = time.monotonic() - started
     assert spent < 5, f"waited {spent:.1f} s"
+
+
+# --- response_timeout: the wait for the headers -----------------------------
+
+def test_response_timeout_fires_when_the_headers_are_late():
+    """A server that accepts and then thinks is past the connecting limit and
+    inside the total one; this is the limit for that silence."""
+    with RawHeaderServer(delay=2.0) as srv, curlpro.Session(verify=False, force_http1=True) as s:
+        started = time.monotonic()
+        with pytest.raises(curlpro.Timeout, match="response headers"):
+            s.get(srv.url, response_timeout=0.4, timeout=10)
+        assert time.monotonic() - started < 1.5
+
+
+def test_response_timeout_spares_a_slow_body():
+    """Once the headers are in the timer is off: a body that trickles for a
+    second after a 0.4 s headers limit still arrives whole."""
+    with RawHeaderServer(body_delay=1.0) as srv, curlpro.Session(verify=False, force_http1=True) as s:
+        r = s.get(srv.url, response_timeout=0.4, timeout=10)
+        assert r.status == 200 and r.json()["request_line"].startswith("GET")
+
+
+def test_session_response_timeout_applies():
+    with RawHeaderServer(delay=2.0) as srv:
+        with curlpro.Session(verify=False, force_http1=True, response_timeout=0.4) as s:
+            with pytest.raises(curlpro.Timeout, match="response headers"):
+                s.get(srv.url)
+
+
+def test_named_connect_timeout_wins_over_the_pair(stalled):
+    """connect_timeout= is the more specific statement; it overrides the
+    pair's first element rather than being ignored beside it."""
+    with curlpro.Session(verify=False) as s:
+        started = time.monotonic()
+        with pytest.raises(curlpro.CurlProError):
+            s.get(stalled.url, timeout=(30, 30), connect_timeout=0.4)
+        assert time.monotonic() - started < 5
+
+
+def test_response_timeout_must_be_positive():
+    """Zero is refused by name on the native side, as timeout=0 is — "leave it
+    unset for no limit"; a bool is refused before it can turn into a second."""
+    with curlpro.Session(verify=False) as s:
+        with pytest.raises(curlpro.CurlProError, match="response timeout must be positive"):
+            s.get("https://example.com/", response_timeout=0)
+        with pytest.raises(TypeError, match="response_timeout"):
+            s.get("https://example.com/", response_timeout=True)

@@ -261,6 +261,8 @@ def _request_meta(
     session_headers: bool | None = None,
     protocol: str | float | None = None,
     timeout: float | tuple[float, float] | None = None,
+    connect_timeout: float | None = None,
+    response_timeout: float | None = None,
     allow_redirects: bool | None = None,
     max_redirects: int | None = None,
     retries: int | None = None,
@@ -274,7 +276,11 @@ def _request_meta(
 ) -> tuple[dict[str, Any], bytes]:
     # params and auth are the familiar requests arguments; here they turn
     # into a URL with a query string and an ordinary header, nothing special.
-    connect_timeout, timeout = _split_timeout(timeout)
+    pair_connect, timeout = _split_timeout(timeout)
+    # The named limit wins over the pair's first element: it is the more
+    # specific statement of the two, and a caller writing both meant it.
+    if connect_timeout is None:
+        connect_timeout = pair_connect
     url = _with_params(url, params)
     if credentials := _auth_header(auth):
         headers = dict(headers or {})
@@ -319,6 +325,7 @@ def _request_meta(
         # absence is what travels, not a substituted default.
         "timeout_ms": _ms(timeout, "timeout"),
         "connect_timeout_ms": _ms(connect_timeout, "connect_timeout"),
+        "response_timeout_ms": _ms(response_timeout, "response_timeout"),
         "follow_redirects": allow_redirects,
         "max_redirects": max_redirects,
         "retry": _retry_config(
@@ -475,6 +482,14 @@ class Session:
         handshake. Here the second element caps the whole request rather than
         the silence between bytes as in requests: that is stricter, so the
         familiar value is safe to keep
+    :param connect_timeout: the connecting limit by name — name resolution,
+        TCP and the TLS handshake. Wins over the pair's first element
+    :param response_timeout: how long to wait for the response headers after
+        the request went out. The gap the other two leave: a server that
+        accepts the connection and then thinks for a minute is past the
+        connecting limit and still inside the total one. The body is not
+        bounded by it — once the headers are in, only ``timeout`` applies.
+        Raises :class:`Timeout` with the words "response headers"
     :param proxy: ``http://``, ``https://``, ``socks5://`` or ``socks5h://``,
         with ``user:pass`` allowed. An address with no scheme is read as
         ``http://``: a bare one says nothing about SOCKS, and guessing wrong
@@ -549,6 +564,8 @@ class Session:
         trust_env: bool = True,
         max_response_size: int = 0,
         timeout: float | tuple[float, float] = 30.0,
+        connect_timeout: float | None = None,
+        response_timeout: float | None = None,
         proxy: str | None = None,
         default_headers: bool = True,
         header_order: Iterable[str] | None = None,
@@ -579,6 +596,8 @@ class Session:
         # the library has to work without any extra steps.
         ensure_loaded()
         session_connect, session_total = _split_timeout(timeout)
+        if connect_timeout is not None:
+            session_connect = connect_timeout
         self._id = _call(
             "curlpro_session_new",
             encode(
@@ -597,6 +616,7 @@ class Session:
                     "max_response_size": _size(max_response_size),
                     "timeout_ms": _ms(session_total, "timeout") or 0,
                     "connect_timeout_ms": _ms(session_connect, "connect_timeout") or 0,
+                    "response_timeout_ms": _ms(response_timeout, "response_timeout") or 0,
                     "proxy": proxy or "",
                     "default_headers": default_headers,
                     "header_order": list(header_order) if header_order else None,
@@ -666,6 +686,8 @@ class Session:
         session_headers: bool | None = None,
         protocol: str | float | None = None,
         timeout: float | tuple[float, float] | None = None,
+        connect_timeout: float | None = None,
+        response_timeout: float | None = None,
         allow_redirects: bool | None = None,
         max_redirects: int | None = None,
         retries: int | None = None,
@@ -717,7 +739,8 @@ class Session:
             files=files, fields=fields, body_file=body_file,
             header_order=header_order, default_headers=default_headers,
             cookies=cookies, session_headers=session_headers,
-            protocol=protocol, timeout=timeout, allow_redirects=allow_redirects,
+            protocol=protocol, timeout=timeout, connect_timeout=connect_timeout,
+            response_timeout=response_timeout, allow_redirects=allow_redirects,
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
@@ -830,6 +853,8 @@ class Session:
         session_headers: bool | None = None,
         protocol: str | float | None = None,
         timeout: float | tuple[float, float] | None = None,
+        connect_timeout: float | None = None,
+        response_timeout: float | None = None,
         allow_redirects: bool | None = None,
         max_redirects: int | None = None,
         retries: int | None = None,
@@ -856,7 +881,8 @@ class Session:
             files=files, fields=fields, body_file=body_file,
             header_order=header_order, default_headers=default_headers,
             cookies=cookies, session_headers=session_headers,
-            protocol=protocol, timeout=timeout, allow_redirects=allow_redirects,
+            protocol=protocol, timeout=timeout, connect_timeout=connect_timeout,
+            response_timeout=response_timeout, allow_redirects=allow_redirects,
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,

@@ -526,6 +526,42 @@ drove fhttp's receive accounting into a quadratic runaway that every browser
 profile had merely been too small to trigger — [docs/FHTTP-PATCH.md](docs/FHTTP-PATCH.md).
 The release was held until that was fixed.
 
+## Stage 24 — the limits by name, and the one that was missing ✅ done 2026-09-14
+
+A user's list against the API: `connection_timeout`, `response_timeout`,
+`ContentEncoding`, `ContentNotEmpty`, `ContentAsJson`. Checked against the code
+rather than remembered: two existed under other names (`Expect(non_empty=True)`,
+`Expect(json=True)`), one existed without a name of its own (the connecting
+limit was the first element of `timeout=(connect, total)`), two did not exist.
+
+**`response_timeout`** — the wait for the response headers. The gap the other
+two limits left: a server that accepts the connection and then thinks for a
+minute is past the connecting limit and still inside the total one. It is a
+timer that cancels the request if nothing has arrived by then and is stopped
+the moment the headers are in; the body reads under the total limit alone. A
+second context would not do — on HTTP/2 the body is bound to the request
+context, and cancelling a headers-only context after the headers would kill
+the read that follows.
+
+It found a defect of its own: on HTTP/1.1 the round trip took the limit from
+the socket deadline and never looked at `ctx.Done()`, so a cancelled context
+did not interrupt a blocked header read — the HTTP/1.1 case failed while the
+HTTP/2 case passed. The header wait now watches the context and pulls the read
+deadline to now on cancellation, restoring it afterwards unconditionally so the
+body cannot inherit an expired deadline from the race. Four Go tests over both
+transports; the one that matters as much as "it fires" is "it does not cut a
+slow body". ABI 0.16.0.
+
+**`connect_timeout`** and **`response_timeout`** are named keywords on the
+session and per request, beside the pair; the named one wins over the pair's
+first element.
+
+**`Expect(encoding=)`** — the body's charset, as the detector sees it, must be
+this one, names compared through `codecs` so that `cp1251` and `windows-1251`
+are one answer. The check that catches a Russian site handing back a cp1251
+page where the code expected UTF-8: `.text` would have decoded it into
+mojibake without a word.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

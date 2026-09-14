@@ -114,7 +114,9 @@ func curlpro_free(s *C.char) {
 // on, not only off).
 // 0.11.0: per-request switches for the session memory — the cookie jar
 // (cookies) and the session headers (session_headers).
-const Version = "0.15.0"
+// 0.16.0: a limit on waiting for the response headers (response_timeout_ms),
+// on the session and per request.
+const Version = "0.16.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -167,6 +169,7 @@ type sessionConfig struct {
 	MaxIdleConns       int      `json:"max_idle_conns"`
 	IdleConnTimeoutMS  int      `json:"idle_conn_timeout_ms"`
 	ConnectTimeoutMS   int      `json:"connect_timeout_ms"`
+	ResponseTimeoutMS  int      `json:"response_timeout_ms"`
 	CACert             string   `json:"ca_cert"`
 	ClientCert         string   `json:"client_cert"`
 	ClientKey          string   `json:"client_key"`
@@ -244,6 +247,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		Resume:             c.Resume,
 		HTTP3:              c.HTTP3,
 		ConnectTimeout:     time.Duration(c.ConnectTimeoutMS) * time.Millisecond,
+		ResponseTimeout:    time.Duration(c.ResponseTimeoutMS) * time.Millisecond,
 		CACert:             c.CACert,
 		ClientCert:         c.ClientCert,
 		ClientKey:          c.ClientKey,
@@ -412,11 +416,12 @@ type requestJSON struct {
 
 	// Per-request overrides of session settings. Pointers tell "not set" from
 	// "set to zero": for a timeout and for redirects those differ.
-	TimeoutMS        *int       `json:"timeout_ms"`
-	ConnectTimeoutMS *int       `json:"connect_timeout_ms"`
-	FollowRedirects  *bool      `json:"follow_redirects"`
-	MaxRedirects     *int       `json:"max_redirects"`
-	Retry            *retryJSON `json:"retry"`
+	TimeoutMS         *int       `json:"timeout_ms"`
+	ConnectTimeoutMS  *int       `json:"connect_timeout_ms"`
+	ResponseTimeoutMS *int       `json:"response_timeout_ms"`
+	FollowRedirects   *bool      `json:"follow_redirects"`
+	MaxRedirects      *int       `json:"max_redirects"`
+	Retry             *retryJSON `json:"retry"`
 	// Proxy: null takes the session's, "" goes directly, bypassing it.
 	Proxy *string `json:"proxy"`
 	// Mode overrides the header set for a single request.
@@ -432,6 +437,10 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 	if r.ConnectTimeoutMS != nil {
 		d := time.Duration(*r.ConnectTimeoutMS) * time.Millisecond
 		req.ConnectTimeout = &d
+	}
+	if r.ResponseTimeoutMS != nil {
+		d := time.Duration(*r.ResponseTimeoutMS) * time.Millisecond
+		req.ResponseTimeout = &d
 	}
 	req.FollowRedirects = r.FollowRedirects
 	req.MaxRedirects = r.MaxRedirects

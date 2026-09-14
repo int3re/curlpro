@@ -115,6 +115,15 @@ with curlpro.Session() as s:
         ws.send(b"\x00\xff")     # bytes -> a binary one
         for message in ws:       # until the server closes: curlpro.WebSocketClosed;
             print(message)       # a silence timeout is CurlProError with .code == "timeout"
+```
+
+Three limits, each by name: `connect_timeout` for connecting, `response_timeout`
+for the wait until the response headers arrive, `timeout` for the whole request.
+The middle one is the gap the other two leave — a server that accepts and then
+thinks — and it does not bound the body. `Expect(encoding="utf-8")` refuses a
+page that came back in cp1251 instead of silently decoding it into mojibake.
+
+```python
 
 # A large file goes as a stream rather than through memory
 with curlpro.Session() as s:

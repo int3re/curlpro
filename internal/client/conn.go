@@ -106,7 +106,37 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 		c.dead.Store(true)
 		return nil, fmt.Errorf("sending request: %w", err)
 	}
+
+	// A cancelled context has to interrupt the wait for the headers as well.
+	// ReadResponse blocks on the socket and knows nothing of ctx.Done(); the
+	// only lever a blocked read has is its deadline, so cancellation pulls it
+	// to now. That is how ResponseTimeout reaches HTTP/1.1 — on HTTP/2 the
+	// transport watches the context itself. Once the read returns the deadline
+	// is put back to the context's, unconditionally: the watcher may have
+	// fired a moment after a successful return, and the body must not inherit
+	// an expired deadline from that race.
+	unblock := make(chan struct{})
+	watched := make(chan struct{})
+	go func() {
+		defer close(watched)
+		select {
+		case <-ctx.Done():
+			_ = c.raw.SetReadDeadline(time.Now())
+		case <-unblock:
+		}
+	}()
 	resp, err := http.ReadResponse(c.br, req)
+	close(unblock)
+	<-watched
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = c.raw.SetReadDeadline(deadline)
+	} else {
+		_ = c.raw.SetReadDeadline(time.Time{})
+	}
+	if cerr := ctx.Err(); cerr != nil {
+		c.dead.Store(true)
+		return nil, fmt.Errorf("reading response: %w", cerr)
+	}
 	if err != nil {
 		c.dead.Store(true)
 		return nil, fmt.Errorf("reading response: %w", err)

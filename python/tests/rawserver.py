@@ -21,10 +21,13 @@ class RawHeaderServer:
     """Accepts one HTTP/1.1 connection and answers with the raw header lines."""
 
     def __init__(self, host: str = "127.0.0.1", port: int = 0, persistent: bool = False,
-                 delay: float = 0.0):
+                 delay: float = 0.0, body_delay: float = 0.0):
         # delay postpones the response: it shows whether the client is limited
         # by concurrency or handles requests one after another.
         self.delay = delay
+        # body_delay sends the headers at once and the body only after the
+        # pause: the case a response timeout must let through.
+        self.body_delay = body_delay
         # persistent=True keeps the connection open and counts the accepted ones:
         # that is how reuse is checked. By default the server answers once and
         # closes — which is what the header case checks expect.
@@ -91,12 +94,18 @@ class RawHeaderServer:
         if self.delay:
             time.sleep(self.delay)
         alive = b"keep-alive" if self.persistent else b"close"
-        conn.sendall(
+        head = (
             b"HTTP/1.1 200 OK\r\n"
             b"Content-Type: application/json\r\n"
             b"Content-Length: " + str(len(body)).encode() + b"\r\n"
-            b"Connection: " + alive + b"\r\n\r\n" + body
+            b"Connection: " + alive + b"\r\n\r\n"
         )
+        if self.body_delay:
+            conn.sendall(head)
+            time.sleep(self.body_delay)
+            conn.sendall(body)
+        else:
+            conn.sendall(head + body)
         return True
 
     def __enter__(self) -> "RawHeaderServer":

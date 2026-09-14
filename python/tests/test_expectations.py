@@ -259,3 +259,34 @@ def test_an_error_hook_still_replaces_by_returning():
             s.on_error(lambda exc: LookupError("the caller's own error"))
             with pytest.raises(LookupError):
                 s.get(srv.url, expect=Expect(status=418))
+
+
+# --- encoding= --------------------------------------------------------------
+
+def test_encoding_matches_the_declared_charset():
+    r = make(body="привет".encode("cp1251"),
+             headers={"content-type": ["text/html; charset=windows-1251"]})
+    assert Expect(encoding="windows-1251").check(r) is r
+
+
+def test_encoding_names_are_normalised():
+    """cp1251, windows-1251 and WINDOWS-1251 are one answer; so are utf8 and
+    UTF-8. The comparison goes through codecs, not through string equality."""
+    r = make(body=b"ok", headers={"content-type": ["text/html; charset=cp1251"]})
+    for name in ("cp1251", "windows-1251", "WINDOWS-1251"):
+        Expect(encoding=name).check(r)
+    r2 = make(body=b"ok", headers={"content-type": ["text/plain; charset=UTF-8"]})
+    for name in ("utf8", "utf-8", "UTF_8"):
+        Expect(encoding=name).check(r2)
+
+
+def test_encoding_mismatch_names_both_sides():
+    r = make(body="привет".encode("cp1251"),
+             headers={"content-type": ["text/html; charset=windows-1251"]})
+    with pytest.raises(ExpectationFailed, match="windows-1251, expected utf-8"):
+        Expect(encoding="utf-8").check(r)
+
+
+def test_unknown_encoding_is_refused_at_construction():
+    with pytest.raises(ValueError, match="unknown encoding"):
+        Expect(encoding="klingon-8")
