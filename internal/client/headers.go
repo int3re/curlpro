@@ -187,18 +187,43 @@ func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []st
 		out = reorder(out, want, tpl.anchor)
 	}
 
-	// Headers suppressed explicitly: they come from the profile, so they are
-	// removed here rather than from r.Headers.
+	// Headers suppressed explicitly — by the request, or by the session for
+	// every request. They come from the profile, so they are removed here
+	// rather than from r.Headers. A name the request sets itself is left
+	// alone by the session's suppression: the request is the more specific
+	// statement of the two.
 	for _, name := range r.SuppressHeaders {
-		lowered := strings.ToLower(name)
-		for i, h := range out {
-			if strings.ToLower(h.Key) == lowered {
-				out = append(out[:i], out[i+1:]...)
-				break
+		out = withoutHeader(out, name)
+	}
+	if s.useSessionHeaders(r) {
+		for _, name := range s.headers.Suppressed() {
+			if requestSets(r, name) {
+				continue
 			}
+			out = withoutHeader(out, name)
 		}
 	}
 	return out
+}
+
+// withoutHeader removes a header by name, case-insensitively.
+func withoutHeader(have []headerKV, name string) []headerKV {
+	for i, h := range have {
+		if strings.EqualFold(h.Key, name) {
+			return append(have[:i], have[i+1:]...)
+		}
+	}
+	return have
+}
+
+// requestSets reports whether the request itself carries the header.
+func requestSets(r *Request, name string) bool {
+	for k := range r.Headers {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // wantOrder returns the desired order for a request: the request's explicit

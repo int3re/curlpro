@@ -524,6 +524,11 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if opts.ResponseTimeout < 0 {
 		return nil, fmt.Errorf("response timeout cannot be negative, got %s", opts.ResponseTimeout)
 	}
+	// A session-wide fetch on a profile without a fetch set is refused here,
+	// once, rather than on every request.
+	if err := modeError(p, opts.Mode); err != nil {
+		return nil, err
+	}
 	if opts.Timeout == 0 {
 		opts.Timeout = 30 * time.Second
 	}

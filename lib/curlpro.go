@@ -116,7 +116,10 @@ func curlpro_free(s *C.char) {
 // (cookies) and the session headers (session_headers).
 // 0.16.0: a limit on waiting for the response headers (response_timeout_ms),
 // on the session and per request.
-const Version = "0.16.0"
+// 0.17.0: dropping a header by name — suppress_headers per request and a
+// session-wide suppression export — and the profile's own header values in
+// the fingerprint.
+const Version = "0.17.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -426,6 +429,9 @@ type requestJSON struct {
 	Proxy *string `json:"proxy"`
 	// Mode overrides the header set for a single request.
 	Mode string `json:"mode"`
+	// SuppressHeaders names headers to leave out of this request whatever
+	// set them — the Python side sends here every header given as None.
+	SuppressHeaders []string `json:"suppress_headers"`
 }
 
 // applyOverrides copies the request overrides into client.Request.
@@ -452,16 +458,17 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 // toRequest builds a client.Request out of a frame.
 func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 	req := &client.Request{
-		Method:         r.Method,
-		URL:            r.URL,
-		Headers:        r.Headers,
-		Body:           body,
-		BodyFile:       r.BodyFile,
-		HeaderOrder:    r.HeaderOrder,
-		DefaultHeaders: r.DefaultHeaders,
-		Cookies:        r.Cookies,
-		SessionHeaders: r.SessionHeaders,
-		Protocol:       r.Protocol,
+		Method:          r.Method,
+		URL:             r.URL,
+		Headers:         r.Headers,
+		Body:            body,
+		BodyFile:        r.BodyFile,
+		HeaderOrder:     r.HeaderOrder,
+		DefaultHeaders:  r.DefaultHeaders,
+		Cookies:         r.Cookies,
+		SessionHeaders:  r.SessionHeaders,
+		SuppressHeaders: r.SuppressHeaders,
+		Protocol:        r.Protocol,
 	}
 	r.applyOverrides(req)
 	if r.Multipart != nil {

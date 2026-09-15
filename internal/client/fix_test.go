@@ -749,15 +749,56 @@ func TestModeAutoDetection(t *testing.T) {
 		{"referer is not a sign", &Request{Method: "GET", Headers: map[string]string{"Referer": "https://example.com/"}}, ModeNavigate},
 		{"explicit navigation", &Request{Method: "PUT", Mode: ModeNavigate}, ModeNavigate},
 		{"explicit fetch", &Request{Method: "GET", Mode: ModeFetch}, ModeFetch},
+		// The names are known to the navigation set; the values are not. A
+		// caller writing sec-fetch-mode: cors is describing a fetch, and the
+		// navigation set around it — with sec-fetch-user: ?1 beside — was a
+		// request no browser makes, and a detected one.
+		{"sec-fetch-mode cors", &Request{Method: "GET", Headers: map[string]string{"Sec-Fetch-Mode": "cors"}}, ModeFetch},
+		{"sec-fetch-dest empty", &Request{Method: "GET", Headers: map[string]string{"sec-fetch-dest": "empty"}}, ModeFetch},
+		{"sec-fetch-mode navigate stays", &Request{Method: "GET", Headers: map[string]string{"Sec-Fetch-Mode": "navigate"}}, ModeNavigate},
+		{"sec-fetch-dest iframe is a navigation", &Request{Method: "GET", Headers: map[string]string{"Sec-Fetch-Dest": "iframe"}}, ModeNavigate},
 	}
 	for _, tc := range cases {
 		if got := s.modeFor(tc.r); got != tc.want {
 			t.Errorf("%s: %q, expected %q", tc.name, got, tc.want)
 		}
 	}
-	// A profile without a fetch section is always navigation.
+	// A profile without a fetch section is always navigation in auto mode; an
+	// explicit fetch on it is refused before this is ever asked (see below).
 	s.profile.Fetch = profile.FetchSpec{}
-	if got := s.modeFor(&Request{Method: "PUT", Mode: ModeFetch}); got != ModeNavigate {
+	if got := s.modeFor(&Request{Method: "PUT"}); got != ModeNavigate {
 		t.Errorf("without a fetch section the mode is %q", got)
+	}
+}
+
+// An explicit fetch on a profile without a fetch set used to fall back to the
+// navigation set without a word — and a Firefox 155 profile captured without
+// the section sent sec-fetch-user: ?1 under mode="fetch". Refused, with the reason.
+func TestExplicitFetchWithoutASetIsRefused(t *testing.T) {
+	s := fetchSession(t)
+	if err := s.checkMode(&Request{Method: "GET", Mode: ModeFetch}); err != nil {
+		t.Fatalf("a profile with a fetch set refused mode=fetch: %v", err)
+	}
+	s.profile.Fetch = profile.FetchSpec{}
+	err := s.checkMode(&Request{Method: "GET", Mode: ModeFetch})
+	if err == nil || !strings.Contains(err.Error(), "no fetch header set") {
+		t.Fatalf("mode=fetch without a fetch set must be refused with the reason, got %v", err)
+	}
+	s.opts.Mode = ModeFetch
+	if err := s.checkMode(&Request{Method: "GET"}); err == nil {
+		t.Error("the session's own mode=fetch was not checked")
+	}
+	for _, m := range []string{"", "auto", "navigate", "Navigate"} {
+		if err := modeError(s.profile, m); err != nil {
+			t.Errorf("mode %q refused: %v", m, err)
+		}
+	}
+	if err := modeError(s.profile, "xhr"); err == nil {
+		t.Error("an unknown mode was accepted")
+	}
+	// A real profile without a fetch set, refused once at session creation.
+	_, err = New(auditProfile(t, "safari-26.0-macos"), Options{Mode: ModeFetch, DefaultHeaders: true})
+	if err == nil || !strings.Contains(err.Error(), "no fetch header set") {
+		t.Errorf("New accepted mode=fetch on safari-26.0-macos: %v", err)
 	}
 }

@@ -586,29 +586,49 @@ distinct User-Agent strings because Yandex writes the model into the string.
 data: no ABI change, and the TLS fingerprints are untouched — checked by the
 audit, which still fires on exactly the two profiles it did before.
 
-## Stage 25 — a large device pool, from real phones ✅ done 2026-09-14
+## Stage 26 — a field report: fetch under a navigation name ✅ done 2026-09-15
 
-`device="random"` drew from eight phones; now from 46. The value of it: the
-device is the one identity axis that varies without touching the TLS a server
-scores, so a big pool is many believable clients behind one fingerprint — the
-question a user asked directly.
+A user's bug report with six items, each reproduced against a local stand
+rather than taken on trust. Two were real and are closed; two were the network
+between the user and the echo service; two were settled by measurement.
 
-The models are not invented. Each is the exact `ro.product.model` a phone
-reports — the string Chrome puts in `sec-ch-ua-model` and Yandex writes into the
-User-Agent — taken from Google's public Play device catalogue, the global
-variant (Samsung `…B`, not the US `…U`) because the library is for Russian
-sites, and weighted to that market: Samsung, Xiaomi/Redmi/POCO, Pixel, Honor,
-realme, OnePlus, vivo, Tecno, Infinix. Each on an Android version it plausibly
-runs, spread across 13–16 — a pool where every phone ran one version would
-itself be a tell.
+**Real: `mode="fetch"` sent the navigation set on Firefox 155.** The profile,
+captured live, had no `fetch`, `http1` or `websocket` sections — a capture
+measures TLS and HTTP/2 only — and an explicit fetch on a profile without a set
+fell back to navigation without a word. So the caller's `sec-fetch-mode: cors`
+went out beside the profile's `sec-fetch-user: ?1` and
+`upgrade-insecure-requests: 1`, a request no browser makes, and Yandex
+SmartCaptcha sent every attempt into the picture. Closed three ways: the
+profile carries the Firefox family sets (measured on Firefox 154, carried by
+133/135/144/Tor); `curlpro capture` gives a full profile the sets of the newest
+sibling of its family (`-sets`), so the next raw capture cannot repeat this;
+and an explicit fetch on a profile with no set is refused with the reason. In
+auto mode the values of `sec-fetch-mode` and `sec-fetch-dest` now pick the set
+the way a custom header's name does.
 
-The pool is owned by `scripts/gen-devices.py` from a committed, verified seed
-(`scripts/android-devices.json`) and written into `chrome-152-android` and
-`yandex-26.8-android` — the latter with `arch`, where the 46 models become 46
-distinct User-Agent strings because Yandex writes the model into the string.
-`gen-devices.py --check` in CI fails if a profile drifts from the seed. Pure
-data: no ABI change, and the TLS fingerprints are untouched — checked by the
-audit, which still fires on exactly the two profiles it did before.
+**Real: a header given as `None` went out empty.** The only way to drop one
+profile header was `default_headers=False`, which drops the User-Agent and the
+order with it. `None` removes now — per request, and on the session with
+`s.headers[name] = None` — and `""` is sent as an empty header. ABI 0.17:
+`suppress_headers` on the request, a suppression export on the session.
+
+**The network: "Accept-Encoding is rewritten to `gzip, br`".** It is — by
+Cloudflare in front of postman-echo.com, for system curl as well. The local
+stand shows the profile's `gzip, deflate, br, zstd` on the wire, with and
+without `default_headers`.
+
+**Measured: "curlpro negotiated HTTP/1.1 where Firefox would take h2".**
+`smartcaptcha.yandexcloud.net` selects `http/1.1` for any client offering
+`h2, http/1.1` — Python's `ssl` included; `ya.ru` next to it selects `h2`. That
+is why the missing `http1` section mattered: over HTTP/1.1 the Firefox 155
+navigation went out with `TE: trailers` and without `Connection: keep-alive`,
+and that host speaks nothing else.
+
+**The audit** gained the checks the report asked for: navigation-only headers
+beside fetch metadata (high), an `accept-encoding` that is not the profile's
+(medium), and a request with no User-Agent at all (high) — the shape
+`default_headers=False` leaves behind. The fingerprint carries
+`profile_header_values`, the profile's own request, for the comparison.
 
 ## A separate list: the accumulated debt
 

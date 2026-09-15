@@ -19,8 +19,14 @@ class SessionHeaders(MutableMapping[str, str]):
     """Dict-like access to the session headers.
 
         s.headers["X-Api-Key"] = "secret"   # in every later request
-        del s.headers["X-Api-Key"]
+        s.headers["Sec-Fetch-User"] = None  # removed from every later request
+        del s.headers["X-Api-Key"]          # a value or a removal, either way
         s.headers.clear()                   # only profile headers remain
+
+    ``None`` is how one profile header goes without switching the whole set
+    off: ``default_headers=False`` drops the User-Agent and the order with it,
+    while a removal by name leaves the rest exactly as the browser sends it.
+    The removed names are listed by :attr:`suppressed`.
     """
 
     __slots__ = ("_session_id", "_cache")
@@ -31,9 +37,15 @@ class SessionHeaders(MutableMapping[str, str]):
         # enough to support iteration and len without extra calls.
         self._cache: list[str] = []
 
-    def __setitem__(self, name: str, value: str) -> None:
+    def __setitem__(self, name: str, value: str | None) -> None:
+        if value is None:
+            data = _call("curlpro_session_suppress_header", self._session_id, name.encode("utf-8"))
+            self._cache = data["headers"]
+            return
         if not isinstance(value, str):
-            raise TypeError(f"header value must be a string, got {type(value).__name__}")
+            raise TypeError(
+                f"header value must be a string, or None to remove the header; "
+                f"got {type(value).__name__}")
         data = _call(
             "curlpro_session_set_header",
             self._session_id,
@@ -72,8 +84,13 @@ class SessionHeaders(MutableMapping[str, str]):
         lowered = name.lower()
         return any(k.lower() == lowered for k in self._names())
 
+    @property
+    def suppressed(self) -> list[str]:
+        """Names removed from every request with ``s.headers[name] = None``."""
+        return list(_call("curlpro_session_headers", self._session_id)["suppressed"])
+
     def clear(self) -> int:
-        """Drops every session header, keeping the profile's own.
+        """Drops every session header and every removal, keeping the profile's own.
 
         Returns how many were dropped.
         """

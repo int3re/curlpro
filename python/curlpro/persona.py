@@ -51,7 +51,7 @@ class Persona:
         name: str | None = None,
         proxy: str | None = None,
         device: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: dict[str, str | None] | None = None,
         cookies: list[dict[str, Any]] | None = None,
         created: float | None = None,
         updated: float | None = None,

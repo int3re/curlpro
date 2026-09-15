@@ -136,9 +136,16 @@ delta for a new Chrome version fixes `sec-ch-ua` once. The rest
 the request, the library or the transport.
 
 The mode is chosen automatically: fetch, if the method is not GET, HEAD or POST,
-if the body does not look like a form, or if a header is set that the
-navigational set does not know. Explicitly — `mode="navigate"` or
-`mode="fetch"`. A profile with no `fetch` section is always navigational.
+if the body does not look like a form, if a header is set that the navigational
+set does not know, or if `sec-fetch-mode` / `sec-fetch-dest` carry a value no
+navigation has (`cors`, `empty`). Explicitly — `mode="navigate"` or
+`mode="fetch"`. A profile with no `fetch` section is navigational in auto mode;
+an explicit `mode="fetch"` on it is refused with the reason, because the
+navigational set under a fetch name — `sec-fetch-user: ?1` beside the caller's
+`sec-fetch-mode: cors` — is a request no browser makes. Every Chromium and
+Firefox profile carries the section; a delta inherits it, and a full capture
+takes it, with `http1` and `websocket`, from the newest profile of its family
+(`curlpro capture -sets`).
 
 ### What is mandatory
 

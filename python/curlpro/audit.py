@@ -95,14 +95,20 @@ def audit(target: Any) -> list[Finding]:
 def _audit(fp: Any, persona: Any) -> list[Finding]:
     data = fp.to_dict()
     pairs = data.get("header_values") or []
+    # The profile's own request, before anything the caller added or removed:
+    # the reference the real preview is measured against.
+    profile_pairs = data.get("profile_header_values") or []
     profile = data.get("profile", "")
     ua = data.get("user_agent", "")
     out: list[Finding] = []
 
     out += _check_tor_language(profile, pairs)
+    out += _check_no_user_agent(profile, ua)
     out += _check_user_agent_version(profile, ua)
     out += _check_platform(profile, pairs, ua)
     out += _check_mobile_device(profile, data)
+    out += _check_fetch_metadata(pairs)
+    out += _check_accept_encoding(pairs, profile_pairs)
 
     order = {level: i for i, level in enumerate(LEVELS)}
     out.sort(key=lambda f: order[f.level])
@@ -134,6 +140,8 @@ def _check_user_agent_version(profile: str, ua: str) -> list[Finding]:
     version is the engine version are compared, so a Tor or a Yandex profile —
     where the two differ by design — is left alone.
     """
+    if not ua:
+        return []  # reported once, by _check_no_user_agent
     m = _VERSION_IN_NAME.match(profile)
     if not m:
         return []
@@ -249,6 +257,96 @@ def _check_mobile_device(profile: str, data: dict) -> list[Finding]:
             "sec-ch-ua-platform-version. Without a device those hints go out "
             "empty — a phone that does not know which phone it is",
         fix='set device="Pixel 8" (or "random") on the session or the persona')]
+
+
+def _check_no_user_agent(profile: str, ua: str) -> list[Finding]:
+    """A request with no User-Agent at all.
+
+    The shape ``default_headers=False`` produces when the caller supplies no
+    User-Agent of their own: the transport's default is suppressed on purpose,
+    so nothing Go-shaped goes out in its place — and nothing else does either.
+    """
+    if ua:
+        return []
+    return [Finding(
+        code="no_user_agent",
+        level="high",
+        what=f"profile {profile}, and the request carries no User-Agent at all",
+        why="every browser sends one, so a request without it is not a "
+            "browser's whatever the TLS says. This is what default_headers="
+            "False leaves behind unless a User-Agent is passed by hand",
+        fix="keep the profile headers on and remove single ones with None "
+            "(headers={\"Sec-Fetch-User\": None}), or pass a User-Agent")]
+
+
+#: sec-fetch-dest values a navigation can carry; anything else is a fetch or a
+#: subresource, and neither sends the navigation set.
+_NAVIGATION_DEST = ("document", "iframe", "frame")
+
+
+def _check_fetch_metadata(pairs: list) -> list[Finding]:
+    """Navigation-only headers on a request whose fetch metadata says fetch.
+
+    ``sec-fetch-user`` and ``upgrade-insecure-requests`` exist only on a
+    navigation; a ``fetch()`` or XHR never carries them. A request that says
+    ``sec-fetch-mode: cors`` and carries them describes a request no browser
+    makes — the pair that sent a client into a captcha on every attempt.
+    """
+    mode = (_header(pairs, "sec-fetch-mode") or "").strip().lower()
+    dest = (_header(pairs, "sec-fetch-dest") or "").strip().lower()
+    if (not mode or mode == "navigate") and (not dest or dest in _NAVIGATION_DEST):
+        return []
+    carried = [n for n in ("sec-fetch-user", "upgrade-insecure-requests")
+               if _header(pairs, n) is not None]
+    if not carried:
+        return []
+    return [Finding(
+        code="navigation_headers_on_fetch",
+        level="high",
+        what=f"sec-fetch-mode {mode or '-'} / sec-fetch-dest {dest or '-'} "
+             f"next to {' and '.join(carried)}",
+        why="those two headers exist only on a page load — a browser's fetch() "
+            "and XHR never send them. Fetch metadata that says one thing beside "
+            "headers that say another is a request no browser makes, and it is "
+            "read for free by anything that reads both",
+        fix="let the set switch itself (mode=\"auto\") or set mode=\"fetch\"; on "
+            "a profile without a fetch set, remove the two with None")]
+
+
+def _check_accept_encoding(pairs: list, profile_pairs: list) -> list[Finding]:
+    """accept-encoding that is not the profile's.
+
+    The value is part of the header fingerprint and a browser sends the same
+    one every time; ``gzip`` alone is the mark of a library. The client decodes
+    gzip, deflate, br and zstd, so the profile's value costs nothing to keep.
+    """
+    want = _header(profile_pairs, "accept-encoding")
+    if want is None:
+        return []
+    got = _header(pairs, "accept-encoding")
+    if got is None:
+        if not _header(pairs, "user-agent"):
+            return []  # the whole set is off; reported once, by no_user_agent
+        return [Finding(
+            code="accept_encoding",
+            level="medium",
+            what=f"no accept-encoding, where the profile sends {want!r}",
+            why="every browser advertises what it can decode, and a request "
+                "without the header is not one this browser makes",
+            fix="drop the None on Accept-Encoding; the client decodes the "
+                "profile's value itself")]
+    if got.strip().lower() == want.strip().lower():
+        return []
+    return [Finding(
+        code="accept_encoding",
+        level="medium",
+        what=f"accept-encoding {got!r}, where the profile sends {want!r}",
+        why="the value is part of the header fingerprint (JA4H hashes it) and "
+            "a browser sends the same one every time; gzip alone is the mark "
+            "of a library. The client decodes gzip, deflate, br and zstd, so "
+            "the profile's value costs nothing",
+        fix="drop the Accept-Encoding override; the profile's value is "
+            "decoded by the client")]
 
 
 # The q-ladder check that used to live here has been removed.

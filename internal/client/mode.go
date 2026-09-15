@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/curlpro/curlpro/internal/profile"
@@ -115,18 +116,60 @@ func (t headerTemplate) names() []string {
 	return out
 }
 
+// explicitMode returns the mode the caller asked for: the request's, else the
+// session's, else "" for auto.
+func (s *Session) explicitMode(r *Request) string {
+	if r != nil && r.Mode != "" {
+		return r.Mode
+	}
+	return s.opts.Mode
+}
+
+// modeError says why a mode cannot be honoured on a profile, or nil.
+//
+// An explicit fetch on a profile without a fetch set used to fall back to the
+// navigation set without a word. That is how a Firefox 155 profile captured
+// without the section sent, under mode="fetch", the caller's
+// sec-fetch-mode: cors next to the profile's sec-fetch-user: ?1 and
+// upgrade-insecure-requests: 1 — two headers only a navigation carries — and
+// an anti-bot read the contradiction. An argument that cannot be honoured is
+// refused with the reason rather than ignored.
+func modeError(p *profile.Profile, mode string) error {
+	switch strings.ToLower(mode) {
+	case ModeAuto, "auto", ModeNavigate:
+		return nil
+	case ModeFetch:
+		if p.Fetch.Enabled() {
+			return nil
+		}
+		return fmt.Errorf("mode=fetch: profile %q has no fetch header set, and the navigation "+
+			"set would go out under a fetch name (sec-fetch-user and upgrade-insecure-requests "+
+			"beside sec-fetch-mode: cors). Use a profile with a fetch section, or pass the "+
+			"headers yourself with default_headers=False", p.Name)
+	}
+	return fmt.Errorf("mode=%q: use navigate, fetch or auto", mode)
+}
+
+// checkMode validates the request's effective mode against the profile.
+func (s *Session) checkMode(r *Request) error {
+	return modeError(s.profile, s.explicitMode(r))
+}
+
+// navigationDest lists sec-fetch-dest values a navigation can carry. Anything
+// else — empty, script, image, font — is a fetch or a subresource, and neither
+// sends the navigation set.
+var navigationDest = map[string]bool{"document": true, "iframe": true, "frame": true}
+
 // modeFor decides the request mode.
 //
 // An explicit request mode beats the session's; without either, the mode is
 // derived from traits a navigation could not have: a method other than GET,
 // HEAD or POST; a body that is not a form (JSON or XML — no form sends that);
-// a header the navigation set never carries. Fetch is only possible for a
-// profile with a fetch section.
+// a header the navigation set never carries; a fetch-metadata value the
+// navigation set never has. Fetch is only possible for a profile with a fetch
+// section; an explicit fetch without one is refused earlier, by checkMode.
 func (s *Session) modeFor(r *Request) string {
-	mode := r.Mode
-	if mode == "" {
-		mode = s.opts.Mode
-	}
+	mode := s.explicitMode(r)
 	switch strings.ToLower(mode) {
 	case ModeNavigate:
 		return ModeNavigate
@@ -145,6 +188,16 @@ func (s *Session) modeFor(r *Request) string {
 		return ModeFetch
 	}
 	if ct := s.requestHeader(r, "content-type"); ct != "" && !isFormContentType(ct) {
+		return ModeFetch
+	}
+	// The names sec-fetch-mode and sec-fetch-dest are known to the navigation
+	// set, so the name alone says nothing — the value does. A caller writing
+	// sec-fetch-mode: cors is describing a fetch, and giving them the
+	// navigation set around it produced a request no browser makes.
+	if v := s.requestHeader(r, "sec-fetch-mode"); v != "" && !strings.EqualFold(v, "navigate") {
+		return ModeFetch
+	}
+	if v := s.requestHeader(r, "sec-fetch-dest"); v != "" && !navigationDest[strings.ToLower(v)] {
 		return ModeFetch
 	}
 	known := map[string]bool{

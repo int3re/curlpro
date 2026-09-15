@@ -46,6 +46,12 @@ type Fingerprint struct {
 	// what a server receives, and a check against internal state would pass
 	// while the wire said something else.
 	HeaderValues []fingerprint.HeaderKV `json:"header_values"`
+	// ProfileHeaderValues is the same GET as the profile alone would send:
+	// with its default headers and without anything added to or suppressed
+	// on the session. The audit compares the two — a caller's
+	// accept-encoding: gzip on a profile that says gzip, deflate, br, zstd
+	// is visible only against what the profile says.
+	ProfileHeaderValues []fingerprint.HeaderKV `json:"profile_header_values"`
 
 	// JA4H is the fingerprint of the request itself — for the same plain GET
 	// the header preview describes. Licensed differently from the rest: see
@@ -133,8 +139,9 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 	}
 
 	var pairs, pairsH1 []fingerprint.HeaderKV
-	out.Headers, out.UserAgent, pairs = s.headerPreview(u, false)
-	out.HeadersHTTP1, _, pairsH1 = s.headerPreview(u, true)
+	out.Headers, out.UserAgent, pairs = s.headerPreview(u, false, false)
+	out.HeadersHTTP1, _, pairsH1 = s.headerPreview(u, true, false)
+	_, _, out.ProfileHeaderValues = s.headerPreview(u, s.opts.ForceHTTP1, true)
 
 	// The protocol and the header set move together. A session forced to
 	// HTTP/1.1 sends the HTTP/1.1 set — Chrome drops priority there, Firefox
@@ -164,12 +171,20 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 // with a separate copy of the logic rather than with the code would be worse
 // than no preview — that is exactly how the custom-header anchor once passed
 // its tests while working on one transport only.
-func (s *Session) headerPreview(u *url.URL, h1 bool) ([]string, string, []fingerprint.HeaderKV) {
+//
+// plain asks for the profile's own request: default headers on, session
+// headers and suppressions off — the reference the audit measures the real
+// preview against.
+func (s *Session) headerPreview(u *url.URL, h1, plain bool) ([]string, string, []fingerprint.HeaderKV) {
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, "", nil
 	}
 	r := &Request{Method: "GET", URL: u.String()}
+	if plain {
+		yes, no := true, false
+		r.DefaultHeaders, r.SessionHeaders = &yes, &no
+	}
 	s.applyHeaders(req, r, u, h1)
 
 	order, _ := req.Header[http.HeaderOrderKey]
@@ -183,8 +198,11 @@ func (s *Session) headerPreview(u *url.URL, h1 bool) ([]string, string, []finger
 			}
 		}
 		// A profile names more headers than any one request carries; a name
-		// with nothing behind it is a slot and does not reach the wire.
-		if len(vs) == 0 {
+		// with nothing behind it is a slot and does not reach the wire. An
+		// empty user-agent is not a value either: it is how the HTTP/2 path
+		// tells the transport to send no User-Agent at all (suppressDefaultUA),
+		// and a preview listing it would claim a header that never goes out.
+		if len(vs) == 0 || (vs[0] == "" && equalFold(name, "user-agent")) {
 			continue
 		}
 		names = append(names, name)

@@ -20,21 +20,30 @@ type sessionHeaders struct {
 	values map[string]string // key is the lowercase name
 	names  map[string]string // lowercase -> the name as the user wrote it
 	order  []string          // lowercase names, in insertion order
+	// suppressed holds names the session drops from every request: a
+	// profile header the caller wants gone — sec-fetch-user on a client that
+	// never navigates — without giving up the rest of the set, which is what
+	// DefaultHeaders=false costs. Lowercase name -> the name as written.
+	// A name is either set or suppressed, never both.
+	suppressed map[string]string
 }
 
 func newSessionHeaders() *sessionHeaders {
 	return &sessionHeaders{
-		values: map[string]string{},
-		names:  map[string]string{},
+		values:     map[string]string{},
+		names:      map[string]string{},
+		suppressed: map[string]string{},
 	}
 }
 
-// Set adds or replaces a header.
+// Set adds or replaces a header. A suppression of the same name is lifted:
+// a value is the more recent statement about it.
 func (h *sessionHeaders) Set(name, value string) {
 	key := strings.ToLower(name)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	delete(h.suppressed, key)
 	if _, exists := h.values[key]; !exists {
 		h.order = append(h.order, key)
 	}
@@ -42,14 +51,32 @@ func (h *sessionHeaders) Set(name, value string) {
 	h.names[key] = name
 }
 
-// Remove drops a header by name, case-insensitively.
-// Reports whether it was set: a silent "removed something that was not there"
-// would hide a typo in the name.
+// Suppress drops a header by name from every later request, whatever set it:
+// the profile, an earlier Set on the session. A value set earlier is removed.
+func (h *sessionHeaders) Suppress(name string) {
+	key := strings.ToLower(name)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.dropLocked(key)
+	h.suppressed[key] = name
+}
+
+// Remove drops a header by name, case-insensitively — a value set earlier or
+// a suppression, whichever was there. Reports whether either was: a silent
+// "removed something that was not there" would hide a typo in the name.
 func (h *sessionHeaders) Remove(name string) bool {
 	key := strings.ToLower(name)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	_, suppressed := h.suppressed[key]
+	delete(h.suppressed, key)
+	return h.dropLocked(key) || suppressed
+}
+
+// dropLocked removes a set value; the caller holds the lock.
+func (h *sessionHeaders) dropLocked(key string) bool {
 	if _, ok := h.values[key]; !ok {
 		return false
 	}
@@ -64,15 +91,29 @@ func (h *sessionHeaders) Remove(name string) bool {
 	return true
 }
 
-// Reset drops every user header, keeping the profile's.
+// Reset drops every user header and every suppression, keeping the profile's.
 func (h *sessionHeaders) Reset() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	n := len(h.values)
+	n := len(h.values) + len(h.suppressed)
 	h.values = map[string]string{}
 	h.names = map[string]string{}
 	h.order = nil
+	h.suppressed = map[string]string{}
 	return n
+}
+
+// Suppressed returns the suppressed names, sorted for a stable view.
+func (h *sessionHeaders) Suppressed() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	out := make([]string, 0, len(h.suppressed))
+	for _, name := range h.suppressed {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // All returns the headers in insertion order.
@@ -110,9 +151,16 @@ type HeaderPair struct {
 // SetHeader adds a header to every later request of the session.
 func (s *Session) SetHeader(name, value string) { s.headers.Set(name, value) }
 
-// RemoveHeader drops a header added earlier. Returns false when there was
-// none.
+// RemoveHeader drops a header added earlier, or a suppression. Returns false
+// when there was neither.
 func (s *Session) RemoveHeader(name string) bool { return s.headers.Remove(name) }
+
+// SuppressHeader drops a header by name from every later request of the
+// session — the way to lose one profile header without losing the set.
+func (s *Session) SuppressHeader(name string) { s.headers.Suppress(name) }
+
+// SuppressedHeaders returns the names suppressed on the session.
+func (s *Session) SuppressedHeaders() []string { return s.headers.Suppressed() }
 
 // ResetHeaders drops every user-added header, leaving only the profile's.
 // Returns how many were dropped.

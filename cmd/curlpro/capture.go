@@ -103,6 +103,8 @@ profile from a single capture would pin a random permutation.
 	certDir := fs.String("certs", "capture/certs", "directory holding tls.crt and tls.key")
 	out := fs.String("out", "profiles", "directory for the profile")
 	basedOn := fs.String("based-on", "", "parent profile: write a delta (tls and headers) instead of a full profile")
+	sets := fs.String("sets", "", "profile to take the unmeasured header sets from (http1, fetch, websocket, custom_anchor); "+
+		"by default the newest profile of the same family in -out, \"none\" to leave them empty")
 	browser := fs.String("browser", "", "path to the browser (found by the family in -name by default)")
 	manual := fs.Bool("manual", false, "do not launch a browser: open the page yourself")
 	dwell := fs.Duration("dwell", 4*time.Second, "how long to leave each browser window open")
@@ -146,6 +148,8 @@ profile from a single capture would pin a random permutation.
 		if p, err = toDelta(p, *basedOn, *out); err != nil {
 			return err
 		}
+	} else if err := inheritSets(p, *sets, *out); err != nil {
+		return err
 	}
 
 	path := filepath.Join(*out, *name+".json")
@@ -164,6 +168,100 @@ profile from a single capture would pin a random permutation.
 	fmt.Printf("verify with: curlpro validate -only %s -oracle https://%s/json -insecure\n",
 		*name, *addr)
 	return nil
+}
+
+// inheritSets fills the sections a capture cannot measure from a sibling.
+//
+// The stand sees TLS and HTTP/2. The HTTP/1.1 order, case and Connection
+// header, the fetch set, the WebSocket handshake and the custom-header anchor
+// are measured separately, once per browser family, and every profile of the
+// family carries them. A full profile written without them — Firefox 155 was
+// — sent its HTTP/2 navigation set over HTTP/1.1 with TE: trailers and no
+// Connection: keep-alive, and fell back to that same set under mode="fetch".
+// A delta inherits the sections from its parent; a full profile takes them
+// from the newest profile of its family, or from the one named in -sets.
+func inheritSets(p *profile.Profile, from, dir string) error {
+	if from == "none" {
+		return nil
+	}
+	reg := profile.NewRegistry()
+	if err := reg.LoadFS(os.DirFS(dir), "."); err != nil {
+		return err
+	}
+	if from == "" {
+		if from = newestOfFamily(reg, p.Name); from == "" {
+			fmt.Printf("header sets: no %s profile with fetch and http1 sections in %s — "+
+				"they stay empty; pass -sets to take them from a profile\n", familyOf(p.Name), dir)
+			return nil
+		}
+	}
+	src, err := reg.Resolve(from)
+	if err != nil {
+		return fmt.Errorf("-sets %s: %w", from, err)
+	}
+	if familyOf(src.Name) != familyOf(p.Name) {
+		return fmt.Errorf("-sets %s: a %s profile cannot lend its header sets to a %s one",
+			from, familyOf(src.Name), familyOf(p.Name))
+	}
+	p.HTTP1 = src.HTTP1
+	p.Fetch = src.Fetch
+	p.WebSocket = src.WebSocket
+	if p.Headers.CustomAnchor == "" {
+		p.Headers.CustomAnchor = src.Headers.CustomAnchor
+	}
+	fmt.Printf("header sets: http1, fetch, websocket and custom_anchor taken from %s "+
+		"(a capture measures TLS and HTTP/2 only)\n", from)
+	return nil
+}
+
+// newestOfFamily picks the sibling with the highest version that carries the
+// fetch and http1 sets — the one most likely to describe the browser being captured.
+func newestOfFamily(reg *profile.Registry, name string) string {
+	fam := familyOf(name)
+	best, bestV := "", []int(nil)
+	for _, n := range reg.Names() {
+		if n == name || familyOf(n) != fam {
+			continue
+		}
+		p, err := reg.Resolve(n)
+		if err != nil || !p.Fetch.Enabled() || !p.HTTP1.Enabled() {
+			continue
+		}
+		if v := nameVersion(n); best == "" || versionLess(bestV, v) {
+			best, bestV = n, v
+		}
+	}
+	return best
+}
+
+// nameVersion reads the version out of a profile name: firefox-135-macos -> 135,
+// safari-26.0.1-macos -> 26 0 1.
+func nameVersion(name string) []int {
+	parts := strings.Split(name, "-")
+	if len(parts) < 2 {
+		return nil
+	}
+	var out []int
+	for _, s := range strings.Split(parts[1], ".") {
+		n := 0
+		for _, c := range s {
+			if c < '0' || c > '9' {
+				break
+			}
+			n = n*10 + int(c-'0')
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+func versionLess(a, b []int) bool {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return len(a) < len(b)
 }
 
 // toDelta keeps in the profile only what a capture may override: TLS and

@@ -283,6 +283,15 @@ false one, and nothing downstream can tell. Firefox has no equivalent of
 an interstitial: the ClientHello is captured, the headers are not. Click through
 it once, or use `-manual`.
 
+The stand measures TLS and HTTP/2. The HTTP/1.1 order, case and `Connection`
+header, the fetch set and the WebSocket handshake are measured once per browser
+family ([STAGE15](STAGE15-RESULTS.md)) and carried by every profile of it. A
+delta (`-based-on`) inherits them from its parent; a full profile takes them from
+the newest profile of its family in `-out`, or from the one named in `-sets`
+(`-sets none` leaves them empty). Firefox 155 was written without them, and over
+HTTP/1.1 — the only protocol some hosts speak — its navigation went out with
+`TE: trailers` and without `Connection: keep-alive`.
+
 ```bash
 tshark -r h2.pcapng -o "tls.keylog_file:$KL" -Y "http2.type==1" \
   -T fields -e http2.header.name                     # the pseudo- and ordinary header order

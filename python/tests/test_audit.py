@@ -191,3 +191,52 @@ def test_tor_and_safari_stay_silent():
     would be false alarms, which is why neither family is checked."""
     for profile in ("tor-14-macos", "safari-26.0-macos"):
         assert not [c for c in _codes(profile) if c[0] == "ua_family"]
+
+
+# ------------------------------------------------ the report of 2026-09-15
+#
+# A client on a Firefox 155 profile sent, under mode="fetch", the caller's
+# sec-fetch-mode: cors beside the profile's sec-fetch-user: ?1 and
+# upgrade-insecure-requests: 1 — and the audit said nothing, though that pair
+# is exactly "does anything here disagree with anything else".
+
+def test_navigation_headers_next_to_cors_are_a_high_finding():
+    with curlpro.Session("chrome-152-windows", mode="navigate") as s:
+        s.headers["Sec-Fetch-Mode"] = "cors"
+        found = s.audit()
+    assert ("navigation_headers_on_fetch", "high") in [(f.code, f.level) for f in found]
+
+
+def test_a_cors_header_in_auto_mode_switches_the_set_and_is_silent():
+    """The fix for the same case: in auto mode the value picks the fetch set."""
+    with curlpro.Session("chrome-152-windows") as s:
+        s.headers["Sec-Fetch-Mode"] = "cors"
+        assert "navigation_headers_on_fetch" not in codes(s.audit())
+        assert "sec-fetch-user" not in [n.lower() for n in s.fingerprint().headers]
+
+
+def test_accept_encoding_that_differs_from_the_profile():
+    with curlpro.Session("firefox-155-windows") as s:
+        s.headers["Accept-Encoding"] = "gzip"
+        found = s.audit()
+    assert ("accept_encoding", "medium") in [(f.code, f.level) for f in found]
+
+
+def test_accept_encoding_removed_with_none_is_reported():
+    with curlpro.Session("firefox-155-windows") as s:
+        s.headers["Accept-Encoding"] = None
+        assert "accept_encoding" in codes(s.audit())
+
+
+def test_profile_headers_off_without_a_user_agent():
+    with curlpro.Session("chrome-152-windows", default_headers=False) as s:
+        found = s.audit()
+    assert ("no_user_agent", "high") in [(f.code, f.level) for f in found]
+    # One finding for one problem: the missing User-Agent is not also
+    # reported as "names no browser", nor is every missing header listed.
+    assert "ua_family" not in codes(found)
+    assert "accept_encoding" not in codes(found)
+
+    with curlpro.Session("chrome-152-windows", default_headers=False) as s:
+        s.headers["User-Agent"] = _CHROME_UA
+        assert "no_user_agent" not in codes(s.audit())

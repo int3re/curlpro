@@ -269,7 +269,7 @@ s.get(url, timeout=(3, 30), protocol="h2", cookies=False, retries=0)
 |---|---|
 | `params`, `auth` | query string and `Authorization` — as in requests |
 | `data`, `json_body`, `fields`, `files`, `body_file` | body: bytes, JSON, form, multipart, a streamed file |
-| `headers`, `header_order` | your own headers and their order |
+| `headers`, `header_order` | your own headers and their order; a value of `None` removes a header the profile or the session would send, `""` sends it empty |
 | `protocol` | `1.1`/`http1`, `2`/`h2`, `3`/`h3` — the transport for this request |
 | `timeout` | a number or a `(connect, total)` pair |
 | `connect_timeout`, `response_timeout` | the connecting limit and the headers-wait limit by name; `connect_timeout` wins over the pair's first element |
@@ -277,7 +277,7 @@ s.get(url, timeout=(3, 30), protocol="h2", cookies=False, retries=0)
 | `cookies` | `False` — neither send nor store cookies |
 | `session_headers` | `False` — without the headers added to the session |
 | `default_headers` | `True`/`False` — the profile headers, either way |
-| `mode` | `navigate` or `fetch` — which header set to use |
+| `mode` | `navigate` or `fetch` — which header set to use; `fetch` on a profile without a fetch set is refused with the reason, not sent as a navigation |
 | `allow_redirects`, `max_redirects`, `retries`, … | overrides of the session policies |
 | `expect` | a response expectation (see below) |
 | `rollback_cookies` | undo what this request wrote into the jar if it fails |
@@ -320,6 +320,7 @@ out of either:
 s.get(url, cookies=False)          # past the jar: neither sent nor stored
 s.get(url, session_headers=False)  # without the headers added to the session
 s.get(url, default_headers=False)  # without the profile headers — only your own
+s.get(url, headers={"Sec-Fetch-User": None})   # one profile header gone, the rest intact
 ```
 
 The cookie isolation is deliberately two-way: "do not use the memory" reads as "do
@@ -330,6 +331,14 @@ anonymous visitor".
 `default_headers` and `session_headers` are separate: the first is the browser's set
 (that is the fingerprint), the second is what you added. Switching one off leaves
 the other alone.
+
+A header given as `None` is removed — from the profile's set or the session's — and
+the rest goes out exactly as the browser sends it, order included. That is the way
+to lose one navigation-only header without `default_headers=False`, which loses the
+User-Agent and the order with it; on the session, `s.headers["Sec-Fetch-User"] =
+None` does the same for every request, and `s.headers.suppressed` lists what is
+gone. An empty string is a value: it is sent as an empty header, the way a
+browser's `fetch()` sends one.
 
 ## Response expectations
 
@@ -677,6 +686,13 @@ s.get(url)                                  # the navigation set
 s.get(url, headers={"X-Api-Key": "k"})      # the fetch set: as a browser sends it
 s.get(url, headers={"X-Api-Key": "k"}, mode="navigate")   # if you need otherwise
 ```
+
+The values count as well as the names: a request carrying `sec-fetch-mode: cors`,
+or a `sec-fetch-dest` no navigation has, is a fetch whatever else it carries. An
+explicit `mode="fetch"` on a profile that has no fetch set — Safari, okhttp — is
+refused with the reason rather than sent with the navigation set: `sec-fetch-mode:
+cors` beside `sec-fetch-user: ?1` is a request no browser makes, and an anti-bot
+reads the pair for free. Every Chromium and Firefox profile carries the set.
 
 ## Profiles as data
 

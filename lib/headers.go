@@ -55,6 +55,24 @@ func curlpro_session_remove_header(id C.longlong, name *C.char) (out *C.char) {
 	return respond(map[string]any{"removed": removed, "headers": s.Headers()}, nil)
 }
 
+//export curlpro_session_suppress_header
+func curlpro_session_suppress_header(id C.longlong, name *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	key := C.GoString(name)
+	if key == "" {
+		return respond(nil, fmt.Errorf("header name is empty"))
+	}
+	// The name is dropped from every later request whatever set it — the
+	// profile included. This is how one navigation-only header goes without
+	// switching the whole profile set off.
+	s.SuppressHeader(key)
+	return respond(map[string]any{"headers": s.Headers(), "suppressed": s.SuppressedHeaders()}, nil)
+}
+
 //export curlpro_session_reset_headers
 func curlpro_session_reset_headers(id C.longlong) (out *C.char) {
 	defer recoverInto(&out)
@@ -72,5 +90,5 @@ func curlpro_session_headers(id C.longlong) (out *C.char) {
 	if err != nil {
 		return respond(nil, err)
 	}
-	return respond(map[string]any{"headers": s.Headers()}, nil)
+	return respond(map[string]any{"headers": s.Headers(), "suppressed": s.SuppressedHeaders()}, nil)
 }

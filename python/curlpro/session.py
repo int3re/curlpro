@@ -247,7 +247,7 @@ def _request_meta(
     method: str,
     url: str,
     *,
-    headers: Mapping[str, str] | None = None,
+    headers: Mapping[str, str | None] | None = None,
     params: Mapping[str, Any] | Iterable[tuple[str, Any]] | None = None,
     auth: tuple[str, str] | str | None = None,
     data: bytes | str | None = None,
@@ -287,7 +287,22 @@ def _request_meta(
         headers.setdefault("Authorization", credentials)
     """Builds the request frame. Shared by request() and stream(): the stream
     used to keep its own cut-down copy without timeout, proxy, retries or files."""
-    hdrs = dict(headers or {})
+    # None removes a header the profile or the session would send — the way
+    # to drop one navigation-only name without default_headers=False, which
+    # drops the User-Agent and the order with it. An empty string is a value
+    # and goes out as one, the way a browser's fetch() sends an empty header
+    # when told to. Both used to be sent empty, without a word.
+    hdrs: dict[str, str] = {}
+    suppress: list[str] = []
+    for name, value in (headers or {}).items():
+        if value is None:
+            suppress.append(name)
+        elif isinstance(value, str):
+            hdrs[name] = value
+        else:
+            raise TypeError(
+                f"header {name!r}: the value must be a string, or None to remove "
+                f"the header; got {type(value).__name__}")
     multipart = None
 
     if body_file is not None:
@@ -311,6 +326,7 @@ def _request_meta(
         "method": method.upper(),
         "url": url,
         "headers": hdrs,
+        "suppress_headers": suppress,
         "header_order": list(header_order) if header_order else None,
         # None follows the session; True and False override it either way.
         "default_headers": default_headers,
@@ -672,7 +688,7 @@ class Session:
         method: str,
         url: str,
         *,
-        headers: Mapping[str, str] | None = None,
+        headers: Mapping[str, str | None] | None = None,
         params: Mapping[str, Any] | Iterable[tuple[str, Any]] | None = None,
         auth: tuple[str, str] | str | None = None,
         data: bytes | str | None = None,
@@ -705,6 +721,11 @@ class Session:
 
         Beyond the familiar requests arguments:
 
+        :param headers: your own headers. A value of ``None`` removes a header
+            the profile or the session would send — one navigation-only name
+            gone, the rest of the set and its order intact; an empty string
+            is sent as an empty header, the way a browser's ``fetch()`` sends
+            one
         :param cookies: use the session jar for this request. ``False`` isolates
             the request in both directions: stored cookies are not sent and
             ``Set-Cookie`` from the response is not remembered
@@ -841,7 +862,7 @@ class Session:
         method: str,
         url: str,
         *,
-        headers: Mapping[str, str] | None = None,
+        headers: Mapping[str, str | None] | None = None,
         data: bytes | str | None = None,
         json_body: Any = None,
         files: Mapping[str, Any] | None = None,
