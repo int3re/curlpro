@@ -6,12 +6,10 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.7.0**: a header given as `None` is removed, per request and on the session;
-`mode="fetch"` on a profile without a fetch set is refused rather than sent as a
-navigation, and the values of `sec-fetch-mode`/`sec-fetch-dest` pick the set in
-auto mode; the Firefox 155 profile carries the family's `http1`, `fetch` and
-`websocket` sets, and `curlpro capture` gives every full profile the sets of its
-family; three new audit checks. ABI 0.17.0: a wheel carries the matching
+**0.7.1**: `post_quantum=False` — the ClientHello of a browser with post-quantum
+key agreement switched off, X25519MLKEM768 and its 1216-byte share gone, JA4
+unchanged, the hello inside one TCP segment — and `fingerprint().client_hello`,
+the marshalled message as bytes. ABI 0.18.0: a wheel carries the matching
 library, a source build needs `go build` again.
 
 ## What happens on a tag
