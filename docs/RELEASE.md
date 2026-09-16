@@ -6,11 +6,13 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.6.0**: `response_timeout` — the wait for the response headers, the gap the
-other two limits left — with `connect_timeout` by name beside it;
-`Expect(encoding=)`; and a device pool of 46 real phones behind one TLS
-fingerprint. ABI 0.16.0: a wheel carries the matching library, a source build
-needs `go build` again.
+**0.7.0**: a header given as `None` is removed, per request and on the session;
+`mode="fetch"` on a profile without a fetch set is refused rather than sent as a
+navigation, and the values of `sec-fetch-mode`/`sec-fetch-dest` pick the set in
+auto mode; the Firefox 155 profile carries the family's `http1`, `fetch` and
+`websocket` sets, and `curlpro capture` gives every full profile the sets of its
+family; three new audit checks. ABI 0.17.0: a wheel carries the matching
+library, a source build needs `go build` again.
 
 ## What happens on a tag
 
