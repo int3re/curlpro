@@ -26,6 +26,7 @@ REPO = Path(__file__).resolve().parents[2]
 PAIRS = [
     (REPO / "docs" / "AUDIT-BRIEF.md", REPO / "docs" / "AUDIT-BRIEF.ru.md"),
     (REPO / "README.md", REPO / "README.ru.md"),
+    (REPO / "docs" / "GUIDE.md", REPO / "docs" / "GUIDE.ru.md"),
 ]
 
 HEADING = re.compile(r"^(#{1,6})\s+(.*)$")

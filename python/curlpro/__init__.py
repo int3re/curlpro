@@ -25,7 +25,7 @@ from .audit import Finding, audit
 from .persona import Persona, load_all
 from .aio import AsyncSession, AsyncStreamResponse, AsyncWebSocket
 from .cookies import Cookie, Cookies
-from .session import Redirect, Response, Session, delete, get, head, options, patch, post, put
+from .session import Redirect, Response, Session, delete, get, head, options, patch, post, put, request
 from .profiles import Profile, ensure_loaded, list_profiles, load_profiles, register_profile
 from .stream import StreamResponse
 from .websocket import WebSocket
@@ -64,9 +64,10 @@ __all__ = [
     "post",
     "put",
     "register_profile",
+    "request",
 ]
 
-__version__ = "0.7.1"
+__version__ = "0.7.2"
 
 try:  # an installed distribution is the authority; a source checkout has none
     from importlib.metadata import version as _dist_version

@@ -684,6 +684,32 @@ the fingerprint preview agree, and a custom header the pattern does not
 mention still goes before the profile's anchor. A name listed twice is
 refused. Pure Go and Python; the JSON field is the same, so no ABI change.
 
+## Stage 29 — the documentation, rewritten against the code ✅ done 2026-09-16
+
+A user's request, and a real one: the project is young, and an AI assistant
+handed code that uses the library keeps rewriting what the library already
+does — decompression, cookie files, header ordering, retries — because no one
+document told it what exists. The README had grown by accretion and carried
+claims that were no longer true.
+
+`docs/GUIDE.md` (and its Russian twin) now describes the whole library in one
+place: every session and request parameter with its default and meaning, the
+response, headers and their order, navigation versus fetch, expectations,
+errors and hooks, cookies, profiles and devices, transports, streaming and
+async, fingerprint and audit, personas — plus two sections for assistants:
+what not to reimplement, and which older claims were checked and found false.
+`llms.txt` at the root is the one-page entry point. Every countable claim is
+counted by `python/tests/test_guide_claims.py` — 50 profiles by family, 17
+distinct JA4 values, the four HTTP/3 profiles, the error codes, the parameter
+tables against the live signatures, the API index against the exports — so
+the guide fails with the code rather than drifting from it.
+
+The audit of the older documents found five false statements, corrected in
+the same release: the README's claim that the documentation was Russian, its
+error-code list missing `too_large` and `proxy_closed`, fhttp called MIT
+instead of BSD-3-Clause, `ARCHITECTURE.md` naming 0.4.2 as current, and
+`curlpro.request` documented by shape but not exported.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

@@ -1,0 +1,54 @@
+# curlPro
+
+> A Python HTTP client whose traffic carries a real browser's network fingerprint — TLS ClientHello, HTTP/2 and HTTP/3 frames, header set, order and case, WebSocket handshake — driven by JSON profiles, not code. Python `ctypes` over a Go library (uTLS, patched fhttp, vendored uquic) shipped inside the wheel. Apache 2.0. PyPI: `curlpro`. Repository: https://github.com/int3re/curlpro
+
+This file is the entry point for an AI assistant. Read `docs/GUIDE.md` in full
+before proposing code that touches this library; it is the verified reference
+and it lists, in section 15, what the library already does so you do not
+reimplement it. The README is the front page for people.
+
+## The four rules
+
+- Profiles are data: a browser is a `.json` file, the code is generic. A new browser version is a profile delta or `curlpro.register_profile()`, never a library change.
+- Measured, not assumed: every profile value was seen on the wire from a real browser; where nothing was measured the library says so.
+- Refuse rather than ignore: an option that cannot be honoured raises with the reason. Nothing is silently downgraded, dropped or substituted.
+- The wire is the truth: `session.fingerprint()` and `session.audit()` are computed from the bytes that would go out, offline.
+
+## Surface (all in `import curlpro`)
+
+- `Session(impersonate="chrome-151-windows", *, verify, cert, trust_env, max_response_size, timeout, connect_timeout, response_timeout, proxy, default_headers, header_order, allow_redirects, max_redirects, cookies, force_http1, post_quantum, resume, http3, alt_svc, resolve, ip_version, keep_alive, hooks, device, devices, max_idle_conns, idle_conn_timeout, retries, retry_statuses, retry_methods, retry_backoff, retry_max_backoff, respect_retry_after, mode)`
+- `s.request(method, url, *, headers, params, auth, data, json_body, files, fields, body_file, header_order, default_headers, cookies, session_headers, protocol, timeout, connect_timeout, response_timeout, allow_redirects, max_redirects, retries, retry_statuses, retry_methods, retry_backoff, retry_max_backoff, respect_retry_after, proxy, mode, expect, rollback_cookies)` and `get/post/put/patch/delete/head/options`
+- `s.stream(...)` → `StreamResponse` (`iter_content`, `iter_lines`, `read`, `close`); `s.websocket(url, headers, subprotocols, timeout, max_message_size)` → `WebSocket` (`send`, `recv`, `ping`, `close`, iteration)
+- `s.headers` (mapping; `= None` removes a profile header; `.suppressed`), `s.cookies` (mapping plus `all/set/load/export/save/load_file/save_netscape/load_netscape/to_netscape/snapshot/restore/transaction/clear`), `s.hooks`, `s.on_request/on_response/on_error`, `s.fingerprint(url)`, `s.audit()`, `s.close()`
+- `Response`: `status ok proto headers header(name) content text encoding json() url history cookies elapsed raise_for_status()`
+- `AsyncSession` — the same API as coroutines, native concurrency (goroutines, one thread)
+- `Expect(status, not_status, body, not_body, headers, not_headers, non_empty, json, encoding)` → `ExpectationFailed`
+- `Persona.new/load/save/session/open/capture/fingerprint/audit/to_dict/from_dict`, `load_all(dir)`
+- `Fingerprint`: `ja4 ja4_r ja3n ja3 ja3_text akamai ciphers extensions curves sigalgs alpn headers headers_http1 ja4h ja4h_http1 ja4h_available user_agent profile client_hello to_dict() diff()`
+- `Finding(code, level, what, why, fix)`; `audit(session_or_persona)`
+- `Profile.from_file(path).derive(name, **overrides).register()`; `load_profiles(dir)`, `register_profile(x)`, `list_profiles()`, `ensure_loaded()`
+- Module-level `request/get/post/put/patch/delete/head/options(url, impersonate=..., **kw)`
+- Exceptions: `CurlProError(.code)` ← `Timeout`, `HTTPError(.status, .response)`, `ExpectationFailed(.response)`, `WebSocketClosed`. Codes: `timeout expectation session_closed too_large ws_closed ws_too_big ws_protocol proxy_closed`
+- `curlpro.requests`: a `requests`-shaped face (`get`, `Session`, `status_code`); unsupported arguments raise
+
+## Facts an assistant tends to get wrong
+
+- Adding any custom header switches the request to the browser's fetch header set in `mode="auto"`; that is correct. `mode="navigate"` overrides.
+- To drop one profile header use `headers={"Name": None}`, not `default_headers=False` (which also drops the User-Agent and the order).
+- `header_order=[..., "accept", "x-api-key", ...]` edits the browser's order in place; `...` is the profile's own order.
+- `timeout` caps the whole request; `(connect, total)` is the pair; `response_timeout` is the wait for headers.
+- `ja3` moves per connection on Chrome ≥110 (extension shuffling); compare `ja4` or `ja3n`.
+- Bodies are already decompressed (gzip, deflate, br, zstd) and `r.text` already has the charset detected.
+- 50 profiles, 17 distinct JA4 values (the pre-Kyber Chromium group, Chrome 119–131 and Edge 119/120, flips between two JA4 spellings as its padding extension comes and goes with the ECH GREASE payload size, like the browsers); HTTP/3 sections on chrome-151-windows, chrome-152-windows, chrome-152-android, yandex-26.8-android; fetch sets on every Chromium/Firefox/Tor/Yandex profile, not on Safari or okhttp; 46 phones on the two Android profiles.
+- From a repository checkout call `curlpro.load_profiles("profiles")`; from the wheel nothing.
+- Public echo services lie: postman-echo.com is behind Cloudflare, which rewrites `Accept-Encoding`. Judge headers on `python/tests/rawserver.py`.
+
+## Documents
+
+- `docs/GUIDE.md` — the complete guide (Russian twin: `docs/GUIDE.ru.md`)
+- `README.md` — the front page (Russian twin: `README.ru.md`)
+- `docs/PROFILE-SCHEMA.md` — the JSON profile schema and inheritance
+- `docs/CAPTURE.md` — capturing a browser into a profile
+- `docs/FINGERPRINT-SPEC.md` — JA3/JA4/JA4H/Akamai formats
+- `docs/VERSIONING.md`, `docs/RELEASE.md` — what a version promises, how a release is made
+- `ARCHITECTURE.md`, `ROADMAP.md` — the stack and the stage-by-stage record

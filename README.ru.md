@@ -422,8 +422,9 @@ except curlpro.CurlProError as e:         # всё остальное из на�
     print(e.code, e)
 ```
 
-Коды исходов: `timeout`, `expectation`, `session_closed`, `ws_closed`, `ws_too_big`,
-`ws_protocol`. Текст написан для человека и называет следствие, а не только факт:
+Коды исходов: `timeout`, `expectation`, `session_closed`, `too_large`, `ws_closed`,
+`ws_too_big`, `ws_protocol`, `proxy_closed`. Текст написан для человека и называет
+следствие, а не только факт:
 
 ```
 timeout must be positive, got 0s (leave it unset for no limit)
@@ -789,16 +790,20 @@ Go выбран из-за двух возможностей uTLS: `ClientHelloSp
 байтов. Вместе они замыкают цикл «снял браузер → получил профиль» без единой
 строчки кода.
 
-Язык кода и сообщений ошибок — английский, документации — русский.
+Язык кода, сообщений ошибок и документации — английский; у README и руководства
+есть русские двойники, которые тест держит в согласии с оригиналом.
 
 ## Документы
 
-Начинать лучше с [docs/AUDIT-BRIEF.md](docs/AUDIT-BRIEF.md): он самодостаточен и
-описывает текущее состояние, тогда как `ARCHITECTURE.md` писался в начале и местами
-устарел.
+Начинать лучше с [docs/GUIDE.ru.md](docs/GUIDE.ru.md) — полного руководства:
+каждый параметр, каждое поведение, что не нужно переписывать и какие старые
+утверждения проверены и оказались ложью. [llms.txt](llms.txt) — короткая точка
+входа для ИИ-ассистента.
 
 | Файл | Содержание |
 |---|---|
+| [docs/GUIDE.md](docs/GUIDE.md) | Полное руководство, сверенное с кодом; русский двойник — `docs/GUIDE.ru.md` |
+| [llms.txt](llms.txt) | Карта на одну страницу для ИИ-ассистента: правила, поверхность API, факты, в которых он обычно ошибается |
 | [docs/AUDIT-BRIEF.md](docs/AUDIT-BRIEF.md) | **Срез состояния:** карта репозитория, инварианты («выглядит багом, но так задумано»), способы проверки |
 | [docs/AUDIT-QUESTIONS.md](docs/AUDIT-QUESTIONS.md) | Известные долги, пробелы в проверке, места, где нужна помощь |
 | [docs/PROFILE-SCHEMA.md](docs/PROFILE-SCHEMA.md) | Схема JSON-профиля, наследование `based_on`, полный список полей |
@@ -814,7 +819,7 @@ Go выбран из-за двух возможностей uTLS: `ClientHelloSp
 ## Лицензия
 
 Apache 2.0, текст — в [LICENSE](LICENSE). Сторонний код и его лицензии перечислены
-в [NOTICE](NOTICE): проект стоит на uTLS и uquic (BSD-3-Clause), fhttp и
+в [NOTICE](NOTICE): проект стоит на uTLS, uquic и fhttp (BSD-3-Clause) и
 quic-go/qpack (MIT), и содержит копию пакета `http3` из uquic с правками под
 отпечаток — они описаны в [internal/h3/README.md](internal/h3/README.md).
 

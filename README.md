@@ -431,9 +431,9 @@ except curlpro.CurlProError as e:         # everything else from the native side
     print(e.code, e)
 ```
 
-The outcome codes: `timeout`, `expectation`, `session_closed`, `ws_closed`,
-`ws_too_big`, `ws_protocol`. The message is written for a human and names the
-consequence, not only the fact:
+The outcome codes: `timeout`, `expectation`, `session_closed`, `too_large`,
+`ws_closed`, `ws_too_big`, `ws_protocol`, `proxy_closed`. The message is written
+for a human and names the consequence, not only the fact:
 
 ```
 timeout must be positive, got 0s (leave it unset for no limit)
@@ -806,18 +806,20 @@ profile as data, and `Fingerprinter.RawClientHello` — learning a profile from
 captured bytes. Together they close the loop "capture a browser → get a profile"
 without a line of code.
 
-The code and the error messages are in English; the project documentation is in
-Russian.
+The code, the error messages and the documentation are in English; the README
+and the guide have Russian twins kept in step by a test.
 
 ## Documentation
 
-The project documentation is written in Russian; this file is its English
-counterpart. Start with [docs/AUDIT-BRIEF.md](docs/AUDIT-BRIEF.md) — a self-contained
-snapshot of the current state, including the invariants ("looks like a bug, is
-deliberate") and how to verify each of them.
+Start with [docs/GUIDE.md](docs/GUIDE.md) — the complete guide: every
+parameter, every behaviour, what not to reimplement, and which older claims
+were checked and found false. [llms.txt](llms.txt) is the short entry point for
+an AI assistant.
 
 | File | Content |
 |---|---|
+| [docs/GUIDE.md](docs/GUIDE.md) | The complete guide, verified against the code; Russian twin in `docs/GUIDE.ru.md` |
+| [llms.txt](llms.txt) | The one-page map for an AI assistant: rules, API surface, facts it tends to get wrong |
 | [docs/AUDIT-BRIEF.md](docs/AUDIT-BRIEF.md) | State snapshot: repository map, invariants, verification recipes |
 | [docs/AUDIT-QUESTIONS.md](docs/AUDIT-QUESTIONS.md) | Known debts, gaps in coverage, where help is wanted |
 | [docs/PROFILE-SCHEMA.md](docs/PROFILE-SCHEMA.md) | The JSON profile schema, `based_on` inheritance, every field |
@@ -832,8 +834,8 @@ deliberate") and how to verify each of them.
 ## License
 
 Apache 2.0, the text is in [LICENSE](LICENSE). Third-party code and its licences are
-listed in [NOTICE](NOTICE): the project stands on uTLS and uquic (BSD-3-Clause),
-fhttp and quic-go/qpack (MIT), and carries a copy of the `http3` package from uquic
+listed in [NOTICE](NOTICE): the project stands on uTLS, uquic and fhttp
+(BSD-3-Clause) and quic-go/qpack (MIT), and carries a copy of the `http3` package from uquic
 with fingerprint-related changes, described in
 [internal/h3/README.md](internal/h3/README.md).
 
