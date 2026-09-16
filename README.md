@@ -270,7 +270,7 @@ s.get(url, timeout=(3, 30), protocol="h2", cookies=False, retries=0)
 |---|---|
 | `params`, `auth` | query string and `Authorization` — as in requests |
 | `data`, `json_body`, `fields`, `files`, `body_file` | body: bytes, JSON, form, multipart, a streamed file |
-| `headers`, `header_order` | your own headers and their order; a value of `None` removes a header the profile or the session would send, `""` sends it empty |
+| `headers`, `header_order` | your own headers, and the send order as a pattern — `[..., "accept", "x-api-key", ...]` puts a header right after Accept, `...` is the profile's own order (see below); a value of `None` removes a header the profile or the session would send, `""` sends it empty |
 | `protocol` | `1.1`/`http1`, `2`/`h2`, `3`/`h3` — the transport for this request |
 | `timeout` | a number or a `(connect, total)` pair |
 | `connect_timeout`, `response_timeout` | the connecting limit and the headers-wait limit by name; `connect_timeout` wins over the pair's first element |
@@ -340,6 +340,26 @@ User-Agent and the order with it; on the session, `s.headers["Sec-Fetch-User"] =
 None` does the same for every request, and `s.headers.suppressed` lists what is
 gone. An empty string is a value: it is sent as an empty header, the way a
 browser's `fetch()` sends one.
+
+## Header order
+
+The order is part of the fingerprint, so a custom header is placed where the
+browser would put one — before the profile's anchor — without being asked. When
+that is not the place, `header_order` is a pattern over the browser's order:
+names, and `...` for "the profile's own headers here".
+
+```python
+s.get(url, headers={"X-Api-Key": "k"},
+      header_order=[..., "accept", "x-api-key", ...])   # right after Accept, the rest untouched
+s.get(url, header_order=["x-api-key", ...])            # first
+s.get(url, header_order=[..., "accept-encoding", "accept-language", ...])   # two profile headers swapped
+```
+
+Several `...` are allowed: an unlisted profile header stays beside the listed
+neighbour it follows in the profile. A list without `...` is the list followed
+by the rest of the profile. Names the request does not carry are skipped, so one
+pattern on the session serves every request; a name listed twice is refused.
+`fingerprint().headers` shows the result before anything is sent.
 
 ## Response expectations
 

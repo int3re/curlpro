@@ -243,6 +243,26 @@ def _protocol(value: str | float | None) -> str:
     return _PROTOCOLS[key]
 
 
+def _order(header_order: Iterable[Any] | None) -> list[str] | None:
+    """The header order as it travels: names as given, ``...`` as the string.
+
+    ``...`` (the Ellipsis) marks where the profile's own order goes, so a
+    pattern edits the browser's order instead of restating it.
+    """
+    if not header_order:
+        return None
+    out: list[str] = []
+    for item in header_order:
+        if item is Ellipsis:
+            out.append("...")
+        elif isinstance(item, str):
+            out.append(item)
+        else:
+            raise TypeError(
+                f"header_order: entries are header names or ..., got {type(item).__name__}")
+    return out
+
+
 def _request_meta(
     method: str,
     url: str,
@@ -255,7 +275,7 @@ def _request_meta(
     files: Mapping[str, Any] | None = None,
     fields: Mapping[str, str] | None = None,
     body_file: str | Any = None,
-    header_order: Iterable[str] | None = None,
+    header_order: Iterable[Any] | None = None,
     default_headers: bool | None = None,
     cookies: bool | None = None,
     session_headers: bool | None = None,
@@ -327,7 +347,7 @@ def _request_meta(
         "url": url,
         "headers": hdrs,
         "suppress_headers": suppress,
-        "header_order": list(header_order) if header_order else None,
+        "header_order": _order(header_order),
         # None follows the session; True and False override it either way.
         "default_headers": default_headers,
         # The session memory: the cookie jar and the session headers. False
@@ -519,8 +539,16 @@ class Session:
         too. Without your own ``user-agent`` no such header is sent at all:
         the library will not substitute Go's default. An individual request
         overrides this either way
-    :param header_order: the desired header order; anything not listed follows,
-        keeping its relative order
+    :param header_order: the send order as a pattern: names, with ``...`` for
+        "the profile's own order here". ``[..., "accept", "x-api-key", ...]``
+        puts a custom header right after Accept and leaves the rest as the
+        browser sends it; ``["x-api-key", ...]`` puts it first, ``[...,
+        "accept-language", "accept", ...]`` swaps two profile headers.
+        Several ``...`` are allowed: an unlisted profile header stays beside
+        the listed neighbour it follows in the profile. A list without
+        ``...`` is the list followed by the rest of the profile. Names the
+        request does not carry are skipped, so one pattern serves every
+        request; a name listed twice is refused
     :param allow_redirects: follow 3xx responses
     :param max_redirects: limit on the length of a redirect chain
     :param cookies: enable the cookie jar shared by the session's requests
@@ -590,7 +618,7 @@ class Session:
         response_timeout: float | None = None,
         proxy: str | None = None,
         default_headers: bool = True,
-        header_order: Iterable[str] | None = None,
+        header_order: Iterable[Any] | None = None,
         allow_redirects: bool = True,
         max_redirects: int = 20,
         cookies: bool = True,
@@ -642,7 +670,7 @@ class Session:
                     "response_timeout_ms": _ms(response_timeout, "response_timeout") or 0,
                     "proxy": proxy or "",
                     "default_headers": default_headers,
-                    "header_order": list(header_order) if header_order else None,
+                    "header_order": _order(header_order),
                     "follow_redirects": allow_redirects,
                     "max_redirects": _count(max_redirects, "max_redirects"),
                     "cookies": cookies,
@@ -704,7 +732,7 @@ class Session:
         files: Mapping[str, Any] | None = None,
         fields: Mapping[str, str] | None = None,
         body_file: str | Any = None,
-        header_order: Iterable[str] | None = None,
+        header_order: Iterable[Any] | None = None,
         default_headers: bool | None = None,
         cookies: bool | None = None,
         session_headers: bool | None = None,
@@ -734,6 +762,10 @@ class Session:
             gone, the rest of the set and its order intact; an empty string
             is sent as an empty header, the way a browser's ``fetch()`` sends
             one
+        :param header_order: the send order for this request as a pattern —
+            ``[..., "accept", "x-api-key", ...]`` puts a custom header right
+            after Accept, the rest stays as the browser sends it; see
+            :class:`Session` for the rules
         :param cookies: use the session jar for this request. ``False`` isolates
             the request in both directions: stored cookies are not sent and
             ``Set-Cookie`` from the response is not remembered
@@ -876,7 +908,7 @@ class Session:
         files: Mapping[str, Any] | None = None,
         fields: Mapping[str, str] | None = None,
         body_file: str | Any = None,
-        header_order: Iterable[str] | None = None,
+        header_order: Iterable[Any] | None = None,
         default_headers: bool | None = None,
         cookies: bool | None = None,
         session_headers: bool | None = None,

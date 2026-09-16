@@ -45,8 +45,9 @@ type Options struct {
 	// With it off the caller controls the set and the order completely —
 	// anti-bot systems look at the order too, so that control belongs outside.
 	DefaultHeaders bool
-	// HeaderOrder overrides the send order. Headers not listed here follow the
-	// listed ones, keeping their relative order.
+	// HeaderOrder edits the send order: names, with "..." (OrderEllipsis) for
+	// the profile's own order — see expandOrder. A list without "..." is the
+	// list followed by the rest of the profile.
 	HeaderOrder []string
 
 	// FollowRedirects enables following 3xx responses.
@@ -431,6 +432,9 @@ func (r *Request) validate(hasJar bool) error {
 		return fmt.Errorf("cookies=true: the session has no cookie jar " +
 			"(create the session with cookies enabled)")
 	}
+	if err := validateOrder(r.HeaderOrder); err != nil {
+		return err
+	}
 	switch r.Protocol {
 	case "", ProtoHTTP1, ProtoH2, ProtoH3:
 	default:
@@ -537,6 +541,9 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	// A session-wide fetch on a profile without a fetch set is refused here,
 	// once, rather than on every request.
 	if err := modeError(p, opts.Mode); err != nil {
+		return nil, err
+	}
+	if err := validateOrder(opts.HeaderOrder); err != nil {
 		return nil, err
 	}
 	if opts.Timeout == 0 {

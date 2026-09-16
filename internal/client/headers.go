@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"net/textproto"
 	"net/url"
 	"sort"
@@ -234,11 +235,102 @@ func requestSets(r *Request, name string) bool {
 // follows them (measured on Chrome 152, both hops — browser-initiated and via a
 // link). Profiles without sec-ch-* (Firefox, Safari) are unaffected.
 func (s *Session) wantOrder(r *Request, h1Order []string, tpl headerTemplate) []string {
-	want := firstNonEmpty(r.HeaderOrder, s.opts.HeaderOrder, h1Order, tpl.names())
+	base := firstNonEmpty(h1Order, tpl.names())
+	want := base
+	if explicit := firstNonEmpty(r.HeaderOrder, s.opts.HeaderOrder); len(explicit) > 0 {
+		want = expandOrder(explicit, base)
+	}
 	if r.RedirectHop {
 		want = redirectHopOrder(want)
 	}
 	return want
+}
+
+// OrderEllipsis is the placeholder in a caller's header order that stands for
+// the profile's own headers — "the browser's order goes here".
+const OrderEllipsis = "..."
+
+// expandOrder turns a caller's order pattern into a full order over base, the
+// profile's order for the transport.
+//
+// A pattern names the headers whose places the caller sets and marks with
+// "..." where the profile's headers go. So [... accept x-api-key ...] puts a
+// custom header right after Accept and leaves everything else as the browser
+// sends it, [x-api-key ...] puts it first, and [... x-api-key] last. With
+// several "..." an unnamed profile header stays beside the named profile
+// neighbour it follows in base: it goes into the first "..." after that
+// neighbour, or into the first slot when nothing named precedes it. A pattern
+// without "..." is the pattern followed by "...": the names in that order, the
+// rest of the profile after them.
+//
+// Names in the pattern that the request does not carry are harmless — reorder
+// skips them — so one pattern serves every request of a session. Names
+// missing from both the pattern and base are custom headers, and those still
+// go before the profile's anchor, where a browser would put them.
+func expandOrder(pattern, base []string) []string {
+	slots := make([]int, 0, 2) // pattern positions of "..."
+	posOf := make(map[string]int, len(pattern))
+	for i, p := range pattern {
+		if p == OrderEllipsis {
+			slots = append(slots, i)
+			continue
+		}
+		posOf[strings.ToLower(p)] = i
+	}
+	if len(slots) == 0 {
+		pattern = append(append(make([]string, 0, len(pattern)+1), pattern...), OrderEllipsis)
+		slots = append(slots, len(pattern)-1)
+	}
+	// slotAfter is the slot an unnamed header falls into once the named
+	// header at pattern position pos has been passed in base.
+	slotAfter := func(pos int) int {
+		for k, at := range slots {
+			if at > pos {
+				return k
+			}
+		}
+		return len(slots) - 1
+	}
+	fill := make([][]string, len(slots))
+	cur := 0
+	for _, b := range base {
+		if pos, named := posOf[strings.ToLower(b)]; named {
+			cur = slotAfter(pos)
+			continue
+		}
+		fill[cur] = append(fill[cur], b)
+	}
+	out := make([]string, 0, len(pattern)+len(base))
+	k := 0
+	for _, p := range pattern {
+		if p == OrderEllipsis {
+			out = append(out, fill[k]...)
+			k++
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// validateOrder refuses an order pattern that cannot mean one thing: a name
+// listed twice, or an empty name.
+func validateOrder(order []string) error {
+	seen := make(map[string]bool, len(order))
+	for _, name := range order {
+		if name == OrderEllipsis {
+			continue
+		}
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("header_order: an empty name")
+		}
+		key := strings.ToLower(name)
+		if seen[key] {
+			return fmt.Errorf("header_order: %q is listed twice", name)
+		}
+		seen[key] = true
+	}
+	return nil
 }
 
 func redirectHopOrder(want []string) []string {

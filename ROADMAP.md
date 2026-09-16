@@ -661,6 +661,29 @@ next report does not need a socket server to see what goes out; `len()` of
 it answers the segment question. Not part of `diff()`: key shares and GREASE
 are drawn afresh per call. ABI 0.18.
 
+## Stage 28 — the header order as a pattern ✅ done 2026-09-16
+
+A user asked to edit the order of the default headers and to place custom
+ones among them, in one statement. `header_order` could take a full list —
+which meant restating the profile's order and keeping it in step with the
+profile — and a partial list put the listed names in one place and the rest
+somewhere that depended on the profile's anchor: "put X-Api-Key after Accept"
+was not sayable.
+
+Now `header_order` is a pattern over the browser's order: names, and `...`
+for "the profile's own headers here". `[..., "accept", "x-api-key", ...]`
+puts a custom header right after Accept and leaves everything else as the
+browser sends it; `["x-api-key", ...]` first; `[..., "accept-encoding",
+"accept-language", ...]` swaps two profile headers. Several `...` are
+allowed — an unlisted profile header stays beside the listed neighbour it
+follows in the profile — and a list without `...` is the list followed by
+the rest of the profile, which replaces the old anchor-dependent placement.
+The expansion runs against the transport's own base (the HTTP/1.1 order with
+Host and Connection, or the HTTP/2 set), before `reorder`, so the wire and
+the fingerprint preview agree, and a custom header the pattern does not
+mention still goes before the profile's anchor. A name listed twice is
+refused. Pure Go and Python; the JSON field is the same, so no ABI change.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:
