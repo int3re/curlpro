@@ -251,6 +251,7 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 | `cookies` | the cookie jar shared by the session's requests |
 | `default_headers`, `header_order`, `mode` | profile headers, desired order, header set (`navigate`/`fetch`/`auto`) |
 | `force_http1`, `http3`, `alt_svc` | transport: forbid h2, go straight to QUIC, upgrade on `Alt-Svc` |
+| `post_quantum` | `False` drops the X25519MLKEM768 group and its 1216-byte key share — the hello of a browser with post-quantum key agreement off by policy. JA4 stays, JA3 and the size move: ~1.9 KB over two TCP segments becomes one that fits in one |
 | `keep_alive`, `max_idle_conns`, `idle_conn_timeout` | connection reuse and pool size |
 | `resolve`, `ip_version` | host address override, address family (`"4"`/`"6"`) |
 | `device`, `devices` | the phone for mobile profiles and your own device list |
@@ -552,6 +553,7 @@ with curlpro.Session("chrome-151-windows") as s:
     print(fp.ja4)       # t13d1516h2_8daaf6152771_806a8c22fdea
     print(fp.akamai)    # 1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p
     print(fp.headers)   # the order the names will go out in
+    fp.client_hello     # the ClientHello itself: bytes, key shares drawn afresh per call
 ```
 
 These values used to be obtainable only from browserleaks, which made every

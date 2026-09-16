@@ -119,7 +119,8 @@ func curlpro_free(s *C.char) {
 // 0.17.0: dropping a header by name — suppress_headers per request and a
 // session-wide suppression export — and the profile's own header values in
 // the fingerprint.
-const Version = "0.17.0"
+// 0.18.0: post_quantum on the session, and the raw ClientHello in the fingerprint.
+const Version = "0.18.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -167,17 +168,19 @@ type sessionConfig struct {
 	MaxRedirects       int      `json:"max_redirects"`
 	Cookies            bool     `json:"cookies"`
 	ForceHTTP1         bool     `json:"force_http1"`
-	Resume             bool     `json:"resume"`
-	HTTP3              bool     `json:"http3"`
-	MaxIdleConns       int      `json:"max_idle_conns"`
-	IdleConnTimeoutMS  int      `json:"idle_conn_timeout_ms"`
-	ConnectTimeoutMS   int      `json:"connect_timeout_ms"`
-	ResponseTimeoutMS  int      `json:"response_timeout_ms"`
-	CACert             string   `json:"ca_cert"`
-	ClientCert         string   `json:"client_cert"`
-	ClientKey          string   `json:"client_key"`
-	TrustEnv           bool     `json:"trust_env"`
-	MaxResponseSize    int64    `json:"max_response_size"`
+	// PostQuantum is a pointer because a missing field means "send the share".
+	PostQuantum       *bool  `json:"post_quantum"`
+	Resume            bool   `json:"resume"`
+	HTTP3             bool   `json:"http3"`
+	MaxIdleConns      int    `json:"max_idle_conns"`
+	IdleConnTimeoutMS int    `json:"idle_conn_timeout_ms"`
+	ConnectTimeoutMS  int    `json:"connect_timeout_ms"`
+	ResponseTimeoutMS int    `json:"response_timeout_ms"`
+	CACert            string `json:"ca_cert"`
+	ClientCert        string `json:"client_cert"`
+	ClientKey         string `json:"client_key"`
+	TrustEnv          bool   `json:"trust_env"`
+	MaxResponseSize   int64  `json:"max_response_size"`
 	// AltSvc is a pointer because a missing field means "enabled".
 	AltSvc    *bool             `json:"alt_svc"`
 	Resolve   map[string]string `json:"resolve"`
@@ -247,6 +250,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		MaxRedirects:       c.MaxRedirects,
 		Cookies:            c.Cookies,
 		ForceHTTP1:         c.ForceHTTP1,
+		DisablePostQuantum: c.PostQuantum != nil && !*c.PostQuantum,
 		Resume:             c.Resume,
 		HTTP3:              c.HTTP3,
 		ConnectTimeout:     time.Duration(c.ConnectTimeoutMS) * time.Millisecond,

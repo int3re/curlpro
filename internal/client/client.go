@@ -136,6 +136,16 @@ type Options struct {
 	// ForceHTTP1 forbids h2 even when the server offers it.
 	ForceHTTP1 bool
 
+	// DisablePostQuantum drops the post-quantum hybrid group from the
+	// ClientHello: X25519MLKEM768 leaves supported_groups and its 1216-byte
+	// key share leaves key_share. That is the hello of Chrome under the
+	// PostQuantumKeyAgreementEnabled=false policy and of Firefox with
+	// security.tls.enable_kyber off — a client that exists. Nothing else
+	// moves, so JA4 is unchanged; JA3 (which hashes the groups) and the size
+	// change: a ~1.9 KB hello that spans two TCP segments becomes one that
+	// fits in one. Off by default, because the browser sends the share.
+	DisablePostQuantum bool
+
 	// Resume turns on TLS session resumption.
 	//
 	// A browser talking to one host resumes constantly: it keeps the ticket the
@@ -1015,6 +1025,9 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 			raw.Close()
 			return nil, fmt.Errorf("force_http1: profile %q has no ALPN extension to restrict", s.profile.Name)
 		}
+	}
+	if s.opts.DisablePostQuantum {
+		dropPostQuantum(spec)
 	}
 
 	cfg := &utls.Config{

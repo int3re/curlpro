@@ -263,6 +263,51 @@ func setALPN(spec *utls.ClientHelloSpec, protos []string) bool {
 	return false
 }
 
+// hybridGroup reports whether a group is a post-quantum hybrid:
+// X25519MLKEM768 (0x11ec), SecP256r1MLKEM768 (0x11eb) or the earlier
+// X25519Kyber768Draft00 (0x6399) of Chrome 124–130.
+func hybridGroup(g utls.CurveID) bool {
+	switch g {
+	case utls.X25519MLKEM768, 0x11eb, utls.X25519Kyber768Draft00:
+		return true
+	}
+	return false
+}
+
+// dropPostQuantum removes the hybrid groups from supported_groups and their
+// shares from key_share — see Options.DisablePostQuantum. The extension list,
+// ciphers and signature algorithms are untouched. New slices are built rather
+// than filtered in place: an extension-list profile hands the spec slices it
+// still owns. Reports whether anything was removed.
+func dropPostQuantum(spec *utls.ClientHelloSpec) bool {
+	removed := false
+	for _, e := range spec.Extensions {
+		switch ext := e.(type) {
+		case *utls.SupportedCurvesExtension:
+			kept := make([]utls.CurveID, 0, len(ext.Curves))
+			for _, c := range ext.Curves {
+				if hybridGroup(c) {
+					removed = true
+					continue
+				}
+				kept = append(kept, c)
+			}
+			ext.Curves = kept
+		case *utls.KeyShareExtension:
+			kept := make([]utls.KeyShare, 0, len(ext.KeyShares))
+			for _, ks := range ext.KeyShares {
+				if hybridGroup(ks.Group) {
+					removed = true
+					continue
+				}
+				kept = append(kept, ks)
+			}
+			ext.KeyShares = kept
+		}
+	}
+	return removed
+}
+
 // alpnFromProfile takes the ALPN list out of a profile.
 //
 // For raw_client_hello profiles the extensions field is empty — there ALPN is

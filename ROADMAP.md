@@ -630,6 +630,37 @@ beside fetch metadata (high), an `accept-encoding` that is not the profile's
 `default_headers=False` leaves behind. The fingerprint carries
 `profile_header_values`, the profile's own request, for the comparison.
 
+## Stage 27 — the second field report: the ClientHello itself ✅ done 2026-09-16
+
+The same reporter, on 0.7.0, with raw ClientHello captures of curl, Firefox
+155 and Chrome 151 through curlpro. The headers are confirmed clean and the
+Accept-Encoding claim withdrawn; what remains is a TLS-layer difference
+against a client that passes their anti-bot at ~45%: system curl on Schannel,
+a 168-byte TLS 1.2 hello, against curlpro's 1873-byte TLS 1.3 hello with a
+1216-byte post-quantum key share that spans two TCP segments on a path with a
+known MTU pathology.
+
+**Answered from the capture: Firefox 155 sends three key shares.** The
+report suspected the third (secp256r1, 65 bytes) was ours. The profile is the
+raw hello recorded from the user's own Firefox 155 on 2026-09-08, and its
+key_share carries X25519MLKEM768, x25519 and secp256r1 — what NSS sends. The
+client replays the list; the bytes are the browser's.
+
+**`post_quantum=False`.** The knob the report needed for its A/B: drops
+X25519MLKEM768 from supported_groups and its share from key_share, which is
+the hello of Chrome under `PostQuantumKeyAgreementEnabled=false` and of
+Firefox with `security.tls.enable_kyber` off — a client that exists. Nothing
+else moves: JA4 is unchanged, JA3 (which hashes the groups) and the size
+change, and the hello fits one segment. Off by default: the browser sends
+the share, and a size check in the audit was declined for the same reason —
+every modern browser's hello spans two segments, so the check would fire on
+every stock profile and say nothing.
+
+**`fingerprint().client_hello`.** The marshalled message as bytes, so the
+next report does not need a socket server to see what goes out; `len()` of
+it answers the segment question. Not part of `diff()`: key shares and GREASE
+are drawn afresh per call. ABI 0.18.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

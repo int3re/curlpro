@@ -58,6 +58,11 @@ type TLS struct {
 	Curves     []string `json:"curves"`
 	SigAlgs    []string `json:"sigalgs"`
 	ALPN       []string `json:"alpn"`
+
+	// Raw is the marshalled ClientHello the values above were read from, set
+	// by FromSpec: the bytes are the evidence, and a caller comparing against
+	// a capture wants them rather than a re-derivation.
+	Raw []byte `json:"-"`
 }
 
 // isGREASE reports whether a value is one of the sixteen GREASE codepoints.
@@ -237,7 +242,12 @@ func FromSpec(spec *utls.ClientHelloSpec, serverName string) (TLS, error) {
 	if err != nil {
 		return TLS{}, err
 	}
-	return FromRaw(raw)
+	out, err := FromRaw(raw)
+	if err != nil {
+		return TLS{}, err
+	}
+	out.Raw = raw
+	return out, nil
 }
 
 // FromRaw computes the fingerprints of a ClientHello that already exists as

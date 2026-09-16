@@ -14,6 +14,7 @@ JA3N and the Akamai string all match what the oracle reported.
 
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 
@@ -94,6 +95,20 @@ class Fingerprint:
     @property
     def alpn(self) -> list[str]:
         return list(self._d.get("alpn") or [])
+
+    @property
+    def client_hello(self) -> bytes:
+        """The ClientHello handshake message the values above were read from.
+
+        The bytes a server's first read would contain, without the 5-byte TLS
+        record header: ``client_hello[0] == 1``. Key shares and GREASE are
+        drawn afresh per call, so two calls differ in those bytes while
+        agreeing in everything a fingerprint hashes — which is why the field
+        is not part of :meth:`diff`. ``len()`` of it answers whether the
+        hello fits one TCP segment: with a post-quantum key share it does not,
+        for a browser and for this client alike (see ``post_quantum``).
+        """
+        return base64.b64decode(self._d.get("client_hello") or "")
 
     # -- HTTP --------------------------------------------------------------
 

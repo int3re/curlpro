@@ -34,6 +34,13 @@ type Fingerprint struct {
 	SigAlgs    []string `json:"sigalgs"`
 	ALPN       []string `json:"alpn"`
 
+	// ClientHello is the marshalled handshake message the fingerprints were
+	// computed from — the bytes a server's first read would contain, minus
+	// the 5-byte record header. Until it was exposed, seeing them meant
+	// standing up a socket server; the size alone answers "does this hello
+	// fit one TCP segment", which a field report had to measure by hand.
+	ClientHello []byte `json:"client_hello"`
+
 	// Headers is the order the names would go out in, for an ordinary GET.
 	Headers []string `json:"headers"`
 	// HeadersHTTP1 is the same over HTTP/1.1, where the set differs: Chrome
@@ -116,6 +123,11 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 				"force_http1: profile %q has no ALPN extension to restrict", s.profile.Name)
 		}
 	}
+	// The same edit the dial makes: a fingerprint of a session without the
+	// post-quantum share must show the hello that session sends.
+	if s.opts.DisablePostQuantum {
+		dropPostQuantum(spec)
+	}
 
 	tls, err := fingerprint.FromSpec(spec, u.Hostname())
 	if err != nil {
@@ -136,6 +148,10 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 		Curves:     tls.Curves,
 		SigAlgs:    tls.SigAlgs,
 		ALPN:       tls.ALPN,
+		// The message itself, as marshalled for this call: key shares and
+		// GREASE are drawn afresh, so two calls differ in those bytes and
+		// agree in everything a fingerprint hashes.
+		ClientHello: tls.Raw,
 	}
 
 	var pairs, pairsH1 []fingerprint.HeaderKV

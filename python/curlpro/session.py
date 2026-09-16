@@ -525,6 +525,12 @@ class Session:
     :param max_redirects: limit on the length of a redirect chain
     :param cookies: enable the cookie jar shared by the session's requests
     :param force_http1: do not offer h2, even when the profile lists it
+    :param post_quantum: ``False`` drops the X25519MLKEM768 group and its
+        1216-byte key share from the ClientHello — the hello of a browser
+        with post-quantum key agreement switched off by policy. JA4 is
+        unchanged, JA3 and the size move: a ~1.9 KB hello that spans two TCP
+        segments becomes one that fits in one. On by default, because the
+        browser sends the share
     :param resume: reuse TLS session tickets, as a browser does.
         A browser talking to one host resumes constantly; a client that
         never resumes is an observable anomaly, and one no fingerprint
@@ -589,6 +595,7 @@ class Session:
         max_redirects: int = 20,
         cookies: bool = True,
         force_http1: bool = False,
+        post_quantum: bool = True,
         resume: bool = False,
         http3: bool = False,
         alt_svc: bool = True,
@@ -640,6 +647,7 @@ class Session:
                     "max_redirects": _count(max_redirects, "max_redirects"),
                     "cookies": cookies,
                     "force_http1": force_http1,
+                    "post_quantum": post_quantum,
                     "resume": resume,
                     "http3": http3,
                     "alt_svc": alt_svc,
@@ -1013,7 +1021,7 @@ def request(method: str, url: str, *, impersonate: str = DEFAULT_PROFILE,
     session_kw = {
         k: kw.pop(k)
         for k in ("default_headers", "header_order", "allow_redirects",
-                  "max_redirects", "cookies", "force_http1", "http3")
+                  "max_redirects", "cookies", "force_http1", "http3", "post_quantum")
         if k in kw
     }
     with Session(impersonate, verify=verify, timeout=timeout, proxy=proxy,

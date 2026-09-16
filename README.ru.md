@@ -246,6 +246,7 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 | `cookies` | банка кук, общая для запросов сессии |
 | `default_headers`, `header_order`, `mode` | заголовки профиля, желаемый порядок, набор (`navigate`/`fetch`/`auto`) |
 | `force_http1`, `http3`, `alt_svc` | транспорт: запретить h2, сразу QUIC, автопереход по `Alt-Svc` |
+| `post_quantum` | `False` убирает группу X25519MLKEM768 и её key_share на 1216 байт — hello браузера с выключенным политикой постквантовым обменом. JA4 не меняется, JA3 и размер меняются: ~1,9 КБ в два TCP-сегмента становятся одним, который влезает в один |
 | `keep_alive`, `max_idle_conns`, `idle_conn_timeout` | переиспользование соединений и размер пула |
 | `resolve`, `ip_version` | подмена адреса узла, семейство адресов (`"4"`/`"6"`) |
 | `device`, `devices` | телефон для мобильных профилей и свой список устройств |
@@ -540,6 +541,7 @@ with curlpro.Session("chrome-151-windows") as s:
     print(fp.ja4)       # t13d1516h2_8daaf6152771_806a8c22fdea
     print(fp.akamai)    # 1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p
     print(fp.headers)   # порядок имён, как они уйдут
+    fp.client_hello     # сам ClientHello: байты, key_share свежие на каждый вызов
 ```
 
 Раньше эти значения можно было узнать только у browserleaks, то есть проверка
