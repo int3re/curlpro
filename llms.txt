@@ -41,7 +41,7 @@ reimplement it. The README is the front page for people.
 - `timeout` caps the whole request; `(connect, total)` is the pair; `response_timeout` is the wait for headers.
 - `ja3` moves per connection on Chrome ≥110 (extension shuffling); compare `ja4` or `ja3n`.
 - Bodies are already decompressed (gzip, deflate, br, zstd) and `r.text` already has the charset detected.
-- 50 profiles, 17 distinct JA4 values (the pre-Kyber Chromium group, Chrome 119–131 and Edge 119/120, flips between two JA4 spellings as its padding extension comes and goes with the ECH GREASE payload size, like the browsers); HTTP/3 sections on chrome-151-windows, chrome-152-windows, chrome-152-android, yandex-26.8-android; fetch sets on every Chromium/Firefox/Tor/Yandex profile, not on Safari or okhttp; 46 phones on the two Android profiles.
+- 50 profiles, 17 distinct JA4 values (the pre-Kyber Chromium group, Chrome 119–131 and Edge 119/120, flips between two JA4 spellings as its padding extension comes and goes with the ECH GREASE payload size, like the browsers); HTTP/3 sections on chrome-151-windows, chrome-152-windows, chrome-152-android, yandex-26.8-android; fetch sets on every Chromium/Firefox/Tor/Yandex profile, not on Safari or okhttp; 46 phones on the two Android profiles; a chosen device is written into the User-Agent on both (on chrome-152-android by the owner's decision — stock Chrome ≥110 sends the reduced `Android 10; K`), and without `device=` the captured string goes out.
 - From a repository checkout call `curlpro.load_profiles("profiles")`; from the wheel nothing.
 - Public echo services lie: postman-echo.com is behind Cloudflare, which rewrites `Accept-Encoding`. Judge headers on `python/tests/rawserver.py`.
 

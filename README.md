@@ -687,8 +687,8 @@ them only after the site asked with an `Accept-CH` header.
 
 ```python
 with curlpro.Session("chrome-152-android", device="random") as s:
-    s.get(url)          # sec-ch-ua-model: "SM-S911B" — but only once the site
-                        # asked for the hints; before that there are none
+    s.get(url)          # User-Agent: Android 15; SM-S911B — and sec-ch-ua-model:
+                        # "SM-S911B" once the site asked for the hints
 ```
 
 The device is chosen once per session: a real client does not swap phones between
@@ -697,6 +697,14 @@ Google's Play device catalogue, weighted to the Russian market, each on a
 plausible Android version — so `device="random"` draws a believable phone while
 the TLS stays one. Your own list goes into the `devices` parameter, or you set
 one phone by name.
+
+One deliberate departure from Chrome, decided by the project's owner: a chosen
+device is written into the `User-Agent` as well (`Android 15; SM-S911B`), the way
+Yandex Browser writes it, so the 46 phones are 46 strings on Chrome too. A stock
+Chrome ≥110 sends the reduced `Android 10; K` and discloses the model only in the
+hints — and a defence that knows about the reduction can tell. Without a device
+the profile goes out as captured, reduced string included; the string and the
+hints always name the same phone and the same Android.
 
 ## Navigation vs fetch
 

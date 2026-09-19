@@ -381,13 +381,17 @@ What each family carries, resolved through inheritance:
 **Mobile.** `chrome-152-android` and `yandex-26.8-android` carry a pool of 46
 real phones — exact `ro.product.model` strings from Google's Play device
 catalogue, on plausible Android versions. `device="Pixel 8"` or
-`device="random"` picks one for the session. On Chrome the model travels in the
+`device="random"` picks one for the session. The model travels in the
 `sec-ch-ua-model` and `sec-ch-ua-platform-version` client hints, sent only after
-the site asked with `Accept-CH` (and at once on `Critical-CH`); the User-Agent
-stays `Android 10; K` as Chrome's does. Yandex writes the model into the
-User-Agent itself, so there the pool is 46 distinct strings. Your own list goes
-in `devices=[{"name": ..., "model": ..., "platform_version": ...}]`. A name not
-in the list is refused.
+the site asked with `Accept-CH` (and at once on `Critical-CH`), and — on both
+profiles — in the User-Agent string, so the pool is 46 distinct strings. On
+Yandex that is what the browser does. On Chrome it is a deliberate departure,
+decided by the project's owner: a stock Chrome ≥110 sends the reduced
+`Android 10; K` for every phone and discloses the model only in the hints, and
+a defence that knows about the reduction can tell an unreduced string. Without
+a device the profile goes out as captured, reduced string included. Your own
+list goes in `devices=[{"name": ..., "model": ..., "platform_version": ...}]`.
+A name not in the list is refused.
 
 **Inheritance.** A profile may name `based_on`; it then stores only its
 differences. Chrome 110 over Chrome 98 is one line: extension shuffling on.

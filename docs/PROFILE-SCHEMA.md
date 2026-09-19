@@ -276,7 +276,11 @@ From version 110 Chrome cut the model and the system version out of the
 `User-Agent`: a capture of a Pixel 7 on Android 17 gives
 `Mozilla/5.0 (Linux; Android 10; K) …` — the same placeholder on every phone. The
 real device is reported through the hints, and the browser sends them **only
-after the site has asked** with an `Accept-CH` header in a response:
+after the site has asked** with an `Accept-CH` header in a response. (The
+`chrome-152-android` profile nevertheless carries a `user_agent_template`, by
+the owner's decision: with a device chosen the model and Android version are
+written into the string as Yandex writes them; without one the captured,
+reduced string goes out.)
 
 ```
 sec-ch-ua-model: "Pixel 7"

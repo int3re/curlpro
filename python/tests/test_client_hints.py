@@ -205,17 +205,42 @@ def test_unknown_device_is_an_error():
         curlpro.Session("chrome-152-android", device="Nokia 3310")
 
 
-def test_user_agent_stays_frozen():
-    """The model is not put into the User-Agent: Chrome has a placeholder there for everyone."""
+def test_a_chosen_device_goes_into_the_chrome_user_agent_too():
+    """The owner's decision, against what Chrome does: a stock Chrome ≥110 sends
+    the reduced "Android 10; K" for every phone and discloses the model only in
+    the hints. Here a chosen device is written into the string as well, so the
+    46 phones are 46 User-Agent strings on Chrome the way they are on Yandex.
+    The string and the hints must still say the same phone and the same Android."""
     with HintServer(ALL_HINTS) as srv:
         with curlpro.Session("chrome-152-android", verify=False,
                              force_http1=True, device="Galaxy S23") as s:
             s.get(srv.url)
             s.get(srv.url)
-    m = _model("Galaxy S23")
+    m, v = _model("Galaxy S23"), _pv("Galaxy S23")
     ua = srv.value(1, "user-agent")
-    assert "Android 10; K" in ua and m not in ua, ua
+    assert f"Android {v.split('.')[0]}; {m})" in ua, ua
+    assert "Android 10; K" not in ua
+    assert "Chrome/152.0.0.0 Mobile Safari/537.36" in ua
     assert srv.value(1, "sec-ch-ua-model") == f'"{m}"'
+    assert srv.value(1, "sec-ch-ua-platform-version") == f'"{v}"'
+
+
+def test_without_a_device_chrome_keeps_the_reduced_user_agent():
+    """No device chosen: the profile goes out as captured, reduced string included."""
+    with HintServer(ALL_HINTS) as srv:
+        with curlpro.Session("chrome-152-android", verify=False, force_http1=True) as s:
+            s.get(srv.url)
+            s.get(srv.url)
+    assert "Android 10; K" in srv.value(1, "user-agent")
+    assert srv.value(1, "sec-ch-ua-model") is None
+
+
+def test_random_devices_are_visible_in_the_chrome_user_agent():
+    seen = set()
+    for _ in range(30):
+        with curlpro.Session("chrome-152-android", device="random") as s:
+            seen.add(s.fingerprint().user_agent)
+    assert len(seen) >= 10, f"random reached only {len(seen)} User-Agent strings"
 
 
 def test_yandex_puts_the_device_into_the_user_agent():

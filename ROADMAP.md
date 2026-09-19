@@ -742,6 +742,16 @@ through `tls.resume_omits_session_ticket`, honoured only once a ticket exists
 so the first hello and every fingerprint stay what they were. A client that
 never resumed was a tell no fingerprint measured; it is gone. ABI 0.19.
 
+**Addendum, 2026-09-20 — the device in Chrome's User-Agent.** By the owner's
+decision, and against what Chrome does, `chrome-152-android` carries a
+`user_agent_template`: a chosen device is written into the string
+(`Android 15; SM-S911B`) as Yandex writes it, so the 46 phones are 46 strings
+on Chrome as well. The concern was raised and overruled: a stock Chrome ≥110
+sends the reduced `Android 10; K` for every phone, and a defence that knows
+about the reduction can tell an unreduced string. Without a device the
+captured, reduced string goes out; the string and the hints always name the
+same phone and the same Android. Data only, no ABI change.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:
