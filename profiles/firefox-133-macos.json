@@ -120,7 +120,8 @@
         "type": "encrypted_client_hello"
       }
     ],
-    "permute_extensions": false
+    "permute_extensions": false,
+    "resume_omits_session_ticket": true
   },
   "http1": {
     "order": [
@@ -132,6 +133,7 @@
       "Content-Type",
       "Content-Length",
       "Origin",
+      "Referer",
       "Connection",
       "Upgrade-Insecure-Requests",
       "Sec-Fetch-Dest",
@@ -204,6 +206,14 @@
         "value": ""
       },
       {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
         "key": "upgrade-insecure-requests",
         "value": "1"
       },
@@ -222,10 +232,6 @@
       {
         "key": "sec-fetch-user",
         "value": "?1"
-      },
-      {
-        "key": "cookie",
-        "value": ""
       },
       {
         "key": "priority",

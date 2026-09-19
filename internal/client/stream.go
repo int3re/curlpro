@@ -225,7 +225,12 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 		return nil, attemptOutcome{}, err
 	}
 	// The chain initiator: sec-fetch-site is computed from it on every hop.
+	// A page, when the caller named one, is the initiator of the whole chain;
+	// otherwise the first URL stands in.
 	initiator := current.URL
+	if page := s.pageFor(r); page != "" {
+		initiator = page
+	}
 	var history []Redirect
 
 	policy := s.retryPolicy(r)

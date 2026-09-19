@@ -73,6 +73,21 @@ func curlpro_session_suppress_header(id C.longlong, name *C.char) (out *C.char) 
 	return respond(map[string]any{"headers": s.Headers(), "suppressed": s.SuppressedHeaders()}, nil)
 }
 
+//export curlpro_session_set_page
+func curlpro_session_set_page(id C.longlong, page *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	// The page moves as a scraper moves: after a navigation the next fetches
+	// are made from the page that arrived. An empty string clears it.
+	if err := s.SetPage(C.GoString(page)); err != nil {
+		return respond(nil, err)
+	}
+	return respond(map[string]any{"page": s.Page()}, nil)
+}
+
 //export curlpro_session_reset_headers
 func curlpro_session_reset_headers(id C.longlong) (out *C.char) {
 	defer recoverInto(&out)

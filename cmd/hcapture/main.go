@@ -58,10 +58,15 @@ func main() {
 	timeout := flag.Duration("timeout", 25*time.Second, "how long to wait for requests")
 	out := flag.String("json", "", "file to write the capture to")
 	certs := flag.String("certs", "capture/certs", "directory holding tls.crt and tls.key")
+	flag.BoolVar(&origins, "origins", false, "serve the three-origin page: what a page sends to its own origin, its site and another site")
+	flag.BoolVar(&closeAfter, "close", false, "close every connection after its first response, so later requests resume TLS on new ones")
 	flag.Parse()
 
 	certFile = *certs + "/tls.crt"
 	keyFile = *certs + "/tls.key"
+	if _, port, err := net.SplitHostPort(*listen); err == nil {
+		listenPort = port
+	}
 	// Alt-Svc is the only way to move a browser onto QUIC when
 	// --origin-to-force-quic-on cannot be passed: on Android there are no launch
 	// flags. The browser switches to HTTP/3 from the request after this header.
@@ -113,8 +118,14 @@ func main() {
 type record struct {
 	Proto   string   `json:"proto"`
 	Method  string   `json:"method"`
+	Host    string   `json:"host,omitempty"`
 	Path    string   `json:"path"`
 	Headers []string `json:"headers"`
+	// Resumed says the TLS session was resumed with a ticket; ClientHello is
+	// the first record of the connection, base64, on the connection's first
+	// request only.
+	Resumed     bool   `json:"resumed,omitempty"`
+	ClientHello string `json:"client_hello,omitempty"`
 }
 
 type srv struct {
@@ -142,7 +153,7 @@ func (s *srv) add(r record) {
 	s.mu.Lock()
 	s.records = append(s.records, r)
 	s.mu.Unlock()
-	fmt.Fprintf(os.Stderr, "%s %s %s (%d headers)\n", r.Proto, r.Method, r.Path, len(r.Headers))
+	fmt.Fprintf(os.Stderr, "%s %s %s%s (%d headers)\n", r.Proto, r.Method, r.Host, r.Path, len(r.Headers))
 }
 
 func (s *srv) track(c io.Closer) {
@@ -192,8 +203,77 @@ const log = m => { document.getElementById('out').textContent += m + "\n"; };
 
 const second = `<!doctype html><meta charset=utf-8><title>second</title><body>ok`
 
+// The origins run: what a browser sends when a page on one origin talks to
+// its own origin, to a sibling of the same site and to another site — and
+// what a navigation and a form post from a page carry. Three names on the
+// same stand: the page lives on www.a.localhost, api.a.localhost is the same
+// site, b.localhost is another site (the public suffix list has no entry for
+// localhost, so a.localhost and b.localhost are two registrable domains, in
+// Chromium and in our own siteRelation alike).
+//
+// Every fetch is wrapped: a CORS failure must not stop the chain, and the
+// request has reached the stand by then anyway.
+const (
+	originsPage   = "www.a.localhost"
+	originsSite   = "api.a.localhost"
+	originsOther  = "b.localhost"
+	originsScript = `<!doctype html><meta charset=utf-8><title>origins</title>
+<body><h1>origins</h1><pre id=out></pre>
+<script>
+const log = m => { document.getElementById('out').textContent += m + "\n"; };
+const port = location.port;
+const targets = {so: location.origin, ss: 'https://api.a.localhost:' + port, cs: 'https://b.localhost:' + port};
+const quiet = async f => { try { await f(); } catch (e) { log('x ' + e); } };
+(async () => {
+  for (const [k, o] of Object.entries(targets)) {
+    await quiet(() => fetch(o + '/' + k + '-get'));
+    await quiet(() => fetch(o + '/' + k + '-post', {method: 'POST', body: 'a=1'}));
+    await quiet(() => fetch(o + '/' + k + '-json', {method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Api-Key': 'v1'}, body: '{"a":1}'}));
+    await quiet(() => new Promise(r => { const x = new XMLHttpRequest();
+      x.open('GET', o + '/' + k + '-xhr'); x.onloadend = r; x.onerror = r; x.send(); }));
+    log(k);
+  }
+  await new Promise(r => { const i = new Image(); i.onload = i.onerror = r;
+    i.src = 'https://b.localhost:' + port + '/cs-img'; });
+  await new Promise(r => { const s = document.createElement('script'); s.onload = s.onerror = r;
+    s.src = 'https://b.localhost:' + port + '/cs-script'; document.head.appendChild(s); });
+  setTimeout(() => { location.href = 'https://b.localhost:' + port + '/cs-nav'; }, 300);
+})();
+</script>`
+	// The cross-site page: a form post back to the first origin, script-submitted.
+	originsNav = `<!doctype html><meta charset=utf-8><title>nav</title><body>nav
+<form id=f method=post action="https://www.a.localhost:PORT/form-post"><input name=a value=1></form>
+<script>setTimeout(() => document.getElementById('f').submit(), 300);</script>`
+	// The form target: a same-origin script navigation to finish.
+	originsForm = `<!doctype html><meta charset=utf-8><title>form</title><body>form
+<script>setTimeout(() => { location.href = '/so-nav'; }, 300);</script>`
+)
+
+// origins is set by -origins: the stand serves the three-name page instead.
+var origins bool
+
+// originsStart is the page's path (query included), as the browser opens it.
+const originsStart = "/app/index.html?tab=1"
+
 // route returns the response body and its type.
 func route(path string) (string, string) {
+	if origins {
+		switch path {
+		case originsStart:
+			// A page at a deep path with a query: it separates a full-URL
+			// Referer from an origin-only one, which the root page could not.
+			return originsScript, "text/html; charset=utf-8"
+		case "/cs-nav":
+			return strings.ReplaceAll(originsNav, "PORT", listenPort), "text/html; charset=utf-8"
+		case "/form-post":
+			return originsForm, "text/html; charset=utf-8"
+		case "/so-nav":
+			return second, "text/html; charset=utf-8"
+		case "/cs-script":
+			return "void 0;", "text/javascript"
+		}
+	}
 	switch path {
 	case "/":
 		return page, "text/html; charset=utf-8"
@@ -203,6 +283,9 @@ func route(path string) (string, string) {
 		return `{"ok":true}`, "application/json"
 	}
 }
+
+// listenPort is the stand's port, for the pages that name another host.
+var listenPort = "8443"
 
 // ---------------------------------------------------------------------------
 // HTTP/2
@@ -232,7 +315,7 @@ func (s *srv) listenTCP(addr string, wg *sync.WaitGroup) error {
 	if err != nil {
 		return err
 	}
-	ln, err := tls.Listen("tcp", addr, cfg)
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
@@ -245,27 +328,78 @@ func (s *srv) listenTCP(addr string, wg *sync.WaitGroup) error {
 			if err != nil {
 				return
 			}
-			go s.serveConn(c.(*tls.Conn))
+			rc := &recordingConn{Conn: c}
+			go s.serveConn(tls.Server(rc, cfg), rc)
 		}
 	}()
 	return nil
 }
 
-func (s *srv) serveConn(c *tls.Conn) {
+func (s *srv) serveConn(c *tls.Conn, rc *recordingConn) {
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(2 * time.Minute))
 	if err := c.Handshake(); err != nil {
 		return
 	}
 	if c.ConnectionState().NegotiatedProtocol == "h2" {
-		s.serveH2(c)
+		s.serveH2(c, c.ConnectionState().DidResume, rc.clientHello())
 	}
 }
 
+// recordingConn keeps the first TLS record a client sends — its ClientHello —
+// so that a resumed hello can be compared with a first one byte for byte.
+// Recording stops once the record is complete; the rest is passed through.
+type recordingConn struct {
+	net.Conn
+	mu    sync.Mutex
+	hello []byte
+	done  bool
+}
+
+func (r *recordingConn) Read(b []byte) (int, error) {
+	n, err := r.Conn.Read(b)
+	r.mu.Lock()
+	if !r.done && n > 0 {
+		r.hello = append(r.hello, b[:n]...)
+		if len(r.hello) >= 5 {
+			want := 5 + int(binary.BigEndian.Uint16(r.hello[3:5]))
+			if len(r.hello) >= want {
+				r.hello = r.hello[:want]
+				r.done = true
+			}
+		}
+	}
+	r.mu.Unlock()
+	return n, err
+}
+
+func (r *recordingConn) clientHello() []byte {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]byte(nil), r.hello...)
+}
+
+// closeAfter is set by -close: every connection is closed after its first
+// response, so the page's next request has to open a new one — and a client
+// holding a session ticket resumes on it. That is how the resumed ClientHello
+// of a browser is captured: on a kept-alive connection there is no second
+// handshake to see.
+var closeAfter bool
+
 // serveH2 parses the frames by hand: net/http loses the header order, and that
 // is exactly what is being captured here.
-func (s *srv) serveH2(c net.Conn) {
+func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte) {
 	const preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+	answered := 0
+	// finish is what -close does after a response: a GOAWAY, then the socket.
+	finish := func(fr *http2.Framer) bool {
+		answered++
+		if !closeAfter {
+			return false
+		}
+		_ = fr.WriteGoAway(0, http2.ErrCodeNo, nil)
+		return true
+	}
 	buf := make([]byte, len(preface))
 	if _, err := io.ReadFull(c, buf); err != nil || string(buf) != preface {
 		return
@@ -293,19 +427,27 @@ func (s *srv) serveH2(c net.Conn) {
 		case *http2.PingFrame:
 			_ = fr.WritePing(true, f.Data)
 		case *http2.MetaHeadersFrame:
-			r := record{Proto: "h2"}
+			r := record{Proto: "h2", Resumed: resumed}
+			if answered == 0 && len(hello) > 0 {
+				r.ClientHello = base64.StdEncoding.EncodeToString(hello)
+			}
 			for _, hf := range f.Fields {
 				switch hf.Name {
 				case ":method":
 					r.Method = hf.Value
 				case ":path":
 					r.Path = hf.Value
+				case ":authority":
+					r.Host = hf.Value
 				}
 				r.Headers = append(r.Headers, hf.Name+": "+hf.Value)
 			}
 			if f.StreamEnded() {
 				s.add(r)
 				s.respondH2(fr, f.StreamID, r.Path)
+				if finish(fr) {
+					return
+				}
 			} else {
 				pending[f.StreamID] = r
 			}
@@ -319,6 +461,9 @@ func (s *srv) serveH2(c net.Conn) {
 					delete(pending, f.StreamID)
 					s.add(r)
 					s.respondH2(fr, f.StreamID, r.Path)
+					if finish(fr) {
+						return
+					}
 				}
 			}
 		case *http2.GoAwayFrame:
@@ -340,7 +485,14 @@ func (s *srv) respondH2(fr *http2.Framer, id uint32, path string) {
 	if altSvc != "" {
 		_ = enc.WriteField(hpack.HeaderField{Name: "alt-svc", Value: altSvc})
 	}
-	if path == "/" {
+	if origins {
+		// CORS answers, so the cross-origin fetches on the page complete and the
+		// chain moves on; the preflight itself is recorded like any request.
+		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-origin", Value: "*"})
+		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-headers", Value: "content-type, x-api-key"})
+		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-methods", Value: "GET, POST, OPTIONS"})
+	}
+	if path == "/" || (origins && path == originsStart) {
 		// The cookie is set on the first page so that later requests show its
 		// position: in the profile cookie is a slot placed on a guess.
 		_ = enc.WriteField(hpack.HeaderField{Name: "set-cookie", Value: "hc=1; path=/"})
@@ -679,7 +831,7 @@ func (s *srv) serveH3Stream(str *quic.Stream, dec *cqpack.Decoder) {
 	_ = enc.WriteField(qpack.HeaderField{Name: "content-length", Value: fmt.Sprint(len(body))})
 	_ = enc.WriteField(qpack.HeaderField{Name: "accept-ch", Value: acceptCH})
 	_ = enc.WriteField(qpack.HeaderField{Name: "critical-ch", Value: acceptCH})
-	if rec.Path == "/" {
+	if rec.Path == "/" || (origins && rec.Path == originsStart) {
 		_ = enc.WriteField(qpack.HeaderField{Name: "set-cookie", Value: "hc=1; path=/"})
 	}
 	_ = enc.Close()
@@ -747,6 +899,12 @@ func launch(browser, origin string, h3 bool) func() {
 		"--no-default-browser-check",
 		"--ignore-certificate-errors",
 	}
+	if origins {
+		// Chromium resolves *.localhost to loopback on its own; the rule makes
+		// that explicit rather than relied upon. The page is on www.a.localhost.
+		args = append(args, "--host-resolver-rules=MAP *.localhost 127.0.0.1")
+		origin = originsPage + ":" + listenPort
+	}
 	if h3 {
 		args = append(args, "--enable-quic", "--origin-to-force-quic-on="+origin)
 		// --ignore-certificate-errors does not extend to the QUIC path: Chrome
@@ -758,7 +916,11 @@ func launch(browser, origin string, h3 bool) func() {
 			fmt.Fprintln(os.Stderr, "key fingerprint:", err)
 		}
 	}
-	args = append(args, "https://"+origin+"/")
+	start := "https://" + origin + "/"
+	if origins {
+		start = "https://" + origin + originsStart
+	}
+	args = append(args, start)
 	cmd := exec.Command(browser, args...)
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, "launching the browser:", err)
@@ -791,9 +953,15 @@ func (s *srv) report(out string) {
 		fmt.Println("no request was captured")
 		return
 	}
-	sort.SliceStable(recs, func(i, j int) bool { return recs[i].Path < recs[j].Path })
+	if !origins {
+		sort.SliceStable(recs, func(i, j int) bool { return recs[i].Path < recs[j].Path })
+	}
 	for _, r := range recs {
-		fmt.Printf("\n=== %s %s %s\n", r.Proto, r.Method, r.Path)
+		mark := ""
+		if r.Resumed {
+			mark = "  [resumed TLS]"
+		}
+		fmt.Printf("\n=== %s %s %s%s%s\n", r.Proto, r.Method, r.Host, r.Path, mark)
 		for _, h := range r.Headers {
 			name, value, _ := strings.Cut(h, ": ")
 			if len(value) > 60 {

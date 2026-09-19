@@ -247,6 +247,8 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 | `default_headers`, `header_order`, `mode` | заголовки профиля, желаемый порядок, набор (`navigate`/`fetch`/`auto`) |
 | `force_http1`, `http3`, `alt_svc` | транспорт: запретить h2, сразу QUIC, автопереход по `Alt-Svc` |
 | `post_quantum` | `False` убирает группу X25519MLKEM768 и её key_share на 1216 байт — hello браузера с выключенным политикой постквантовым обменом. JA4 не меняется, JA3 и размер меняются: ~1,9 КБ в два TCP-сегмента становятся одним, который влезает в один |
+| `resume` | возобновление TLS-сессии, включено по умолчанию: второе соединение к хосту несёт билет, как у браузера. Возобновляющий hello измерен на Chrome 153 и Firefox 156 и воспроизведён, включая убранный у Firefox `session_ticket`; первый hello не тронут |
+| `page` | страница, с которой делаются запросы: `Referer`, `Origin` и `sec-fetch-site` выводятся из неё так, как их выводит браузер (см. ниже); `s.page = url` двигает её |
 | `keep_alive`, `max_idle_conns`, `idle_conn_timeout` | переиспользование соединений и размер пула |
 | `resolve`, `ip_version` | подмена адреса узла, семейство адресов (`"4"`/`"6"`) |
 | `device`, `devices` | телефон для мобильных профилей и свой список устройств |
@@ -274,6 +276,7 @@ s.get(url, timeout=(3, 30), protocol="h2", cookies=False, retries=0)
 | `session_headers` | `False` — без заголовков, добавленных сессии |
 | `default_headers` | `True`/`False` — заголовки профиля, в обе стороны |
 | `mode` | `navigate` или `fetch` — какой набор заголовков брать; `fetch` на профиле без набора fetch отклоняется с причиной, а не уходит навигацией |
+| `page` | страница, с которой сделан этот запрос, поверх сессионной; `False` шлёт его без инициатора |
 | `allow_redirects`, `max_redirects`, `retries`, … | переопределения политик сессии |
 | `expect` | проверка ответа (см. ниже) |
 | `rollback_cookies` | откатить банку, если запрос не удался |
@@ -701,6 +704,24 @@ s.get(url, headers={"X-Api-Key": "k"}, mode="navigate")   # если нужно 
 отклоняется с причиной, а не уходит с навигационным набором: `sec-fetch-mode:
 cors` рядом с `sec-fetch-user: ?1` — запрос, которого не делает ни один браузер,
 и антибот читает эту пару даром. У всех профилей Chromium и Firefox набор есть.
+
+Браузерный fetch идёт со страницы, и `Referer`, `Origin` и `sec-fetch-site`
+говорят, с какой. Назовите её, и все три выводятся так, как их выводят Chrome 153
+и Firefox 156 (измерено, и оба сошлись в каждом значении): Referer — URL страницы
+на её собственный origin и origin страницы на любой другой, Origin — origin
+страницы на каждом кросс-origin fetch и на всём, что с телом, а
+`sec-fetch-site` — отношение страницы к адресу, ухудшающееся вдоль цепочки
+редиректов.
+
+```python
+r = s.get("https://example.com/app")                 # переход: sec-fetch-site none, без Referer
+s.page = r.url                                       # дальше — с этой страницы
+s.post("https://api.example.com/v1/x", json_body=d)  # origin: https://example.com, referer: https://example.com/, cross-site
+```
+
+Без страницы fetch уходит с собственного origin запроса, как и раньше. Аудит
+сообщает о рукописном `Referer` рядом с `sec-fetch-site: none` — самом частом
+способе сказать «со страницы» и «ниоткуда» в одном запросе.
 
 ## Профили как данные
 

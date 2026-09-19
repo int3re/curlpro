@@ -82,6 +82,14 @@ type headerKV struct{ Key, Value string }
 func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []string) []headerKV {
 	useDefaults := s.useDefaultHeaders(r)
 	tpl := s.template(r)
+	// The initiator, when the caller named one: Referer, Origin and
+	// sec-fetch-site are derived from it below, the way a browser derives them.
+	var page *url.URL
+	if p := s.pageFor(r); p != "" {
+		if parsed, err := url.Parse(p); err == nil {
+			page = parsed
+		}
+	}
 
 	out := make([]headerKV, 0, 16)
 	// slot keeps the actual map key for every lowercase name.
@@ -124,6 +132,12 @@ func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []st
 				continue
 			}
 			if v := h.For(r.Method); v != "" {
+				// With an initiator the relation is computed rather than taken
+				// from the profile, whose value describes a request with none:
+				// a typed navigation (none) or a fetch to the page's own origin.
+				if page != nil && strings.EqualFold(h.Key, "sec-fetch-site") {
+					v = siteRelation(page.String(), u.String())
+				}
 				add(caseFor(h.Key, h1Order), v)
 				continue
 			}
@@ -142,10 +156,24 @@ func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []st
 				}
 			case "origin":
 				// A browser sends Origin on any request with a body, including a
-				// navigational form POST (measured on Chromium 148). The value is
-				// the request's own origin: the client has no initiator.
-				if sendsOrigin(r.Method) {
+				// navigational form POST (measured on Chromium 148), and on every
+				// cross-origin fetch, with or without a body (Chrome 153 and
+				// Firefox 156). The value is the initiator's origin; without one
+				// the request's own origin stands in — the same-origin case.
+				switch {
+				case page != nil && (sendsOrigin(r.Method) || (tpl.fetch && !sameOrigin(page.String(), u.String()))):
+					add(caseFor(h.Key, h1Order), originOf(page))
+				case page == nil && sendsOrigin(r.Method):
 					add(caseFor(h.Key, h1Order), originOf(u))
+				}
+			case "referer":
+				// strict-origin-when-cross-origin, the default policy of both
+				// browsers: the page's URL to its own origin, the page's origin
+				// elsewhere, nothing from https to http.
+				if page != nil {
+					if v := refererFor(page, u); v != "" {
+						add(caseFor(h.Key, h1Order), v)
+					}
 				}
 			}
 		}
@@ -406,6 +434,23 @@ func sendsOrigin(method string) bool {
 
 func originOf(u *url.URL) string {
 	return u.Scheme + "://" + u.Host
+}
+
+// refererFor is the Referer a page sends to a URL under
+// strict-origin-when-cross-origin (measured on Chrome 153 and Firefox 156):
+// the page's URL, fragment and credentials stripped, to its own origin; the
+// page's origin with a trailing slash to any other; nothing at all when a
+// secure page reaches for a cleartext URL.
+func refererFor(page, u *url.URL) string {
+	if page.Scheme == "https" && u.Scheme != "https" {
+		return ""
+	}
+	if sameOrigin(page.String(), u.String()) {
+		full := *page
+		full.Fragment, full.RawFragment, full.User = "", "", nil
+		return full.String()
+	}
+	return originOf(page) + "/"
 }
 
 // wireOrder returns the names for the service order key, in lowercase.

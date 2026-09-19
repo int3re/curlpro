@@ -242,6 +242,14 @@ func (s *Session) websocketHeaders(u *url.URL, key string, opts WebSocketOptions
 				add(h.Key, ua)
 			}
 		case "origin":
+			// The page that opened the socket, when one is named; the socket's
+			// own origin otherwise, the way a page on that origin would.
+			if page := s.pageFor(nil); page != "" {
+				if pu, err := url.Parse(page); err == nil {
+					add(h.Key, originOf(pu))
+					continue
+				}
+			}
 			add(h.Key, "https://"+u.Host)
 		case "sec-websocket-key":
 			add(h.Key, key)

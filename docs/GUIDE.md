@@ -103,7 +103,7 @@ touch it.
 | `cookies` | `True` | the jar shared by the session's requests |
 | `force_http1` | `False` | offer `http/1.1` alone in ALPN. This changes JA4 (two characters of it), legitimately: a browser without h2 looks like that |
 | `post_quantum` | `True` | `False` drops X25519MLKEM768 and its 1216-byte key share: the hello of a browser with post-quantum key agreement off by policy. JA4 stays, JA3 and the size move, the hello fits one TCP segment |
-| `resume` | `False` | TLS session resumption with tickets, one cache per session. Off because the resumed hello has not been measured against oracles |
+| `resume` | `True` | TLS session resumption with tickets, one cache per session, as a browser does. On since the resuming hello was measured (Chrome 153 and Firefox 156): the first hello plus `pre_shared_key` last, no early data, and for Firefox without `session_ticket` — which is what goes out. The first hello of a session is untouched, so every fingerprint stays what it was |
 | `http3` | `False` | go to QUIC at once. The profile needs an `http3` section (four have one, section 12) |
 | `alt_svc` | `True` | move to HTTP/3 after an `Alt-Svc` header, as a browser does; a failed attempt falls back to TCP and is not retried for 5 minutes, doubling up to 24 hours. Needs an `http3` section; not through a proxy |
 | `resolve` | `None` | `{"example.com:443": "10.0.0.7"}` — curl's `--resolve`; SNI and `Host` keep the name. Not through a proxy |
@@ -116,6 +116,7 @@ touch it.
 | `retry_backoff`, `retry_max_backoff` | `0.2`, `10.0` | seconds; exponential between the two |
 | `respect_retry_after` | `True` | a `Retry-After` header sets the wait |
 | `mode` | `"auto"` | the header set: `navigate`, `fetch`, or decided per request (section 7) |
+| `page` | `None` | the page the requests are made from — the initiator. Derives `Referer`, `Origin` and `sec-fetch-site` the way a browser does (section 7); `s.page = url` moves it as the scraper moves. Must be an absolute http(s) URL |
 | `device`, `devices` | `None` | the phone for mobile profiles — a name from the profile's list or `"random"` — and a list of your own (section 11) |
 | `max_response_size` | `0` | a body limit in bytes; exceeding it raises with code `too_large`. Binds `read()`, not `iter_content()` |
 | `hooks` | `None` | `{"request": [...], "response": [...], "error": [...]}`; section 9 |
@@ -151,6 +152,7 @@ overridden here for one request; `None` means "the session's".
 | `proxy` | an address, or `False` to go directly past the session proxy |
 | `allow_redirects`, `max_redirects`, `retries`, `retry_*`, `respect_retry_after` | overrides of the session policy; `retries=0` switches the session's retries off for this request |
 | `mode` | `"navigate"` or `"fetch"`; `fetch` on a profile without a fetch set is refused with the reason |
+| `page` | the page this request is made from, overriding the session's; `False` sends it with no initiator at all |
 | `expect` | an `Expect(...)`; a mismatch raises `ExpectationFailed` (section 8) |
 | `rollback_cookies` | `True` restores the jar to its state before the request if the request fails, a failed expectation included |
 
@@ -240,6 +242,37 @@ browser does with a custom header. When that is wrong for you, say
 refused with the reason: the navigation set under a fetch name — `sec-fetch-user:
 ?1` beside `sec-fetch-mode: cors` — is a request no browser makes, and an
 anti-bot reads the pair for free.
+
+**The page a request is made from.** A browser's fetch always comes from a page,
+and three headers say which: `Referer`, `Origin` and `sec-fetch-site`. Without a
+page the profile's own values go out — a navigation typed into the bar
+(`sec-fetch-site: none`, no Referer) and a fetch from the request's own origin.
+Name the page, on the session or the request, and the three are derived the way
+Chrome 153 and Firefox 156 derive them (measured on `cmd/hcapture -origins`,
+where the two agreed on every value):
+
+```python
+r = s.get("https://example.com/app")                 # the navigation: none, no Referer
+s.page = r.url                                       # from here on, from that page
+s.post("https://api.example.com/v1/x", json_body=...)
+# origin: https://example.com   referer: https://example.com/   sec-fetch-site: cross-site
+s.get("https://example.com/next", page=False)        # one request with no initiator
+```
+
+| Header | Rule (default policy `strict-origin-when-cross-origin`) |
+|---|---|
+| `Referer` | the page's URL, fragment and credentials stripped, to its own origin; the page's origin with a trailing slash to any other; nothing from an https page to an http URL |
+| `Origin` | the page's origin — on every cross-origin fetch, with or without a body, and on any request with a body, a form post included; a same-origin GET fetch carries none |
+| `sec-fetch-site` | `same-origin`, `same-site` (one registrable domain, by the public suffix list) or `cross-site`; along a redirect chain it is the relation of the page to every URL of the chain and only ever degrades |
+
+A navigation from a page is treated as a click: `sec-fetch-user: ?1` stays. The
+Referer sits where each family puts it — after `sec-fetch-dest` in Chromium,
+after `Origin` in Firefox — through a slot in every profile. Your own `Referer`,
+`Origin` or `sec-fetch-site` header wins over the derived one. Two things are
+deliberately not done: cookies are sent as the jar says, not withheld on
+cross-origin fetches the way an uncredentialed `fetch()` withholds them, and no
+CORS preflight is sent before a non-simple cross-origin request — a browser
+sends an `OPTIONS` first, and that is measured but not yet reproduced.
 
 ## 8. Expectations and cookie rollback
 
@@ -451,6 +484,7 @@ profile is silent except a phone profile with no device chosen:
 | `navigation_headers_on_fetch` | high | `sec-fetch-user` or `upgrade-insecure-requests` beside fetch metadata that says fetch |
 | `accept_encoding` | medium | an `accept-encoding` that is not the profile's, or none at all |
 | `no_user_agent` | high | no User-Agent at all — the shape `default_headers=False` leaves behind |
+| `referer_site` | high | a Referer that disagrees with the fetch metadata or the Origin beside it: a hand-written Referer next to `sec-fetch-site: none`, a Referer from another origin under `same-origin`, or Origin and Referer naming two pages |
 
 `Persona` binds one identity — profile, proxy, device, headers (removals
 included), cookies, free-form `notes` — to one JSON file:
@@ -484,6 +518,7 @@ should reach for the existing feature instead. Each line names it:
 - **Header order and case** — the profile, plus `header_order=[..., ...]` for edits; never build header lists by hand.
 - **Removing a header** — `None`, not `default_headers=False`.
 - **Fetch versus navigation sets** — `mode`, chosen automatically.
+- **Referer, Origin and sec-fetch-site for a request from a page** — `page=` on the session or the request, never a hand-written `Referer`.
 - **Client hints and phone models** — `device=`, `devices=`, already answering `Accept-CH` and `Critical-CH`.
 - **Proxies** with environment variables, SOCKS5 with remote DNS, CONNECT authentication — `proxy=`, `trust_env`.
 - **HTTP/3** with `Alt-Svc` and fallback — on by default where the profile has the section.
@@ -528,6 +563,10 @@ Facts that are easy to doubt and are true:
   mode. That is what a browser does; `mode="navigate"` says otherwise.
 - `timeout` caps the whole request, not the silence between bytes as in
   `requests`. A value carried over is safe: stricter, not looser.
+- A resumed connection's ClientHello is not the first one: it carries
+  `pre_shared_key` last, and Firefox drops `session_ticket` from it. Measured
+  on both browsers and reproduced; neither browser offers early data on a
+  resumed TCP connection, not even to a server that supports 0-RTT.
 
 ## 17. API index
 

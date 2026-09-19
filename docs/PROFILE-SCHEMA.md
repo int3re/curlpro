@@ -71,8 +71,15 @@ filled by the library:
 
 - `user-agent` — from `headers.user_agent`;
 - `cookie` — from the session jar, and if the jar is empty the header is not sent;
-- `origin` — the request's origin, on any method except GET and HEAD (a browser
-  sends `Origin` on anything with a body, including a navigational form POST);
+- `origin` — the page's origin when the session names a page (on every
+  cross-origin fetch and on anything with a body), else the request's own
+  origin on any method except GET and HEAD (a browser sends `Origin` on
+  anything with a body, including a navigational form POST);
+- `referer` — derived from the page the session names, under
+  `strict-origin-when-cross-origin`; without a page the slot drops out. Every
+  Chromium profile carries it after `sec-fetch-dest`, every Firefox profile
+  after `origin` — where Chrome 153 and Firefox 156 put it (measured
+  2026-09-19 on `cmd/hcapture -origins`);
 - `content-length` — added by the transport after the assembly; the slot only
   fixes the position;
 - `content-type` and any other name — the value from the session or request
@@ -192,6 +199,7 @@ The rest is plan.
 | `psk_client_hello`, `raw_psk_client_hello` | the same for a resumed connection |
 | `quic_client_hello`, `quic_psk_client_hello` | separate specs for QUIC |
 | `allow_blunt_mimicry` | reproduce unknown extensions verbatim (carefully — stale key_shares) |
+| `resume_omits_session_ticket` | the resuming ClientHello has no `session_ticket` extension. Firefox (NSS offers the TLS 1.2 ticket slot only when it holds no TLS 1.3 ticket — measured on Firefox 156); Chromium keeps it. A pointer, so a delta can turn it off |
 | `signature_algorithms` | the sigalgs for TCP |
 | `quic_signature_algorithms` | **separately**: Chrome 150 sends ML-DSA over TCP but not over QUIC |
 | `delegated_credential_algorithms` | ext 34 (Firefox) |

@@ -710,6 +710,38 @@ error-code list missing `too_large` and `proxy_closed`, fhttp called MIT
 instead of BSD-3-Clause, `ARCHITECTURE.md` naming 0.4.2 as current, and
 `curlpro.request` documented by shape but not exported.
 
+## Stage 30 — the initiator, and resumption on by default ✅ done 2026-09-19
+
+Two of the items from the "what next" review, both settled by measurement
+([STAGE17](docs/STAGE17-RESULTS.md)).
+
+**The page a request is made from.** A fetch to an API on another origin
+went out with the API's own origin in `Origin`, no `Referer` and
+`sec-fetch-site: same-origin` — three headers a browser never sends together,
+and the audit could not see it because nothing in the session said where the
+request came from. `page` on the session and per request names the page, and
+`Referer`, `Origin` and `sec-fetch-site` are derived from it the way Chrome
+153 and Firefox 156 derive them, measured on a stand of three names
+(`cmd/hcapture -origins`) where the two agreed on every value: the Referer is
+the page's URL to its own origin and the page's origin elsewhere, the Origin
+is the page's origin on every cross-origin fetch and on anything with a body,
+the site relation degrades along a redirect chain. A `referer` slot went into
+every Chromium and Firefox profile at the measured position, and the Firefox
+`cookie` slot moved to where the same measurement showed it. The audit gained
+`referer_site`. Not done, recorded as debt: the CORS preflight a browser
+sends before a non-simple cross-origin request (measured, both browsers), and
+withholding cookies on uncredentialed cross-origin fetches.
+
+**Resumption on by default.** `resume` existed and was off because the
+resuming hello had not been measured. Measured now on both browsers against
+a stand that closes every connection (`cmd/hcapture -close`) and, for Chrome,
+against a real 0-RTT server through a recording proxy: the first hello plus
+`pre_shared_key` last, no `early_data` — exactly what uTLS produces — and for
+Firefox without the empty `session_ticket`, which the Firefox family now drops
+through `tls.resume_omits_session_ticket`, honoured only once a ticket exists
+so the first hello and every fingerprint stay what they were. A client that
+never resumed was a tell no fingerprint measured; it is gone. ABI 0.19.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

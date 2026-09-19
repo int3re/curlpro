@@ -132,6 +132,7 @@
       "Sec-Fetch-Mode",
       "Sec-Fetch-User",
       "Sec-Fetch-Dest",
+      "Referer",
       "Accept-Encoding",
       "Accept-Language",
       "Cookie"
@@ -221,6 +222,10 @@
       {
         "key": "sec-fetch-dest",
         "value": "document"
+      },
+      {
+        "key": "referer",
+        "value": ""
       },
       {
         "key": "accept-encoding",

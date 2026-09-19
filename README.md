@@ -252,6 +252,8 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 | `default_headers`, `header_order`, `mode` | profile headers, desired order, header set (`navigate`/`fetch`/`auto`) |
 | `force_http1`, `http3`, `alt_svc` | transport: forbid h2, go straight to QUIC, upgrade on `Alt-Svc` |
 | `post_quantum` | `False` drops the X25519MLKEM768 group and its 1216-byte key share — the hello of a browser with post-quantum key agreement off by policy. JA4 stays, JA3 and the size move: ~1.9 KB over two TCP segments becomes one that fits in one |
+| `resume` | TLS session resumption, on by default: the second connection to a host carries the ticket, the way a browser's does. The resuming hello was measured on Chrome 153 and Firefox 156 and is reproduced, Firefox's dropped `session_ticket` included; the first hello is untouched |
+| `page` | the page the requests are made from: `Referer`, `Origin` and `sec-fetch-site` are derived from it as a browser derives them (see below); `s.page = url` moves it |
 | `keep_alive`, `max_idle_conns`, `idle_conn_timeout` | connection reuse and pool size |
 | `resolve`, `ip_version` | host address override, address family (`"4"`/`"6"`) |
 | `device`, `devices` | the phone for mobile profiles and your own device list |
@@ -279,6 +281,7 @@ s.get(url, timeout=(3, 30), protocol="h2", cookies=False, retries=0)
 | `session_headers` | `False` — without the headers added to the session |
 | `default_headers` | `True`/`False` — the profile headers, either way |
 | `mode` | `navigate` or `fetch` — which header set to use; `fetch` on a profile without a fetch set is refused with the reason, not sent as a navigation |
+| `page` | the page this request is made from, overriding the session's; `False` sends it with no initiator |
 | `allow_redirects`, `max_redirects`, `retries`, … | overrides of the session policies |
 | `expect` | a response expectation (see below) |
 | `rollback_cookies` | undo what this request wrote into the jar if it fails |
@@ -715,6 +718,24 @@ explicit `mode="fetch"` on a profile that has no fetch set — Safari, okhttp �
 refused with the reason rather than sent with the navigation set: `sec-fetch-mode:
 cors` beside `sec-fetch-user: ?1` is a request no browser makes, and an anti-bot
 reads the pair for free. Every Chromium and Firefox profile carries the set.
+
+A browser's fetch comes from a page, and `Referer`, `Origin` and `sec-fetch-site`
+say which. Name it, and the three are derived the way Chrome 153 and Firefox 156
+derive them (measured, and the two agreed on every value): the Referer is the
+page's URL to its own origin and the page's origin elsewhere, the Origin is the
+page's origin on every cross-origin fetch and on anything with a body, and
+`sec-fetch-site` is the relation between the page and the URL, degrading along a
+redirect chain.
+
+```python
+r = s.get("https://example.com/app")                 # a navigation: sec-fetch-site none, no Referer
+s.page = r.url                                       # from here on, from that page
+s.post("https://api.example.com/v1/x", json_body=d)  # origin: https://example.com, referer: https://example.com/, cross-site
+```
+
+Without a page a fetch goes out from the request's own origin, as before. The
+audit reports a hand-written `Referer` beside `sec-fetch-site: none`, the
+commonest way to say "from a page" and "from nowhere" in one request.
 
 ## Profiles as data
 

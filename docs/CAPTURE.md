@@ -418,6 +418,13 @@ to any non-browser client:
 - **A reused client resumes.** The second handshake carries `pre_shared_key`,
   and the capture drops resumed handshakes on purpose. A fresh client is not
   enough when the TLS context is shared: make the `SSLContext` fresh per run.
+  To capture the resuming hello itself, `cmd/hcapture -close` closes every
+  connection after one response, so each later request of the page opens a
+  new one with the ticket; the record carries the raw hello and whether the
+  server resumed. `cmd/hcapture -origins` serves a page on `www.a.localhost`
+  that reaches its own origin, `api.a.localhost` and `b.localhost` by fetch,
+  XHR, navigation and form post — the measurement behind `page=`
+  ([STAGE17](STAGE17-RESULTS.md)).
 
 The provider decides the ClientHello. On Android that is Conscrypt; on the JVM,
 SunJSSE unless Conscrypt is installed as a provider. Both were captured, and the

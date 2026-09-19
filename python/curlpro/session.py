@@ -79,6 +79,18 @@ def _count(value: Any, name: str) -> Any:
     return value
 
 
+def _page_override(page: str | bool | None) -> str | None:
+    """The page argument as the native side expects it: ``None`` inherits the
+    session's page, ``False`` means no initiator, a string names the page."""
+    if page is None:
+        return None
+    if page is False:
+        return ""
+    if not isinstance(page, str):
+        raise TypeError(f"page must be a URL, None or False, got {type(page).__name__}")
+    return page
+
+
 def _proxy_override(proxy: str | bool | None) -> str | None:
     """Turns the proxy argument into what the native side expects.
 
@@ -293,6 +305,7 @@ def _request_meta(
     respect_retry_after: bool = True,
     proxy: str | bool | None = None,
     mode: str | None = None,
+    page: str | bool | None = None,
 ) -> tuple[dict[str, Any], bytes]:
     # params and auth are the familiar requests arguments; here they turn
     # into a URL with a query string and an ordinary header, nothing special.
@@ -373,6 +386,9 @@ def _request_meta(
         "proxy": _proxy_override(proxy),
         # None is the session mode; "navigate" or "fetch" pick a header set.
         "mode": mode or "",
+        # None takes the session's page, False means no initiator for this
+        # request, a URL names the page it is made from.
+        "page": _page_override(page),
     }
     return meta, data or b""
 
@@ -559,13 +575,16 @@ class Session:
         unchanged, JA3 and the size move: a ~1.9 KB hello that spans two TCP
         segments becomes one that fits in one. On by default, because the
         browser sends the share
-    :param resume: reuse TLS session tickets, as a browser does.
-        A browser talking to one host resumes constantly; a client that
-        never resumes is an observable anomaly, and one no fingerprint
-        here measures — JA3, JA4, JA4H and the Akamai string all come
-        from the first handshake, while the tell lives in the second.
-        Off by default: resuming changes the ClientHello, and that shape
-        has not been measured against the oracles yet.
+    :param resume: reuse TLS session tickets, as a browser does. A browser
+        talking to one host resumes constantly, and a client that never
+        resumes is an observable anomaly that no fingerprint measures —
+        JA3, JA4, JA4H and the Akamai string all come from the first
+        handshake, while the tell lives in the second. On by default since
+        the resuming hello was measured (Chrome 153 and Firefox 156,
+        2026-09-19): it is the first hello plus ``pre_shared_key`` last,
+        no early data, and for Firefox without ``session_ticket`` — which is
+        what goes out here. The first hello of a session is untouched, so
+        every fingerprint stays what it was
     :param http3: send requests over QUIC instead of TCP. The profile must
         describe an ``http3`` section or the session will not be created.
         This is a separate transport, not an ALPN variant, so it is explicit
@@ -598,6 +617,10 @@ class Session:
     :param devices: your own device list instead of the profile's; each entry
         is ``{"name": ..., "model": ..., "platform_version": ...}``
     :param retries: how many retries to make after the first attempt
+    :param page: the page the requests are made from — the initiator. Sets
+        ``Referer``, ``Origin`` and ``sec-fetch-site`` the way a browser does
+        for a request from that page; see :attr:`page`. Must be an absolute
+        http(s) URL
     :param mode: which header set to use: ``"navigate"`` for a page load,
         ``"fetch"`` for a fetch/XHR request from a page, ``"auto"`` to decide
         from the request itself (a method other than GET/HEAD/POST, a
@@ -624,7 +647,7 @@ class Session:
         cookies: bool = True,
         force_http1: bool = False,
         post_quantum: bool = True,
-        resume: bool = False,
+        resume: bool = True,
         http3: bool = False,
         alt_svc: bool = True,
         resolve: Mapping[str, str] | None = None,
@@ -642,6 +665,7 @@ class Session:
         retry_max_backoff: float = 10.0,
         respect_retry_after: bool = True,
         mode: str = "auto",
+        page: str | None = None,
     ):
         # The bundled profiles are loaded on first use: after pip install
         # the library has to work without any extra steps.
@@ -691,6 +715,7 @@ class Session:
                         retry_backoff, retry_max_backoff, respect_retry_after,
                     ),
                     "mode": "" if mode == "auto" else mode,
+                    "page": page or "",
                 }
             ),
         )["session"]
@@ -703,6 +728,8 @@ class Session:
         #: Headers added to every request of the session. Kept apart from
         #: the profile's, so clear() restores the plain fingerprint.
         self.headers = SessionHeaders(self._id)
+        #: The page the requests are made from; see :attr:`page`.
+        self._page = page or ""
         #: Session cookies: reading, editing, saving and loading from a file.
         self.cookies = Cookies(self._id)
         #: Hooks: "request" runs before sending and receives the request
@@ -750,6 +777,7 @@ class Session:
         respect_retry_after: bool = True,
         proxy: str | bool | None = None,
         mode: str | None = None,
+        page: str | bool | None = None,
         expect: "Expect | None" = None,
         rollback_cookies: bool = False,
     ) -> Response:
@@ -766,6 +794,8 @@ class Session:
             ``[..., "accept", "x-api-key", ...]`` puts a custom header right
             after Accept, the rest stays as the browser sends it; see
             :class:`Session` for the rules
+        :param page: the page this request is made from, overriding the
+            session's; ``False`` sends it with no initiator at all
         :param cookies: use the session jar for this request. ``False`` isolates
             the request in both directions: stored cookies are not sent and
             ``Set-Cookie`` from the response is not remembered
@@ -805,7 +835,7 @@ class Session:
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
-            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode,
+            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page,
         )
         for hook in self.hooks["request"]:
             replaced = hook(meta)
@@ -926,6 +956,7 @@ class Session:
         respect_retry_after: bool = True,
         proxy: str | bool | None = None,
         mode: str | None = None,
+        page: str | bool | None = None,
     ) -> "StreamResponse":
         """Opens a response for reading in chunks.
 
@@ -947,7 +978,7 @@ class Session:
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
-            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode,
+            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page,
         )
         payload, _ = call_framed("curlpro_stream_open", self._id, body=body, meta=meta)
         return StreamResponse(payload, self._max_response_size)
@@ -1013,6 +1044,41 @@ class Session:
         if self._closed:
             raise RuntimeError("session is closed")
         return Fingerprint(_call("curlpro_session_fingerprint", self._id, url.encode("utf-8")))
+
+    @property
+    def page(self) -> str | None:
+        """The page the session's requests are made from — the initiator.
+
+        With a page set, three headers are derived the way a browser derives
+        them (measured on Chrome 153 and Firefox 156, identical): ``Referer``
+        is the page's URL to its own origin and the page's origin elsewhere;
+        ``Origin`` is the page's origin, on every cross-origin fetch and on
+        any request with a body; ``sec-fetch-site`` is the relation between
+        the page and the URL — same-origin, same-site or cross-site — and
+        degrades along a redirect chain. Without a page the profile's own
+        values go out: a navigation typed into the bar and a fetch from the
+        request's own origin.
+
+        A scraper sets it as it moves::
+
+            r = s.get("https://example.com/app")     # the navigation
+            s.page = r.url                            # from here on, from that page
+            s.post("https://api.example.com/v1/x", json_body=...)   # Origin, Referer, cross-site
+
+        ``None`` clears it. A request's own ``page=`` argument wins for that
+        request; ``page=False`` sends one request with no initiator.
+        """
+        return self._page or None
+
+    @page.setter
+    def page(self, url: str | None) -> None:
+        if self._closed:
+            raise RuntimeError("session is closed")
+        value = url or ""
+        if not isinstance(value, str):
+            raise TypeError(f"page must be a URL or None, got {type(url).__name__}")
+        _call("curlpro_session_set_page", self._id, value.encode("utf-8"))
+        self._page = value
 
     def audit(self) -> list:
         """Contradictions in what this session would send.

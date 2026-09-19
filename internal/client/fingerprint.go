@@ -18,6 +18,10 @@ import (
 // "why am I being detected" a question answerable only online.
 type Fingerprint struct {
 	Profile string `json:"profile"`
+	// URL is the address the preview was built for: with a page set the
+	// Referer, Origin and sec-fetch-site in HeaderValues are relative to it,
+	// and the audit compares them against it.
+	URL string `json:"url"`
 
 	JA3      string `json:"ja3"`
 	JA3Text  string `json:"ja3_text"`
@@ -136,6 +140,7 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 
 	out := Fingerprint{
 		Profile:    s.profile.Name,
+		URL:        u.String(),
 		JA3:        tls.JA3,
 		JA3Text:    tls.JA3Text,
 		JA3N:       tls.JA3N,

@@ -109,6 +109,7 @@ def _audit(fp: Any, persona: Any) -> list[Finding]:
     out += _check_mobile_device(profile, data)
     out += _check_fetch_metadata(pairs)
     out += _check_accept_encoding(pairs, profile_pairs)
+    out += _check_referer(pairs, data.get("url", ""))
 
     order = {level: i for i, level in enumerate(LEVELS)}
     out.sort(key=lambda f: order[f.level])
@@ -347,6 +348,64 @@ def _check_accept_encoding(pairs: list, profile_pairs: list) -> list[Finding]:
             "the profile's value costs nothing",
         fix="drop the Accept-Encoding override; the profile's value is "
             "decoded by the client")]
+
+
+def _origin_of(url: str) -> str:
+    from urllib.parse import urlsplit
+    p = urlsplit(url)
+    return f"{p.scheme.lower()}://{p.netloc.lower()}"
+
+
+def _check_referer(pairs: list, url: str) -> list[Finding]:
+    """A Referer that disagrees with the fetch metadata or the Origin beside it.
+
+    A browser derives all three from one thing — the page the request is made
+    from — so they cannot disagree. A hand-written Referer beside the
+    profile's ``sec-fetch-site: none`` is the commonest shape: a request that
+    claims to come from a page and, in the same breath, from nowhere.
+    """
+    referer = _header(pairs, "referer")
+    if not referer:
+        return []
+    site = (_header(pairs, "sec-fetch-site") or "").strip().lower()
+    origin = _header(pairs, "origin")
+    fix = 'set page="<the URL of the page>" on the session or the request and drop the hand-written Referer'
+    if site == "none":
+        return [Finding(
+            code="referer_site",
+            level="high",
+            what=f"Referer {referer!r} next to sec-fetch-site: none",
+            why="a browser sends sec-fetch-site: none only for a navigation it "
+                "started itself — a typed URL, a bookmark — and such a request "
+                "has no page to send a Referer from. The pair describes a request "
+                "no browser makes",
+            fix=fix)]
+    try:
+        ro, uo = _origin_of(referer), _origin_of(url)
+    except ValueError:
+        return []
+    if site == "same-origin" and ro != uo:
+        return [Finding(
+            code="referer_site", level="high",
+            what=f"sec-fetch-site: same-origin, but the Referer is from {ro}",
+            why="same-origin says the page is on the request's own origin, and "
+                "the Referer says it is not",
+            fix=fix)]
+    if site == "cross-site" and ro == uo:
+        return [Finding(
+            code="referer_site", level="high",
+            what=f"sec-fetch-site: cross-site, but the Referer is from the request's own origin {ro}",
+            why="cross-site says the page is on another site, and the Referer "
+                "says it is this very origin",
+            fix=fix)]
+    if origin and _origin_of(origin) != ro:
+        return [Finding(
+            code="referer_site", level="high",
+            what=f"Origin {origin!r} and Referer {referer!r} name different origins",
+            why="both are the page's origin in a browser; two values mean two "
+                "pages, which one request cannot come from",
+            fix=fix)]
+    return []
 
 
 # The q-ladder check that used to live here has been removed.

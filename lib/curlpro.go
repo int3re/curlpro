@@ -120,7 +120,9 @@ func curlpro_free(s *C.char) {
 // session-wide suppression export — and the profile's own header values in
 // the fingerprint.
 // 0.18.0: post_quantum on the session, and the raw ClientHello in the fingerprint.
-const Version = "0.18.0"
+// 0.19.0: the page a request is made from (page on the session and per
+// request, curlpro_session_set_page), and the preview URL in the fingerprint.
+const Version = "0.19.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -192,6 +194,8 @@ type sessionConfig struct {
 	Retry     *retryJSON `json:"retry"`
 	// Mode: "navigate", "fetch" or "auto" (empty) — see client.Options.Mode.
 	Mode string `json:"mode"`
+	// Page is the initiator URL — see client.Options.Page. Empty means none.
+	Page string `json:"page"`
 	// Device is a device name from the profile's devices section, or "random".
 	Device string `json:"device"`
 	// Devices overrides the profile's device list.
@@ -268,6 +272,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		IdleConnTimeout:    time.Duration(c.IdleConnTimeoutMS) * time.Millisecond,
 		Retry:              c.Retry.toPolicy(),
 		Mode:               c.Mode,
+		Page:               c.Page,
 		Device:             c.Device,
 		Devices:            c.Devices,
 	})
@@ -433,6 +438,8 @@ type requestJSON struct {
 	Proxy *string `json:"proxy"`
 	// Mode overrides the header set for a single request.
 	Mode string `json:"mode"`
+	// Page: null takes the session's, "" means no initiator, a URL names one.
+	Page *string `json:"page"`
 	// SuppressHeaders names headers to leave out of this request whatever
 	// set them — the Python side sends here every header given as None.
 	SuppressHeaders []string `json:"suppress_headers"`
@@ -457,6 +464,7 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 	req.Retry = r.Retry.toPolicy()
 	req.Proxy = r.Proxy
 	req.Mode = r.Mode
+	req.Page = r.Page
 }
 
 // toRequest builds a client.Request out of a frame.

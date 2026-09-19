@@ -174,6 +174,19 @@ type Options struct {
 	// fetch/XHR, "" or "auto" to decide from the request (see modeFor).
 	Mode string
 
+	// Page is the URL of the page the session's requests are made from — the
+	// initiator. With it set, three headers are derived the way a browser
+	// derives them (measured on Chrome 153 and Firefox 156, identical):
+	// Referer is the page's URL to its own origin and the page's origin
+	// elsewhere (strict-origin-when-cross-origin, the default policy); Origin
+	// is the page's origin, on every cross-origin fetch and on any request
+	// with a body; sec-fetch-site is the relation between the page and the
+	// URL — same-origin, same-site or cross-site — and degrades along a
+	// redirect chain. Without a page the profile's own values go out: a
+	// navigation typed into the bar (sec-fetch-site: none, no Referer) and a
+	// fetch from the request's own origin.
+	Page string
+
 	// Device is a device name from the profile's devices section; "random" picks
 	// one at random. Empty means no device is chosen, and the high-entropy hints
 	// keep the profile's values.
@@ -258,6 +271,10 @@ type Request struct {
 	// bypassing it. Those differ, hence a pointer rather than a string.
 	Proxy *string
 
+	// Page overrides the session's page for a single request: nil takes the
+	// session's, an empty string means no page — a request with no initiator.
+	Page *string
+
 	// SuppressHeaders removes headers by name after they were built from the profile.
 	//
 	// Needed for cases such as sec-fetch-user: it comes from the profile, and
@@ -333,6 +350,58 @@ func (s *Session) useDefaultHeaders(r *Request) bool {
 		return *r.DefaultHeaders
 	}
 	return s.opts.DefaultHeaders
+}
+
+// pageFor returns the page the request is made from: the request's own, else
+// the session's; empty means no initiator.
+func (s *Session) pageFor(r *Request) string {
+	if r != nil && r.Page != nil {
+		return *r.Page
+	}
+	s.pageMu.RLock()
+	defer s.pageMu.RUnlock()
+	return s.opts.Page
+}
+
+// SetPage changes the session's page; an empty string means no initiator.
+func (s *Session) SetPage(page string) error {
+	if page != "" {
+		if err := validatePage(page); err != nil {
+			return err
+		}
+	}
+	s.pageMu.Lock()
+	s.opts.Page = page
+	s.pageMu.Unlock()
+	return nil
+}
+
+// hasTicket reports whether the session holds a TLS ticket for a host — that
+// is, whether the next connection to it will try to resume. uTLS keys its
+// cache by the ServerName, which is the host the dial sets.
+func (s *Session) hasTicket(host string) bool {
+	if s.tlsSessions == nil {
+		return false
+	}
+	_, ok := s.tlsSessions.Get(host)
+	return ok
+}
+
+// Page returns the session's page.
+func (s *Session) Page() string {
+	s.pageMu.RLock()
+	defer s.pageMu.RUnlock()
+	return s.opts.Page
+}
+
+// validatePage refuses a page that is not an absolute http(s) URL: the
+// headers derived from it would be derived from nothing.
+func validatePage(page string) error {
+	u, err := url.Parse(page)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("page must be an absolute http(s) URL, got %q", page)
+	}
+	return nil
 }
 
 // proxyFor returns the proxy address for a request.
@@ -435,6 +504,11 @@ func (r *Request) validate(hasJar bool) error {
 	if err := validateOrder(r.HeaderOrder); err != nil {
 		return err
 	}
+	if r.Page != nil && *r.Page != "" {
+		if err := validatePage(*r.Page); err != nil {
+			return err
+		}
+	}
 	switch r.Protocol {
 	case "", ProtoHTTP1, ProtoH2, ProtoH3:
 	default:
@@ -486,6 +560,10 @@ type Session struct {
 	// connection to the same host can be abbreviated the way a browser's is.
 	// Nil unless Options.Resume is set.
 	tlsSessions utls.ClientSessionCache
+
+	// pageMu guards opts.Page: a scraper moves the page between requests
+	// while async requests may be in flight.
+	pageMu sync.RWMutex
 
 	mu    sync.Mutex
 	conns map[dialSpec][]*conn
@@ -545,6 +623,11 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	}
 	if err := validateOrder(opts.HeaderOrder); err != nil {
 		return nil, err
+	}
+	if opts.Page != "" {
+		if err := validatePage(opts.Page); err != nil {
+			return nil, err
+		}
 	}
 	if opts.Timeout == 0 {
 		opts.Timeout = 30 * time.Second
@@ -1019,6 +1102,13 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 	// byte-for-byte what it was.
 	if s.opts.Resume {
 		spec.Extensions = append(spec.Extensions, &utls.UtlsPreSharedKeyExtension{})
+		// Firefox's resuming hello has no session_ticket extension: NSS offers
+		// the TLS 1.2 ticket slot only when it holds no TLS 1.3 ticket. Chrome
+		// keeps it. The profile says which, and the cache says whether this
+		// connection will resume at all — the first hello must stay as captured.
+		if s.profile.TLS.ResumeOmitsSessionTicket != nil && *s.profile.TLS.ResumeOmitsSessionTicket && s.hasTicket(u.Hostname()) {
+			dropSessionTicket(spec)
+		}
 	}
 
 	// ALPN lives inside the spec, and ApplyPreset overrides Config.NextProtos.

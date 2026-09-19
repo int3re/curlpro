@@ -263,6 +263,18 @@ func setALPN(spec *utls.ClientHelloSpec, protos []string) bool {
 	return false
 }
 
+// dropSessionTicket removes the session_ticket extension from a spec.
+func dropSessionTicket(spec *utls.ClientHelloSpec) {
+	kept := spec.Extensions[:0:0]
+	for _, e := range spec.Extensions {
+		if _, ok := e.(*utls.SessionTicketExtension); ok {
+			continue
+		}
+		kept = append(kept, e)
+	}
+	spec.Extensions = kept
+}
+
 // hybridGroup reports whether a group is a post-quantum hybrid:
 // X25519MLKEM768 (0x11ec), SecP256r1MLKEM768 (0x11eb) or the earlier
 // X25519Kyber768Draft00 (0x6399) of Chrome 124–130.

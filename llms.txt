@@ -16,10 +16,10 @@ reimplement it. The README is the front page for people.
 
 ## Surface (all in `import curlpro`)
 
-- `Session(impersonate="chrome-151-windows", *, verify, cert, trust_env, max_response_size, timeout, connect_timeout, response_timeout, proxy, default_headers, header_order, allow_redirects, max_redirects, cookies, force_http1, post_quantum, resume, http3, alt_svc, resolve, ip_version, keep_alive, hooks, device, devices, max_idle_conns, idle_conn_timeout, retries, retry_statuses, retry_methods, retry_backoff, retry_max_backoff, respect_retry_after, mode)`
-- `s.request(method, url, *, headers, params, auth, data, json_body, files, fields, body_file, header_order, default_headers, cookies, session_headers, protocol, timeout, connect_timeout, response_timeout, allow_redirects, max_redirects, retries, retry_statuses, retry_methods, retry_backoff, retry_max_backoff, respect_retry_after, proxy, mode, expect, rollback_cookies)` and `get/post/put/patch/delete/head/options`
+- `Session(impersonate="chrome-151-windows", *, verify, cert, trust_env, max_response_size, timeout, connect_timeout, response_timeout, proxy, default_headers, header_order, allow_redirects, max_redirects, cookies, force_http1, post_quantum, resume, http3, alt_svc, resolve, ip_version, keep_alive, hooks, device, devices, max_idle_conns, idle_conn_timeout, retries, retry_statuses, retry_methods, retry_backoff, retry_max_backoff, respect_retry_after, mode, page)`
+- `s.request(method, url, *, headers, params, auth, data, json_body, files, fields, body_file, header_order, default_headers, cookies, session_headers, protocol, timeout, connect_timeout, response_timeout, allow_redirects, max_redirects, retries, retry_statuses, retry_methods, retry_backoff, retry_max_backoff, respect_retry_after, proxy, mode, page, expect, rollback_cookies)` and `get/post/put/patch/delete/head/options`
 - `s.stream(...)` → `StreamResponse` (`iter_content`, `iter_lines`, `read`, `close`); `s.websocket(url, headers, subprotocols, timeout, max_message_size)` → `WebSocket` (`send`, `recv`, `ping`, `close`, iteration)
-- `s.headers` (mapping; `= None` removes a profile header; `.suppressed`), `s.cookies` (mapping plus `all/set/load/export/save/load_file/save_netscape/load_netscape/to_netscape/snapshot/restore/transaction/clear`), `s.hooks`, `s.on_request/on_response/on_error`, `s.fingerprint(url)`, `s.audit()`, `s.close()`
+- `s.headers` (mapping; `= None` removes a profile header; `.suppressed`), `s.cookies` (mapping plus `all/set/load/export/save/load_file/save_netscape/load_netscape/to_netscape/snapshot/restore/transaction/clear`), `s.page` (the page requests are made from; `= None` clears), `s.hooks`, `s.on_request/on_response/on_error`, `s.fingerprint(url)`, `s.audit()`, `s.close()`
 - `Response`: `status ok proto headers header(name) content text encoding json() url history cookies elapsed raise_for_status()`
 - `AsyncSession` — the same API as coroutines, native concurrency (goroutines, one thread)
 - `Expect(status, not_status, body, not_body, headers, not_headers, non_empty, json, encoding)` → `ExpectationFailed`
@@ -35,6 +35,8 @@ reimplement it. The README is the front page for people.
 
 - Adding any custom header switches the request to the browser's fetch header set in `mode="auto"`; that is correct. `mode="navigate"` overrides.
 - To drop one profile header use `headers={"Name": None}`, not `default_headers=False` (which also drops the User-Agent and the order).
+- Never hand-write `Referer`, `Origin` or `sec-fetch-site`: set `s.page = url` (or `page=` on a request) and the three are derived as Chrome and Firefox derive them; a hand-written Referer beside `sec-fetch-site: none` is an audit finding.
+- TLS session resumption is on by default (measured on both browsers); `resume=False` turns it off. The first hello of a session never changes, so fingerprints are unaffected.
 - `header_order=[..., "accept", "x-api-key", ...]` edits the browser's order in place; `...` is the profile's own order.
 - `timeout` caps the whole request; `(connect, total)` is the pair; `response_timeout` is the wait for headers.
 - `ja3` moves per connection on Chrome ≥110 (extension shuffling); compare `ja4` or `ja3n`.

@@ -110,6 +110,10 @@
         "value": "document"
       },
       {
+        "key": "referer",
+        "value": ""
+      },
+      {
         "key": "accept-encoding",
         "value": "gzip, deflate, br, zstd"
       },

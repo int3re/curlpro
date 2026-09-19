@@ -109,10 +109,30 @@ func (s *Session) nextRequest(prev *Request, nextURL string, status int, initiat
 	// When the value is set explicitly and is not none, it is computed from the
 	// initiator against every URL of the chain and only ever degrades:
 	// same-origin -> same-site -> cross-site, never back.
-	if cur := s.effectiveHeader(prev, "sec-fetch-site"); cur != "" && cur != "none" {
+	if cur := s.sentSite(prev); cur != "" && cur != "none" {
 		setHeader(next.Headers, "sec-fetch-site", worseSite(cur, siteRelation(initiator, nextURL)))
 	}
 	return next
+}
+
+// sentSite is the sec-fetch-site value the request went out with: an
+// explicit header, else the relation to the page when one is named — the
+// profile's own value describes a request with no initiator — else that value.
+func (s *Session) sentSite(r *Request) string {
+	for k, v := range r.Headers {
+		if strings.EqualFold(k, "sec-fetch-site") {
+			return v
+		}
+	}
+	for _, h := range s.headers.All() {
+		if strings.EqualFold(h.Key, "sec-fetch-site") {
+			return h.Value
+		}
+	}
+	if page := s.pageFor(r); page != "" && s.useDefaultHeaders(r) {
+		return siteRelation(page, r.URL)
+	}
+	return s.effectiveHeader(r, "sec-fetch-site")
 }
 
 // effectiveHeader returns the header value that would go out with the request:
