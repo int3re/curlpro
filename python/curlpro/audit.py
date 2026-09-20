@@ -110,6 +110,7 @@ def _audit(fp: Any, persona: Any) -> list[Finding]:
     out += _check_fetch_metadata(pairs)
     out += _check_accept_encoding(pairs, profile_pairs)
     out += _check_referer(pairs, data.get("url", ""))
+    out += _check_derived_fetch(profile, data)
 
     order = {level: i for i, level in enumerate(LEVELS)}
     out.sort(key=lambda f: order[f.level])
@@ -348,6 +349,30 @@ def _check_accept_encoding(pairs: list, profile_pairs: list) -> list[Finding]:
             "the profile's value costs nothing",
         fix="drop the Accept-Encoding override; the profile's value is "
             "decoded by the client")]
+
+
+def _check_derived_fetch(profile: str, data: dict) -> list[Finding]:
+    """A fetch set that was worked out rather than captured.
+
+    Fires only when such a set is actually in use — the session is in fetch
+    mode — because on a navigation the derived data never reaches the wire.
+    Everything else in a profile was seen from a real browser; this one part
+    was not, and a caller weighing a detection deserves to know which of the
+    two they are looking at.
+    """
+    if not data.get("derived_fetch") or data.get("mode") != "fetch":
+        return []
+    return [Finding(
+        code="derived_fetch_set",
+        level="medium",
+        what=f"profile {profile} is sending a derived fetch set, not a captured one",
+        why="the names and values follow the Fetch standard and the profile's "
+            "own navigation set, but the order was not measured from Safari — "
+            "and order is part of the header fingerprint. It is better than "
+            "the outright refusal it replaced and weaker than everything else "
+            "in this profile",
+        fix="use a Chromium or Firefox profile where the fetch set is measured, "
+            "or capture Safari's own with curlpro capture on a Mac or iPhone")]
 
 
 def _origin_of(url: str) -> str:

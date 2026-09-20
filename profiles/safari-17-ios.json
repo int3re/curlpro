@@ -62,5 +62,79 @@
     ],
     "stream_weight": 0
   },
-  "name": "safari-17-ios"
+  "name": "safari-17-ios",
+  "fetch": {
+    "order": [
+      {
+        "key": "accept",
+        "value": "*/*"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "same-origin"
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "cors"
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "empty"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      }
+    ],
+    "http1_order": [
+      "Host",
+      "Connection",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "User-Agent",
+      "Accept",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Dest",
+      "Content-Type",
+      "Content-Length",
+      "Origin",
+      "Referer",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie",
+      "priority"
+    ],
+    "custom_anchor": "accept-encoding",
+    "derived": true
+  }
 }

@@ -68,6 +68,56 @@ def list_profiles() -> list[str]:
     return _call("curlpro_profiles_list")["profiles"]
 
 
+def capabilities(name: str) -> dict[str, Any]:
+    """What a profile can do, without opening a session or sending anything.
+
+        caps = curlpro.capabilities("safari-26.0-macos")
+        if "fetch" in caps["modes"]:
+            ...
+
+    | Key | Meaning |
+    |---|---|
+    | ``modes`` | the header sets it carries: ``navigate`` always, ``fetch`` with a fetch section |
+    | ``protocols`` | ``http1`` and ``h2`` always, ``h3`` with an ``http3`` section |
+    | ``devices`` | the phones it offers, empty for a desktop profile |
+    | ``client_hints``, ``websocket``, ``http1_set`` | whether it answers ``Accept-CH``, carries a handshake template, has a measured HTTP/1.1 order |
+    | ``user_agent``, ``user_agent_varies`` | the string without a device, and whether a device changes it |
+    | ``derived_fetch`` | the fetch set was worked out rather than captured (see the guide) |
+    | ``name``, ``based_on``, ``family`` | identity, after inheritance is resolved |
+
+    This exists because the only way to learn any of it used to be to try: a
+    caller filtering profiles had to open a session, aim a request at a closed
+    port and read the words "fetch header" out of the error text — and the
+    wording of an error is explicitly not part of the API.
+    """
+    ensure_loaded()
+    return _call("curlpro_profile_capabilities", name.encode("utf-8"))
+
+
+def get_profile(name: str) -> "Profile":
+    """A registered profile as an object, with its inheritance resolved.
+
+        p = curlpro.get_profile("chrome-152-windows")
+        p.data["headers"]["order"]          # what it actually sends
+
+    What comes back is the profile as it behaves, not the delta as it is
+    stored: a child that carries three lines over ``based_on`` arrives whole.
+    Reading the JSON out of ``site-packages`` was the only way before this.
+    """
+    ensure_loaded()
+    return Profile(_call("curlpro_profile_get", name.encode("utf-8")))
+
+
+def library_version() -> str:
+    """The version of the native library, beside ``curlpro.__version__``.
+
+    They are different numbers on purpose (``docs/VERSIONING.md``), and a bug
+    report wants both: a wheel always carries a matching pair, a source build
+    need not.
+    """
+    return _call("curlpro_version")["version"]
+
+
 class Profile:
     """A browser profile as an object.
 

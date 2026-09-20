@@ -399,7 +399,7 @@ func (s *Session) Page() string {
 func validatePage(page string) error {
 	u, err := url.Parse(page)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return fmt.Errorf("page must be an absolute http(s) URL, got %q", page)
+		return configErr("page must be an absolute http(s) URL, got %q", page)
 	}
 	return nil
 }
@@ -486,19 +486,19 @@ func (r *Request) validate(hasJar bool) error {
 		return nil
 	}
 	if r.Timeout != nil && *r.Timeout <= 0 {
-		return fmt.Errorf("timeout must be positive, got %s "+
+		return configErr("timeout must be positive, got %s "+
 			"(leave it unset for no limit)", *r.Timeout)
 	}
 	if r.ConnectTimeout != nil && *r.ConnectTimeout <= 0 {
-		return fmt.Errorf("connect timeout must be positive, got %s "+
+		return configErr("connect timeout must be positive, got %s "+
 			"(leave it unset for no limit)", *r.ConnectTimeout)
 	}
 	if r.ResponseTimeout != nil && *r.ResponseTimeout <= 0 {
-		return fmt.Errorf("response timeout must be positive, got %s "+
+		return configErr("response timeout must be positive, got %s "+
 			"(leave it unset for no limit)", *r.ResponseTimeout)
 	}
 	if r.Cookies != nil && *r.Cookies && !hasJar {
-		return fmt.Errorf("cookies=true: the session has no cookie jar " +
+		return configErr("cookies=true: the session has no cookie jar " +
 			"(create the session with cookies enabled)")
 	}
 	if err := validateOrder(r.HeaderOrder); err != nil {
@@ -512,11 +512,11 @@ func (r *Request) validate(hasJar bool) error {
 	switch r.Protocol {
 	case "", ProtoHTTP1, ProtoH2, ProtoH3:
 	default:
-		return fmt.Errorf("unknown protocol %q: use %q, %q or %q",
+		return configErr("unknown protocol %q: use %q, %q or %q",
 			r.Protocol, ProtoHTTP1, ProtoH2, ProtoH3)
 	}
 	if r.MaxRedirects != nil && *r.MaxRedirects < 0 {
-		return fmt.Errorf("max_redirects cannot be negative, got %d",
+		return configErr("max_redirects cannot be negative, got %d",
 			*r.MaxRedirects)
 	}
 	return nil
@@ -605,16 +605,16 @@ type Session struct {
 // error surfaces at creation rather than on the first request.
 func New(p *profile.Profile, opts Options) (*Session, error) {
 	if p == nil {
-		return nil, fmt.Errorf("no profile given: a session needs one to build its fingerprint")
+		return nil, configErr("no profile given: a session needs one to build its fingerprint")
 	}
 	if _, err := profile.BuildSpec(p); err != nil {
 		return nil, err
 	}
 	if opts.Timeout < 0 {
-		return nil, fmt.Errorf("timeout cannot be negative, got %s", opts.Timeout)
+		return nil, configErr("timeout cannot be negative, got %s", opts.Timeout)
 	}
 	if opts.ResponseTimeout < 0 {
-		return nil, fmt.Errorf("response timeout cannot be negative, got %s", opts.ResponseTimeout)
+		return nil, configErr("response timeout cannot be negative, got %s", opts.ResponseTimeout)
 	}
 	// A session-wide fetch on a profile without a fetch set is refused here,
 	// once, rather than on every request.
@@ -647,7 +647,13 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if opts.Device != "" {
 		var err error
 		if dev, err = p.PickDevice(opts.Device); err != nil {
-			return nil, err
+			// "this profile has no devices" is the profile's limit, "that
+			// device is not in the list" is the caller's typo: a retry helps
+			// with neither, and the codes say which to fix.
+			if !p.HasDevices() {
+				return nil, capabilityErr("%w", err)
+			}
+			return nil, asConfig(err)
 		}
 		// For profiles where the device sits inside the User-Agent, the string is
 		// rebuilt: otherwise the hint would say one thing and the string next to
@@ -698,12 +704,12 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	// A missing http3 section in the profile must surface when the session is
 	// created, not on the first request.
 	if opts.HTTP3 && !p.HTTP3.Enabled() {
-		return nil, fmt.Errorf("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
+		return nil, capabilityErr("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
 	// A proxy for QUIC is not implemented. Silently going direct is not an
 	// option: that would reveal the very address the proxy was meant to hide.
 	if opts.HTTP3 && opts.Proxy != "" {
-		return nil, fmt.Errorf("HTTP/3 through a proxy is not supported: QUIC needs " +
+		return nil, configErr("HTTP/3 through a proxy is not supported: QUIC needs " +
 			"CONNECT-UDP (RFC 9298), which no available library implements. " +
 			"Drop either http3 or the proxy")
 	}
@@ -800,7 +806,7 @@ func (s *Session) prepare(r *Request) (Request, error) {
 		return out, nil
 	}
 	if len(out.Body) > 0 {
-		return out, fmt.Errorf("request has both Body and Multipart set: pass exactly one")
+		return out, configErr("request has both Body and Multipart set: pass exactly one")
 	}
 	body, contentType, err := encodeMultipart(out.Multipart, s.profile.FormBoundaryStyle())
 	if err != nil {
@@ -1120,7 +1126,7 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 	if ds.forceHTTP1 {
 		if !setALPN(spec, []string{"http/1.1"}) {
 			raw.Close()
-			return nil, fmt.Errorf("force_http1: profile %q has no ALPN extension to restrict", s.profile.Name)
+			return nil, capabilityErr("force_http1: profile %q has no ALPN extension to restrict", s.profile.Name)
 		}
 	}
 	if s.opts.DisablePostQuantum {

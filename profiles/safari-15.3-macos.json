@@ -172,5 +172,67 @@
       }
     ],
     "custom_anchor": "accept-encoding"
+  },
+  "fetch": {
+    "order": [
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "*/*"
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      }
+    ],
+    "http1_order": [
+      "Host",
+      "Connection",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "User-Agent",
+      "Accept",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Dest",
+      "Content-Type",
+      "Content-Length",
+      "Origin",
+      "Referer",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie",
+      "priority"
+    ],
+    "custom_anchor": "accept-encoding",
+    "derived": true
   }
 }

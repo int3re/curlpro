@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/curlpro/curlpro/internal/profile"
@@ -142,12 +141,12 @@ func modeError(p *profile.Profile, mode string) error {
 		if p.Fetch.Enabled() {
 			return nil
 		}
-		return fmt.Errorf("mode=fetch: profile %q has no fetch header set, and the navigation "+
+		return capabilityErr("mode=fetch: profile %q has no fetch header set, and the navigation "+
 			"set would go out under a fetch name (sec-fetch-user and upgrade-insecure-requests "+
 			"beside sec-fetch-mode: cors). Use a profile with a fetch section, or pass the "+
 			"headers yourself with default_headers=False", p.Name)
 	}
-	return fmt.Errorf("mode=%q: use navigate, fetch or auto", mode)
+	return configErr("mode=%q: use navigate, fetch or auto", mode)
 }
 
 // checkMode validates the request's effective mode against the profile.

@@ -77,11 +77,15 @@ def test_fetch_metadata_values_switch_the_set_by_themselves(server, profile):
 
 
 def test_an_explicit_fetch_on_a_profile_without_a_set_is_refused(server):
-    """Refused with the reason, not quietly navigational."""
-    with pytest.raises(curlpro.CurlProError, match="no fetch header set"):
-        curlpro.Session("safari-26.0-macos", mode="fetch")
-    with curlpro.Session("safari-26.0-macos", verify=False, force_http1=True) as s:
-        with pytest.raises(curlpro.CurlProError, match="no fetch header set"):
+    """Refused with the reason, not quietly navigational.
+
+    okhttp is the example since 0.8.1: it is a library, it has no fetch
+    concept at all, while the Safari profiles carry a derived set.
+    """
+    with pytest.raises(curlpro.ProfileCapabilityError, match="no fetch header set"):
+        curlpro.Session("okhttp-5.5-jvm", mode="fetch")
+    with curlpro.Session("okhttp-5.5-jvm", verify=False, force_http1=True) as s:
+        with pytest.raises(curlpro.ProfileCapabilityError, match="no fetch header set"):
             s.get(server.url, mode="fetch")
         # Auto mode still works: the navigation set is the only one there is.
         assert s.get(server.url).status == 200
@@ -109,8 +113,8 @@ def test_firefox_family_drops_te_over_http1_and_keeps_it_over_http2():
         assert "te" not in [n.lower() for n in fp.headers_http1], name
 
 
-def test_every_chromium_and_firefox_profile_accepts_mode_fetch():
-    families = ("chrome-", "edge-", "firefox-", "tor-", "yandex-")
+def test_every_browser_profile_accepts_mode_fetch():
+    families = ("chrome-", "edge-", "firefox-", "tor-", "yandex-", "safari-")
     for name in curlpro.list_profiles():
         if name.startswith(families):
             with curlpro.Session(name, mode="fetch") as s:

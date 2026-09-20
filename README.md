@@ -434,9 +434,15 @@ except curlpro.CurlProError as e:         # everything else from the native side
     print(e.code, e)
 ```
 
-The outcome codes: `timeout`, `expectation`, `session_closed`, `too_large`,
-`ws_closed`, `ws_too_big`, `ws_protocol`, `proxy_closed`. The message is written
-for a human and names the consequence, not only the fact:
+`PermanentError` — with `ProfileCapabilityError` and `ConfigurationError` under
+it — is the one a scraper branches on: it means the answer will not change, so
+do not retry. A profile that has no fetch set, a device that is not in the
+list, a page that is not a URL. Everything else is worth a retry.
+
+The outcome codes: `timeout`, `expectation`, `profile_capability`,
+`configuration`, `session_closed`, `too_large`, `ws_closed`, `ws_too_big`,
+`ws_protocol`, `proxy_closed`. The message is written for a human and names the
+consequence, not only the fact:
 
 ```
 timeout must be positive, got 0s (leave it unset for no limit)
@@ -577,6 +583,23 @@ with curlpro.Session("chrome-151-windows") as s:
     print(fp.akamai)    # 1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p
     print(fp.headers)   # the order the names will go out in
     fp.client_hello     # the ClientHello itself: bytes, key shares drawn afresh per call
+```
+
+`headers_for()` answers the same question for one request rather than a plain
+GET — its method, mode, page and headers — so seeing what goes out needs no
+server of your own:
+
+```python
+s.headers_for("POST", api_url, mode="fetch", page=page_url)
+# {'sec-ch-ua-platform': '"Windows"', ..., 'origin': ..., 'referer': ...}
+```
+
+And `capabilities()` says what a profile can do before you commit to it:
+
+```python
+curlpro.capabilities("safari-26.0-macos")
+# {'modes': ['navigate', 'fetch'], 'protocols': ['http1', 'h2'],
+#  'devices': [], 'derived_fetch': True, ...}
 ```
 
 These values used to be obtainable only from browserleaks, which made every

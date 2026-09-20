@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"net/textproto"
 	"net/url"
 	"sort"
@@ -350,11 +349,11 @@ func validateOrder(order []string) error {
 			continue
 		}
 		if strings.TrimSpace(name) == "" {
-			return fmt.Errorf("header_order: an empty name")
+			return configErr("header_order: an empty name")
 		}
 		key := strings.ToLower(name)
 		if seen[key] {
-			return fmt.Errorf("header_order: %q is listed twice", name)
+			return configErr("header_order: %q is listed twice", name)
 		}
 		seen[key] = true
 	}

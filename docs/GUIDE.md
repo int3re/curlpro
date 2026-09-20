@@ -4,8 +4,8 @@
 
 This is the whole library in one document, written for two readers: a person
 integrating it, and an AI assistant researching it before touching code. Every
-number and every behaviour here was checked against the code on 2026-09-16, at
-version 0.7.2. Where the README says less, this document says more; where the
+number and every behaviour here was checked against the code on 2026-09-20, at
+version 0.8.1. Where the README says less, this document says more; where the
 two disagree, this one is wrong and should be fixed — say so.
 
 An assistant reading this: the library already does most of what a scraper
@@ -57,7 +57,7 @@ Three ways profiles reach the library:
 - **At runtime.** `curlpro.register_profile(dict_or_json)` adds one profile
   without a release.
 
-The native library has an ABI version (`0.18` for this release) that the Python
+The native library has an ABI version (`0.20` for this release) that the Python
 side checks on import. A wheel always carries a matching pair; the check exists
 for source builds and for `CURLPRO_LIBRARY`, which points the package at a
 library of your own. A mismatch raises at import time with the rebuild command
@@ -319,11 +319,33 @@ except curlpro.CurlProError as e:        # everything else: e.code, str(e)
     ...
 ```
 
-`CurlProError` is a `RuntimeError`; the four above derive from it. Branch on the
-type or on `code`, never on the message — messages are written for people and
-are improved freely. The codes: `timeout`, `expectation`, `session_closed`,
-`too_large`, `ws_closed`, `ws_too_big`, `ws_protocol`, `proxy_closed`. An error
-without a code is an ordinary failure with the reason in the text.
+`CurlProError` is a `RuntimeError`; everything else here derives from it.
+Branch on the type or on `code`, never on the message — messages are written
+for people and are improved freely.
+
+The first question a scraper asks is whether to retry, and the hierarchy
+answers it:
+
+```python
+except curlpro.PermanentError:      # never retry: the answer will not change
+except curlpro.Timeout:             # retry
+except curlpro.CurlProError:        # everything else, usually worth one retry
+```
+
+`PermanentError` has two kinds. `ProfileCapabilityError` (`profile_capability`)
+means the profile cannot do what was asked — no fetch set, no `http3` section,
+no ALPN to restrict, no devices; ask :func:`capabilities` first or move to
+another profile. `ConfigurationError` (`configuration`) means the arguments do
+not make sense — an unregistered profile name, a device not in the list, a
+page that is not a URL, a header listed twice. Both used to arrive as a plain
+`CurlProError` with no code, indistinguishable from a blinked connection, and
+a worker that retried them three times and dropped the task is where they come
+from.
+
+The codes: `timeout`, `expectation`, `profile_capability`, `configuration`,
+`session_closed`, `too_large`, `ws_closed`, `ws_too_big`, `ws_protocol`,
+`proxy_closed`. An error without a code is an ordinary failure with the reason
+in the text.
 
 Three hooks, each a list of callables on `s.hooks[...]`, also addable with
 `@s.on_request`, `@s.on_response`, `@s.on_error`:
@@ -373,10 +395,29 @@ What each family carries, resolved through inheritance:
 
 | Family | Navigation set | Fetch set | HTTP/1.1 set | WebSocket | HTTP/3 |
 |---|---|---|---|---|---|
-| Chrome, Edge, Yandex | yes | yes | yes | yes | chrome-151-windows, chrome-152-windows, chrome-152-android, yandex-26.8-android |
-| Firefox, Tor | yes | yes | yes | yes | no |
-| Safari | yes | no | yes | no | no |
-| okhttp | yes | no | no | no | no |
+| Chrome, Edge, Yandex | yes | measured | yes | yes | chrome-151-windows, chrome-152-windows, chrome-152-android, yandex-26.8-android |
+| Firefox, Tor | yes | measured | yes | yes | no |
+| Safari | yes | **derived** | yes | no | no |
+| okhttp | yes | none — a library has no fetch | no | no | no |
+
+`curlpro.capabilities(name)` answers all of this for one profile without
+opening a session: the modes it carries, the protocols it can speak, its
+devices, whether it answers `Accept-CH`, and whether its fetch set is derived.
+
+**The Safari fetch set is the one derived thing in the corpus.** Eleven Safari
+profiles had no fetch set, so `mode="fetch"` on them was refused and they could
+not make an XHR at all — and a user reported Safari passing their anti-bot
+about twice as often as any Chrome while being unusable for exactly that
+reason. `scripts/gen-safari-fetch.py` writes one from the Fetch standard and
+the profile's own navigation set: `accept: */*`, no `upgrade-insecure-requests`
+or `sec-fetch-user`, `sec-fetch-mode: cors`, `sec-fetch-dest: empty`, slots for
+`Origin`, `Referer` and the body's headers — and, for the 15.x profiles, no
+`sec-fetch-*` at all, because WebKit shipped Fetch Metadata in Safari 16.4 and
+inventing them would be a worse tell than the missing set was. The **set** is
+solid; the **order** is a guess, and order is part of the fingerprint. So it is
+marked: `capabilities()["derived_fetch"]` is true, and `audit()` raises
+`derived_fetch_set` whenever such a set is actually in use. Replace it with a
+capture the day a Mac or an iPhone is at hand.
 
 **Mobile.** `chrome-152-android` and `yandex-26.8-android` carry a pool of 46
 real phones — exact `ro.product.model` strings from Google's Play device
@@ -489,6 +530,7 @@ profile is silent except a phone profile with no device chosen:
 | `accept_encoding` | medium | an `accept-encoding` that is not the profile's, or none at all |
 | `no_user_agent` | high | no User-Agent at all — the shape `default_headers=False` leaves behind |
 | `referer_site` | high | a Referer that disagrees with the fetch metadata or the Origin beside it: a hand-written Referer next to `sec-fetch-site: none`, a Referer from another origin under `same-origin`, or Origin and Referer naming two pages |
+| `derived_fetch_set` | medium | the session is sending Safari's derived fetch set, whose order was not measured (section 11) |
 
 `Persona` binds one identity — profile, proxy, device, headers (removals
 included), cookies, free-form `notes` — to one JSON file:
@@ -531,6 +573,10 @@ should reach for the existing feature instead. Each line names it:
 - **Response validation** — `Expect(...)` instead of hand-written `if` chains.
 - **Identity files** — `Persona`, not an ad-hoc JSON of proxy plus cookies.
 - **Fingerprint checks** — `s.fingerprint()` and `s.audit()` offline, not a call to an oracle.
+- **Seeing the outgoing headers** — `s.headers_for(method, url, mode=..., page=...)`, not an echo server of your own.
+- **Asking whether a profile can do something** — `curlpro.capabilities(name)`, not a probe request and a substring in the error text.
+- **Telling a permanent failure from a passing one** — `except curlpro.PermanentError`, not a match on the message.
+- **Reading a profile's data** — `curlpro.get_profile(name).data`, not the JSON inside `site-packages`.
 - **A `requests` shim** — `import curlpro.requests as requests` exists; unsupported arguments raise instead of being ignored.
 - **A new browser version** — a profile delta or `register_profile()`, not a library change.
 
@@ -588,8 +634,11 @@ Facts that are easy to doubt and are true:
 | `Persona`, `load_all(dir)` | class, function | an identity between runs; a folder of them |
 | `Profile` | class | a profile as an object: `from_file`, `derive`, `register`, `save` |
 | `load_profiles(dir)`, `register_profile(x)`, `list_profiles()`, `ensure_loaded()` | function | profile management |
+| `capabilities(name)`, `get_profile(name)`, `library_version()` | function | what a profile can do, a profile as data, the native library's own version |
+| `s.headers_for(method, url, ...)` | method | the headers a request would carry, without sending it |
 | `request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options` | function | one request in its own session; `impersonate=` picks the profile |
 | `CurlProError`, `Timeout`, `HTTPError`, `WebSocketClosed` | exception | the hierarchy; `.code` on all |
+| `PermanentError`, `ProfileCapabilityError`, `ConfigurationError` | exception | failures a retry cannot fix (section 9) |
 | `curlpro.requests` | module | the `requests`-shaped face: `get`, `Session`, `status_code`, the same exceptions |
 
 ## 18. Where things live

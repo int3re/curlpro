@@ -18,7 +18,15 @@ belongs to the browser and is not covered here.
 
 from __future__ import annotations
 
-from ._ffi import HTTPError, Timeout, CurlProError, WebSocketClosed
+from ._ffi import (
+    ConfigurationError,
+    CurlProError,
+    HTTPError,
+    PermanentError,
+    ProfileCapabilityError,
+    Timeout,
+    WebSocketClosed,
+)
 from .expect import Expect, ExpectationFailed
 from .fingerprint import Fingerprint
 from .audit import Finding, audit
@@ -26,7 +34,16 @@ from .persona import Persona, load_all
 from .aio import AsyncSession, AsyncStreamResponse, AsyncWebSocket
 from .cookies import Cookie, Cookies
 from .session import Redirect, Response, Session, delete, get, head, options, patch, post, put, request
-from .profiles import Profile, ensure_loaded, list_profiles, load_profiles, register_profile
+from .profiles import (
+    Profile,
+    capabilities,
+    ensure_loaded,
+    get_profile,
+    library_version,
+    list_profiles,
+    load_profiles,
+    register_profile,
+)
 from .stream import StreamResponse
 from .websocket import WebSocket
 
@@ -36,12 +53,15 @@ __all__ = [
     "AsyncWebSocket",
     "Cookie",
     "Cookies",
+    "ConfigurationError",
     "CurlProError",
     "Expect",
     "Finding",
     "ExpectationFailed",
     "Fingerprint",
     "Persona",
+    "PermanentError",
+    "ProfileCapabilityError",
     "HTTPError",
     "Redirect",
     "Timeout",
@@ -52,10 +72,13 @@ __all__ = [
     "WebSocket",
     "WebSocketClosed",
     "audit",
+    "capabilities",
     "delete",
     "ensure_loaded",
     "get",
+    "get_profile",
     "head",
+    "library_version",
     "list_profiles",
     "load_all",
     "load_profiles",

@@ -122,7 +122,10 @@ func curlpro_free(s *C.char) {
 // 0.18.0: post_quantum on the session, and the raw ClientHello in the fingerprint.
 // 0.19.0: the page a request is made from (page on the session and per
 // request, curlpro_session_set_page), and the preview URL in the fingerprint.
-const Version = "0.19.0"
+// 0.20.0: codes on configuration and capability failures, so a caller can tell
+// "never retry" from "retry"; curlpro_profile_capabilities, curlpro_profile_get
+// and curlpro_session_preview.
+const Version = "0.20.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -157,6 +160,36 @@ func curlpro_profile_register(data *C.char) (out *C.char) {
 func curlpro_profiles_list() (out *C.char) {
 	defer recoverInto(&out)
 	return respond(map[string]any{"profiles": registry.Names()}, nil)
+}
+
+// curlpro_profile_capabilities answers what a profile can do, without opening
+// a session.
+//
+// Before it, the only way to learn whether a profile could serve mode="fetch"
+// was to try one and read the words "fetch header" out of the error — and the
+// wording of an error is explicitly not part of the API.
+//
+//export curlpro_profile_capabilities
+func curlpro_profile_capabilities(name *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	p, err := registry.Resolve(C.GoString(name))
+	if err != nil {
+		return respond(nil, client.AsConfigError(err))
+	}
+	return respond(p.Capabilities(), nil)
+}
+
+// curlpro_profile_get returns a profile with its inheritance resolved — the
+// profile as it actually behaves, not the delta as it is stored.
+//
+//export curlpro_profile_get
+func curlpro_profile_get(name *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	p, err := registry.Resolve(C.GoString(name))
+	if err != nil {
+		return respond(nil, client.AsConfigError(err))
+	}
+	return respond(p, nil)
 }
 
 type sessionConfig struct {
@@ -242,7 +275,9 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 	}
 	p, err := registry.Resolve(c.Profile)
 	if err != nil {
-		return respond(nil, err)
+		// A name that is not registered is the caller's mistake, permanent:
+		// retrying it a minute later finds the same nothing.
+		return respond(nil, client.AsConfigError(err))
 	}
 	s, err := client.New(p, client.Options{
 		InsecureSkipVerify: c.InsecureSkipVerify,
@@ -321,6 +356,60 @@ func curlpro_session_fingerprint(id C.longlong, url *C.char) (out *C.char) {
 		return respond(nil, err)
 	}
 	return respond(fp, nil)
+}
+
+// previewJSON asks what one request's headers would be.
+type previewJSON struct {
+	Method  string            `json:"method"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+	// Mode, Page and Protocol are the request's own, as in a real request:
+	// "" takes the session's, and for Page a null does the same while an
+	// empty string means no initiator.
+	Mode            string   `json:"mode"`
+	Page            *string  `json:"page"`
+	Protocol        string   `json:"protocol"`
+	HeaderOrder     []string `json:"header_order"`
+	DefaultHeaders  *bool    `json:"default_headers"`
+	SessionHeaders  *bool    `json:"session_headers"`
+	SuppressHeaders []string `json:"suppress_headers"`
+}
+
+// curlpro_session_preview reports the headers a request would carry, without
+// sending it.
+//
+// fingerprint() answers the same question for a plain GET in the session's own
+// mode; this one takes the request — its method, URL, mode, page and headers —
+// so "what will actually go out for this call" needs no packet capture. A
+// field report had to stand up an HTTP server to see it.
+//
+//export curlpro_session_preview
+func curlpro_session_preview(id C.longlong, spec *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	var p previewJSON
+	if err := json.Unmarshal([]byte(C.GoString(spec)), &p); err != nil {
+		return respond(nil, fmt.Errorf("parsing the preview request: %w", err))
+	}
+	names, values, err := s.PreviewHeaders(&client.Request{
+		Method:          p.Method,
+		URL:             p.URL,
+		Headers:         p.Headers,
+		Mode:            p.Mode,
+		Page:            p.Page,
+		Protocol:        p.Protocol,
+		HeaderOrder:     p.HeaderOrder,
+		DefaultHeaders:  p.DefaultHeaders,
+		SessionHeaders:  p.SessionHeaders,
+		SuppressHeaders: p.SuppressHeaders,
+	})
+	if err != nil {
+		return respond(nil, err)
+	}
+	return respond(map[string]any{"names": names, "headers": values}, nil)
 }
 
 // curlpro_session_set_cookies loads cookies into the session.

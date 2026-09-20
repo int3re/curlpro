@@ -69,7 +69,7 @@ func (s *Session) http3() (*h3.Transport, error) {
 
 func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports) (*h3.Transport, error) {
 	if !p.HTTP3.Enabled() {
-		return nil, fmt.Errorf("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
+		return nil, capabilityErr("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
 
 	// Settings 0x06 and 0x33 are set through transport fields rather than

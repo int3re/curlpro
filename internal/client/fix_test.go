@@ -797,8 +797,13 @@ func TestExplicitFetchWithoutASetIsRefused(t *testing.T) {
 		t.Error("an unknown mode was accepted")
 	}
 	// A real profile without a fetch set, refused once at session creation.
-	_, err = New(auditProfile(t, "safari-26.0-macos"), Options{Mode: ModeFetch, DefaultHeaders: true})
+	// okhttp is the example: it is a library, it has no fetch concept, and
+	// unlike Safari it will never grow a derived set.
+	_, err = New(auditProfile(t, "okhttp-5.5-jvm"), Options{Mode: ModeFetch, DefaultHeaders: true})
 	if err == nil || !strings.Contains(err.Error(), "no fetch header set") {
-		t.Errorf("New accepted mode=fetch on safari-26.0-macos: %v", err)
+		t.Errorf("New accepted mode=fetch on okhttp-5.5-jvm: %v", err)
+	}
+	if Code(err) != CodeProfileCapability {
+		t.Errorf("code %q, want %q", Code(err), CodeProfileCapability)
 	}
 }

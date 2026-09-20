@@ -76,7 +76,8 @@ def test_which_profiles_have_http3_and_fetch_sets():
         with pytest.raises(curlpro.CurlProError):
             curlpro.Session(n, http3=True)
     for n in NAMES:
-        has_fetch = n.startswith(("chrome-", "edge-", "firefox-", "tor-", "yandex-"))
+        # Every browser profile has a fetch set; okhttp, a library, has none.
+        has_fetch = not n.startswith("okhttp-")
         if has_fetch:
             curlpro.Session(n, mode="fetch").close()
         else:
@@ -98,7 +99,8 @@ def test_the_error_codes_named_are_the_ones_the_native_side_knows():
     go = (REPO / "internal" / "client" / "errors.go").read_text(encoding="utf-8")
     native = set(re.findall(r'ErrorCode = "([a-z_]+)"', go))
     assert native == {"session_closed", "timeout", "ws_closed", "ws_too_big",
-                      "ws_protocol", "too_large", "proxy_closed"}
+                      "ws_protocol", "too_large", "proxy_closed",
+                      "profile_capability", "configuration"}
     for code in native | {"expectation"}:
         assert f"`{code}`" in GUIDE, code
         assert code in LLMS, code
@@ -112,6 +114,11 @@ def test_every_name_in_the_api_index_exists():
         for n in re.findall(r"`([^`]+)`", m.group(1)):
             names.add(n.split("(")[0])
     assert "Session" in names and "request" in names, names
+    # A row may name a method rather than a module-level name: s.headers_for.
+    methods = {n[2:] for n in names if n.startswith("s.")}
+    missing = [n for n in methods if not hasattr(curlpro.Session, n)]
+    assert missing == [], f"Session has no {missing}"
+    names -= {n for n in names if n.startswith("s.")}
     missing = [n for n in names if n != "curlpro.requests" and not hasattr(curlpro, n)]
     assert missing == [], missing
     import curlpro.requests as rq

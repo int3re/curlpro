@@ -60,14 +60,49 @@ class WebSocketClosed(CurlProError):
     """
 
 
+class PermanentError(CurlProError):
+    """A failure that will repeat: retrying it changes nothing.
+
+    The two below are its kinds, and this is what a caller catches to mean
+    "do not retry". Until it existed, a profile that could not serve
+    ``mode="fetch"`` raised the same ``CurlProError`` as a blinked
+    connection: a worker retried it three times and dropped the task.
+    """
+
+
+class ProfileCapabilityError(PermanentError):
+    """The profile cannot do what was asked.
+
+    No fetch header set, no ``http3`` section, no ALPN extension to restrict,
+    no devices to choose from. Ask :func:`curlpro.capabilities` before
+    choosing a profile, or catch this and move to another one — the profile
+    will not grow the section between attempts. ``code == "profile_capability"``.
+    """
+
+
+class ConfigurationError(PermanentError):
+    """The arguments do not make sense together.
+
+    An unregistered profile name, a device that is not in the list, a page
+    that is not a URL, a header listed twice, a negative timeout.
+    ``code == "configuration"``.
+    """
+
+
+#: Error codes that map to a class of their own. Everything else arrives as a
+#: plain CurlProError with its code attached.
+_BY_CODE = {
+    "ws_closed": WebSocketClosed,
+    "timeout": Timeout,
+    "profile_capability": ProfileCapabilityError,
+    "configuration": ConfigurationError,
+}
+
+
 def _raise(envelope: dict, name: str) -> None:
     code = envelope.get("code")
     message = envelope.get("error") or f"{name}: unknown error"
-    if code == "ws_closed":
-        raise WebSocketClosed(message, code)
-    if code == "timeout":
-        raise Timeout(message, code)
-    raise CurlProError(message, code)
+    raise _BY_CODE.get(code, CurlProError)(message, code)
 
 
 def _library_name() -> str:
@@ -117,6 +152,8 @@ _lib.curlpro_free.restype = None
 for _name, _args in (
     ("curlpro_version", []),
     ("curlpro_profiles_list", []),
+    ("curlpro_profile_capabilities", [ctypes.c_char_p]),
+    ("curlpro_profile_get", [ctypes.c_char_p]),
     ("curlpro_profiles_load_dir", [ctypes.c_char_p]),
     ("curlpro_profile_register", [ctypes.c_char_p]),
     ("curlpro_session_new", [ctypes.c_char_p]),
@@ -145,6 +182,7 @@ for _name, _args in (
     ("curlpro_session_headers", [ctypes.c_longlong]),
     ("curlpro_session_cookies", [ctypes.c_longlong]),
     ("curlpro_session_fingerprint", [ctypes.c_longlong, ctypes.c_char_p]),
+    ("curlpro_session_preview", [ctypes.c_longlong, ctypes.c_char_p]),
     ("curlpro_session_set_cookies", [ctypes.c_longlong, ctypes.c_char_p]),
     ("curlpro_session_clear_cookies", [ctypes.c_longlong]),
     ("curlpro_request_start", [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]),
@@ -210,7 +248,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Minimum version of the native part: major and minor. Raise it together
 # with lib/curlpro.go whenever Python starts depending on a new export or field.
-REQUIRED_VERSION = (0, 19)
+REQUIRED_VERSION = (0, 20)
 
 
 def _check_version() -> None:

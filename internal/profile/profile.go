@@ -65,6 +65,11 @@ type FetchSpec struct {
 	HTTP1Order []string `json:"http1_order,omitempty"`
 	// CustomAnchor is the anchor for custom headers, comma separated.
 	CustomAnchor string `json:"custom_anchor,omitempty"`
+	// Derived marks a set that was not captured from the browser but worked
+	// out from its navigation set and the Fetch standard. Everything else in
+	// a profile is measured, so the exception is stated rather than hidden:
+	// Capabilities reports it and the audit says so out loud.
+	Derived bool `json:"derived,omitempty"`
 }
 
 // Enabled reports whether the profile describes a fetch set.
@@ -151,6 +156,82 @@ func quoteHint(v string) string {
 		return v
 	}
 	return "\"" + v + "\""
+}
+
+// HasDevices reports whether the profile offers phones to choose from.
+func (p *Profile) HasDevices() bool { return len(p.Devices) > 0 }
+
+// Capabilities is what a profile can do, answerable without sending anything.
+//
+// It exists because the only way to learn this used to be to try: a caller
+// building a list of usable profiles had to open a session, aim a request at a
+// closed port and read the words "fetch header" out of the error text — and
+// the text of an error is explicitly not part of the API. Now the question has
+// an answer.
+type Capabilities struct {
+	Name    string `json:"name"`
+	BasedOn string `json:"based_on,omitempty"`
+	Family  string `json:"family"`
+	// Modes are the header sets the profile carries: "navigate" always,
+	// "fetch" when it has a fetch section.
+	Modes []string `json:"modes"`
+	// Protocols are the transports it can speak: "http1" and "h2" always
+	// (the server chooses through ALPN), "h3" with an http3 section.
+	Protocols []string `json:"protocols"`
+	// Devices lists the phones it offers, empty for a desktop profile.
+	Devices []string `json:"devices"`
+	// ClientHints is true when the profile answers Accept-CH with
+	// high-entropy hints; WebSocket, when it carries a handshake template;
+	// HTTP1Set, when it has a measured HTTP/1.1 order rather than an
+	// approximated one.
+	ClientHints bool `json:"client_hints"`
+	WebSocket   bool `json:"websocket"`
+	HTTP1Set    bool `json:"http1_set"`
+	// UserAgent is the string the profile sends without a device chosen, and
+	// UserAgentVaries says a chosen device changes it.
+	UserAgent       string `json:"user_agent"`
+	UserAgentVaries bool   `json:"user_agent_varies"`
+	// DerivedFetch marks a fetch set that was derived from the navigation set
+	// and the Fetch standard rather than captured from the browser. Everything
+	// else in a profile is measured; this one field says where that is not so.
+	DerivedFetch bool `json:"derived_fetch,omitempty"`
+}
+
+// Capabilities answers what this profile can do.
+func (p *Profile) Capabilities() Capabilities {
+	c := Capabilities{
+		Name:        p.Name,
+		BasedOn:     p.BasedOn,
+		Family:      familyOf(p.Name),
+		Modes:       []string{"navigate"},
+		Protocols:   []string{"http1", "h2"},
+		Devices:     []string{},
+		ClientHints: p.ClientHints.Enabled(),
+		WebSocket:   len(p.WebSocket.Order) > 0,
+		HTTP1Set:    p.HTTP1.Enabled(),
+		UserAgent:   p.Headers.UserAgent,
+		// A template means the chosen device reaches the string itself.
+		UserAgentVaries: p.Headers.UserAgentTemplate != "",
+		DerivedFetch:    p.Fetch.Derived,
+	}
+	if p.Fetch.Enabled() {
+		c.Modes = append(c.Modes, "fetch")
+	}
+	if p.HTTP3.Enabled() {
+		c.Protocols = append(c.Protocols, "h3")
+	}
+	for _, d := range p.Devices {
+		c.Devices = append(c.Devices, d.Name)
+	}
+	return c
+}
+
+// familyOf is the browser family in a profile name: "safari" of safari-26-ios.
+func familyOf(name string) string {
+	if i := strings.Index(name, "-"); i > 0 {
+		return name[:i]
+	}
+	return name
 }
 
 // PickDevice picks a device by name; an empty name or "random" picks one at random.
@@ -512,6 +593,12 @@ func (r *Registry) Resolve(name string) (*Profile, error) {
 		merge(out, chain[i])
 	}
 	out.Name = name
+	// The parent a profile declares, kept on the folded result: it is the
+	// answer to "where does this come from", which Capabilities reports and a
+	// reader comparing two profiles wants. It is not used for resolution — the
+	// chain is already applied — and re-resolving a resolved profile is not a
+	// thing the registry does.
+	out.BasedOn = chain[0].BasedOn
 	if err := out.validate(); err != nil {
 		return nil, fmt.Errorf("profile %q: %w", name, err)
 	}
@@ -724,6 +811,11 @@ func merge(dst, src *Profile) {
 	}
 	if src.Fetch.CustomAnchor != "" {
 		dst.Fetch.CustomAnchor = src.Fetch.CustomAnchor
+	}
+	// The flag travels with the order it describes: a child that brings its
+	// own measured set must not inherit its parent's "derived" mark.
+	if src.Fetch.Order != nil {
+		dst.Fetch.Derived = src.Fetch.Derived
 	}
 
 	if src.Headers.UserAgent != "" {

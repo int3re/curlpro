@@ -79,6 +79,31 @@ def _count(value: Any, name: str) -> Any:
     return value
 
 
+def _split_headers(
+    headers: "Mapping[str, str | None] | None",
+) -> tuple[dict[str, str], list[str]]:
+    """Splits the caller's headers into values to send and names to remove.
+
+    ``None`` removes a header the profile or the session would send — the way
+    to drop one navigation-only name without ``default_headers=False``, which
+    drops the User-Agent and the order with it. An empty string is a value and
+    goes out as one, the way a browser's ``fetch()`` sends an empty header when
+    told to. Both used to be sent empty, without a word.
+    """
+    values: dict[str, str] = {}
+    suppress: list[str] = []
+    for name, value in (headers or {}).items():
+        if value is None:
+            suppress.append(name)
+        elif isinstance(value, str):
+            values[name] = value
+        else:
+            raise TypeError(
+                f"header {name!r}: the value must be a string, or None to remove "
+                f"the header; got {type(value).__name__}")
+    return values, suppress
+
+
 def _page_override(page: str | bool | None) -> str | None:
     """The page argument as the native side expects it: ``None`` inherits the
     session's page, ``False`` means no initiator, a string names the page."""
@@ -320,22 +345,7 @@ def _request_meta(
         headers.setdefault("Authorization", credentials)
     """Builds the request frame. Shared by request() and stream(): the stream
     used to keep its own cut-down copy without timeout, proxy, retries or files."""
-    # None removes a header the profile or the session would send — the way
-    # to drop one navigation-only name without default_headers=False, which
-    # drops the User-Agent and the order with it. An empty string is a value
-    # and goes out as one, the way a browser's fetch() sends an empty header
-    # when told to. Both used to be sent empty, without a word.
-    hdrs: dict[str, str] = {}
-    suppress: list[str] = []
-    for name, value in (headers or {}).items():
-        if value is None:
-            suppress.append(name)
-        elif isinstance(value, str):
-            hdrs[name] = value
-        else:
-            raise TypeError(
-                f"header {name!r}: the value must be a string, or None to remove "
-                f"the header; got {type(value).__name__}")
+    hdrs, suppress = _split_headers(headers)
     multipart = None
 
     if body_file is not None:
@@ -1079,6 +1089,55 @@ class Session:
             raise TypeError(f"page must be a URL or None, got {type(url).__name__}")
         _call("curlpro_session_set_page", self._id, value.encode("utf-8"))
         self._page = value
+
+    def headers_for(
+        self,
+        method: str = "GET",
+        url: str = "https://example.com/",
+        *,
+        headers: Mapping[str, str | None] | None = None,
+        header_order: Iterable[Any] | None = None,
+        mode: str | None = None,
+        page: str | bool | None = None,
+        protocol: str | float | None = None,
+        default_headers: bool | None = None,
+        session_headers: bool | None = None,
+    ) -> dict[str, str]:
+        """The headers this request would carry, without sending it.
+
+            s.headers_for("POST", api_url, mode="fetch", page=page_url)
+            # {'sec-ch-ua-platform': '"Windows"', ..., 'referer': ..., 'origin': ...}
+
+        The same assembly the request itself runs — profile set, session
+        headers, removals, order pattern, the page's ``Referer``, ``Origin``
+        and ``sec-fetch-site`` — so the answer is what goes out, not a second
+        implementation of the rules. Insertion order is send order.
+
+        :meth:`fingerprint` answers the same question for a plain GET in the
+        session's own mode; this one takes the request. The transport matters,
+        so it follows ``protocol``: HTTP/1.1 adds ``Host`` and ``Connection``
+        and uses the browser's letter case, HTTP/2 and HTTP/3 have neither.
+
+        Refuses what the request would refuse: ``mode="fetch"`` on a profile
+        without a fetch set raises :class:`~curlpro.ProfileCapabilityError`
+        here too, which makes this the cheap way to ask before committing.
+        """
+        if self._closed:
+            raise RuntimeError("session is closed")
+        hdrs, suppress = _split_headers(headers)
+        data = _call("curlpro_session_preview", self._id, encode({
+            "method": method.upper(),
+            "url": url,
+            "headers": hdrs,
+            "suppress_headers": suppress,
+            "header_order": _order(header_order),
+            "mode": mode or "",
+            "page": _page_override(page),
+            "protocol": _protocol(protocol),
+            "default_headers": default_headers,
+            "session_headers": session_headers,
+        }))
+        return {h["name"]: h["value"] for h in data["headers"]}
 
     def audit(self) -> list:
         """Contradictions in what this session would send.

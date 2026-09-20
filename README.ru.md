@@ -425,9 +425,15 @@ except curlpro.CurlProError as e:         # всё остальное из на�
     print(e.code, e)
 ```
 
-Коды исходов: `timeout`, `expectation`, `session_closed`, `too_large`, `ws_closed`,
-`ws_too_big`, `ws_protocol`, `proxy_closed`. Текст написан для человека и называет
-следствие, а не только факт:
+`PermanentError` — а под ним `ProfileCapabilityError` и `ConfigurationError` —
+это то, по чему ветвится скрапер: ответ не изменится, повторять не нужно.
+Профиль без набора fetch, устройство не из списка, page не URL. Всё остальное
+повтора стоит.
+
+Коды исходов: `timeout`, `expectation`, `profile_capability`, `configuration`,
+`session_closed`, `too_large`, `ws_closed`, `ws_too_big`, `ws_protocol`,
+`proxy_closed`. Текст написан для человека и называет следствие, а не только
+факт:
 
 ```
 timeout must be positive, got 0s (leave it unset for no limit)
@@ -566,6 +572,23 @@ with curlpro.Session("chrome-151-windows") as s:
     print(fp.akamai)    # 1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p
     print(fp.headers)   # порядок имён, как они уйдут
     fp.client_hello     # сам ClientHello: байты, key_share свежие на каждый вызов
+```
+
+`headers_for()` отвечает на тот же вопрос про конкретный запрос, а не про
+обычный GET — с его методом, режимом, страницей и заголовками, — так что своего
+сервера для этого не нужно:
+
+```python
+s.headers_for("POST", api_url, mode="fetch", page=page_url)
+# {'sec-ch-ua-platform': '"Windows"', ..., 'origin': ..., 'referer': ...}
+```
+
+А `capabilities()` говорит, что профиль умеет, до того как вы на него положитесь:
+
+```python
+curlpro.capabilities("safari-26.0-macos")
+# {'modes': ['navigate', 'fetch'], 'protocols': ['http1', 'h2'],
+#  'devices': [], 'derived_fetch': True, ...}
 ```
 
 Раньше эти значения можно было узнать только у browserleaks, то есть проверка

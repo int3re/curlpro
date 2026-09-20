@@ -57,6 +57,12 @@ jobs:
       - name: the device pool is in sync with its seed
         run: python scripts/gen-devices.py --check
 
+      # Safari's fetch sets are derived rather than captured, so they are
+      # generated: a hand edit that drifts from the generator is caught here.
+      # The day they are captured from a real Safari, the generator goes.
+      - name: the Safari fetch sets are in sync with their generator
+        run: python scripts/gen-safari-fetch.py --check
+
   go:
     strategy:
       fail-fast: false

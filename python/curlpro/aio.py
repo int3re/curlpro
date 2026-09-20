@@ -214,6 +214,13 @@ class AsyncSession:
         waiting is done by goroutines.
     """
 
+    # __slots__ is the point, not the memory: without it this class is a bag
+    # of attributes, and `s.page = url` for a property it had forgotten to
+    # proxy went into that bag instead of reaching the session. No error, no
+    # Referer on the wire, and a field report that found it only by standing
+    # up an echo server. A missing name is now an AttributeError.
+    __slots__ = ("_session", "impersonate")
+
     def __init__(
         self,
         impersonate: str = DEFAULT_PROFILE,
@@ -243,8 +250,29 @@ class AsyncSession:
         return self._session.headers
 
     @property
+    def page(self) -> str | None:
+        """The page the requests are made from. See :attr:`curlpro.Session.page`."""
+        return self._session.page
+
+    @page.setter
+    def page(self, url: str | None) -> None:
+        self._session.page = url
+
+    @property
     def hooks(self) -> dict[str, list[Any]]:
         return self._session.hooks
+
+    def fingerprint(self, url: str = "https://example.com/"):  # noqa: ANN201
+        """What a server would see. Offline, like the sync session's."""
+        return self._session.fingerprint(url)
+
+    def audit(self) -> list:
+        """Contradictions in what this session would send."""
+        return self._session.audit()
+
+    def headers_for(self, method: str = "GET", url: str = "https://example.com/", **kw: Any):  # noqa: ANN201
+        """The headers a request would carry, without sending it."""
+        return self._session.headers_for(method, url, **kw)
 
     def on_request(self, fn):  # noqa: ANN001, ANN201
         return self._session.on_request(fn)

@@ -89,6 +89,13 @@ type Fingerprint struct {
 	// followed.
 	Device  string   `json:"device"`
 	Devices []string `json:"devices"`
+
+	// Mode is the header set the preview was built with: "navigate" or
+	// "fetch". DerivedFetch says that set was worked out from the Fetch
+	// standard rather than captured — true only for the Safari profiles, and
+	// the audit says so when it is in use.
+	Mode         string `json:"mode"`
+	DerivedFetch bool   `json:"derived_fetch"`
 }
 
 // Fingerprint computes what this session looks like on the wire.
@@ -123,7 +130,7 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 	// session other than this one.
 	if s.opts.ForceHTTP1 {
 		if !setALPN(spec, []string{"http/1.1"}) {
-			return Fingerprint{}, fmt.Errorf(
+			return Fingerprint{}, capabilityErr(
 				"force_http1: profile %q has no ALPN extension to restrict", s.profile.Name)
 		}
 	}
@@ -176,6 +183,8 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 	for _, d := range s.profile.Devices {
 		out.Devices = append(out.Devices, d.Name)
 	}
+	out.Mode = s.modeFor(&Request{Method: "GET", URL: u.String()})
+	out.DerivedFetch = s.profile.Fetch.Derived
 	out.HeaderValues = main
 	out.JA4H = fingerprint.JA4H(fingerprint.JA4HRequest{
 		Method: "GET", Proto: proto, Headers: main})
@@ -183,6 +192,55 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 		Method: "GET", Proto: "HTTP/1.1", Headers: pairsH1})
 	out.JA4HAvailable = fingerprint.JA4HAvailable
 	return out, nil
+}
+
+// PreviewHeaders reports the headers a request would carry, without sending it.
+//
+// The same assembly the request itself would run, with the same mode, page and
+// overrides — so "what will actually go out" stops needing a packet capture or
+// a server of one's own. The transport decides part of the set, so it is taken
+// from the request's protocol: HTTP/1.1 adds Host and Connection and uses the
+// browser's letter case, HTTP/2 and HTTP/3 have neither.
+func (s *Session) PreviewHeaders(r *Request) ([]string, []fingerprint.HeaderKV, error) {
+	if err := s.ensureOpen(); err != nil {
+		return nil, nil, err
+	}
+	if r == nil {
+		r = &Request{}
+	}
+	req := *r
+	if req.Method == "" {
+		req.Method = "GET"
+	}
+	if req.URL == "" {
+		req.URL = "https://example.com/"
+	}
+	if err := s.checkMode(&req); err != nil {
+		return nil, nil, err
+	}
+	if err := req.validate(s.jar != nil); err != nil {
+		return nil, nil, err
+	}
+	u, err := parseURL(req.URL)
+	if err != nil {
+		return nil, nil, configErr("parsing %q: %v", req.URL, err)
+	}
+	// http1 when the caller asked for it or the session forces it; a session
+	// that lets the server choose is previewed as HTTP/2, which is what a
+	// modern server picks.
+	h1 := req.Protocol == ProtoHTTP1 || (req.Protocol == "" && s.opts.ForceHTTP1)
+	names, pairs := s.previewFor(&req, u, h1)
+	return names, pairs, nil
+}
+
+// previewFor builds one request's headers and reads them back in send order.
+func (s *Session) previewFor(r *Request, u *url.URL, h1 bool) ([]string, []fingerprint.HeaderKV) {
+	req, err := http.NewRequest(r.Method, u.String(), nil)
+	if err != nil {
+		return nil, nil
+	}
+	s.applyHeaders(req, r, u, h1)
+	return readBuiltHeaders(req)
 }
 
 // headerPreview runs the real header assembly for a plain GET and reports the
@@ -208,7 +266,25 @@ func (s *Session) headerPreview(u *url.URL, h1, plain bool) ([]string, string, [
 	}
 	s.applyHeaders(req, r, u, h1)
 
-	order, _ := req.Header[http.HeaderOrderKey]
+	names, pairs := readBuiltHeaders(req)
+	// Not Header.Get: it canonicalises the name, and the profile prescribes
+	// the case — "user-agent" as written would not be found.
+	var ua string
+	if vs := headerLookup(req.Header, "user-agent"); len(vs) > 0 {
+		ua = vs[0]
+	}
+	return names, ua, pairs
+}
+
+// readBuiltHeaders reads an assembled request back in send order.
+//
+// A profile names more headers than any one request carries; a name with
+// nothing behind it is a slot and does not reach the wire. An empty user-agent
+// is not a value either: it is how the HTTP/2 path tells the transport to send
+// no User-Agent at all (suppressDefaultUA), and a preview listing it would
+// claim a header that never goes out.
+func readBuiltHeaders(req *http.Request) ([]string, []fingerprint.HeaderKV) {
+	order := req.Header[http.HeaderOrderKey]
 	names := make([]string, 0, len(order))
 	pairs := make([]fingerprint.HeaderKV, 0, len(order))
 	for _, name := range order {
@@ -218,24 +294,13 @@ func (s *Session) headerPreview(u *url.URL, h1, plain bool) ([]string, string, [
 				vs = canon
 			}
 		}
-		// A profile names more headers than any one request carries; a name
-		// with nothing behind it is a slot and does not reach the wire. An
-		// empty user-agent is not a value either: it is how the HTTP/2 path
-		// tells the transport to send no User-Agent at all (suppressDefaultUA),
-		// and a preview listing it would claim a header that never goes out.
 		if len(vs) == 0 || (vs[0] == "" && equalFold(name, "user-agent")) {
 			continue
 		}
 		names = append(names, name)
 		pairs = append(pairs, fingerprint.HeaderKV{Name: name, Value: vs[0]})
 	}
-	// Not Header.Get: it canonicalises the name, and the profile prescribes
-	// the case — "user-agent" as written would not be found.
-	var ua string
-	if vs := headerLookup(req.Header, "user-agent"); len(vs) > 0 {
-		ua = vs[0]
-	}
-	return names, ua, pairs
+	return names, pairs
 }
 
 // headerLookup finds a header by name without canonicalising it: the profile
