@@ -79,7 +79,7 @@ def test_fetch_metadata_values_switch_the_set_by_themselves(server, profile):
 def test_an_explicit_fetch_on_a_profile_without_a_set_is_refused(server):
     """Refused with the reason, not quietly navigational.
 
-    okhttp is the example since 0.8.1: it is a library, it has no fetch
+    okhttp is the example since 0.9.0: it is a library, it has no fetch
     concept at all, while the Safari profiles carry a derived set.
     """
     with pytest.raises(curlpro.ProfileCapabilityError, match="no fetch header set"):

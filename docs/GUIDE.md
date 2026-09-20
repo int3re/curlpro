@@ -5,7 +5,7 @@
 This is the whole library in one document, written for two readers: a person
 integrating it, and an AI assistant researching it before touching code. Every
 number and every behaviour here was checked against the code on 2026-09-20, at
-version 0.8.1. Where the README says less, this document says more; where the
+version 0.9.0. Where the README says less, this document says more; where the
 two disagree, this one is wrong and should be fixed — say so.
 
 An assistant reading this: the library already does most of what a scraper

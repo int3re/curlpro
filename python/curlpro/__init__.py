@@ -90,7 +90,7 @@ __all__ = [
     "request",
 ]
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 try:  # an installed distribution is the authority; a source checkout has none
     from importlib.metadata import version as _dist_version
