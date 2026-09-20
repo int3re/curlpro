@@ -1,0 +1,103 @@
+{
+  "name": "chrome-153-windows",
+  "based_on": "chrome-152-windows",
+  "tls": {
+    "raw_client_hello": "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",
+    "signature_algorithms": [
+      14906,
+      2308,
+      2309,
+      2310,
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537
+    ],
+    "permute_extensions": true,
+    "allow_blunt_mimicry": true
+  },
+  "http1": {},
+  "http2": {},
+  "http3": {},
+  "quic": {},
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+    "order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": "\"Google Chrome\";v=\"153\", \"Not_A Brand\";v=\"8\", \"Chromium\";v=\"153\""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": "?0"
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": "\"Windows\""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      },
+      {
+        "key": "accept-language",
+        "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      }
+    ]
+  },
+  "websocket": {},
+  "client_hints": {},
+  "fetch": {}
+}
