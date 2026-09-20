@@ -6,10 +6,12 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.7.2**: `header_order` as a pattern over the browser's order (`...` for the
-profile's own headers), the complete guide in `docs/GUIDE.md` verified against
-the code, `llms.txt` for AI assistants, `curlpro.request` exported, and the
-README's stale claims corrected. ABI 0.18.0, unchanged since 0.7.1.
+**0.8.0** — a minor, because two defaults changed. `page` names the page a
+request is made from, and `Referer`, `Origin` and `sec-fetch-site` are derived
+from it as Chrome 153 and Firefox 156 derive them; TLS session resumption is on
+by default, its resuming hello measured on both browsers; and a chosen device is
+written into the Chrome Android `User-Agent` as well. ABI 0.19.0: a wheel carries
+the matching library, a source build needs `go build` again.
 
 ## What happens on a tag
 
