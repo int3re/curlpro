@@ -4,8 +4,8 @@
 
 This is the whole library in one document, written for two readers: a person
 integrating it, and an AI assistant researching it before touching code. Every
-number and every behaviour here was checked against the code on 2026-09-20, at
-version 0.9.0. Where the README says less, this document says more; where the
+number and every behaviour here was checked against the code on 2026-09-21, at
+version 0.10.0. Where the README says less, this document says more; where the
 two disagree, this one is wrong and should be fixed — say so.
 
 An assistant reading this: the library already does most of what a scraper
@@ -57,7 +57,7 @@ Three ways profiles reach the library:
 - **At runtime.** `curlpro.register_profile(dict_or_json)` adds one profile
   without a release.
 
-The native library has an ABI version (`0.20` for this release) that the Python
+The native library has an ABI version (`0.21` for this release) that the Python
 side checks on import. A wheel always carries a matching pair; the check exists
 for source builds and for `CURLPRO_LIBRARY`, which points the package at a
 library of your own. A mismatch raises at import time with the rebuild command
@@ -117,14 +117,17 @@ touch it.
 | `respect_retry_after` | `True` | a `Retry-After` header sets the wait |
 | `mode` | `"auto"` | the header set: `navigate`, `fetch`, or decided per request (section 7) |
 | `page` | `None` | the page the requests are made from — the initiator. Derives `Referer`, `Origin` and `sec-fetch-site` the way a browser does (section 7); `s.page = url` moves it as the scraper moves. Must be an absolute http(s) URL |
+| `credentials` | `"same-origin"` | the credentials mode of fetch-mode requests, in `fetch()`'s words: `same-origin` sends cookies only to the page's own origin — the default of `fetch()` and of XHR — `include` sends them wherever the SameSite rules allow, `omit` sends none. Measured on Chrome 153 and Firefox 156: a plain `fetch()` to another origin of the *same site* carries no cookie at all (section 10) |
+| `samesite` | `True` | apply the cookies' `SameSite` attribute and the family's third-party rule to requests made from a `page`; `False` sends every cookie the jar matches, as before 0.10 (section 10) |
+| `preflight` | `True` | send the CORS preflight a browser sends before a non-simple cross-origin fetch, check its answer and keep it for its `Access-Control-Max-Age`; a refusal raises `CORSError` and the request is not sent. `False` sends straight out, as before 0.10 (section 7) |
 | `device`, `devices` | `None` | the phone for mobile profiles — a name from the profile's list or `"random"` — and a list of your own (section 11) |
 | `max_response_size` | `0` | a body limit in bytes; exceeding it raises with code `too_large`. Binds `read()`, not `iter_content()` |
 | `hooks` | `None` | `{"request": [...], "response": [...], "error": [...]}`; section 9 |
 
 Session attributes worth knowing: `s.headers` (a mapping of the headers you
 added, plus `s.headers.suppressed`), `s.cookies` (section 10), `s.hooks`,
-`s.impersonate`, `s.fingerprint(url="https://example.com/")`, `s.audit()`,
-`s.close()`. A session is a context manager; `__del__` closes it as well.
+`s.impersonate`, `s.fingerprint(url="https://example.com/")`, `s.audit(mode=None)`,
+`s.headers_for(...)`, `s.preflight_for(...)`, `s.close()`. A session is a context manager; `__del__` closes it as well.
 
 ## 5. Requests: every parameter and the response
 
@@ -153,6 +156,8 @@ overridden here for one request; `None` means "the session's".
 | `allow_redirects`, `max_redirects`, `retries`, `retry_*`, `respect_retry_after` | overrides of the session policy; `retries=0` switches the session's retries off for this request |
 | `mode` | `"navigate"` or `"fetch"`; `fetch` on a profile without a fetch set is refused with the reason |
 | `page` | the page this request is made from, overriding the session's; `False` sends it with no initiator at all |
+| `credentials` | `"same-origin"`, `"include"` or `"omit"` for this fetch-mode request (section 10) |
+| `preflight` | `False` sends this cross-origin fetch without the OPTIONS a browser sends first; `True` sends it when the Fetch standard requires one (section 7) |
 | `expect` | an `Expect(...)`; a mismatch raises `ExpectationFailed` (section 8) |
 | `rollback_cookies` | `True` restores the jar to its state before the request if the request fails, a failed expectation included |
 
@@ -168,6 +173,7 @@ The response:
 | `json()` | `json.loads` on the raw bytes — UTF-8/16/32 are recognised by the parser itself |
 | `url` | the final URL after redirects |
 | `history` | the redirect chain as `Redirect(status, url, location)` records |
+| `preflight`, `preflights` | the CORS preflight that preceded the request, a `Preflight(url, status, headers, cached)` record or `None`; all of them along a redirect chain. `cached` means no OPTIONS went out: an earlier answer still covered it. A `StreamResponse` carries both as well |
 | `cookies` | the cookies **this** response set, as a mapping |
 | `elapsed` | seconds, measured in Python around the native call |
 | `raise_for_status()` | raises `HTTPError` (with `.status` and `.response`) on 4xx/5xx; returns the response otherwise |
@@ -268,11 +274,46 @@ s.get("https://example.com/next", page=False)        # one request with no initi
 A navigation from a page is treated as a click: `sec-fetch-user: ?1` stays. The
 Referer sits where each family puts it — after `sec-fetch-dest` in Chromium,
 after `Origin` in Firefox — through a slot in every profile. Your own `Referer`,
-`Origin` or `sec-fetch-site` header wins over the derived one. Two things are
-deliberately not done: cookies are sent as the jar says, not withheld on
-cross-origin fetches the way an uncredentialed `fetch()` withholds them, and no
-CORS preflight is sent before a non-simple cross-origin request — a browser
-sends an `OPTIONS` first, and that is measured but not yet reproduced.
+`Origin` or `sec-fetch-site` header wins over the derived one.
+
+Along a redirect chain `Origin` names the origin the chain started from — never
+the host a hop moved the request to — and becomes `null` under the Fetch
+standard's rule: a hop to another origin from a URL the request's origin did
+not match. So a fetch from a page to another origin that is then sent on
+elsewhere arrives with `Origin: null`, while a fetch to the page's own origin
+sent elsewhere keeps the page's origin; Chrome 153 and Firefox 156 agree.
+Chromium alone also sends `null` on a navigation with a body (a form POST
+answered with 307) after any cross-origin hop, and the Chromium profiles do
+the same.
+
+**Cookies from a page** follow `fetch()`'s credentials mode and the cookies'
+`SameSite` attribute — section 10.
+
+**The CORS preflight.** A browser sends `OPTIONS` before a cross-origin fetch
+that is not simple — a method other than GET, HEAD or POST, or a header
+outside the CORS safelist (`Accept`, `Accept-Language`, `Content-Language`,
+`Content-Type` with a form type; so `application/json` counts, and so does any
+`X-…` or `Authorization`) — and sends the request only when the answer allows
+it. The library does the same, on every hop of a redirect chain, with the
+OPTIONS measured on Chrome 153 and Firefox 156: `accept: */*`,
+`access-control-request-method`, `access-control-request-headers` (the names,
+lowercase, sorted, comma-joined), `origin`, the profile's own fetch values in
+the family's preflight order — and neither cookies, nor client hints, nor the
+request's own headers. The answer is checked — a 2xx, `Access-Control-Allow-Origin`
+equal to the origin or `*` (not `*` with `credentials="include"`, which also
+needs `Access-Control-Allow-Credentials: true`), the method and every header
+allowed — and kept for its `Access-Control-Max-Age` (five seconds without the
+header, capped at two hours for Chromium and a day for Firefox), so the next
+request goes without one, as in a browser. A refusal raises `CORSError` with
+the answer (`.status`, `.headers`, `.reason`) and the request is not sent: a
+site that works in a browser answers a browser's preflight, so a refusal says
+the `page` is not one the site allows — or that the preflight differs from the
+browser's, which is a bug to report. `r.preflight` shows what went out;
+`s.preflight_for(method, url, headers=..., page=...)` shows it before sending,
+`None` when a browser would send none; `preflight=False` on the session or the
+request sends straight out. A hand-made `s.options(url, headers={...})` stays
+what it says — an OPTIONS carrying those headers, which a browser's preflight
+never does.
 
 ## 8. Expectations and cookie rollback
 
@@ -342,10 +383,26 @@ page that is not a URL, a header listed twice. Both used to arrive as a plain
 a worker that retried them three times and dropped the task is where they come
 from.
 
+Three more classes carry what a pool or a retry loop decides on. `ProxyError`
+(`proxy`) means the proxy, not the target, failed the request: `.stage` is
+`"dial"` (the proxy itself unreachable — TCP, or TLS for an `https://` proxy),
+`"auth"`, or `"connect"` (reached, and the tunnel refused or unanswered);
+`.status` is the proxy's answer — the HTTP status of the CONNECT reply, or the
+SOCKS5 reply code (5 is "connection refused" *at the target*) — or `None` for
+a hang-up, which keeps its code `proxy_closed`. `ProxyAuthError` (`proxy_auth`)
+is the `"auth"` stage — a 407, or a SOCKS5 login rejected — and a
+`PermanentError` too: the same login will not pass next time, and retries are
+skipped. `CORSError` (`cors`) is a refused CORS preflight (section 7), with
+`.status`, `.headers` and `.reason` of the answer; not permanent on purpose —
+a 503 to the OPTIONS is a bad minute and a missing `Access-Control-Allow-Origin`
+is forever, and the caller tells them apart by `.status` better than a guess
+here would. Until 0.10 the four proxy outcomes were one `CurlProError` with an
+empty code, and pools parsed the text.
+
 The codes: `timeout`, `expectation`, `profile_capability`, `configuration`,
 `session_closed`, `too_large`, `ws_closed`, `ws_too_big`, `ws_protocol`,
-`proxy_closed`. An error without a code is an ordinary failure with the reason
-in the text.
+`proxy_closed`, `proxy`, `proxy_auth`, `cors`. An error without a code is an
+ordinary failure with the reason in the text.
 
 Three hooks, each a list of callables on `s.hooks[...]`, also addable with
 `@s.on_request`, `@s.on_response`, `@s.on_error`:
@@ -376,6 +433,38 @@ Three hooks, each a list of callables on `s.hooks[...]`, also addable with
 | `.clear()` | forget everything |
 
 `r.cookies` on a response is only what that response set.
+
+**Which cookies a request carries.** The jar matches by domain and path; a
+browser then asks two more questions, and since 0.10 so does the library. The
+first is `fetch()`'s credentials mode (`credentials=` on the session or the
+request): `same-origin`, the default of `fetch()` and XHR, sends cookies only
+to the page's own origin — a fetch to another origin of the *same site*
+carries none; `include` sends them wherever the rules below allow; `omit`
+sends none. The second is the `SameSite` attribute against the relation
+between the page and the URL, applied only when a `page` is set (a navigation
+with no initiator is same-site with its target, so everything goes, as
+before):
+
+| Cookie | Same-site request | Cross-site fetch, XHR, subresource | Cross-site top-level navigation |
+|---|---|---|---|
+| `SameSite=Strict` | sent | — | — |
+| `SameSite=Lax` | sent | — | GET and HEAD only |
+| `SameSite=None` (with `Secure`) | sent | sent, where the family allows third-party cookies | sent |
+| no attribute | sent | Chromium: — (Lax by default); Firefox, Safari: as `None` | Chromium: on GET, and on POST while the cookie is younger than two minutes (the "Lax+POST" window); Firefox, Safari: sent |
+
+The family part is data, `capabilities(name)["cookies"]`: Chromium treats an
+unattributed cookie as Lax, refuses `SameSite=None` without `Secure` at set
+time, allows third-party cookies and compares sites with the scheme; Firefox
+has no Lax-by-default, refuses `None` without `Secure` too, and sends no
+cookies at all on a cross-site fetch or subresource (Total Cookie Protection),
+`include` or not; Safari's row is WebKit's documented ITP, not a capture; a
+library profile (okhttp) has no policy and sends whatever matches. Measured on
+Chrome 153 and Firefox 156 with five cookies on each of three sites and every
+kind of request between them (`docs/STAGE18-RESULTS.md`). `samesite=False` on
+the session restores the old behaviour — every match goes, and `None` without
+`Secure` is stored — for code that relied on it. A cookie record carries
+`created` (epoch seconds) for the Lax+POST window; an import without it counts
+as old.
 
 ## 11. Profiles, devices and mobile
 
@@ -506,6 +595,7 @@ what a server would see:
 | `headers`, `headers_http1` | the header names an ordinary GET would send, over HTTP/2 and over HTTP/1.1 |
 | `ja4h`, `ja4h_http1`, `ja4h_available` | the request fingerprint; empty with `ja4h_available == False` in a build made with `-tags nofoxio` |
 | `user_agent`, `profile` | the string that would go out, and the profile name |
+| `to_dict()["mode"]`, `["modes_used"]`, `["derived_fetch"]` | the header set the preview was built with; the sets requests have actually gone out with; whether the fetch set is derived (section 11) |
 | `client_hello` | the marshalled ClientHello as bytes; `len()` answers whether it fits one TCP segment |
 | `to_dict()`, `diff(other)`, `==` | everything as data; a field-by-field difference (extensions compared as sets, `ja3` and `client_hello` excluded) |
 
@@ -530,7 +620,7 @@ profile is silent except a phone profile with no device chosen:
 | `accept_encoding` | medium | an `accept-encoding` that is not the profile's, or none at all |
 | `no_user_agent` | high | no User-Agent at all — the shape `default_headers=False` leaves behind |
 | `referer_site` | high | a Referer that disagrees with the fetch metadata or the Origin beside it: a hand-written Referer next to `sec-fetch-site: none`, a Referer from another origin under `same-origin`, or Origin and Referer naming two pages |
-| `derived_fetch_set` | medium | the session is sending Safari's derived fetch set, whose order was not measured (section 11) |
+| `derived_fetch_set` | medium | the session is sending Safari's derived fetch set, whose order was not measured (section 11) — judged by the sets its requests actually went out with, not only the mode it was built with; `s.audit(mode="fetch")` asks before any went out |
 
 `Persona` binds one identity — profile, proxy, device, headers (removals
 included), cookies, free-form `notes` — to one JSON file:
@@ -545,6 +635,11 @@ with p.session(timeout=20) as s:       # overrides go to Session; cookies restor
     s.get("https://example.com/")     # captured on exit, even if the block raises
 p.save()                              # atomic write; a truncated file is refused on load
 ```
+
+`s.headers_for(...)` reports HTTP/1.1 names in the wire's case — `Host`,
+`User-Agent`, `sec-ch-ua` as the profile spells them — and takes that form by
+itself for an `http://` URL, where there is no other transport; over `https://`
+the default preview is the HTTP/2 form, `protocol="http1"` asks for the other.
 
 `p.open()` returns a plain session, `p.capture(s)` takes a session's cookies
 back without closing it, `p.fingerprint()` and `p.audit()` work without a
@@ -574,6 +669,9 @@ should reach for the existing feature instead. Each line names it:
 - **Identity files** — `Persona`, not an ad-hoc JSON of proxy plus cookies.
 - **Fingerprint checks** — `s.fingerprint()` and `s.audit()` offline, not a call to an oracle.
 - **Seeing the outgoing headers** — `s.headers_for(method, url, mode=..., page=...)`, not an echo server of your own.
+- **The CORS preflight** — sent, checked and cached by the library before every non-simple cross-origin fetch from a page; `s.preflight_for(...)` shows it. Never an `s.options()` with the custom headers on it.
+- **Which cookies a cross-origin request carries** — `credentials=` and the SameSite rules, applied from `page=`; never a hand-filtered `Cookie` header.
+- **Telling a dead proxy from a refused tunnel from a 407** — `ProxyError.stage` and `.status`, `ProxyAuthError`; never a substring of the message.
 - **Asking whether a profile can do something** — `curlpro.capabilities(name)`, not a probe request and a substring in the error text.
 - **Telling a permanent failure from a passing one** — `except curlpro.PermanentError`, not a match on the message.
 - **Reading a profile's data** — `curlpro.get_profile(name).data`, not the JSON inside `site-packages`.
@@ -613,6 +711,15 @@ Facts that are easy to doubt and are true:
   mode. That is what a browser does; `mode="navigate"` says otherwise.
 - `timeout` caps the whole request, not the silence between bytes as in
   `requests`. A value carried over is safe: stricter, not looser.
+- A plain `fetch()` sends no cookies to another origin, even one of the same
+  site; `credentials: "include"` sends across sites only `SameSite=None` in
+  Chrome and nothing at all in Firefox. Chrome's unattributed cookie rides a
+  cross-site POST for two minutes after it was set and not afterwards.
+  Measured, and reproduced by the cookie rules of section 10.
+- After a cross-origin redirect a fetch's `Origin` is `null` only when the
+  first hop was already cross-origin to the page; from the page's own origin
+  it keeps the page's origin. Chrome alone nulls a navigation's POST after any
+  cross-origin hop; Firefox follows the standard.
 - A resumed connection's ClientHello is not the first one: it carries
   `pre_shared_key` last, and Firefox drops `session_ticket` from it. Measured
   on both browsers and reproduced; neither browser offers early data on a
@@ -624,7 +731,7 @@ Facts that are easy to doubt and are true:
 |---|---|---|
 | `Session` | class | one profile, reused connections, memory and policy |
 | `AsyncSession` | class | the same over asyncio, native concurrency |
-| `Response`, `Redirect` | class | a response; one hop of a redirect chain |
+| `Response`, `Redirect`, `Preflight` | class | a response; one hop of a redirect chain; a CORS preflight that preceded it |
 | `StreamResponse`, `AsyncStreamResponse` | class | a body read in chunks |
 | `WebSocket`, `AsyncWebSocket` | class | an open WebSocket |
 | `Cookies`, `Cookie` | class | the jar and one record |
@@ -636,9 +743,11 @@ Facts that are easy to doubt and are true:
 | `load_profiles(dir)`, `register_profile(x)`, `list_profiles()`, `ensure_loaded()` | function | profile management |
 | `capabilities(name)`, `get_profile(name)`, `library_version()` | function | what a profile can do, a profile as data, the native library's own version |
 | `s.headers_for(method, url, ...)` | method | the headers a request would carry, without sending it |
+| `s.preflight_for(method, url, ...)` | method | the CORS preflight a request would be preceded by, or `None` |
 | `request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options` | function | one request in its own session; `impersonate=` picks the profile |
 | `CurlProError`, `Timeout`, `HTTPError`, `WebSocketClosed` | exception | the hierarchy; `.code` on all |
 | `PermanentError`, `ProfileCapabilityError`, `ConfigurationError` | exception | failures a retry cannot fix (section 9) |
+| `ProxyError`, `ProxyAuthError`, `CORSError` | exception | the proxy failed, with `.stage` and `.status`; the permanent 407; a refused CORS preflight with its answer |
 | `curlpro.requests` | module | the `requests`-shaped face: `get`, `Session`, `status_code`, the same exceptions |
 
 ## 18. Where things live

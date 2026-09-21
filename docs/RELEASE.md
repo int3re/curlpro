@@ -6,16 +6,21 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.9.0** — a minor, because a Safari session with a custom header now sends a
-different header set: the eleven Safari profiles gained a **derived** fetch set,
-so `mode="fetch"` works on them instead of being refused. Beside it, four fixes
-from a field report on 0.8.0: `page`, `fingerprint()`, `audit()` and
-`headers_for()` now exist on `AsyncSession` (the first was silently swallowed);
-`PermanentError` with `ProfileCapabilityError` and `ConfigurationError` tells a
-failure that will repeat from one worth retrying; `capabilities(name)`,
-`get_profile(name)` and `library_version()` answer what used to need a probe
-request and a substring match. ABI 0.20.0: a wheel carries the matching library,
-a source build needs `go build` again.
+**0.10.0** — a minor, because a request made from a `page` now sends what the
+browser sends and already-written code sees the difference on the wire: a
+cross-origin fetch carries no cookies unless `credentials="include"` (and then
+only what `SameSite` allows, by the browser family's measured rules), a
+non-simple cross-origin fetch is preceded by the CORS preflight — checked,
+cached, refused as `CORSError` — and `Origin` turns `null` along a redirect
+where the Fetch standard says so. `samesite=False` and `preflight=False` are
+the way back. Beside it: `ProxyError` with `stage` and `status` and the
+permanent `ProxyAuthError` replace one empty code for four proxy outcomes;
+`audit()` judges the sets requests actually went out with; `headers_for()`
+spells HTTP/1.1 names as the wire does; `capabilities()` gained
+`fetch_metadata` and `cookies`. All of it from a second field report on
+0.9.0, all of it measured on Chrome 153 and Firefox 156
+(`docs/STAGE18-RESULTS.md`). ABI 0.21.0: a wheel carries the matching
+library, a source build needs `go build` again.
 
 ## What happens on a tag
 

@@ -115,10 +115,12 @@ type fatalError struct{ err error }
 func (e *fatalError) Error() string { return e.err.Error() }
 func (e *fatalError) Unwrap() error { return e.err }
 
-// isFatal reports that there is nothing to retry.
+// isFatal reports that there is nothing to retry: a marked fatal failure, or
+// one whose code says the same call cannot end differently — a proxy that
+// rejected the credentials would reject them again, retries times over.
 func isFatal(err error) bool {
 	var fe *fatalError
-	return errors.As(err, &fe)
+	return errors.As(err, &fe) || Permanent(err)
 }
 
 // h2Unprocessed recognises HTTP/2 errors where the stream was not processed.

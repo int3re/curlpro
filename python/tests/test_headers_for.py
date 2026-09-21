@@ -38,13 +38,16 @@ def wire(response) -> dict[str, str]:
 @pytest.mark.parametrize("profile", ["chrome-152-windows", "firefox-155-windows"])
 def test_the_preview_is_what_the_wire_gets(server, profile):
     page = "https://www.example.test/app"
-    with curlpro.Session(profile, verify=False, force_http1=True, page=page) as s:
+    # preflight=False: with a session header the fetch from another site is
+    # not simple, and the raw stand answers no CORS preflight — the question
+    # here is the assembly of the request itself. The preview spells HTTP/1.1
+    # names as the wire does (Host, User-Agent); wire() lowercases them.
+    with curlpro.Session(profile, verify=False, force_http1=True, page=page, preflight=False) as s:
         s.headers["X-Api-Key"] = "k"
         for kw in ({"mode": "fetch"}, {"mode": "navigate"}, {}):
-            preview = s.headers_for("GET", server.url + "x", protocol="http1", **kw)
+            preview = {k.lower(): v for k, v in s.headers_for("GET", server.url + "x", protocol="http1", **kw).items()}
             sent = wire(s.get(server.url + "x", **kw))
-            assert list(preview) == [n for n in sent if n != "host"] or list(preview) == list(sent), \
-                f"{kw}: {list(preview)} vs {list(sent)}"
+            assert list(preview) == list(sent), f"{kw}: {list(preview)} vs {list(sent)}"
             for name, value in preview.items():
                 assert sent.get(name) == value, f"{kw}: {name}"
 
@@ -65,6 +68,7 @@ def test_the_preview_follows_the_transport(server):
     with curlpro.Session("firefox-155-windows") as s:
         h1 = s.headers_for(url="https://a.test/", protocol="http1")
         h2 = s.headers_for(url="https://a.test/", protocol="h2")
+    h1 = {k.lower(): v for k, v in h1.items()}  # the wire's case: Host, User-Agent
     assert "host" in h1 and "connection" in h1, "HTTP/1.1 adds both"
     assert "host" not in h2 and "connection" not in h2
     assert "te" in h2 and "te" not in h1, "Firefox sends TE over HTTP/2 only"
@@ -88,7 +92,7 @@ def test_removals_and_order_show_in_the_preview(server):
     with curlpro.Session("chrome-152-windows", verify=False, force_http1=True) as s:
         h = s.headers_for(url=server.url, headers={"Sec-Fetch-User": None, "X-Api-Key": "k"},
                           header_order=[..., "accept", "x-api-key", ...], protocol="http1")
-        names = list(h)
+        names = [n.lower() for n in h]  # HTTP/1.1 names come in the wire's case
         assert "sec-fetch-user" not in names
         assert names.index("x-api-key") == names.index("accept") + 1
         sent = wire(s.get(server.url, headers={"Sec-Fetch-User": None, "X-Api-Key": "k"},

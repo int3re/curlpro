@@ -240,11 +240,12 @@ func curlpro_async_pending() C.longlong {
 
 func okFrame(resp *client.Response) []byte {
 	return buildFrame(responseJSON{
-		Status:  resp.Status,
-		Proto:   resp.Proto,
-		Headers: resp.Headers,
-		URL:     resp.URL,
-		History: resp.History,
+		Status:     resp.Status,
+		Proto:      resp.Proto,
+		Headers:    resp.Headers,
+		URL:        resp.URL,
+		History:    resp.History,
+		Preflights: resp.Preflights,
 	}, resp.Body, nil)
 }
 
@@ -262,6 +263,7 @@ func buildFrame(data any, body []byte, err error) []byte {
 	if err != nil {
 		r.Error = err.Error()
 		r.Code = string(client.Code(err))
+		r.Details = errorDetails(err)
 		body = nil
 	} else {
 		r.OK = true

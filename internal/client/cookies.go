@@ -31,6 +31,11 @@ type Cookie struct {
 	Secure   bool   `json:"secure,omitempty"`
 	HTTPOnly bool   `json:"http_only,omitempty"`
 	SameSite string `json:"same_site,omitempty"`
+	// Created is when the cookie was received, epoch seconds. Chromium's
+	// Lax+POST exception depends on it: a cookie without a SameSite
+	// attribute still goes on a cross-site POST navigation while younger
+	// than two minutes. 0 — an import that did not say — counts as old.
+	Created int64 `json:"created,omitempty"`
 }
 
 func cookieKey(domain, path, name string) string {
@@ -84,6 +89,7 @@ func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie) {
 			Secure:   c.Secure,
 			HTTPOnly: c.HttpOnly,
 			SameSite: sameSiteName(c.SameSite),
+			Created:  now.Unix(),
 		}
 	}
 }

@@ -53,7 +53,10 @@ def session(**kw):
 
 def test_a_fetch_from_a_page_on_another_site(server):
     page = "https://www.example.test/app/index.html?tab=1"
-    with session(page=page) as s:
+    # A JSON POST to another site is preceded by a CORS preflight since 0.10
+    # (test_preflight.py); the raw stand answers none, and the question here
+    # is the request's own headers.
+    with session(page=page, preflight=False) as s:
         got = wire(s.post(server.url + "api/v1", json_body={"a": 1}))
     assert got["origin"] == "https://www.example.test"
     assert got["referer"] == "https://www.example.test/"

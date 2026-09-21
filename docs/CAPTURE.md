@@ -424,7 +424,13 @@ to any non-browser client:
   server resumed. `cmd/hcapture -origins` serves a page on `www.a.localhost`
   that reaches its own origin, `api.a.localhost` and `b.localhost` by fetch,
   XHR, navigation and form post — the measurement behind `page=`
-  ([STAGE17](STAGE17-RESULTS.md)).
+  ([STAGE17](STAGE17-RESULTS.md)). The same page first primes five cookies
+  on every name, runs every `credentials` mode, a DELETE, four redirect
+  chains and a second cross-site form post after 125 s, so one run also
+  answers which cookies go where, where `Origin` turns `null` and what the
+  preflight carries ([STAGE18](STAGE18-RESULTS.md)); pass `-timeout 170s`,
+  and run the stand from the repository root so it finds `capture/certs`.
+  HTTP/2 splits `Cookie` into one field per cookie — join them when reading.
 
 The provider decides the ClientHello. On Android that is Conscrypt; on the JVM,
 SunJSSE unless Conscrypt is installed as a provider. Both were captured, and the

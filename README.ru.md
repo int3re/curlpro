@@ -249,6 +249,8 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 | `post_quantum` | `False` убирает группу X25519MLKEM768 и её key_share на 1216 байт — hello браузера с выключенным политикой постквантовым обменом. JA4 не меняется, JA3 и размер меняются: ~1,9 КБ в два TCP-сегмента становятся одним, который влезает в один |
 | `resume` | возобновление TLS-сессии, включено по умолчанию: второе соединение к хосту несёт билет, как у браузера. Возобновляющий hello измерен на Chrome 153 и Firefox 156 и воспроизведён, включая убранный у Firefox `session_ticket`; первый hello не тронут |
 | `page` | страница, с которой делаются запросы: `Referer`, `Origin` и `sec-fetch-site` выводятся из неё так, как их выводит браузер (см. ниже); `s.page = url` двигает её |
+| `credentials`, `samesite` | какие куки несёт запрос со страницы: режим credentials из `fetch()` (`same-origin` по умолчанию — ни одной на чужой origin, даже того же сайта; `include`; `omit`) и правила `SameSite` семейства браузера, замеренные на Chrome 153 и Firefox 156; `samesite=False` шлёт всё подобранное, как до 0.10 |
+| `preflight` | CORS-preflight перед непростым кросс-origin fetch со страницы — отправляется, проверяется, хранится на `Access-Control-Max-Age`; отказ — `CORSError`, и запрос не уходит. `False` шлёт сразу |
 | `keep_alive`, `max_idle_conns`, `idle_conn_timeout` | переиспользование соединений и размер пула |
 | `resolve`, `ip_version` | подмена адреса узла, семейство адресов (`"4"`/`"6"`) |
 | `device`, `devices` | телефон для мобильных профилей и свой список устройств |
@@ -425,15 +427,18 @@ except curlpro.CurlProError as e:         # всё остальное из на�
     print(e.code, e)
 ```
 
-`PermanentError` — а под ним `ProfileCapabilityError` и `ConfigurationError` —
-это то, по чему ветвится скрапер: ответ не изменится, повторять не нужно.
-Профиль без набора fetch, устройство не из списка, page не URL. Всё остальное
-повтора стоит.
+`PermanentError` — а под ним `ProfileCapabilityError`, `ConfigurationError` и
+`ProxyAuthError` — это то, по чему ветвится скрапер: ответ не изменится,
+повторять не нужно. Профиль без набора fetch, устройство не из списка, page не
+URL, логин, который прокси отвергает. Всё остальное повтора стоит. `ProxyError`
+говорит, что отказал прокси, а не цель, — со `.stage` (`dial`, `auth`,
+`connect`) и `.status`; пул решает по ним, а не по тексту. `CORSError` —
+отвергнутый preflight, с ответом внутри.
 
 Коды исходов: `timeout`, `expectation`, `profile_capability`, `configuration`,
-`session_closed`, `too_large`, `ws_closed`, `ws_too_big`, `ws_protocol`,
-`proxy_closed`. Текст написан для человека и называет следствие, а не только
-факт:
+`proxy`, `proxy_auth`, `proxy_closed`, `cors`, `session_closed`, `too_large`,
+`ws_closed`, `ws_too_big`, `ws_protocol`. Текст написан для человека и
+называет следствие, а не только факт:
 
 ```
 timeout must be positive, got 0s (leave it unset for no limit)
@@ -753,6 +758,19 @@ s.post("https://api.example.com/v1/x", json_body=d)  # origin: https://example.c
 Без страницы fetch уходит с собственного origin запроса, как и раньше. Аудит
 сообщает о рукописном `Referer` рядом с `sec-fetch-site: none` — самом частом
 способе сказать «со страницы» и «ниоткуда» в одном запросе.
+
+Со страницы и куки ведут себя как в браузере: умолчание `fetch()`
+`credentials="same-origin"` не шлёт ни одной на чужой origin — даже того же
+сайта, — а `"include"` шлёт через сайты только то, что позволяют правила
+`SameSite` семейства (Chromium: `None`, плюс кука без атрибута на
+POST-навигации две минуты; Firefox: на fetch ничего вовсе). Непростой
+кросс-origin fetch — JSON, кастомный заголовок, DELETE — предваряется
+CORS-preflight, который шлёт браузер, с его измеренным набором заголовков, и
+уходит только если ответ разрешает; `r.preflight` показывает его,
+`s.preflight_for(...)` — до отправки. Вдоль цепочки редиректов `Origin`
+становится `null` там, где велит стандарт Fetch. Всё это замерено на Chrome 153
+и Firefox 156 (`docs/STAGE18-RESULTS.md`); `samesite=False` и
+`preflight=False` возвращают поведение до 0.10.
 
 ## Профили как данные
 

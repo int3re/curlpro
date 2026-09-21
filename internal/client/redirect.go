@@ -9,6 +9,8 @@ import (
 
 	http "github.com/bogdanfinn/fhttp"
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/curlpro/curlpro/internal/profile"
 )
 
 func isRedirect(code int) bool {
@@ -97,6 +99,30 @@ func (s *Session) nextRequest(prev *Request, nextURL string, status int, initiat
 
 	if !sameOrigin(prev.URL, nextURL) {
 		dropHeader(next.Headers, "authorization", "cookie", "proxy-authorization")
+
+		// The request's origin — the page's, or the chain's first URL's when
+		// there is no page — is what Origin names from here on, and it turns
+		// opaque ("null") under the Fetch standard's redirect rule: a hop to
+		// another origin, made from a URL the request's origin did not
+		// match. So a fetch from a page to another origin that is then sent
+		// on somewhere else arrives with Origin: null, while a fetch to the
+		// page's own origin sent elsewhere arrives with the page's origin
+		// (both browsers, Chrome 153 and Firefox 156). Chromium taints a
+		// navigation with a body on any cross-origin hop; Firefox keeps
+		// the standard's rule there too.
+		if next.chainOrigin == "" {
+			next.chainOrigin = originOfURL(initiator)
+		}
+		requestOrigin := next.chainOrigin
+		if page := s.pageFor(prev); page != "" {
+			requestOrigin = originOfURL(page)
+		}
+		if !sameOrigin(requestOrigin, prev.URL) {
+			next.originTainted = true
+		}
+		if s.modeFor(prev) == ModeNavigate && profile.TaintsOriginOnNavigationRedirect(s.profile.Family()) {
+			next.originTainted = true
+		}
 	}
 
 	// Chromium 148 measurement: for a navigation the browser started itself
@@ -267,4 +293,14 @@ func defaultPort(u *url.URL) string {
 		return "80"
 	}
 	return "443"
+}
+
+// originOfURL is the serialised origin of a URL given as text, or "" when
+// it does not parse.
+func originOfURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return originOf(u)
 }

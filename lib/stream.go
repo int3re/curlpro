@@ -91,11 +91,13 @@ func registerStream(st *client.Stream, cancel context.CancelFunc) int64 {
 // streamMeta is what the caller learns about an opened stream.
 func streamMeta(sid int64, st *client.Stream) map[string]any {
 	return map[string]any{
-		"stream":  sid,
-		"status":  st.Status,
-		"proto":   st.Proto,
-		"headers": st.Headers,
-		"url":     st.URL,
+		"stream":     sid,
+		"status":     st.Status,
+		"proto":      st.Proto,
+		"headers":    st.Headers,
+		"url":        st.URL,
+		"history":    st.History,
+		"preflights": st.Preflights,
 	}
 }
 

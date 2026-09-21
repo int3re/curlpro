@@ -176,6 +176,14 @@ class Response:
         return list(self._r.history or [])
 
     @property
+    def preflights(self) -> list[Any]:
+        return list(self._r.preflights or [])
+
+    @property
+    def preflight(self) -> Any:
+        return self._r.preflight
+
+    @property
     def reason(self) -> str:
         """The reason phrase.
 

@@ -331,6 +331,8 @@ def _request_meta(
     proxy: str | bool | None = None,
     mode: str | None = None,
     page: str | bool | None = None,
+    credentials: str | None = None,
+    preflight: bool | None = None,
 ) -> tuple[dict[str, Any], bytes]:
     # params and auth are the familiar requests arguments; here they turn
     # into a URL with a query string and an ordinary header, nothing special.
@@ -340,9 +342,9 @@ def _request_meta(
     if connect_timeout is None:
         connect_timeout = pair_connect
     url = _with_params(url, params)
-    if credentials := _auth_header(auth):
+    if basic := _auth_header(auth):
         headers = dict(headers or {})
-        headers.setdefault("Authorization", credentials)
+        headers.setdefault("Authorization", basic)
     """Builds the request frame. Shared by request() and stream(): the stream
     used to keep its own cut-down copy without timeout, proxy, retries or files."""
     hdrs, suppress = _split_headers(headers)
@@ -399,8 +401,38 @@ def _request_meta(
         # None takes the session's page, False means no initiator for this
         # request, a URL names the page it is made from.
         "page": _page_override(page),
+        # None takes the session's credentials mode; "same-origin", "include"
+        # or "omit" set it for this fetch-mode request.
+        "credentials": credentials or "",
+        # None takes the session's; False sends a cross-origin fetch without
+        # the OPTIONS a browser would send first, True sends it when needed.
+        "preflight": preflight,
     }
     return meta, data or b""
+
+
+class Preflight:
+    """A CORS preflight the session sent before a request: the ``OPTIONS``
+    and what the server answered. ``cached`` means no OPTIONS went out —
+    an earlier answer, within its ``Access-Control-Max-Age``, still covered
+    the method and the headers, which is how a browser avoids one per request."""
+
+    __slots__ = ("url", "status", "headers", "cached")
+
+    def __init__(self, url: str, status: int, headers: dict[str, list[str]], cached: bool = False):
+        self.url = url
+        self.status = status
+        self.headers = headers
+        self.cached = cached
+
+    def __repr__(self) -> str:
+        mark = " (cached)" if self.cached else ""
+        return f"<Preflight {self.status} {self.url}{mark}>"
+
+
+def _preflights(items: Any) -> list[Preflight]:
+    return [Preflight(p.get("url", ""), p.get("status", 0), p.get("headers") or {}, bool(p.get("cached")))
+            for p in items or []]
 
 
 class Redirect:
@@ -421,11 +453,11 @@ class Response:
     """A server response."""
 
     __slots__ = ("status", "proto", "headers", "content", "url", "elapsed",
-                 "history", "_encoding")
+                 "history", "preflights", "_encoding")
 
     def __init__(self, status: int, proto: str, headers: dict[str, list[str]],
                  content: bytes, url: str = "", elapsed: float = 0.0,
-                 history: list | None = None):
+                 history: list | None = None, preflights: list | None = None):
         self.status = status
         self.proto = proto
         self.headers = headers
@@ -435,7 +467,15 @@ class Response:
         self.elapsed = elapsed
         #: The intermediate responses of a redirect chain, first to last.
         self.history: list[Redirect] = history or []
+        #: The CORS preflights sent before the request and its hops, in
+        #: order; empty when a browser would have sent none.
+        self.preflights: list[Preflight] = preflights or []
         self._encoding: str | None = None
+
+    @property
+    def preflight(self) -> "Preflight | None":
+        """The CORS preflight that preceded this request, or None."""
+        return self.preflights[0] if self.preflights else None
 
     @property
     def cookies(self) -> dict[str, str]:
@@ -676,6 +716,9 @@ class Session:
         respect_retry_after: bool = True,
         mode: str = "auto",
         page: str | None = None,
+        credentials: str = "same-origin",
+        samesite: bool = True,
+        preflight: bool = True,
     ):
         # The bundled profiles are loaded on first use: after pip install
         # the library has to work without any extra steps.
@@ -726,6 +769,9 @@ class Session:
                     ),
                     "mode": "" if mode == "auto" else mode,
                     "page": page or "",
+                    "credentials": credentials,
+                    "samesite": samesite,
+                    "preflight": preflight,
                 }
             ),
         )["session"]
@@ -788,6 +834,8 @@ class Session:
         proxy: str | bool | None = None,
         mode: str | None = None,
         page: str | bool | None = None,
+        credentials: str | None = None,
+        preflight: bool | None = None,
         expect: "Expect | None" = None,
         rollback_cookies: bool = False,
     ) -> Response:
@@ -845,7 +893,8 @@ class Session:
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
-            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page,
+            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page, credentials=credentials,
+            preflight=preflight,
         )
         for hook in self.hooks["request"]:
             replaced = hook(meta)
@@ -865,6 +914,7 @@ class Session:
                 elapsed=spent,
                 history=[Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
                          for h in payload.get("history") or []],
+                preflights=_preflights(payload.get("preflights")),
             ), expect)
         except BaseException as exc:
             raise self._failed(exc, saved) from None
@@ -967,6 +1017,8 @@ class Session:
         proxy: str | bool | None = None,
         mode: str | None = None,
         page: str | bool | None = None,
+        credentials: str | None = None,
+        preflight: bool | None = None,
     ) -> "StreamResponse":
         """Opens a response for reading in chunks.
 
@@ -988,7 +1040,8 @@ class Session:
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
-            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page,
+            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page, credentials=credentials,
+            preflight=preflight,
         )
         payload, _ = call_framed("curlpro_stream_open", self._id, body=body, meta=meta)
         return StreamResponse(payload, self._max_response_size)
@@ -1099,6 +1152,7 @@ class Session:
         header_order: Iterable[Any] | None = None,
         mode: str | None = None,
         page: str | bool | None = None,
+        credentials: str | None = None,
         protocol: str | float | None = None,
         default_headers: bool | None = None,
         session_headers: bool | None = None,
@@ -1133,20 +1187,70 @@ class Session:
             "header_order": _order(header_order),
             "mode": mode or "",
             "page": _page_override(page),
+            "credentials": credentials or "",
             "protocol": _protocol(protocol),
             "default_headers": default_headers,
             "session_headers": session_headers,
         }))
         return {h["name"]: h["value"] for h in data["headers"]}
 
-    def audit(self) -> list:
+    def preflight_for(
+        self,
+        method: str = "GET",
+        url: str = "https://example.com/",
+        *,
+        headers: Mapping[str, str | None] | None = None,
+        mode: str | None = None,
+        page: str | bool | None = None,
+        credentials: str | None = None,
+        protocol: str | float | None = None,
+        session_headers: bool | None = None,
+    ) -> "dict[str, str] | None":
+        """The CORS preflight this request would be preceded by, or None.
+
+            s.preflight_for("POST", api_url, headers={"Content-Type": "application/json"}, page=page_url)
+            # {'accept': '*/*', 'access-control-request-method': 'POST',
+            #  'access-control-request-headers': 'content-type', 'origin': ..., ...}
+
+        None means a browser would send the request straight out: it is not
+        a fetch from a page to another origin, or it is a simple one — GET,
+        HEAD or POST with nothing outside the CORS safelist. The same
+        assembly the real preflight runs, so what this shows is what goes
+        out — the request's own headers are not on it, only their names in
+        ``access-control-request-headers``. The request is sent with the
+        preflight automatically; this is for looking before sending.
+        """
+        if self._closed:
+            raise RuntimeError("session is closed")
+        hdrs, suppress = _split_headers(headers)
+        data = _call("curlpro_session_preview", self._id, encode({
+            "method": method.upper(),
+            "url": url,
+            "headers": hdrs,
+            "suppress_headers": suppress,
+            "mode": mode or "",
+            "page": _page_override(page),
+            "credentials": credentials or "",
+            "protocol": _protocol(protocol),
+            "session_headers": session_headers,
+            "preflight": True,
+        }))
+        if not data.get("needed"):
+            return None
+        return {h["name"]: h["value"] for h in data["headers"]}
+
+    def audit(self, mode: str | None = None) -> list:
         """Contradictions in what this session would send.
 
         The second question, after "does my fingerprint look right": does
         anything here disagree with anything else. See :mod:`curlpro.audit`.
+
+        The session is judged by what it has actually sent — the header
+        sets its requests went out with — as well as by how it was built;
+        ``mode="fetch"`` asks about fetch requests before any has gone out.
         """
         from .audit import audit as _audit
-        return _audit(self)
+        return _audit(self, mode)
 
     def close(self) -> None:
         if not self._closed:

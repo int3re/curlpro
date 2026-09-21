@@ -89,6 +89,76 @@ class ConfigurationError(PermanentError):
     """
 
 
+class ProxyError(CurlProError):
+    """The proxy, not the target, failed the request.
+
+    ``stage`` says where:
+
+    - ``"dial"`` — the proxy itself could not be reached: TCP, or TLS for an
+      ``https://`` proxy. The target was never asked for.
+    - ``"auth"`` — it wanted credentials it did not get, or rejected the ones
+      it got. That one arrives as :class:`ProxyAuthError`, which is also a
+      :class:`PermanentError`: the same login will not pass next time.
+    - ``"connect"`` — it was reached and could not or would not open the
+      tunnel. ``status`` then carries its answer: the HTTP status of the
+      CONNECT reply (502 from a gateway, 403 for a forbidden target) or the
+      SOCKS5 reply code (5 is "connection refused" *at the target*, 4 "host
+      unreachable"); ``None`` when it hung up without one — that case keeps
+      ``code == "proxy_closed"``, everything else is ``code == "proxy"``.
+
+    A pool decides from these, not from the message: a 502 is a minute's
+    rest for the address, a 407 is never, a SOCKS reply 5 blames the
+    destination rather than the proxy. Until 0.10 all four were one
+    ``CurlProError`` with an empty code, and pools parsed the text.
+    """
+
+    def __init__(self, message: str, code: str | None = None, *,
+                 stage: str | None = None, status: int | None = None):
+        super().__init__(message, code)
+        self.stage = stage
+        self.status = status
+
+
+class ProxyAuthError(ProxyError, PermanentError):
+    """The proxy answered 407, or a SOCKS5 proxy rejected the login.
+
+    Without credentials configured, or with credentials it did not accept.
+    ``code == "proxy_auth"``, ``stage == "auth"``; retries are skipped.
+    """
+
+
+class CORSError(CurlProError):
+    """The CORS preflight was refused, and the request itself was not sent.
+
+    A browser sends ``OPTIONS`` before a cross-origin fetch that is not
+    simple, and sends the request only when the answer allows it. This is
+    that refusal: ``status`` and ``headers`` are the preflight's answer,
+    ``reason`` says which check failed (no ``Access-Control-Allow-Origin``,
+    a method or a header not allowed, a wildcard with credentials, a non-2xx
+    status), ``method`` and ``url`` name the request that was not sent.
+
+    Not a :class:`PermanentError` on purpose: a 503 to the OPTIONS is a bad
+    minute, a missing ``Access-Control-Allow-Origin`` is forever, and the
+    caller tells them apart by ``status`` better than a guess here would.
+    A site that works in a browser answers a browser's preflight; if it
+    refuses ours, the page named in ``page=`` is not one the site allows —
+    or the preflight differs from the browser's, which is a bug to report.
+    ``code == "cors"``. ``preflight=False`` on the session or the request
+    sends without one, as before 0.10.
+    """
+
+    def __init__(self, message: str, code: str | None = None, *,
+                 method: str | None = None, url: str | None = None,
+                 reason: str | None = None, status: int | None = None,
+                 headers: dict | None = None):
+        super().__init__(message, code)
+        self.method = method
+        self.url = url
+        self.reason = reason
+        self.status = status
+        self.headers = headers or {}
+
+
 #: Error codes that map to a class of their own. Everything else arrives as a
 #: plain CurlProError with its code attached.
 _BY_CODE = {
@@ -96,13 +166,23 @@ _BY_CODE = {
     "timeout": Timeout,
     "profile_capability": ProfileCapabilityError,
     "configuration": ConfigurationError,
+    "proxy": ProxyError,
+    "proxy_auth": ProxyAuthError,
+    "proxy_closed": ProxyError,
+    "cors": CORSError,
 }
 
 
 def _raise(envelope: dict, name: str) -> None:
     code = envelope.get("code")
     message = envelope.get("error") or f"{name}: unknown error"
-    raise _BY_CODE.get(code, CurlProError)(message, code)
+    cls = _BY_CODE.get(code, CurlProError)
+    if issubclass(cls, (ProxyError, CORSError)):
+        # The native side attaches the error's fields beside its code; the
+        # class takes them by name, so an unknown one is a loud mistake here
+        # rather than a silently missing attribute.
+        raise cls(message, code, **(envelope.get("details") or {}))
+    raise cls(message, code)
 
 
 def _library_name() -> str:
@@ -248,7 +328,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Minimum version of the native part: major and minor. Raise it together
 # with lib/curlpro.go whenever Python starts depending on a new export or field.
-REQUIRED_VERSION = (0, 20)
+REQUIRED_VERSION = (0, 21)
 
 
 def _check_version() -> None:

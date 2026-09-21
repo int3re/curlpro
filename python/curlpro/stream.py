@@ -52,13 +52,22 @@ class StreamResponse:
                 out.write(chunk)
     """
 
-    __slots__ = ("status", "proto", "headers", "url", "_id", "_closed", "_max_size")
+    __slots__ = ("status", "proto", "headers", "url", "history", "preflights",
+                 "_id", "_closed", "_max_size")
 
     def __init__(self, payload: dict, max_size: int = 0):
         self.status: int = payload["status"]
         self.proto: str = payload.get("proto", "")
         self.headers: dict[str, list[str]] = payload.get("headers") or {}
         self.url: str = payload.get("url", "")
+        # Imported here: session imports this module, and a module-level
+        # import the other way would be a cycle.
+        from .session import Redirect, _preflights
+        #: The redirect hops before this response, first to last.
+        self.history = [Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
+                        for h in payload.get("history") or []]
+        #: The CORS preflights sent before the request, in order.
+        self.preflights = _preflights(payload.get("preflights"))
         self._id: int = payload["stream"]
         self._closed = False
         # The session's max_response_size. It binds read() and not

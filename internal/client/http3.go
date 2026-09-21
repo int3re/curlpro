@@ -304,6 +304,7 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL) (*nethttp.
 // cookie slot. h1Order is not passed — HTTP/3 sends no Host or Connection.
 func (s *Session) applyH3Headers(req *nethttp.Request, r *Request, u *url.URL) {
 	built := s.buildHeaders(r, u, req.Host, nil)
+	s.noteMode(r)
 
 	for _, h := range built {
 		// A direct write instead of Set: that one canonicalises the name, while the

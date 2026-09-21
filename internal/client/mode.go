@@ -32,6 +32,11 @@ type headerTemplate struct {
 // they appear, Chromium rebuilds the whole header cluster and the order comes
 // out different — it is captured by measurement and stored in the profile whole.
 func (s *Session) template(r *Request) headerTemplate {
+	// The preflight has a set of its own: the family's measured OPTIONS
+	// order over the fetch set's values, without client hints or cookies.
+	if r != nil && r.preflight {
+		return s.preflightTemplate()
+	}
 	fetch := s.modeFor(r) == ModeFetch
 	if want := s.hintsForRequest(r); len(want) > 0 {
 		pairs := s.hintTemplate(s.profile.ResolvedHints(fetch, s.device), want)

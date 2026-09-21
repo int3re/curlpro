@@ -96,6 +96,10 @@ type Fingerprint struct {
 	// the audit says so when it is in use.
 	Mode         string `json:"mode"`
 	DerivedFetch bool   `json:"derived_fetch"`
+	// ModesUsed are the sets requests have actually gone out with: a
+	// session constructed without a mode whose requests all say
+	// mode="fetch" is a fetch session, whatever Mode says.
+	ModesUsed []string `json:"modes_used"`
 }
 
 // Fingerprint computes what this session looks like on the wire.
@@ -185,6 +189,7 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 	}
 	out.Mode = s.modeFor(&Request{Method: "GET", URL: u.String()})
 	out.DerivedFetch = s.profile.Fetch.Derived
+	out.ModesUsed = s.ModesUsed()
 	out.HeaderValues = main
 	out.JA4H = fingerprint.JA4H(fingerprint.JA4HRequest{
 		Method: "GET", Proto: proto, Headers: main})
@@ -225,10 +230,12 @@ func (s *Session) PreviewHeaders(r *Request) ([]string, []fingerprint.HeaderKV, 
 	if err != nil {
 		return nil, nil, configErr("parsing %q: %v", req.URL, err)
 	}
-	// http1 when the caller asked for it or the session forces it; a session
-	// that lets the server choose is previewed as HTTP/2, which is what a
-	// modern server picks.
-	h1 := req.Protocol == ProtoHTTP1 || (req.Protocol == "" && s.opts.ForceHTTP1)
+	// http1 when the caller asked for it, the session forces it, or the URL
+	// is cleartext — there is no ALPN over http:// and h2c is refused, so
+	// that transport is known, not guessed. A session that lets the server
+	// choose over https:// is previewed as HTTP/2, which is what a modern
+	// server picks.
+	h1 := req.Protocol == ProtoHTTP1 || (req.Protocol == "" && (s.opts.ForceHTTP1 || u.Scheme == "http"))
 	names, pairs := s.previewFor(&req, u, h1)
 	return names, pairs, nil
 }
@@ -240,7 +247,7 @@ func (s *Session) previewFor(r *Request, u *url.URL, h1 bool) ([]string, []finge
 		return nil, nil
 	}
 	s.applyHeaders(req, r, u, h1)
-	return readBuiltHeaders(req)
+	return readBuiltHeaders(req, h1)
 }
 
 // headerPreview runs the real header assembly for a plain GET and reports the
@@ -266,7 +273,7 @@ func (s *Session) headerPreview(u *url.URL, h1, plain bool) ([]string, string, [
 	}
 	s.applyHeaders(req, r, u, h1)
 
-	names, pairs := readBuiltHeaders(req)
+	names, pairs := readBuiltHeaders(req, h1)
 	// Not Header.Get: it canonicalises the name, and the profile prescribes
 	// the case — "user-agent" as written would not be found.
 	var ua string
@@ -283,24 +290,45 @@ func (s *Session) headerPreview(u *url.URL, h1, plain bool) ([]string, string, [
 // is not a value either: it is how the HTTP/2 path tells the transport to send
 // no User-Agent at all (suppressDefaultUA), and a preview listing it would
 // claim a header that never goes out.
-func readBuiltHeaders(req *http.Request) ([]string, []fingerprint.HeaderKV) {
+func readBuiltHeaders(req *http.Request, h1 bool) ([]string, []fingerprint.HeaderKV) {
 	order := req.Header[http.HeaderOrderKey]
 	names := make([]string, 0, len(order))
 	pairs := make([]fingerprint.HeaderKV, 0, len(order))
 	for _, name := range order {
-		vs := headerLookup(req.Header, name)
+		key, vs := headerEntry(req.Header, name)
 		if len(vs) == 0 {
 			if canon, ok := req.Header[http.CanonicalHeaderKey(name)]; ok {
-				vs = canon
+				key, vs = http.CanonicalHeaderKey(name), canon
 			}
 		}
 		if len(vs) == 0 || (vs[0] == "" && equalFold(name, "user-agent")) {
 			continue
 		}
+		// The order key spells every name lowercase. That is the wire form
+		// for HTTP/2 and HTTP/3; HTTP/1.1 writes the name as the map holds it
+		// — the profile's case — and a preview that reported "host" for a
+		// wire that says Host was wrong on the one transport where case shows.
+		if h1 {
+			name = key
+		}
 		names = append(names, name)
 		pairs = append(pairs, fingerprint.HeaderKV{Name: name, Value: vs[0]})
 	}
 	return names, pairs
+}
+
+// headerEntry finds a header by name without canonicalising it and returns
+// the key as the map holds it along with the values.
+func headerEntry(h http.Header, name string) (string, []string) {
+	if vs, ok := h[name]; ok {
+		return name, vs
+	}
+	for k, vs := range h {
+		if len(k) == len(name) && equalFold(k, name) {
+			return k, vs
+		}
+	}
+	return "", nil
 }
 
 // headerLookup finds a header by name without canonicalising it: the profile

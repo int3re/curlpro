@@ -34,6 +34,9 @@ type Stream struct {
 	URL     string
 	// History holds the intermediate responses, first to last.
 	History []Redirect
+	// Preflights are the CORS preflights sent before the request and its
+	// hops, in order; empty when none was needed.
+	Preflights []Preflight
 
 	body io.ReadCloser
 
@@ -232,12 +235,33 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 		initiator = page
 	}
 	var history []Redirect
+	var preflights []Preflight
 
 	policy := s.retryPolicy(r)
 
 	for hop := 0; ; hop++ {
 		if time.Now().After(deadline) {
 			return nil, attemptOutcome{}, fmt.Errorf("request timed out after %s", limit)
+		}
+
+		// The preflight, when a browser would send one — on every hop, since
+		// a redirect to another origin is a new request to the standard. A
+		// refusal is final for this call: the request is not sent, and a
+		// retry would only repeat the OPTIONS.
+		if u, perr := parseURL(current.URL); perr == nil {
+			if needed, unsafe := s.preflightNeeded(&current, u); needed {
+				pf, err := s.preflight(&current, u, unsafe, deadline)
+				if err != nil {
+					var ce *CORSError
+					if errors.As(err, &ce) {
+						return nil, attemptOutcome{}, &fatalError{err}
+					}
+					var up *unprocessedError
+					return nil, attemptOutcome{retryable: !isFatal(err),
+						unprocessed: errors.As(err, &up)}, err
+				}
+				preflights = append(preflights, pf)
+			}
 		}
 
 		resp, cancel, used, err := s.send(&current, deadline)
@@ -255,14 +279,16 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 		// The response is kept whole: if the attempts run out, it goes to the caller.
 		if policy.attempts() > 0 && policy.allowsStatus(resp.StatusCode) {
 			held := &Stream{
-				Status:  resp.StatusCode,
-				Headers: resp.Header,
-				Proto:   resp.Proto,
-				URL:     current.URL,
-				body:    resp.Body,
-				cancel:  cancel,
-				conn:    used,
-				sess:    s,
+				Status:     resp.StatusCode,
+				Headers:    resp.Header,
+				Proto:      resp.Proto,
+				URL:        current.URL,
+				History:    history,
+				Preflights: preflights,
+				body:       resp.Body,
+				cancel:     cancel,
+				conn:       used,
+				sess:       s,
 			}
 			return nil, attemptOutcome{retryable: true, header: resp, stream: held},
 				fmt.Errorf("server returned %s", resp.Status)
@@ -296,15 +322,16 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 			// header stays, so decompressing again would fall apart on a signature
 			// mismatch.
 			return &Stream{
-				Status:  resp.StatusCode,
-				Headers: resp.Header,
-				Proto:   resp.Proto,
-				URL:     current.URL,
-				History: history,
-				body:    resp.Body,
-				cancel:  cancel,
-				conn:    used,
-				sess:    s,
+				Status:     resp.StatusCode,
+				Headers:    resp.Header,
+				Proto:      resp.Proto,
+				URL:        current.URL,
+				History:    history,
+				Preflights: preflights,
+				body:       resp.Body,
+				cancel:     cancel,
+				conn:       used,
+				sess:       s,
 			}, attemptOutcome{}, nil
 		}
 

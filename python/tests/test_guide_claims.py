@@ -100,7 +100,8 @@ def test_the_error_codes_named_are_the_ones_the_native_side_knows():
     native = set(re.findall(r'ErrorCode = "([a-z_]+)"', go))
     assert native == {"session_closed", "timeout", "ws_closed", "ws_too_big",
                       "ws_protocol", "too_large", "proxy_closed",
-                      "profile_capability", "configuration"}
+                      "profile_capability", "configuration",
+                      "proxy", "proxy_auth", "cors"}
     for code in native | {"expectation"}:
         assert f"`{code}`" in GUIDE, code
         assert code in LLMS, code

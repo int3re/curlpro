@@ -224,16 +224,39 @@ const log = m => { document.getElementById('out').textContent += m + "\n"; };
 const port = location.port;
 const targets = {so: location.origin, ss: 'https://api.a.localhost:' + port, cs: 'https://b.localhost:' + port};
 const quiet = async f => { try { await f(); } catch (e) { log('x ' + e); } };
+const xhr = (url, cred) => new Promise(r => { const x = new XMLHttpRequest();
+  x.open('GET', url); x.withCredentials = cred; x.onloadend = r; x.onerror = r; x.send(); });
 (async () => {
+  // Cookies first: every name gets its five cookies in a first-party context,
+  // by top-level navigations, before the page starts asking. sessionStorage
+  // survives the round trip and stops it from repeating.
+  if (!sessionStorage.primed) {
+    sessionStorage.primed = '1';
+    location.href = targets.cs + '/prime';
+    return;
+  }
   for (const [k, o] of Object.entries(targets)) {
     await quiet(() => fetch(o + '/' + k + '-get'));
     await quiet(() => fetch(o + '/' + k + '-post', {method: 'POST', body: 'a=1'}));
     await quiet(() => fetch(o + '/' + k + '-json', {method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-Api-Key': 'v1'}, body: '{"a":1}'}));
-    await quiet(() => new Promise(r => { const x = new XMLHttpRequest();
-      x.open('GET', o + '/' + k + '-xhr'); x.onloadend = r; x.onerror = r; x.send(); }));
+    await quiet(() => xhr(o + '/' + k + '-xhr', false));
+    // The credentials modes: fetch's default (same-origin), include, omit,
+    // XHR withCredentials; a preflight without headers (DELETE) and a
+    // preflight followed by a credentialed request.
+    await quiet(() => fetch(o + '/' + k + '-cred', {credentials: 'include'}));
+    await quiet(() => fetch(o + '/' + k + '-omit', {credentials: 'omit'}));
+    await quiet(() => xhr(o + '/' + k + '-xhrcred', true));
+    await quiet(() => fetch(o + '/' + k + '-del', {method: 'DELETE'}));
+    await quiet(() => fetch(o + '/' + k + '-jsoncred', {method: 'POST', credentials: 'include',
+      headers: {'Content-Type': 'application/json', 'X-Api-Key': 'v1'}, body: '{"a":1}'}));
     log(k);
   }
+  // Redirects: where the Origin header goes when a hop changes the origin.
+  await quiet(() => fetch(targets.ss + '/r1'));           // cross-origin first hop, then another site
+  await quiet(() => fetch('/r2'));                         // same-origin first hop, then another site
+  await quiet(() => fetch('/r2b'));                        // same-origin, then two cross-origin hops
+  await quiet(() => fetch('/r4', {method: 'POST', body: 'a=1'}));  // same-origin POST, 307 to another site
   await new Promise(r => { const i = new Image(); i.onload = i.onerror = r;
     i.src = 'https://b.localhost:' + port + '/cs-img'; });
   await new Promise(r => { const s = document.createElement('script'); s.onload = s.onerror = r;
@@ -241,14 +264,40 @@ const quiet = async f => { try { await f(); } catch (e) { log('x ' + e); } };
   setTimeout(() => { location.href = 'https://b.localhost:' + port + '/cs-nav'; }, 300);
 })();
 </script>`
+	// The priming page: its response set the cookies; it moves on to the next name.
+	originsPrime = `<!doctype html><meta charset=utf-8><title>prime</title><body>prime
+<script>setTimeout(() => { location.href = 'NEXT'; }, 200);</script>`
 	// The cross-site page: a form post back to the first origin, script-submitted.
 	originsNav = `<!doctype html><meta charset=utf-8><title>nav</title><body>nav
 <form id=f method=post action="https://www.a.localhost:PORT/form-post"><input name=a value=1></form>
 <script>setTimeout(() => document.getElementById('f').submit(), 300);</script>`
-	// The form target: a same-origin script navigation to finish.
+	// The form target: a same-origin form post that is redirected with 307 to
+	// another site — a navigation POST whose origin changes on the way.
 	originsForm = `<!doctype html><meta charset=utf-8><title>form</title><body>form
+<form id=f method=post action="/r3"><input name=a value=1></form>
+<script>setTimeout(() => document.getElementById('f').submit(), 300);</script>`
+	// Where the 307 lands, on the other site: it waits out the two-minute
+	// window of Chromium's Lax+POST exception, then posts back to the first
+	// origin once more, so the same cross-site POST is seen with young cookies
+	// (the first form post) and with old ones (this one).
+	originsLate = `<!doctype html><meta charset=utf-8><title>late</title><body>late
+<form id=f method=post action="https://www.a.localhost:PORT/form-post-late"><input name=a value=1></form>
+<script>setTimeout(() => document.getElementById('f').submit(), 125000);</script>`
+	// The late form target: a same-origin script navigation to finish.
+	originsDone = `<!doctype html><meta charset=utf-8><title>done</title><body>done
 <script>setTimeout(() => { location.href = '/so-nav'; }, 300);</script>`
 )
+
+// primeCookies are set on every name by its priming page (and on the page's
+// own origin by the start page): one of each SameSite kind, one None without
+// Secure — which Chromium refuses at set time — and one with no attribute.
+var primeCookies = []string{
+	"strict=1; Path=/; SameSite=Strict",
+	"lax=1; Path=/; SameSite=Lax",
+	"none=1; Path=/; SameSite=None; Secure",
+	"nonens=1; Path=/; SameSite=None",
+	"plain=1; Path=/",
+}
 
 // origins is set by -origins: the stand serves the three-name page instead.
 var origins bool
@@ -256,32 +305,77 @@ var origins bool
 // originsStart is the page's path (query included), as the browser opens it.
 const originsStart = "/app/index.html?tab=1"
 
-// route returns the response body and its type.
-func route(path string) (string, string) {
+// reply is what the stand answers with.
+type reply struct {
+	status   int
+	body     string
+	ctype    string
+	location string
+	cookies  []string
+}
+
+// route returns the response for a path; host tells the priming pages apart,
+// which are the same path on every name.
+func route(path, host string) reply {
+	const html = "text/html; charset=utf-8"
 	if origins {
+		other := "https://" + originsOther + ":" + listenPort
+		site := "https://" + originsSite + ":" + listenPort
+		start := "https://" + originsPage + ":" + listenPort + originsStart
 		switch path {
 		case originsStart:
 			// A page at a deep path with a query: it separates a full-URL
 			// Referer from an origin-only one, which the root page could not.
-			return originsScript, "text/html; charset=utf-8"
+			// The cookies are set on the first page so that later requests
+			// show their position: in the profile cookie is a slot placed on a guess.
+			return reply{200, originsScript, html, "", append([]string{"hc=1; path=/"}, primeCookies...)}
+		case "/prime":
+			// b.localhost first, then api.a.localhost, then back to the page.
+			next := site + "/prime"
+			if strings.HasPrefix(host, originsSite) {
+				next = start
+			}
+			return reply{200, strings.ReplaceAll(originsPrime, "NEXT", next), html, "", primeCookies}
+		case "/r1", "/r2":
+			return reply{302, "", "", other + path + "-landed", nil}
+		case "/r2b":
+			return reply{302, "", "", site + "/r2b-mid", nil}
+		case "/r2b-mid":
+			return reply{302, "", "", other + "/r2b-landed", nil}
+		case "/r3", "/r4":
+			return reply{307, "", "", other + path + "-landed", nil}
+		case "/r3-landed":
+			return reply{200, strings.ReplaceAll(originsLate, "PORT", listenPort), html, "", nil}
 		case "/cs-nav":
-			return strings.ReplaceAll(originsNav, "PORT", listenPort), "text/html; charset=utf-8"
+			return reply{200, strings.ReplaceAll(originsNav, "PORT", listenPort), html, "", nil}
 		case "/form-post":
-			return originsForm, "text/html; charset=utf-8"
+			return reply{200, originsForm, html, "", nil}
+		case "/form-post-late":
+			return reply{200, originsDone, html, "", nil}
 		case "/so-nav":
-			return second, "text/html; charset=utf-8"
+			return reply{200, second, html, "", nil}
 		case "/cs-script":
-			return "void 0;", "text/javascript"
+			return reply{200, "void 0;", "text/javascript", "", nil}
 		}
 	}
 	switch path {
 	case "/":
-		return page, "text/html; charset=utf-8"
+		return reply{200, page, html, "", []string{"hc=1; path=/"}}
 	case "/second":
-		return second, "text/html; charset=utf-8"
+		return reply{200, second, html, "", nil}
 	default:
-		return `{"ok":true}`, "application/json"
+		return reply{200, `{"ok":true}`, "application/json", "", nil}
 	}
+}
+
+// header returns a request header's value, or "".
+func (r record) header(name string) string {
+	for _, h := range r.Headers {
+		if n, v, ok := strings.Cut(h, ": "); ok && strings.EqualFold(n, name) {
+			return v
+		}
+	}
+	return ""
 }
 
 // listenPort is the stand's port, for the pages that name another host.
@@ -406,6 +500,13 @@ func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte) {
 	}
 	fr := http2.NewFramer(c, c)
 	fr.ReadMetaHeaders = hpack.NewDecoder(4096, nil)
+	// One encoder for the connection: HPACK's dynamic table is shared
+	// state with the browser's decoder, and an encoder created per
+	// response numbered its entries from an empty table while the browser
+	// counted from everything it had already seen. With one set-cookie a
+	// response it went unnoticed; with five, the names came out scrambled.
+	var hbuf bytes.Buffer
+	enc := hpack.NewEncoder(&hbuf)
 	if err := fr.WriteSettings(
 		http2.Setting{ID: http2.SettingMaxConcurrentStreams, Val: 100},
 		http2.Setting{ID: http2.SettingInitialWindowSize, Val: 1 << 20},
@@ -444,7 +545,7 @@ func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte) {
 			}
 			if f.StreamEnded() {
 				s.add(r)
-				s.respondH2(fr, f.StreamID, r.Path)
+				s.respondH2(fr, enc, &hbuf, f.StreamID, r)
 				if finish(fr) {
 					return
 				}
@@ -460,7 +561,7 @@ func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte) {
 				if r, ok := pending[f.StreamID]; ok {
 					delete(pending, f.StreamID)
 					s.add(r)
-					s.respondH2(fr, f.StreamID, r.Path)
+					s.respondH2(fr, enc, &hbuf, f.StreamID, r)
 					if finish(fr) {
 						return
 					}
@@ -472,13 +573,17 @@ func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte) {
 	}
 }
 
-func (s *srv) respondH2(fr *http2.Framer, id uint32, path string) {
-	body, ctype := route(path)
-	var buf bytes.Buffer
-	enc := hpack.NewEncoder(&buf)
-	_ = enc.WriteField(hpack.HeaderField{Name: ":status", Value: "200"})
-	_ = enc.WriteField(hpack.HeaderField{Name: "content-type", Value: ctype})
-	_ = enc.WriteField(hpack.HeaderField{Name: "content-length", Value: fmt.Sprint(len(body))})
+func (s *srv) respondH2(fr *http2.Framer, enc *hpack.Encoder, buf *bytes.Buffer, id uint32, r record) {
+	rep := route(r.Path, r.Host)
+	buf.Reset()
+	_ = enc.WriteField(hpack.HeaderField{Name: ":status", Value: fmt.Sprint(rep.status)})
+	if rep.location != "" {
+		_ = enc.WriteField(hpack.HeaderField{Name: "location", Value: rep.location})
+	}
+	if rep.ctype != "" {
+		_ = enc.WriteField(hpack.HeaderField{Name: "content-type", Value: rep.ctype})
+	}
+	_ = enc.WriteField(hpack.HeaderField{Name: "content-length", Value: fmt.Sprint(len(rep.body))})
 	_ = enc.WriteField(hpack.HeaderField{Name: "cache-control", Value: "no-store"})
 	_ = enc.WriteField(hpack.HeaderField{Name: "accept-ch", Value: acceptCH})
 	_ = enc.WriteField(hpack.HeaderField{Name: "critical-ch", Value: acceptCH})
@@ -488,19 +593,24 @@ func (s *srv) respondH2(fr *http2.Framer, id uint32, path string) {
 	if origins {
 		// CORS answers, so the cross-origin fetches on the page complete and the
 		// chain moves on; the preflight itself is recorded like any request.
-		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-origin", Value: "*"})
+		// The origin is echoed and credentials allowed: a credentialed request
+		// refuses a wildcard, and its preflight would stop the chain.
+		acao := "*"
+		if o := r.header("origin"); o != "" {
+			acao = o
+		}
+		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-origin", Value: acao})
+		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-credentials", Value: "true"})
 		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-headers", Value: "content-type, x-api-key"})
-		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-methods", Value: "GET, POST, OPTIONS"})
+		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-methods", Value: "GET, POST, DELETE, OPTIONS"})
 	}
-	if path == "/" || (origins && path == originsStart) {
-		// The cookie is set on the first page so that later requests show its
-		// position: in the profile cookie is a slot placed on a guess.
-		_ = enc.WriteField(hpack.HeaderField{Name: "set-cookie", Value: "hc=1; path=/"})
+	for _, c := range rep.cookies {
+		_ = enc.WriteField(hpack.HeaderField{Name: "set-cookie", Value: c})
 	}
 	_ = fr.WriteHeaders(http2.HeadersFrameParam{
 		StreamID: id, BlockFragment: buf.Bytes(), EndHeaders: true,
 	})
-	_ = fr.WriteData(id, true, []byte(body))
+	_ = fr.WriteData(id, true, []byte(rep.body))
 }
 
 // ---------------------------------------------------------------------------
@@ -812,6 +922,8 @@ func (s *srv) serveH3Stream(str *quic.Stream, dec *cqpack.Decoder) {
 				out.Method = hf.Value
 			case ":path":
 				out.Path = hf.Value
+			case ":authority":
+				out.Host = hf.Value
 			}
 			out.Headers = append(out.Headers, hf.Name+": "+hf.Value)
 		}
@@ -822,17 +934,23 @@ func (s *srv) serveH3Stream(str *quic.Stream, dec *cqpack.Decoder) {
 	if rec == nil {
 		return
 	}
-	body, ctype := route(rec.Path)
+	rep := route(rec.Path, rec.Host)
+	body := rep.body
 
 	var block bytes.Buffer
 	enc := qpack.NewEncoder(&block)
-	_ = enc.WriteField(qpack.HeaderField{Name: ":status", Value: "200"})
-	_ = enc.WriteField(qpack.HeaderField{Name: "content-type", Value: ctype})
+	_ = enc.WriteField(qpack.HeaderField{Name: ":status", Value: fmt.Sprint(rep.status)})
+	if rep.location != "" {
+		_ = enc.WriteField(qpack.HeaderField{Name: "location", Value: rep.location})
+	}
+	if rep.ctype != "" {
+		_ = enc.WriteField(qpack.HeaderField{Name: "content-type", Value: rep.ctype})
+	}
 	_ = enc.WriteField(qpack.HeaderField{Name: "content-length", Value: fmt.Sprint(len(body))})
 	_ = enc.WriteField(qpack.HeaderField{Name: "accept-ch", Value: acceptCH})
 	_ = enc.WriteField(qpack.HeaderField{Name: "critical-ch", Value: acceptCH})
-	if rec.Path == "/" || (origins && rec.Path == originsStart) {
-		_ = enc.WriteField(qpack.HeaderField{Name: "set-cookie", Value: "hc=1; path=/"})
+	for _, c := range rep.cookies {
+		_ = enc.WriteField(qpack.HeaderField{Name: "set-cookie", Value: c})
 	}
 	_ = enc.Close()
 

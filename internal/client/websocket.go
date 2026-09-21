@@ -258,7 +258,10 @@ func (s *Session) websocketHeaders(u *url.URL, key string, opts WebSocketOptions
 				add(h.Key, strings.Join(opts.Subprotocols, ", "))
 			}
 		case "cookie":
-			if c := s.cookieHeader(u); c != "" {
+			// A WebSocket from a page is a subresource with credentials
+			// always included: across sites only what SameSite=None allows.
+			ws := &Request{Method: "GET", URL: u.String(), Mode: ModeFetch, Credentials: CredentialsInclude}
+			if c := s.cookieHeader(ws, u); c != "" {
 				add(h.Key, c)
 			}
 		default:

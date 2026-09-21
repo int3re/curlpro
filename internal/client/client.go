@@ -16,6 +16,7 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -187,6 +188,33 @@ type Options struct {
 	// fetch from the request's own origin.
 	Page string
 
+	// Credentials is the credentials mode of fetch-mode requests, in the
+	// words of fetch(): "same-origin" — cookies only to the page's own
+	// origin, which is the default of fetch() and of XMLHttpRequest;
+	// "include" — cookies to any origin the SameSite rules allow; "omit" —
+	// none. Empty means same-origin. Measured on Chrome 153 and Firefox
+	// 156: a plain fetch() to another origin of the same site carries no
+	// cookie at all, and with include to another site only those marked
+	// SameSite=None. Without a Page there is nothing to be same-origin
+	// with and every cookie goes; a navigation has no credentials mode.
+	Credentials string
+
+	// DisableSameSite sends every cookie the jar matches whatever the
+	// initiator — the behaviour before 0.10. Off, a request made from a
+	// Page carries across sites only what the browser family would send:
+	// the SameSite attribute, Chromium's Lax-by-default with its two-minute
+	// POST window, the third-party rule of Firefox and Safari, and the
+	// refusal of SameSite=None without Secure. See profile.CookiePolicy.
+	DisableSameSite bool
+
+	// DisablePreflight sends a cross-origin fetch straight out, without the
+	// OPTIONS a browser sends first when the request is not "simple" — the
+	// behaviour before 0.10. Off, the preflight goes when the Fetch
+	// standard says it must, its answer is checked and cached for its
+	// Access-Control-Max-Age, and a refusal is a *CORSError: the request
+	// itself is not sent, because a browser would not send it.
+	DisablePreflight bool
+
 	// Device is a device name from the profile's devices section; "random" picks
 	// one at random. Empty means no device is chosen, and the high-entropy hints
 	// keep the profile's values.
@@ -275,6 +303,29 @@ type Request struct {
 	// session's, an empty string means no page — a request with no initiator.
 	Page *string
 
+	// Credentials overrides the session's credentials mode for a single
+	// fetch-mode request: "same-origin", "include" or "omit"; empty takes
+	// the session's.
+	Credentials string
+
+	// chainOrigin and originTainted are set by nextRequest on the hops of a
+	// redirect chain. chainOrigin is the origin the chain started from,
+	// which is what Origin names once a hop has moved the request elsewhere
+	// — not the new host's own origin. originTainted says a hop made the
+	// request's origin opaque under the Fetch standard's redirect rule (or
+	// Chromium's stricter one for navigations), and Origin goes out as
+	// "null": measured on Chrome 153 and Firefox 156.
+	chainOrigin   string
+	originTainted bool
+
+	// Preflight overrides the session's DisablePreflight for one request:
+	// nil takes the session's, false sends without the OPTIONS, true sends
+	// it when the Fetch standard requires one.
+	Preflight *bool
+	// preflight marks the OPTIONS itself, so it is never preflighted in
+	// turn and takes the preflight header set.
+	preflight bool
+
 	// SuppressHeaders removes headers by name after they were built from the profile.
 	//
 	// Needed for cases such as sec-fetch-user: it comes from the profile, and
@@ -323,6 +374,29 @@ func (r *Request) protocol() string {
 		return ""
 	}
 	return r.Protocol
+}
+
+// noteMode remembers the header set a request is going out with.
+func (s *Session) noteMode(r *Request) {
+	mode := s.modeFor(r)
+	s.mu.Lock()
+	if s.modesUsed == nil {
+		s.modesUsed = make(map[string]bool, 2)
+	}
+	s.modesUsed[mode] = true
+	s.mu.Unlock()
+}
+
+// ModesUsed lists the header sets requests have gone out with so far, sorted.
+func (s *Session) ModesUsed() []string {
+	s.mu.Lock()
+	out := make([]string, 0, len(s.modesUsed))
+	for m := range s.modesUsed {
+		out = append(out, m)
+	}
+	s.mu.Unlock()
+	sort.Strings(out)
+	return out
 }
 
 // useCookies decides whether the jar takes part in this request.
@@ -509,6 +583,9 @@ func (r *Request) validate(hasJar bool) error {
 			return err
 		}
 	}
+	if err := validateCredentials(r.Credentials); err != nil {
+		return err
+	}
 	switch r.Protocol {
 	case "", ProtoHTTP1, ProtoH2, ProtoH3:
 	default:
@@ -547,6 +624,9 @@ type Response struct {
 	URL     string // the final URL after redirects
 	// History holds the redirects that were followed, first to last.
 	History []Redirect
+	// Preflights are the CORS preflights sent (or found cached) before the
+	// request and its redirect hops, in order. Empty when none was needed.
+	Preflights []Preflight
 }
 
 // Session performs requests with a single profile.
@@ -590,6 +670,16 @@ type Session struct {
 	// name-value pair for an address, and that is not enough to save a session.
 	cookies map[string]Cookie
 
+	// modesUsed are the header sets requests actually went out with. The
+	// audit judges what was sent, not what the constructor was told: a
+	// session built without a mode whose every request says mode="fetch"
+	// is a fetch session, and a warning keyed on the constructor never fired.
+	modesUsed map[string]bool
+
+	// preflights caches allowing CORS preflight answers by origin, URL and
+	// credentials mode, for their Access-Control-Max-Age. Under mu.
+	preflights map[string]*preflightEntry
+
 	// altSvc holds the HTTP/3 advertisements per origin along with the "broken" mark.
 	altSvc map[string]altSvcEntry
 
@@ -628,6 +718,9 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 		if err := validatePage(opts.Page); err != nil {
 			return nil, err
 		}
+	}
+	if err := validateCredentials(opts.Credentials); err != nil {
+		return nil, err
 	}
 	if opts.Timeout == 0 {
 		opts.Timeout = 30 * time.Second
@@ -782,12 +875,13 @@ func (s *Session) Do(r *Request) (*Response, error) {
 			limit))
 	}
 	return &Response{
-		History: stream.History,
-		Status:  stream.Status,
-		Headers: stream.Headers,
-		Body:    data,
-		Proto:   stream.Proto,
-		URL:     stream.URL,
+		History:    stream.History,
+		Preflights: stream.Preflights,
+		Status:     stream.Status,
+		Headers:    stream.Headers,
+		Body:       data,
+		Proto:      stream.Proto,
+		URL:        stream.URL,
 	}, nil
 }
 
@@ -1048,6 +1142,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// The headers are built after the connection is chosen: HTTP/1.1 order and
 	// case depend on what the server negotiated, not on an option.
 	s.applyHeaders(req, r, u, c.proto == "http/1.1")
+	s.noteMode(r)
 
 	armHeaders()
 	resp, err := c.roundTrip(req.Context(), req)
@@ -1065,7 +1160,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	}
 
 	if s.useCookies(r) {
-		if cookies := resp.Cookies(); len(cookies) > 0 {
+		if cookies := s.acceptCookies(resp.Cookies()); len(cookies) > 0 {
 			s.jar.SetCookies(u, cookies)
 			s.recordCookies(u, cookies)
 		}

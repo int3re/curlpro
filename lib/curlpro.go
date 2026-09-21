@@ -25,6 +25,7 @@ import "C"
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -51,10 +52,32 @@ var (
 // code is the machine-readable error code (client.ErrorCode) when known: from
 // the text alone Python could not tell a server close from a read timeout.
 type result struct {
-	OK    bool            `json:"ok"`
-	Error string          `json:"error,omitempty"`
-	Code  string          `json:"code,omitempty"`
-	Data  json.RawMessage `json:"data,omitempty"`
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+	Code  string `json:"code,omitempty"`
+	// Details are the error's machine-readable fields beyond its code — a
+	// proxy failure's stage and status — which the Python class carries as
+	// attributes. Absent for errors that have none.
+	Details map[string]any  `json:"details,omitempty"`
+	Data    json.RawMessage `json:"data,omitempty"`
+}
+
+// errorDetails extracts the fields Python attaches to the exception.
+func errorDetails(err error) map[string]any {
+	var pe *client.ProxyError
+	if errors.As(err, &pe) {
+		d := map[string]any{"stage": pe.Stage}
+		if pe.Status != 0 {
+			d["status"] = pe.Status
+		}
+		return d
+	}
+	var ce *client.CORSError
+	if errors.As(err, &ce) {
+		return map[string]any{"method": ce.Method, "url": ce.URL, "reason": ce.Reason,
+			"status": ce.Status, "headers": ce.Headers}
+	}
+	return nil
 }
 
 func respond(data any, err error) *C.char {
@@ -62,6 +85,7 @@ func respond(data any, err error) *C.char {
 	if err != nil {
 		r.Error = err.Error()
 		r.Code = string(client.Code(err))
+		r.Details = errorDetails(err)
 	} else {
 		r.OK = true
 		if data != nil {
@@ -125,7 +149,7 @@ func curlpro_free(s *C.char) {
 // 0.20.0: codes on configuration and capability failures, so a caller can tell
 // "never retry" from "retry"; curlpro_profile_capabilities, curlpro_profile_get
 // and curlpro_session_preview.
-const Version = "0.20.0"
+const Version = "0.21.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -229,6 +253,13 @@ type sessionConfig struct {
 	Mode string `json:"mode"`
 	// Page is the initiator URL — see client.Options.Page. Empty means none.
 	Page string `json:"page"`
+	// Credentials is the fetch credentials mode — see client.Options.Credentials.
+	Credentials string `json:"credentials"`
+	// SameSite is a pointer because a missing field means "apply the rules":
+	// an old Python with a fresh DLL must not silently send every cookie.
+	SameSite *bool `json:"samesite"`
+	// Preflight: the same, for the CORS preflight — missing means "send it".
+	Preflight *bool `json:"preflight"`
 	// Device is a device name from the profile's devices section, or "random".
 	Device string `json:"device"`
 	// Devices overrides the profile's device list.
@@ -308,6 +339,9 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		Retry:              c.Retry.toPolicy(),
 		Mode:               c.Mode,
 		Page:               c.Page,
+		Credentials:        c.Credentials,
+		DisableSameSite:    c.SameSite != nil && !*c.SameSite,
+		DisablePreflight:   c.Preflight != nil && !*c.Preflight,
 		Device:             c.Device,
 		Devices:            c.Devices,
 	})
@@ -366,8 +400,13 @@ type previewJSON struct {
 	// Mode, Page and Protocol are the request's own, as in a real request:
 	// "" takes the session's, and for Page a null does the same while an
 	// empty string means no initiator.
-	Mode            string   `json:"mode"`
-	Page            *string  `json:"page"`
+	Mode        string  `json:"mode"`
+	Page        *string `json:"page"`
+	Credentials string  `json:"credentials"`
+	// Preflight asks for the OPTIONS a browser would send before this
+	// request instead of the request's own headers; "needed": false in the
+	// answer says there would be none.
+	Preflight       bool     `json:"preflight"`
 	Protocol        string   `json:"protocol"`
 	HeaderOrder     []string `json:"header_order"`
 	DefaultHeaders  *bool    `json:"default_headers"`
@@ -394,18 +433,27 @@ func curlpro_session_preview(id C.longlong, spec *C.char) (out *C.char) {
 	if err := json.Unmarshal([]byte(C.GoString(spec)), &p); err != nil {
 		return respond(nil, fmt.Errorf("parsing the preview request: %w", err))
 	}
-	names, values, err := s.PreviewHeaders(&client.Request{
+	req := &client.Request{
 		Method:          p.Method,
 		URL:             p.URL,
 		Headers:         p.Headers,
 		Mode:            p.Mode,
 		Page:            p.Page,
+		Credentials:     p.Credentials,
 		Protocol:        p.Protocol,
 		HeaderOrder:     p.HeaderOrder,
 		DefaultHeaders:  p.DefaultHeaders,
 		SessionHeaders:  p.SessionHeaders,
 		SuppressHeaders: p.SuppressHeaders,
-	})
+	}
+	if p.Preflight {
+		names, values, needed, err := s.PreviewPreflight(req)
+		if err != nil {
+			return respond(nil, err)
+		}
+		return respond(map[string]any{"names": names, "headers": values, "needed": needed}, nil)
+	}
+	names, values, err := s.PreviewHeaders(req)
 	if err != nil {
 		return respond(nil, err)
 	}
@@ -529,6 +577,10 @@ type requestJSON struct {
 	Mode string `json:"mode"`
 	// Page: null takes the session's, "" means no initiator, a URL names one.
 	Page *string `json:"page"`
+	// Credentials overrides the session's fetch credentials mode; "" takes it.
+	Credentials string `json:"credentials"`
+	// Preflight: null takes the session's, false sends without the OPTIONS.
+	Preflight *bool `json:"preflight"`
 	// SuppressHeaders names headers to leave out of this request whatever
 	// set them — the Python side sends here every header given as None.
 	SuppressHeaders []string `json:"suppress_headers"`
@@ -554,6 +606,8 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 	req.Proxy = r.Proxy
 	req.Mode = r.Mode
 	req.Page = r.Page
+	req.Credentials = r.Credentials
+	req.Preflight = r.Preflight
 }
 
 // toRequest builds a client.Request out of a frame.
@@ -632,6 +686,8 @@ type responseJSON struct {
 	URL     string              `json:"url"`
 	BodyLen int                 `json:"body_len"`
 	History []client.Redirect   `json:"history,omitempty"`
+	// Preflights are the CORS preflights sent before the request, in order.
+	Preflights []client.Preflight `json:"preflights,omitempty"`
 }
 
 // Bodies travel as binary, separately from the JSON.
@@ -676,6 +732,7 @@ func respondFrame(data any, body []byte, err error) (*C.char, C.int) {
 	if err != nil {
 		r.Error = err.Error()
 		r.Code = string(client.Code(err))
+		r.Details = errorDetails(err)
 		return encodeFrame(r, nil)
 	}
 	r.OK = true
@@ -737,12 +794,13 @@ func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int
 			return respondFrame(nil, nil, err)
 		}
 		return respondFrame(responseJSON{
-			Status:  resp.Status,
-			Proto:   resp.Proto,
-			Headers: resp.Headers,
-			URL:     resp.URL,
-			BodyLen: len(resp.Body),
-			History: resp.History,
+			Status:     resp.Status,
+			Proto:      resp.Proto,
+			Headers:    resp.Headers,
+			URL:        resp.URL,
+			BodyLen:    len(resp.Body),
+			History:    resp.History,
+			Preflights: resp.Preflights,
 		}, resp.Body, nil)
 	})
 }

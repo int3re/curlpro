@@ -20,10 +20,13 @@ from __future__ import annotations
 
 from ._ffi import (
     ConfigurationError,
+    CORSError,
     CurlProError,
     HTTPError,
     PermanentError,
     ProfileCapabilityError,
+    ProxyAuthError,
+    ProxyError,
     Timeout,
     WebSocketClosed,
 )
@@ -33,7 +36,7 @@ from .audit import Finding, audit
 from .persona import Persona, load_all
 from .aio import AsyncSession, AsyncStreamResponse, AsyncWebSocket
 from .cookies import Cookie, Cookies
-from .session import Redirect, Response, Session, delete, get, head, options, patch, post, put, request
+from .session import Preflight, Redirect, Response, Session, delete, get, head, options, patch, post, put, request
 from .profiles import (
     Profile,
     capabilities,
@@ -54,6 +57,7 @@ __all__ = [
     "Cookie",
     "Cookies",
     "ConfigurationError",
+    "CORSError",
     "CurlProError",
     "Expect",
     "Finding",
@@ -61,7 +65,10 @@ __all__ = [
     "Fingerprint",
     "Persona",
     "PermanentError",
+    "Preflight",
     "ProfileCapabilityError",
+    "ProxyAuthError",
+    "ProxyError",
     "HTTPError",
     "Redirect",
     "Timeout",
@@ -90,7 +97,7 @@ __all__ = [
     "request",
 ]
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 try:  # an installed distribution is the authority; a source checkout has none
     from importlib.metadata import version as _dist_version

@@ -79,20 +79,24 @@ def _header(pairs: Iterable[dict], name: str) -> str | None:
     return None
 
 
-def audit(target: Any) -> list[Finding]:
+def audit(target: Any, mode: str | None = None) -> list[Finding]:
     """Looks for contradictions in what this session or persona would send.
 
     Accepts a :class:`~curlpro.Session` or a :class:`~curlpro.Persona`.
+    ``mode`` names a header set to judge as if it were in use —
+    ``audit(mode="fetch")`` on a session that will send fetch requests it has
+    not sent yet. Without it the session is judged by the sets its requests
+    have actually gone out with, plus the one it was constructed with.
     """
     persona = None
     if hasattr(target, "open") and hasattr(target, "profile"):
         persona = target
         with target.open() as session:
-            return _audit(session.fingerprint(), persona)
-    return _audit(target.fingerprint(), persona)
+            return _audit(session.fingerprint(), persona, mode)
+    return _audit(target.fingerprint(), persona, mode)
 
 
-def _audit(fp: Any, persona: Any) -> list[Finding]:
+def _audit(fp: Any, persona: Any, mode: str | None = None) -> list[Finding]:
     data = fp.to_dict()
     pairs = data.get("header_values") or []
     # The profile's own request, before anything the caller added or removed:
@@ -110,7 +114,7 @@ def _audit(fp: Any, persona: Any) -> list[Finding]:
     out += _check_fetch_metadata(pairs)
     out += _check_accept_encoding(pairs, profile_pairs)
     out += _check_referer(pairs, data.get("url", ""))
-    out += _check_derived_fetch(profile, data)
+    out += _check_derived_fetch(profile, data, mode)
 
     order = {level: i for i, level in enumerate(LEVELS)}
     out.sort(key=lambda f: order[f.level])
@@ -351,16 +355,25 @@ def _check_accept_encoding(pairs: list, profile_pairs: list) -> list[Finding]:
             "decoded by the client")]
 
 
-def _check_derived_fetch(profile: str, data: dict) -> list[Finding]:
+def _check_derived_fetch(profile: str, data: dict, mode: str | None = None) -> list[Finding]:
     """A fetch set that was worked out rather than captured.
 
-    Fires only when such a set is actually in use — the session is in fetch
-    mode — because on a navigation the derived data never reaches the wire.
-    Everything else in a profile was seen from a real browser; this one part
-    was not, and a caller weighing a detection deserves to know which of the
-    two they are looking at.
+    Fires only when such a set is actually in use — the session was built in
+    fetch mode, a request of it went out in fetch mode, or the caller asks
+    about fetch — because on a navigation the derived data never reaches the
+    wire. Everything else in a profile was seen from a real browser; this
+    one part was not, and a caller weighing a detection deserves to know
+    which of the two they are looking at.
+
+    The sets requests actually went out with count as much as the
+    constructor's: a session built without a mode whose every request says
+    ``mode="fetch"`` is a fetch session, and a check keyed on the constructor
+    alone stayed silent for exactly the caller it was written for.
     """
-    if not data.get("derived_fetch") or data.get("mode") != "fetch":
+    if not data.get("derived_fetch"):
+        return []
+    in_use = data.get("mode") == "fetch" or "fetch" in (data.get("modes_used") or [])
+    if not in_use and mode != "fetch":
         return []
     return [Finding(
         code="derived_fetch_set",

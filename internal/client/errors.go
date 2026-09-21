@@ -50,7 +50,73 @@ const (
 	// a negative timeout. Permanent in the same way, and for the same reason
 	// kept apart from the transport's failures.
 	CodeConfiguration ErrorCode = "configuration"
+	// CodeProxy — the proxy, not the target, failed the request: the proxy
+	// itself could not be reached, or it refused the tunnel. The error is a
+	// *ProxyError, whose Stage and Status say which. A pool that decides
+	// "drop this address or rest it" used to parse the message for that.
+	CodeProxy ErrorCode = "proxy"
+	// CodeProxyAuth — the proxy answered 407 (or a SOCKS server rejected the
+	// authentication): without credentials, or with credentials it did not
+	// accept. Permanent: the same login will not pass on the next attempt.
+	CodeProxyAuth ErrorCode = "proxy_auth"
+	// CodeCORS — the preflight a browser would send before this request was
+	// refused, or its answer does not allow the request, which therefore
+	// was not sent. The error is a *CORSError carrying the answer.
+	CodeCORS ErrorCode = "cors"
 )
+
+// Proxy failure stages, as ProxyError.Stage reports them.
+const (
+	// ProxyStageDial: the connection to the proxy itself — TCP, or TLS for
+	// https:// proxies — failed. The target was never asked for.
+	ProxyStageDial = "dial"
+	// ProxyStageAuth: the proxy wanted credentials it did not get, or
+	// rejected the ones it got.
+	ProxyStageAuth = "auth"
+	// ProxyStageConnect: the proxy was reached and refused or failed the
+	// tunnel to the target — a non-2xx to CONNECT, a SOCKS reply other than
+	// success, a hang-up without an answer. Status carries the proxy's
+	// answer when there was one: a 502 from a gateway is a different
+	// decision from a 403.
+	ProxyStageConnect = "connect"
+)
+
+// ProxyError says the proxy failed the request, and at which stage.
+//
+// Four outcomes used to arrive as one CurlProError with an empty code and
+// different texts: the proxy unreachable, a 407, a 502 from the gateway, the
+// target unreachable through the proxy. A pool must treat them differently —
+// drop the address, rest it, or blame the destination — and had nothing but
+// substrings to go on.
+type ProxyError struct {
+	Stage string
+	// Status is the proxy's HTTP status for CONNECT, or the SOCKS5 reply
+	// code (1 general failure, 2 not allowed, 3 network unreachable, 4 host
+	// unreachable, 5 connection refused, 6 TTL expired). 0 when the proxy
+	// answered with nothing.
+	Status int
+	Err    error
+}
+
+func (e *ProxyError) Error() string { return e.Err.Error() }
+func (e *ProxyError) Unwrap() error { return e.Err }
+
+// proxyFail wraps a proxy failure with its stage and status.
+func proxyFail(stage string, status int, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &ProxyError{Stage: stage, Status: status, Err: err}
+}
+
+// Permanent reports that retrying the same call cannot change the outcome.
+func Permanent(err error) bool {
+	switch Code(err) {
+	case CodeConfiguration, CodeProfileCapability, CodeProxyAuth:
+		return true
+	}
+	return false
+}
 
 // codedError carries a code next to the original error, without losing its text.
 type codedError struct {
@@ -101,6 +167,23 @@ func AsConfigError(err error) error { return asConfig(err) }
 func Code(err error) ErrorCode {
 	if err == nil {
 		return ""
+	}
+	// A proxy failure is classified by its stage before any code it wraps:
+	// the hang-up without an answer keeps proxy_closed — documented, and a
+	// caller branches on it — while everything else is proxy or proxy_auth.
+	var ce *CORSError
+	if errors.As(err, &ce) {
+		return CodeCORS
+	}
+	var pe *ProxyError
+	if errors.As(err, &pe) {
+		if pe.Stage == ProxyStageAuth {
+			return CodeProxyAuth
+		}
+		if c := Code(pe.Err); c != "" {
+			return c // proxy_closed, or a timeout on the way to the proxy
+		}
+		return CodeProxy
 	}
 	var coded *codedError
 	if errors.As(err, &coded) {

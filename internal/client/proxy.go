@@ -5,22 +5,28 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	http "github.com/bogdanfinn/fhttp"
-	"golang.org/x/net/proxy"
 )
 
 // dialRaw opens a TCP connection to addr, through a proxy when needed.
 //
 // The proxy address arrives as a parameter instead of being read from the
 // session options: a single request may override or disable it.
+//
+// Every failure on the way through a proxy comes back as a *ProxyError with
+// its stage — the proxy itself unreachable, its credentials refused, the
+// tunnel to the target refused — so a pool can tell "drop this address" from
+// "rest it" from "the destination is at fault" without reading the text.
 func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, error) {
 	d := &net.Dialer{}
 	network := "tcp"
@@ -43,11 +49,11 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, er
 
 	switch strings.ToLower(pu.Scheme) {
 	case "socks5", "socks5h":
-		return dialSOCKS5(ctx, pu, addr)
+		return dialSOCKS5(ctx, d, pu, addr)
 	case "http", "https", "":
 		return dialHTTPProxy(ctx, d, pu, addr, s.profile.Headers.UserAgent)
 	default:
-		return nil, fmt.Errorf("unsupported proxy scheme %q (use http, https or socks5)", pu.Scheme)
+		return nil, configErr("unsupported proxy scheme %q (use http, https or socks5)", pu.Scheme)
 	}
 }
 
@@ -68,10 +74,10 @@ func parseProxy(raw string) (*url.URL, error) {
 	}
 	pu, err := url.Parse(raw)
 	if err != nil {
-		return nil, fmt.Errorf("parsing proxy address: %w", err)
+		return nil, configErr("parsing proxy address: %v", err)
 	}
 	if pu.Host == "" {
-		return nil, fmt.Errorf("proxy address %q has no host", raw)
+		return nil, configErr("proxy address %q has no host", raw)
 	}
 	return pu, nil
 }
@@ -103,25 +109,191 @@ func resolveAddr(table map[string]string, addr string) string {
 	return net.JoinHostPort(target, port)
 }
 
-func dialSOCKS5(ctx context.Context, pu *url.URL, addr string) (net.Conn, error) {
-	var auth *proxy.Auth
-	if pu.User != nil {
-		pass, _ := pu.User.Password()
-		auth = &proxy.Auth{User: pu.User.Username(), Password: pass}
-	}
+// ---------------------------------------------------------------------------
+// SOCKS5
+// ---------------------------------------------------------------------------
+
+// dialSOCKS5 opens a tunnel through a SOCKS5 proxy (RFC 1928; RFC 1929 for
+// the username and password).
+//
+// Written here rather than taken from x/net/proxy for one reason: that
+// package's reply code lives in an internal type, so "the proxy is down" and
+// "the proxy could not reach the target" came back as one string, and a pool
+// deciding whether to drop the address had to parse it. The target name is
+// sent to the proxy for socks5:// and socks5h:// alike — as it always was
+// here, and as a browser with a SOCKS proxy does: no local lookup that could
+// leak the target.
+func dialSOCKS5(ctx context.Context, d *net.Dialer, pu *url.URL, addr string) (net.Conn, error) {
 	host := pu.Host
 	if pu.Port() == "" {
 		host = net.JoinHostPort(pu.Hostname(), "1080")
 	}
-	d, err := proxy.SOCKS5("tcp", host, auth, proxy.Direct)
+	conn, err := d.DialContext(ctx, "tcp", host)
 	if err != nil {
-		return nil, fmt.Errorf("socks5: %w", err)
+		return nil, proxyFail(ProxyStageDial, 0, fmt.Errorf("connecting to proxy: %w", err))
 	}
-	if cd, ok := d.(proxy.ContextDialer); ok {
-		return cd.DialContext(ctx, "tcp", addr)
+	// The negotiation runs on a bare socket and knows no context: the
+	// request's deadline bounds it, and is cleared once the tunnel is up.
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
 	}
-	return d.Dial("tcp", addr)
+	if err := socks5Tunnel(conn, pu, addr); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	_ = conn.SetDeadline(time.Time{})
+	return conn, nil
 }
+
+const (
+	socksVersion      = 0x05
+	socksNoAuth       = 0x00
+	socksUserPass     = 0x02
+	socksNoAcceptable = 0xff
+	socksConnect      = 0x01
+	socksIPv4         = 0x01
+	socksDomain       = 0x03
+	socksIPv6         = 0x04
+)
+
+// socks5Tunnel negotiates authentication and asks the proxy to connect to addr.
+func socks5Tunnel(conn net.Conn, pu *url.URL, addr string) error {
+	dial := func(what string, err error) error {
+		return proxyFail(ProxyStageDial, 0, fmt.Errorf("socks5 %s: %w", what, err))
+	}
+
+	methods := []byte{socksNoAuth}
+	if pu.User != nil {
+		methods = append(methods, socksUserPass)
+	}
+	greeting := append([]byte{socksVersion, byte(len(methods))}, methods...)
+	if _, err := conn.Write(greeting); err != nil {
+		return dial("greeting", err)
+	}
+	var reply [2]byte
+	if _, err := io.ReadFull(conn, reply[:]); err != nil {
+		return dial("greeting", err)
+	}
+	if reply[0] != socksVersion {
+		return proxyFail(ProxyStageDial, 0, fmt.Errorf(
+			"socks5: the proxy answered with version %d — is %s a SOCKS5 proxy?", reply[0], pu.Host))
+	}
+	switch reply[1] {
+	case socksNoAuth:
+	case socksUserPass:
+		user := pu.User.Username()
+		pass, _ := pu.User.Password()
+		if len(user) > 255 || len(pass) > 255 {
+			return configErr("socks5: the username and the password are limited to 255 bytes each")
+		}
+		msg := append([]byte{0x01, byte(len(user))}, user...)
+		msg = append(msg, byte(len(pass)))
+		msg = append(msg, pass...)
+		if _, err := conn.Write(msg); err != nil {
+			return dial("authentication", err)
+		}
+		if _, err := io.ReadFull(conn, reply[:]); err != nil {
+			return dial("authentication", err)
+		}
+		if reply[1] != 0 {
+			return proxyFail(ProxyStageAuth, 0, errors.New("socks5: the proxy rejected the username and password"))
+		}
+	case socksNoAcceptable:
+		if pu.User == nil {
+			return proxyFail(ProxyStageAuth, 0, errors.New(
+				"socks5: the proxy requires authentication — pass user:pass in the proxy URL"))
+		}
+		return proxyFail(ProxyStageAuth, 0, errors.New(
+			"socks5: the proxy accepts neither anonymous access nor a username and password"))
+	default:
+		return proxyFail(ProxyStageDial, 0, fmt.Errorf(
+			"socks5: the proxy chose authentication method %d, which this client does not speak", reply[1]))
+	}
+
+	host, portText, err := net.SplitHostPort(addr)
+	if err != nil {
+		return configErr("socks5: target address %q: %v", addr, err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port < 0 || port > 65535 {
+		return configErr("socks5: target address %q has no valid port", addr)
+	}
+	req := []byte{socksVersion, socksConnect, 0x00}
+	switch ip := net.ParseIP(host); {
+	case ip == nil:
+		if len(host) > 255 {
+			return configErr("socks5: host name %q is longer than 255 bytes", host)
+		}
+		req = append(req, socksDomain, byte(len(host)))
+		req = append(req, host...)
+	case ip.To4() != nil:
+		req = append(req, socksIPv4)
+		req = append(req, ip.To4()...)
+	default:
+		req = append(req, socksIPv6)
+		req = append(req, ip.To16()...)
+	}
+	req = binary.BigEndian.AppendUint16(req, uint16(port))
+	if _, err := conn.Write(req); err != nil {
+		return proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 connect: %w", err))
+	}
+	var head [4]byte
+	if _, err := io.ReadFull(conn, head[:]); err != nil {
+		return proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 connect: reading the reply: %w", err))
+	}
+	if head[1] != 0 {
+		return proxyFail(ProxyStageConnect, int(head[1]), fmt.Errorf(
+			"socks5: the proxy could not connect to %s: %s", addr, socksReplyText(head[1])))
+	}
+	// The bound address follows, in a size its type decides; nothing here
+	// needs it, but it has to leave the socket before TLS starts reading.
+	var rest int64
+	switch head[3] {
+	case socksIPv4:
+		rest = 4 + 2
+	case socksIPv6:
+		rest = 16 + 2
+	case socksDomain:
+		var n [1]byte
+		if _, err := io.ReadFull(conn, n[:]); err != nil {
+			return proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 connect: reading the reply: %w", err))
+		}
+		rest = int64(n[0]) + 2
+	default:
+		return proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5: address type %d in the reply is unknown", head[3]))
+	}
+	if _, err := io.CopyN(io.Discard, conn, rest); err != nil {
+		return proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 connect: reading the reply: %w", err))
+	}
+	return nil
+}
+
+// socksReplyText names a SOCKS5 reply code (RFC 1928, section 6).
+func socksReplyText(code byte) string {
+	switch code {
+	case 1:
+		return "general SOCKS server failure"
+	case 2:
+		return "connection not allowed by the proxy's ruleset"
+	case 3:
+		return "network unreachable"
+	case 4:
+		return "host unreachable"
+	case 5:
+		return "connection refused"
+	case 6:
+		return "TTL expired"
+	case 7:
+		return "command not supported"
+	case 8:
+		return "address type not supported"
+	}
+	return fmt.Sprintf("reply code %d", code)
+}
+
+// ---------------------------------------------------------------------------
+// HTTP CONNECT
+// ---------------------------------------------------------------------------
 
 func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAgent string) (net.Conn, error) {
 	conn, err := dialProxyConn(ctx, d, pu)
@@ -198,9 +370,32 @@ func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAg
 	clearDeadline(conn)
 	if err != nil {
 		conn.Close()
-		return nil, err
+		return nil, classifyConnect(err)
 	}
 	return conn, nil
+}
+
+// classifyConnect turns what connectProxy reported into a ProxyError with its
+// stage: a 407 that could not be answered is the auth stage, everything else
+// the connect stage — with the status when the proxy gave one.
+func classifyConnect(err error) error {
+	var pe *ProxyError
+	if errors.As(err, &pe) {
+		return err
+	}
+	var need needAuthError
+	if errors.As(err, &need) {
+		return proxyFail(ProxyStageAuth, http.StatusProxyAuthRequired, err)
+	}
+	var refused connectRefusedError
+	if errors.As(err, &refused) {
+		stage := ProxyStageConnect
+		if refused.status == http.StatusProxyAuthRequired {
+			stage = ProxyStageAuth
+		}
+		return proxyFail(stage, refused.status, err)
+	}
+	return proxyFail(ProxyStageConnect, 0, err)
 }
 
 // deadSocket says the CONNECT failed at the transport, not at HTTP: the peer
@@ -234,20 +429,20 @@ func dialProxyConn(ctx context.Context, d *net.Dialer, pu *url.URL) (net.Conn, e
 	}
 	conn, err := d.DialContext(ctx, "tcp", host)
 	if err != nil {
-		return nil, fmt.Errorf("connecting to proxy: %w", err)
+		return nil, proxyFail(ProxyStageDial, 0, fmt.Errorf("connecting to proxy: %w", err))
 	}
 	if strings.EqualFold(pu.Scheme, "https") {
 		tconn := tls.Client(conn, &tls.Config{ServerName: pu.Hostname()})
 		if err := tconn.HandshakeContext(ctx); err != nil {
 			conn.Close()
-			return nil, fmt.Errorf("TLS handshake with proxy: %w", err)
+			return nil, proxyFail(ProxyStageDial, 0, fmt.Errorf("TLS handshake with proxy: %w", err))
 		}
 		conn = tconn
 	}
 	return conn, nil
 }
 
-// needAuthError means the proxy answered 407.
+// needAuthError means the proxy answered 407 to a CONNECT without credentials.
 //
 // reusable says whether the same socket can carry the retry: the response body
 // has been drained and the proxy is not about to close.
@@ -257,10 +452,27 @@ type needAuthError struct {
 }
 
 func (e needAuthError) Error() string {
+	msg := "proxy requires authentication"
 	if e.scheme != "" {
-		return "proxy requires authentication (" + e.scheme + ")"
+		msg += " (" + e.scheme + ")"
 	}
-	return "proxy requires authentication"
+	return msg + " — pass user:pass in the proxy URL"
+}
+
+// connectRefusedError means the proxy answered CONNECT with something other
+// than 2xx: a 407 to the credentials it was given, a 403 for a forbidden
+// target, a 5xx from a gateway that could not reach it.
+type connectRefusedError struct {
+	status int
+	text   string // the status line, e.g. "502 Bad Gateway"
+	auth   bool   // the CONNECT carried credentials
+}
+
+func (e connectRefusedError) Error() string {
+	if e.status == http.StatusProxyAuthRequired && e.auth {
+		return "proxy rejected the credentials (" + e.text + ")"
+	}
+	return "proxy refused CONNECT with " + e.text
 }
 
 // proxyClosedError: the proxy hung up without answering CONNECT at all.
@@ -361,8 +573,8 @@ func connectProxy(conn net.Conn, pu *url.URL, target, userAgent string, withAuth
 			scheme: resp.Header.Get("Proxy-Authenticate"),
 		}
 	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("proxy refused CONNECT with %s", resp.Status)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return connectRefusedError{status: resp.StatusCode, text: resp.Status, auth: withAuth}
 	}
 	// A proxy must not send a body before the CONNECT response; anything left in
 	// the buffer means the TLS parsing that follows would start on garbage.

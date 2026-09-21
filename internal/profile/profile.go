@@ -195,6 +195,13 @@ type Capabilities struct {
 	// and the Fetch standard rather than captured from the browser. Everything
 	// else in a profile is measured; this one field says where that is not so.
 	DerivedFetch bool `json:"derived_fetch,omitempty"`
+	// FetchMetadata says the browser sends sec-fetch-* at all. A mode being
+	// listed does not imply it: WebKit shipped Fetch Metadata in Safari 16.4,
+	// so a Safari 15 profile has a fetch set and no sec-fetch-* in either.
+	FetchMetadata bool `json:"fetch_metadata"`
+	// Cookies is the family's cookie policy — what a request made from a
+	// page on another site carries — or nil for a library that has none.
+	Cookies *CookiePolicy `json:"cookies,omitempty"`
 }
 
 // Capabilities answers what this profile can do.
@@ -213,6 +220,7 @@ func (p *Profile) Capabilities() Capabilities {
 		// A template means the chosen device reaches the string itself.
 		UserAgentVaries: p.Headers.UserAgentTemplate != "",
 		DerivedFetch:    p.Fetch.Derived,
+		Cookies:         CookiePolicyFor(familyOf(p.Name)),
 	}
 	if p.Fetch.Enabled() {
 		c.Modes = append(c.Modes, "fetch")
@@ -222,6 +230,12 @@ func (p *Profile) Capabilities() Capabilities {
 	}
 	for _, d := range p.Devices {
 		c.Devices = append(c.Devices, d.Name)
+	}
+	for _, h := range p.Headers.Order {
+		if strings.HasPrefix(strings.ToLower(h.Key), "sec-fetch-") && h.For("GET") != "" {
+			c.FetchMetadata = true
+			break
+		}
 	}
 	return c
 }

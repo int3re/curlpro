@@ -59,13 +59,20 @@ class AsyncStreamResponse:
     The stream holds its connection until closed — hence ``async with``.
     """
 
-    __slots__ = ("status", "proto", "headers", "url", "_id", "_closed", "_max_size")
+    __slots__ = ("status", "proto", "headers", "url", "history", "preflights",
+                 "_id", "_closed", "_max_size")
 
     def __init__(self, payload: dict, max_size: int = 0):
         self.status: int = payload["status"]
         self.proto: str = payload.get("proto", "")
         self.headers: dict[str, list[str]] = payload.get("headers") or {}
         self.url: str = payload.get("url", "")
+        from .session import Redirect, _preflights
+        #: The redirect hops before this response, first to last.
+        self.history = [Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
+                        for h in payload.get("history") or []]
+        #: The CORS preflights sent before the request, in order.
+        self.preflights = _preflights(payload.get("preflights"))
         self._id: int = payload["stream"]
         self._closed = False
         # See StreamResponse: the limit binds read(), not iter_content().
@@ -266,13 +273,17 @@ class AsyncSession:
         """What a server would see. Offline, like the sync session's."""
         return self._session.fingerprint(url)
 
-    def audit(self) -> list:
+    def audit(self, mode: str | None = None) -> list:
         """Contradictions in what this session would send."""
-        return self._session.audit()
+        return self._session.audit(mode)
 
     def headers_for(self, method: str = "GET", url: str = "https://example.com/", **kw: Any):  # noqa: ANN201
         """The headers a request would carry, without sending it."""
         return self._session.headers_for(method, url, **kw)
+
+    def preflight_for(self, method: str = "GET", url: str = "https://example.com/", **kw: Any):  # noqa: ANN201
+        """The CORS preflight a request would be preceded by, or None."""
+        return self._session.preflight_for(method, url, **kw)
 
     def on_request(self, fn):  # noqa: ANN001, ANN201
         return self._session.on_request(fn)

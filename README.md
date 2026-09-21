@@ -254,6 +254,8 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 | `post_quantum` | `False` drops the X25519MLKEM768 group and its 1216-byte key share — the hello of a browser with post-quantum key agreement off by policy. JA4 stays, JA3 and the size move: ~1.9 KB over two TCP segments becomes one that fits in one |
 | `resume` | TLS session resumption, on by default: the second connection to a host carries the ticket, the way a browser's does. The resuming hello was measured on Chrome 153 and Firefox 156 and is reproduced, Firefox's dropped `session_ticket` included; the first hello is untouched |
 | `page` | the page the requests are made from: `Referer`, `Origin` and `sec-fetch-site` are derived from it as a browser derives them (see below); `s.page = url` moves it |
+| `credentials`, `samesite` | which cookies a request from a page carries: `fetch()`'s credentials mode (`same-origin` by default — none to another origin, even of the same site; `include`; `omit`) and the `SameSite` rules of the browser family, measured on Chrome 153 and Firefox 156; `samesite=False` sends every match, as before 0.10 |
+| `preflight` | the CORS preflight before a non-simple cross-origin fetch from a page — sent, checked, cached for its `Access-Control-Max-Age`; a refusal is `CORSError` and the request is not sent. `False` sends straight out |
 | `keep_alive`, `max_idle_conns`, `idle_conn_timeout` | connection reuse and pool size |
 | `resolve`, `ip_version` | host address override, address family (`"4"`/`"6"`) |
 | `device`, `devices` | the phone for mobile profiles and your own device list |
@@ -434,15 +436,19 @@ except curlpro.CurlProError as e:         # everything else from the native side
     print(e.code, e)
 ```
 
-`PermanentError` — with `ProfileCapabilityError` and `ConfigurationError` under
-it — is the one a scraper branches on: it means the answer will not change, so
-do not retry. A profile that has no fetch set, a device that is not in the
-list, a page that is not a URL. Everything else is worth a retry.
+`PermanentError` — with `ProfileCapabilityError`, `ConfigurationError` and
+`ProxyAuthError` under it — is the one a scraper branches on: it means the
+answer will not change, so do not retry. A profile that has no fetch set, a
+device that is not in the list, a page that is not a URL, a proxy login the
+proxy rejects. Everything else is worth a retry. `ProxyError` says the proxy,
+not the target, failed, with `.stage` (`dial`, `auth`, `connect`) and
+`.status` — a pool decides from those, not from the text. `CORSError` is a
+refused preflight, with the answer attached.
 
 The outcome codes: `timeout`, `expectation`, `profile_capability`,
-`configuration`, `session_closed`, `too_large`, `ws_closed`, `ws_too_big`,
-`ws_protocol`, `proxy_closed`. The message is written for a human and names the
-consequence, not only the fact:
+`configuration`, `proxy`, `proxy_auth`, `proxy_closed`, `cors`,
+`session_closed`, `too_large`, `ws_closed`, `ws_too_big`, `ws_protocol`. The
+message is written for a human and names the consequence, not only the fact:
 
 ```
 timeout must be positive, got 0s (leave it unset for no limit)
@@ -767,6 +773,19 @@ s.post("https://api.example.com/v1/x", json_body=d)  # origin: https://example.c
 Without a page a fetch goes out from the request's own origin, as before. The
 audit reports a hand-written `Referer` beside `sec-fetch-site: none`, the
 commonest way to say "from a page" and "from nowhere" in one request.
+
+From a page the cookies follow the browser too: `fetch()`'s default
+`credentials="same-origin"` sends none to another origin — not even one of the
+same site — and `"include"` sends across sites only what the `SameSite` rules
+of the family allow (Chromium: `None`, plus an unattributed cookie on a POST
+navigation for two minutes; Firefox: nothing on a fetch at all). A non-simple
+cross-origin fetch — JSON, a custom header, a DELETE — is preceded by the CORS
+preflight the browser sends, with its measured header set, and goes only when
+the answer allows it; `r.preflight` shows it, `s.preflight_for(...)` shows it
+before sending. Along a redirect chain `Origin` turns `null` where the Fetch
+standard says so. All of it measured on Chrome 153 and Firefox 156
+(`docs/STAGE18-RESULTS.md`); `samesite=False` and `preflight=False` restore
+the behaviour before 0.10.
 
 ## Profiles as data
 

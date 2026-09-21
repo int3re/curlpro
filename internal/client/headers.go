@@ -9,12 +9,13 @@ import (
 	http "github.com/bogdanfinn/fhttp"
 )
 
-// cookieHeader builds the cookie header value from the session jar.
-func (s *Session) cookieHeader(u *url.URL) string {
+// cookieHeader builds the cookie header value from the session jar, after
+// the browser's rules for the request (cookiesFor).
+func (s *Session) cookieHeader(r *Request, u *url.URL) string {
 	if s.jar == nil {
 		return ""
 	}
-	cookies := s.jar.Cookies(u)
+	cookies := s.cookiesFor(r, u)
 	if len(cookies) == 0 {
 		return ""
 	}
@@ -120,7 +121,7 @@ func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []st
 		}
 		cookie := ""
 		if s.useCookies(r) {
-			cookie = s.cookieHeader(u)
+			cookie = s.cookieHeader(r, u)
 		}
 		// On HTTP/1.1 the profile's http1.order defines not only the order but the
 		// set as well: Chrome does not send priority over HTTP/1.1, Firefox does
@@ -159,11 +160,26 @@ func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []st
 				// cross-origin fetch, with or without a body (Chrome 153 and
 				// Firefox 156). The value is the initiator's origin; without one
 				// the request's own origin stands in — the same-origin case.
+				//
+				// Along a redirect chain the value is the origin the chain
+				// started from — a hop to another host does not make the
+				// request that host's own — and "null" once a hop has made
+				// the origin opaque (nextRequest decides that).
+				var origin string
 				switch {
 				case page != nil && (sendsOrigin(r.Method) || (tpl.fetch && !sameOrigin(page.String(), u.String()))):
-					add(caseFor(h.Key, h1Order), originOf(page))
+					origin = originOf(page)
 				case page == nil && sendsOrigin(r.Method):
-					add(caseFor(h.Key, h1Order), originOf(u))
+					origin = originOf(u)
+					if r.chainOrigin != "" {
+						origin = r.chainOrigin
+					}
+				}
+				if origin != "" {
+					if r.originTainted {
+						origin = "null"
+					}
+					add(caseFor(h.Key, h1Order), origin)
 				}
 			case "referer":
 				// strict-origin-when-cross-origin, the default policy of both
