@@ -6,7 +6,11 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.10.0** — a minor, because a request made from a `page` now sends what the
+**0.10.1** — a patch on 0.10.0 for two edges a third field report found the
+same day: a response to an uncredentialed fetch no longer sets cookies, and an
+`AsyncSession` response carries `preflights`, `history` and `elapsed` like the
+sync one; an imported cookie with an IP-address domain is now actually sent.
+ABI stays 0.21. Before it, **0.10.0** — a minor, because a request made from a `page` now sends what the
 browser sends and already-written code sees the difference on the wire: a
 cross-origin fetch carries no cookies unless `credentials="include"` (and then
 only what `SameSite` allows, by the browser family's measured rules), a

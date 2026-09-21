@@ -195,3 +195,46 @@ func TestPreviewAppliesTheCookieRules(t *testing.T) {
 		t.Errorf("preview cookie %q, want none=1", cookie)
 	}
 }
+
+// A response to a request made without credentials sets no cookie — the
+// third field report: an API answered a credentials="omit" fetch with its
+// own session cookie, the jar kept it beside the one the caller had, and the
+// next credentialed request carried a pair no browser sends.
+func TestSetCookieIsIgnoredWithoutCredentials(t *testing.T) {
+	var n int
+	h := stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		n++
+		w.Header().Add("Set-Cookie", "api"+strings.TrimPrefix(r.URL.Path, "/set")+"=1; Path=/")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Write([]byte("ok"))
+	})
+	srv, _ := auditServer(t, false, h)
+	s := auditSession(t, Options{DefaultHeaders: true, Cookies: true, ForceHTTP1: true})
+	crossSitePage := "https://www.example.test/app"
+	sameOriginPage := auditURL(srv, "/app")
+	for _, tc := range []struct {
+		what   string
+		r      *Request
+		stored bool
+	}{
+		{"fetch with omit", &Request{Method: "GET", URL: auditURL(srv, "/set1"), Mode: ModeFetch, Page: &crossSitePage, Credentials: "omit"}, false},
+		{"fetch to another origin, default same-origin", &Request{Method: "GET", URL: auditURL(srv, "/set2"), Mode: ModeFetch, Page: &crossSitePage}, false},
+		{"fetch to the page's own origin, default", &Request{Method: "GET", URL: auditURL(srv, "/set3"), Mode: ModeFetch, Page: &sameOriginPage}, true},
+		{"fetch with include", &Request{Method: "GET", URL: auditURL(srv, "/set4"), Mode: ModeFetch, Page: &crossSitePage, Credentials: "include"}, true},
+		{"a navigation", &Request{Method: "GET", URL: auditURL(srv, "/set5"), Mode: ModeNavigate, Page: &crossSitePage}, true},
+	} {
+		if _, err := s.Do(tc.r); err != nil {
+			t.Fatalf("%s: %v", tc.what, err)
+		}
+		name := "api" + strings.TrimPrefix(strings.TrimPrefix(tc.r.URL, auditURL(srv, "")), "/set")
+		var have bool
+		for _, c := range s.Cookies() {
+			if c.Name == name {
+				have = true
+			}
+		}
+		if have != tc.stored {
+			t.Errorf("%s: cookie %s stored=%v, want %v", tc.what, name, have, tc.stored)
+		}
+	}
+}

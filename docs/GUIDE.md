@@ -5,7 +5,7 @@
 This is the whole library in one document, written for two readers: a person
 integrating it, and an AI assistant researching it before touching code. Every
 number and every behaviour here was checked against the code on 2026-09-21, at
-version 0.10.0. Where the README says less, this document says more; where the
+version 0.10.1. Where the README says less, this document says more; where the
 two disagree, this one is wrong and should be fixed — say so.
 
 An assistant reading this: the library already does most of what a scraper
@@ -173,7 +173,7 @@ The response:
 | `json()` | `json.loads` on the raw bytes — UTF-8/16/32 are recognised by the parser itself |
 | `url` | the final URL after redirects |
 | `history` | the redirect chain as `Redirect(status, url, location)` records |
-| `preflight`, `preflights` | the CORS preflight that preceded the request, a `Preflight(url, status, headers, cached)` record or `None`; all of them along a redirect chain. `cached` means no OPTIONS went out: an earlier answer still covered it. A `StreamResponse` carries both as well |
+| `preflight`, `preflights` | the CORS preflight that preceded the request, a `Preflight(url, status, headers, cached)` record or `None`; all of them along a redirect chain. `cached` means no OPTIONS went out: an earlier answer still covered it. A `StreamResponse` and an `AsyncSession` response carry both (and `history`) as well — the second did not until 0.10.1 |
 | `cookies` | the cookies **this** response set, as a mapping |
 | `elapsed` | seconds, measured in Python around the native call |
 | `raise_for_status()` | raises `HTTPError` (with `.status` and `.response`) on 4xx/5xx; returns the response otherwise |
@@ -465,6 +465,18 @@ the session restores the old behaviour — every match goes, and `None` without
 `Secure` is stored — for code that relied on it. A cookie record carries
 `created` (epoch seconds) for the Lax+POST window; an import without it counts
 as old.
+
+The same question decides the other direction: **a response to a request made
+without credentials sets no cookie**. A fetch with `credentials="omit"`, or
+with the default `same-origin` to another origin, gets no cookies and can
+plant none — otherwise a site that was shown no cookies could still set its
+own, and the next credentialed request would carry a pair no browser sends
+(an API that answered an uncredentialed fetch with its own session cookie, the
+third field report). A navigation always includes credentials; the CORS
+preflight never does, so its `Set-Cookie` was already ignored. And an imported
+cookie whose domain is an IP address (`domain="127.0.0.1"`) is stored as the
+host-only cookie it is — until 0.10.1 the jar refused the attribute and the
+cookie was recorded but never sent.
 
 ## 11. Profiles, devices and mobile
 

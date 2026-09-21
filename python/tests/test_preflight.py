@@ -107,3 +107,20 @@ def test_preflight_can_be_switched_off():
         st.routes["/api"] = lambda rec: allowing(rec) if rec["method"] == "OPTIONS" else (200, [], b"{}")
         s.post(st.url + "/api", json_body={"a": 1}, mode="fetch", preflight=True)
         assert st.methods() == ["POST /api", "OPTIONS /api", "POST /api"]
+
+
+def test_the_async_response_carries_the_preflight_and_the_history():
+    # The third field report: the OPTIONS went out on AsyncSession too, but
+    # its Response was built without preflights — and without history.
+    async def go(st):
+        async with curlpro.AsyncSession("chrome-151-windows", page=PAGE) as a:
+            r = await a.get(st.url + "/api", mode="fetch", headers={"X-Api-Key": "k"})
+            hop = await a.get(st.url + "/r", mode="navigate")
+            return r, hop
+    with EchoStand() as st:
+        st.routes["/api"] = lambda rec: allowing(rec) if rec["method"] == "OPTIONS" else (200, [], b"{}")
+        st.routes["/r"] = (302, [("Location", st.url + "/x")], b"")
+        r, hop = asyncio.run(go(st))
+    assert st.methods()[:2] == ["OPTIONS /api", "GET /api"]
+    assert r.preflight is not None and r.preflight.status == 204
+    assert [h.status for h in hop.history] == [302] and hop.elapsed > 0

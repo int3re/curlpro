@@ -853,6 +853,24 @@ The version is 0.10.0: a cross-origin fetch with `page=` no longer carries
 cookies and is preceded by an OPTIONS, which is what already-written code
 sends. ABI 0.21.
 
+## Stage 33 — the third field report: two edges of 0.10 ✅ done 2026-09-21
+
+The scraper moved onto 0.10.0 the same day, confirmed every claim on the wire
+— a live site accepted the library's preflight without a single refusal —
+and sent two divergences. A response to a `credentials="omit"` fetch set
+cookies, which a browser ignores (Fetch's includeCredentials decides both
+what a request carries and whether its response may set cookies); the jar
+kept the API's session cookie beside the caller's and the next credentialed
+request carried a pair no browser sends. And `Response.preflight` was `None`
+on every `AsyncSession` request while the OPTIONS had gone out: the wrapper
+built its `Response` without `preflights` — and, it turned out, without
+`history` and `elapsed` too, the same shape as the `s.page` defect of 0.8.
+Both fixed, both guarded at the response level rather than the method
+surface. Found beside them: an imported cookie whose domain is an IP address
+was recorded but never sent — fhttp's copy of the jar keeps the older
+net/http rule that refuses a Domain attribute on an IP — and is now stored as
+the host-only cookie it is. Patch 0.10.1, ABI unchanged.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

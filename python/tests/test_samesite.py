@@ -121,3 +121,21 @@ def test_capabilities_carry_the_cookie_policy():
     firefox = curlpro.capabilities("firefox-155-windows")["cookies"]
     assert not firefox["lax_by_default"] and not firefox["third_party"]
     assert "cookies" not in curlpro.capabilities("okhttp-5.5-jvm")
+
+
+def test_a_response_to_an_uncredentialed_request_sets_no_cookie():
+    # The third field report: an API answered a credentials="omit" fetch with
+    # its own session cookie, the jar kept it beside the caller's, and the
+    # next credentialed request carried a pair no browser sends.
+    with EchoStand() as st, curlpro.Session("chrome-151-windows") as s:
+        st.routes["/assort"] = (200, [("Set-Cookie", "spid=FROM_API"), ("Set-Cookie", "spsc=FROM_API")], b"{}")
+        s.cookies.set("spid", "FROM_BOOTSTRAP", domain="127.0.0.1", path="/")
+        same_site = "http://127.0.0.1:1/app"
+        s.get(st.url + "/assort", page=same_site, mode="fetch", credentials="omit")
+        assert "spsc" not in s.cookies and s.cookies["spid"] == "FROM_BOOTSTRAP"
+        s.get(st.url + "/assort", page=CROSS, mode="fetch")            # default same-origin, another origin
+        assert "spsc" not in s.cookies
+        s.get(st.url + "/x", page=same_site, mode="fetch", credentials="include")
+        assert cookie(st) == "spid=FROM_BOOTSTRAP"
+        s.get(st.url + "/assort", page=same_site, mode="fetch", credentials="include")
+        assert "spsc" in s.cookies                                    # with credentials it is stored

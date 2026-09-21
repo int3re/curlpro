@@ -1159,7 +1159,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		return fail(err)
 	}
 
-	if s.useCookies(r) {
+	if s.useCookies(r) && s.includesCredentials(r, u) {
 		if cookies := s.acceptCookies(resp.Cookies()); len(cookies) > 0 {
 			s.jar.SetCookies(u, cookies)
 			s.recordCookies(u, cookies)

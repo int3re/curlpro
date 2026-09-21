@@ -13,13 +13,14 @@ short but it touches the network, so it goes to the default executor.
 from __future__ import annotations
 
 import asyncio
+import time
 import warnings
 from typing import Any, AsyncIterator, Iterable, Mapping
 
 from ._completions import settle
 from ._ffi import WebSocketClosed, _call, call_with_frame, encode
 from .proxies import proxy_for as env_proxy
-from .session import DEFAULT_PROFILE, Response, Session, _request_meta
+from .session import DEFAULT_PROFILE, Redirect, Response, Session, _preflights, _request_meta
 from .timeouts import split_timeout as _split_timeout
 from .stream import DEFAULT_CHUNK, lines_from, too_large
 
@@ -314,6 +315,7 @@ class AsyncSession:
             if replaced is not None:
                 meta = replaced
 
+        t0 = time.perf_counter()
         try:
             started = call_with_frame(
                 "curlpro_request_start", self._session._id, body=body, meta=meta
@@ -329,12 +331,20 @@ class AsyncSession:
             raise self._session._failed(exc, saved) from None
 
         try:
+            # The same fields the synchronous path fills: a response built
+            # here without history and preflights was the third field report
+            # — `r.preflight` was None on every AsyncSession request while the
+            # OPTIONS had gone out, and the redirect chain was invisible too.
             return self._session._after(Response(
                 status=payload["status"],
                 proto=payload.get("proto", ""),
                 headers=payload.get("headers") or {},
                 content=content,
                 url=payload.get("url") or url,
+                elapsed=time.perf_counter() - t0,
+                history=[Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
+                         for h in payload.get("history") or []],
+                preflights=_preflights(payload.get("preflights")),
             ), expect)
         except BaseException as exc:
             # A failed expectation is a request failure too: the caller was

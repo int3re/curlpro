@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"sort"
 	"strings"
@@ -190,6 +191,13 @@ func (s *Session) SetCookies(cs []Cookie) error {
 			Secure:   c.Secure,
 			HttpOnly: c.HTTPOnly,
 			SameSite: sameSiteValue(c.SameSite),
+		}
+		// The jar refuses a Domain attribute on an IP address (the older
+		// net/http rule fhttp's copy keeps), and an imported cookie for
+		// 127.0.0.1 was recorded but never sent. An IP cookie is host-only
+		// by nature; setting it without the attribute says exactly that.
+		if net.ParseIP(strings.TrimPrefix(c.Domain, ".")) != nil {
+			hc.Domain = ""
 		}
 		if c.Expires != 0 {
 			hc.Expires = time.Unix(c.Expires, 0)

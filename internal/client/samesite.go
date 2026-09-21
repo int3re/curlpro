@@ -217,6 +217,28 @@ func pathMatches(reqPath, cookiePath string) bool {
 	return strings.HasSuffix(cookiePath, "/") || reqPath[len(cookiePath)] == '/'
 }
 
+// includesCredentials is Fetch's "includeCredentials": whether the request
+// was made with credentials at all, which decides not only what it carries
+// but also whether its response may set cookies. A fetch with
+// credentials: "omit" — or the default same-origin to another origin —
+// gets no cookies and can set none: otherwise a site that was shown no
+// cookies could still plant its own, and the next credentialed request would
+// carry a pair the browser never sends (the third field report). A
+// navigation always includes them.
+func (s *Session) includesCredentials(r *Request, u *url.URL) bool {
+	if s.modeFor(r) != ModeFetch {
+		return true
+	}
+	switch s.credentialsFor(r) {
+	case CredentialsOmit:
+		return false
+	case CredentialsSameOrigin:
+		page := s.pageURL(r)
+		return page == nil || sameOrigin(page.String(), u.String())
+	}
+	return true
+}
+
 // acceptCookies drops from a response what the browser would refuse to
 // store: SameSite=None without Secure, where the family requires it.
 func (s *Session) acceptCookies(cs []*http.Cookie) []*http.Cookie {
