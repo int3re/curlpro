@@ -102,6 +102,12 @@ Two traps, each of which cost a run:
   datagrams and drops the handshake silently. What is needed is
   `--ignore-certificate-errors-spki-list` with the stand key's fingerprint;
   hcapture computes it itself from `capture/certs/tls.crt`.
+- **Nor to the high-entropy client hints.** Chrome answers `Accept-CH` with
+  `sec-ch-ua-full-version-list` and the rest only from a secure origin, and a
+  certificate waved through by `--ignore-certificate-errors` does not make one:
+  three runs got the three low-entropy hints and nothing else. The same
+  `--ignore-certificate-errors-spki-list` fixes it, so hcapture now passes it
+  on every Chrome run, not only the QUIC one ([STAGE19](STAGE19-RESULTS.md)).
 
 Chrome 152 was captured on both transports with this stand — see
 [STAGE16-RESULTS.md](STAGE16-RESULTS.md).
@@ -394,11 +400,11 @@ SETTINGS and WINDOW_UPDATE).
 | Source | TLS | H2 | Header order | By version | Note |
 |---|---|---|---|---|---|
 | `lexiforest/curl-impersonate` signatures | ✅ | ✅ | ✅ | ✅ | **the best — everything together, machine-readable** |
-| `0x676e67/wreq-util` | ✅ | ✅ | ✅ by OS | ✅ | **the widest version coverage** |
-| `sardanioss/httpcloak` `fingerprint/embedded/*.json` | ✅ | ✅ +H3 | ✅ | ✅ | **the best schema** — the `based_on` delta model |
+| `0x676e67/wreq-util` | ✅ | ✅ | ✅ by OS | ✅ | **the widest version coverage** (2026-09-22: Chrome 100–153, Edge to 148, Firefox to 151, Safari to 26.4 with iOS/iPadOS, Opera 116–131, OkHttp) — as Rust source with BoringSSL options, no hashes, no raw hello. **Transcribed** into 238 marked profiles by `scripts/transcribe-wreq.py`: its equivalence claims are used, its options are not |
+| `sardanioss/httpcloak` `fingerprint/embedded/*.json` | ❌ since 2026 | ❌ | ✅ | ✅ | was the best schema — the `based_on` delta model — but the embedded presets now hold header order, signature algorithms and trust anchors only (checked 2026-09-22 on Chrome 147–152): the hello and HTTP/2 live in the code |
 | `refraction-networking/utls` `u_parrots.go` | ✅ | ❌ | ❌ | ✅ | TLS only, 3526 lines |
 | `bogdanfinn/tls-client` | ✅ | ✅ | pseudo only | ✅ | Go structures, lags behind |
-| `deedy5/primp` | ✅ | ✅ | ✅ | ✅ | Rust, Chrome 144–152, has ML-DSA and ECH |
+| `deedy5/primp` | ✅ | ✅ | ✅ | ✅ | Rust, Chrome 144–153, Edge 144–153, Firefox 140–151, Safari 18.5–26.4, Opera 126–135, has ML-DSA and ECH |
 | `tlsfingerprint.io` | ✅ | ❌ | ❌ | labels | 3.37M fingerprints, but **no bulk export** |
 | `browserforge` | ❌ | ❌ | ✅ | by name | **zero TLS data** (checked by grep). The header order is by browser name rather than by version. The data moved to `apify/fingerprint-suite` |
 | `salesforce/ja3` | hashes | ❌ | ❌ | ❌ | **archived 2025-05-01** |

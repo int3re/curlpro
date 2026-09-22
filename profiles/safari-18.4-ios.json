@@ -40,7 +40,8 @@
       }
     ],
     "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Mobile/15E148 Safari/604.1",
-    "custom_anchor": "accept-encoding"
+    "custom_anchor": "accept-encoding",
+    "user_agent_template": "Mozilla/5.0 (iPhone; CPU iPhone OS {os_version} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{version} Mobile/15E148 Safari/604.1"
   },
   "http2": {
     "connection_window_update": 10420225,
@@ -148,5 +149,92 @@
     ],
     "custom_anchor": "accept-encoding",
     "derived": true
-  }
+  },
+  "devices": [
+    {
+      "name": "iPhone, iOS 18.4",
+      "os_version": "18_4",
+      "version": "18.4"
+    },
+    {
+      "name": "iPhone, iOS 18.4.1",
+      "os_version": "18_4_1",
+      "version": "18.4.1"
+    },
+    {
+      "name": "iPhone, iOS 18.5",
+      "os_version": "18_5",
+      "version": "18.5"
+    },
+    {
+      "name": "iPhone, iOS 18.6",
+      "os_version": "18_6",
+      "version": "18.6"
+    },
+    {
+      "name": "iPhone, iOS 18.6.1",
+      "os_version": "18_6_1",
+      "version": "18.6.1"
+    },
+    {
+      "name": "iPhone, iOS 18.6.2",
+      "os_version": "18_6_2",
+      "version": "18.6.2"
+    },
+    {
+      "name": "iPhone, iOS 18.7",
+      "os_version": "18_7",
+      "version": "18.7"
+    },
+    {
+      "name": "iPhone, iOS 18.7.1",
+      "os_version": "18_7_1",
+      "version": "18.7.1"
+    },
+    {
+      "name": "iPhone, iOS 18.7.2",
+      "os_version": "18_7_2",
+      "version": "18.7.2"
+    },
+    {
+      "name": "iPhone, iOS 18.7.3",
+      "os_version": "18_7_3",
+      "version": "18.7.3"
+    },
+    {
+      "name": "iPhone, iOS 18.7.4",
+      "os_version": "18_7_4",
+      "version": "18.7.4"
+    },
+    {
+      "name": "iPhone, iOS 18.7.5",
+      "os_version": "18_7_5",
+      "version": "18.7.5"
+    },
+    {
+      "name": "iPhone, iOS 18.7.6",
+      "os_version": "18_7_6",
+      "version": "18.7.6"
+    },
+    {
+      "name": "iPhone, iOS 18.7.7",
+      "os_version": "18_7_7",
+      "version": "18.7.7"
+    },
+    {
+      "name": "iPhone, iOS 18.7.8",
+      "os_version": "18_7_8",
+      "version": "18.7.8"
+    },
+    {
+      "name": "iPhone, iOS 18.7.9",
+      "os_version": "18_7_9",
+      "version": "18.7.9"
+    },
+    {
+      "name": "iPhone, iOS 18.7.10",
+      "os_version": "18_7_10",
+      "version": "18.7.10"
+    }
+  ]
 }

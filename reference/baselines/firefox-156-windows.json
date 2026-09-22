@@ -1,0 +1,13 @@
+{
+  "profile": "firefox-156-windows",
+  "oracle": "https://tls.browserleaks.com/json",
+  "ja4": [
+    "t13d1517h2_8daaf6152771_3cbfd9057e0d"
+  ],
+  "ja3n": [
+    "f9c6a2c424206e61efb6c1a6325596b5"
+  ],
+  "akamai": "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s",
+  "recorded": "2026-09-22T00:15:25Z",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:156.0) Gecko/20100101 Firefox/156.0"
+}

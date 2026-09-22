@@ -32,14 +32,23 @@ def _profiles():
 
 def test_the_profile_count_and_families():
     names = NAMES
-    assert len(names) == 50
+    assert len(names) == 294
     assert set(names) <= set(curlpro.list_profiles())
+    import json
+    measured = [n for n in names if "source" not in json.loads((REPO / "profiles" / f"{n}.json").read_text("utf-8"))]
+    transcribed = [n for n in names if n not in measured]
+    assert len(measured) == 56 and len(transcribed) == 238
     families = {}
-    for n in names:
+    for n in measured:
         families[n.split("-")[0]] = families.get(n.split("-")[0], 0) + 1
-    assert families == {"chrome": 25, "edge": 6, "firefox": 4, "safari": 11,
+    assert families == {"chrome": 29, "edge": 7, "firefox": 5, "safari": 11,
                         "tor": 1, "yandex": 1, "okhttp": 2}
-    assert "50 profiles" in TEXT and "25 Chrome" in TEXT
+    families = {}
+    for n in transcribed:
+        families[n.split("-")[0]] = families.get(n.split("-")[0], 0) + 1
+    assert families == {"chrome": 108, "edge": 37, "firefox": 39, "safari": 22, "opera": 32}
+    assert "294 profiles" in TEXT and "56 of them are captured" in TEXT and "29 Chrome" in TEXT
+    assert "238 are transcribed" in TEXT and "238" in LLMS
 
 
 def test_the_number_of_distinct_ja4_values():
@@ -51,15 +60,26 @@ def test_the_number_of_distinct_ja4_values():
     # of the ECH GREASE payload — so that group has two JA4 spellings, as the
     # browsers do, and the baselines list both. The count folds the pair.
     flip = {"t13d1517h2_8daaf6152771_b1ff8ab2d16f": "t13d1516h2_8daaf6152771_02713d6af862"}
+    # The captured members of that group; a transcribed profile standing on
+    # one of them flips the same way, and its chain says so.
     pre_kyber = {"chrome-119-linux", "chrome-119-macos", "chrome-120-linux", "chrome-120-macos",
                  "chrome-123-macos", "chrome-124-macos", "chrome-131-android", "chrome-131-macos",
                  "edge-119-linux", "edge-120-linux"}
+
+    def root(name: str) -> str:
+        while name not in pre_kyber:
+            base = curlpro.get_profile(name).based_on
+            if not base:
+                return name
+            name = base
+        return name
+
     groups: dict[str, list[str]] = {}
     for n in NAMES:
         with curlpro.Session(n) as s:
             ja4 = s.fingerprint().ja4
         if ja4 in flip:
-            assert n in pre_kyber, f"{n} showed the padding variant {ja4}"
+            assert root(n) in pre_kyber, f"{n} showed the padding variant {ja4}"
             ja4 = flip[ja4]
         groups.setdefault(ja4, []).append(n)
     assert len(groups) == 17, "\n".join(f"{k}: {v}" for k, v in sorted(groups.items()))

@@ -1023,16 +1023,19 @@ func launch(browser, origin string, h3 bool) func() {
 		args = append(args, "--host-resolver-rules=MAP *.localhost 127.0.0.1")
 		origin = originsPage + ":" + listenPort
 	}
+	// --ignore-certificate-errors does not extend to the QUIC path — Chrome
+	// sends the datagrams but silently abandons the handshake — nor does it
+	// make the origin secure enough for the high-entropy client hints: three
+	// runs got sec-ch-ua, -mobile and -platform and nothing else (STAGE19).
+	// The stand's public key fingerprint lifts both checks, so every Chrome
+	// run gets it.
+	if h, err := spkiHash(certFile); err == nil {
+		args = append(args, "--ignore-certificate-errors-spki-list="+h)
+	} else {
+		fmt.Fprintln(os.Stderr, "key fingerprint:", err)
+	}
 	if h3 {
 		args = append(args, "--enable-quic", "--origin-to-force-quic-on="+origin)
-		// --ignore-certificate-errors does not extend to the QUIC path: Chrome
-		// sends the datagrams but silently abandons the handshake. The stand's
-		// public key fingerprint is what lifts that particular check.
-		if h, err := spkiHash(certFile); err == nil {
-			args = append(args, "--ignore-certificate-errors-spki-list="+h)
-		} else {
-			fmt.Fprintln(os.Stderr, "key fingerprint:", err)
-		}
 	}
 	start := "https://" + origin + "/"
 	if origins {

@@ -49,6 +49,20 @@ def test_origin_is_null_after_a_cross_origin_redirect():
         assert b.last()["origin"] == a.url
 
 
+def test_the_fingerprint_names_the_device_actually_chosen():
+    # A field report: with device="random" the fingerprint said "random",
+    # and a parser recording which phones get banned had nothing to record.
+    with curlpro.Session("chrome-152-android", device="random") as s:
+        fp = s.fingerprint()
+        assert fp.device in fp.devices and fp.device != "random"
+        assert fp.to_dict()["device"] == fp.device
+    with curlpro.Session("chrome-152-android", device="SM-S928B") as s:
+        assert s.fingerprint().device == "Galaxy S24 Ultra"
+    # A desktop without an identity pool (the 151-153 desktops carry one since 0.11).
+    with curlpro.Session("chrome-150-macos") as s:
+        assert s.fingerprint().device == "" and s.fingerprint().devices == []
+
+
 def test_the_stream_response_carries_history_and_preflights():
     with EchoStand() as st, curlpro.Session("chrome-151-windows") as s:
         st.routes["/r"] = (302, [("Location", st.url + "/x")], b"")

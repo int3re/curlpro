@@ -100,6 +100,11 @@ type Fingerprint struct {
 	// session constructed without a mode whose requests all say
 	// mode="fetch" is a fetch session, whatever Mode says.
 	ModesUsed []string `json:"modes_used"`
+	// Source is set for a transcribed profile — one taken from another
+	// project's description rather than captured here — and the audit
+	// reports it: nothing such a profile sends was seen on the wire by this
+	// project.
+	Source *profile.SourceSpec `json:"source,omitempty"`
 }
 
 // Fingerprint computes what this session looks like on the wire.
@@ -183,13 +188,17 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 	if s.opts.ForceHTTP1 {
 		proto, main = "HTTP/1.1", pairsH1
 	}
-	out.Device = s.opts.Device
+	// The device actually chosen — a name from the list — not the option as
+	// given: with device="random" the option says "random", which is useless
+	// to a parser recording which phones get banned (a field report).
+	out.Device = s.device.Name
 	for _, d := range s.profile.Devices {
 		out.Devices = append(out.Devices, d.Name)
 	}
 	out.Mode = s.modeFor(&Request{Method: "GET", URL: u.String()})
 	out.DerivedFetch = s.profile.Fetch.Derived
 	out.ModesUsed = s.ModesUsed()
+	out.Source = s.profile.Source
 	out.HeaderValues = main
 	out.JA4H = fingerprint.JA4H(fingerprint.JA4HRequest{
 		Method: "GET", Proto: proto, Headers: main})

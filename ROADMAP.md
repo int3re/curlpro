@@ -871,6 +871,125 @@ was recorded but never sent — fhttp's copy of the jar keeps the older
 net/http rule that refuses a Domain attribute on an IP — and is now stored as
 the host-only cookie it is. Patch 0.10.1, ABI unchanged.
 
+## Stage 34 — Firefox 156 and Chrome 153, captured live ✅ done 2026-09-22
+
+Chrome 153 (`curlpro capture -based-on chrome-152-windows`, five samples):
+one new TLS extension, `0xca34` — trust-anchor identifiers, 186 bytes —
+which uTLS does not know and the profile replays as raw bytes; JA4 unchanged
+from 152, JA3N moves, HTTP/2 identical. A lesson of the run: the local
+fingerproxy stand folds the GREASE signature algorithm into its JA4, so a
+Chromium profile shows a different JA4 there on every connection; the
+baseline was recorded against browserleaks, which follows the
+specification, and matched on a second run — the same way Firefox 156's
+was. `fingerprint().device` now names the phone actually chosen
+(`device="random"` used to report "random"), which the MTS field report
+asked for to see which devices get banned.
+
+The corpora were surveyed again for anything importable (the field report
+asked for more Safari, Yandex on the desktop and fresher Chrome on macOS).
+`lexiforest/curl-impersonate` still carries the 43 signatures already
+imported, nothing newer. `sardanioss/httpcloak` has moved to header-only
+presets on a `based_on` chain (its Chrome 152 file holds signature
+algorithms, trust anchors and a header order — no hello, no HTTP/2), so
+there is nothing to take. `0x676e67/wreq-util` (Chrome 100–153, Edge to 148,
+Firefox to 151, Safari to 26.4 with iOS/iPadOS, Opera 116–131),
+`bogdanfinn/tls-client` and `deedy5/primp` describe every browser as a
+BoringSSL/uTLS configuration in source code, without the hashes a
+self-check needs and without the raw hello: importing them means
+transcribing another project's transcription and trusting it, which is
+the one thing this corpus does not do. What was possible without new
+hardware was done instead: four profiles derived from the live Windows
+captures on measured evidence — `edge-153-windows` (Chrome's hello and
+HTTP/2, Edge's User-Agent and brands; headless Edge 153 never reached the
+stand) and `chrome-151/152/153-macos` (the platform in the User-Agent and
+`sec-ch-ua-platform` is the whole difference in every Linux/macOS pair the
+corpus holds). 56 profiles, still 17 JA4 values.
+
+`curlpro capture -name firefox-156-windows -based-on firefox-155-windows
+-manual`, with Firefox 156 driven through the stand by hand in throwaway
+profiles that trust its certificate (the browser cannot ignore certificate
+errors): five samples, one JA4. The one change from 155 is in TLS —
+`supported_groups` lost the two FFDHE entries (ffdhe2048, ffdhe3072), so the
+hello is four bytes shorter, JA4 stays `t13d1517h2_8daaf6152771_3cbfd9057e0d`
+(it hashes no groups) and JA3N moves. HTTP/2 settings and the header sets
+matched 155 and are inherited: the navigation and fetch orders, slots
+included, were confirmed on the same Firefox 156 by the STAGE18 capture. The
+baseline in `reference/baselines` is the stand's reading of the profile,
+matched on a second run.
+
+## Stage 35 — transcribed profiles, marked ✅ done 2026-09-22
+
+The owner's decision on the corpora survey: transcribe the other projects'
+descriptions, trust them, mark them at the profile level, and never touch a
+version this project has measured. Done for `0x676e67/wreq-util` at commit
+`e3922a2`, by `scripts/transcribe-wreq.py`: 238 profiles — 108 Chrome, 37
+Edge, 39 Firefox, 22 Safari (macOS, iOS, iPadOS), 32 Opera — on top of the 56
+captured, 294 in all.
+
+How, and why this way. wreq-util holds no ClientHello and no hash; it holds
+BoringSSL option tuples and, in its source, the statement that version N
+inherits version M's tuple. The script reads those statements and, where M is
+captured here, writes N as a delta on M: the captured hello, frames and header
+sets, wreq-util's brand list and accept-language, the family's User-Agent
+shape (wreq-util's own strings are partly malformed — `X11; U; Windows`, a
+Firefox 139 with `rv:136.0`, a Safari 17.2.1 with `Version/16.0`), and a
+`source` block. Building a hello from the options themselves was rejected:
+that would be a transcription of a transcription, checkable against nothing.
+Seven versions were left out because their tuple matches nothing captured
+(Chrome 105; Firefox 109 and 117, whose PRIORITY frames the schema cannot
+express; Firefox 128; Firefox private and Android), and Chromium's Android
+and iOS variants because the first needs a device pool and the second is a
+different TLS stack altogether. Four Safari versions stand on a captured one
+with one HTTP/2 setting removed, as wreq-util claims.
+
+The mark is a profile field, `source`, that travels down the `based_on`
+chain; `capabilities()` reports `measured: false` and the block, the
+fingerprint carries it, and `audit()` fires `transcribed_profile` on every
+such session. `list_profiles(measured=True)` is the captured list, because
+`random.choice(list_profiles())` in existing code would otherwise start
+drawing claims — which is why this is 0.11.0 and not a patch. Where wreq-util
+contradicts a measurement here, the profile's `note` says so rather than
+resolving it: Firefox 136–151 declared equal to 135 while the captured 155
+and 156 differ; Safari 26.1–26.4 declared equal to 18.5 without the
+post-quantum share 26.0 carries; every Opera on Chromium 131's ALPS codepoint.
+Trust, as decided, with the receipt attached.
+
+## Stage 36 — the identities behind one browser version ✅ done 2026-09-22
+
+The owner's request after Stage 35: full randomisation of the device for the
+User-Agent and the fingerprint, not only on Android. What varies between real
+users of one browser version, per family, and what the wire shows of it:
+
+- Chromium on the desktop: nothing in the User-Agent since the reduction, and
+  everything in the high-entropy hints — the Windows release
+  (`sec-ch-ua-platform-version`, the UniversalApiContract version), the exact
+  build (`sec-ch-ua-full-version` and `-full-version-list`), a 32-bit process
+  (`sec-ch-ua-wow64`), on macOS the version and the CPU (`sec-ch-ua-arch`).
+  Measured first: Chrome 153 on the capture machine, after two failed runs
+  taught that headless Chrome sends the high-entropy hints only from a secure
+  origin, which `--ignore-certificate-errors` does not make and
+  `--ignore-certificate-errors-spki-list` does
+  ([STAGE19](docs/STAGE19-RESULTS.md)). The 151–153 desktops gained the
+  `client_hints` section they had lacked and a pool — Windows release × build ×
+  wow64, macOS version × CPU × build, Linux × build — from Microsoft's contract
+  table, chromiumdash and the release tables, every list with its source in
+  `scripts/identities.json`.
+- Safari on iOS: the iOS version in the string. Safari 18 writes it twice,
+  `iPhone OS 18_1_1` and `Version/18.1.1`; Safari 26 froze the OS token at
+  `18_7` — every 26.0 through 26.5 observed in real traffic says so — and
+  writes the real version only in `Version/`. The three captured iOS profiles
+  carry the versions of their own line under a template.
+- Firefox on Linux: the `Ubuntu; ` token some builds carry.
+- Not pooled, and why: `edge-153-windows`, because Edge writes its own build
+  next to Chromium's in the list and neither is known without a real Edge;
+  Safari on macOS, because the string says `10_15_7` on every Mac and Safari
+  sends no hints; the transcribed desktops, because their hints were never
+  measured and a pool on a claim is a claim squared.
+
+`device="random"` draws one identity for the session, as on Android, and the
+fingerprint names it; without `device=` the capture machine goes out. The TLS
+never moves — that was the point of the project, and it still is.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

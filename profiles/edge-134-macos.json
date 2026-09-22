@@ -1,0 +1,89 @@
+{
+  "name": "edge-134-macos",
+  "based_on": "chrome-131-macos",
+  "source": {
+    "kind": "transcribed",
+    "from": "github.com/0x676e67/wreq-util",
+    "ref": "e3922a2b2d976487cb4cf4e7b0ac290b3ce77f66",
+    "path": "src/emulate/profile/chrome.rs",
+    "date": "2026-09-22",
+    "note": "ClientHello, HTTP/2 frames and header sets are those captured for chrome-131-macos; wreq-util declares edge 134 to use the same TLS and HTTP/2 configuration (edge134: tls_options!('6', 'CURVES_3'), http2_options!(3)). The User-Agent is the family's reduced shape with this version; sec-ch-ua and accept-language are wreq-util's. Nothing was seen on the wire for this version here."
+  },
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0",
+    "order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": "\"Chromium\";v=\"134\", \"Not:A-Brand\";v=\"24\", \"Microsoft Edge\";v=\"134"
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": "?0"
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": "\"macOS\""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      },
+      {
+        "key": "accept-language",
+        "value": "en-US,en;q=0.9"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      }
+    ]
+  }
+}

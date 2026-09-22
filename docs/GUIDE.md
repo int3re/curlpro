@@ -4,8 +4,8 @@
 
 This is the whole library in one document, written for two readers: a person
 integrating it, and an AI assistant researching it before touching code. Every
-number and every behaviour here was checked against the code on 2026-09-21, at
-version 0.10.1. Where the README says less, this document says more; where the
+number and every behaviour here was checked against the code on 2026-09-22, at
+version 0.11.0. Where the README says less, this document says more; where the
 two disagree, this one is wrong and should be fixed — say so.
 
 An assistant reading this: the library already does most of what a scraper
@@ -41,7 +41,7 @@ surprising at first:
 pip install curlpro
 ```
 
-The wheel carries the native library and all 50 profiles; neither Go nor a C
+The wheel carries the native library and all 52 profiles; neither Go nor a C
 compiler is needed. Wheels exist for Linux x86-64 and ARM64 (glibc 2.28+),
 macOS 13+ on Intel and Apple Silicon, and Windows x64; Python 3.9 or newer.
 Anything else builds from the source archive with Go and a C compiler
@@ -57,7 +57,7 @@ Three ways profiles reach the library:
 - **At runtime.** `curlpro.register_profile(dict_or_json)` adds one profile
   without a release.
 
-The native library has an ABI version (`0.21` for this release) that the Python
+The native library has an ABI version (`0.22` for this release) that the Python
 side checks on import. A wheel always carries a matching pair; the check exists
 for source builds and for `CURLPRO_LIBRARY`, which points the package at a
 library of your own. A mismatch raises at import time with the rebuild command
@@ -89,7 +89,7 @@ touch it.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `impersonate` | `chrome-151-windows` | the profile name; `list_profiles()` has all 50 |
+| `impersonate` | `chrome-151-windows` | the profile name; `list_profiles()` has all 294, `list_profiles(measured=True)` the 56 captured ones |
 | `verify` | `True` | `True` — system roots; a PEM path — trust only that root; `False` — no verification |
 | `cert` | `None` | `(certificate, key)` paths for mutual TLS |
 | `trust_env` | `True` | take the proxy from `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, honouring `NO_PROXY`; an explicit `proxy` always wins |
@@ -120,7 +120,7 @@ touch it.
 | `credentials` | `"same-origin"` | the credentials mode of fetch-mode requests, in `fetch()`'s words: `same-origin` sends cookies only to the page's own origin — the default of `fetch()` and of XHR — `include` sends them wherever the SameSite rules allow, `omit` sends none. Measured on Chrome 153 and Firefox 156: a plain `fetch()` to another origin of the *same site* carries no cookie at all (section 10) |
 | `samesite` | `True` | apply the cookies' `SameSite` attribute and the family's third-party rule to requests made from a `page`; `False` sends every cookie the jar matches, as before 0.10 (section 10) |
 | `preflight` | `True` | send the CORS preflight a browser sends before a non-simple cross-origin fetch, check its answer and keep it for its `Access-Control-Max-Age`; a refusal raises `CORSError` and the request is not sent. `False` sends straight out, as before 0.10 (section 7) |
-| `device`, `devices` | `None` | the phone for mobile profiles — a name from the profile's list or `"random"` — and a list of your own (section 11) |
+| `device`, `devices` | `None` | the identity for a profile with a pool — a phone on Android, a Windows release and Chrome build on the desktop, an iOS version on the iPhone — a name from the profile's list or `"random"` — and a list of your own (section 11) |
 | `max_response_size` | `0` | a body limit in bytes; exceeding it raises with code `too_large`. Binds `read()`, not `iter_content()` |
 | `hooks` | `None` | `{"request": [...], "response": [...], "error": [...]}`; section 9 |
 
@@ -480,17 +480,49 @@ cookie was recorded but never sent.
 
 ## 11. Profiles, devices and mobile
 
-50 profiles ship in the wheel: 25 Chrome (98 to 152), 6 Edge, 4 Firefox (133,
-135, 144, 155), 11 Safari (15.3 to 26.0.1, macOS and iOS), Tor 14, Yandex
-Browser 26.8 for Android, and two okhttp 5.5 (JVM and Conscrypt). Many share a
-TLS fingerprint: the 50 profiles form 17 distinct JA4 values, because a browser
-family keeps its ClientHello across several versions and differs in the
-User-Agent and headers. One group — Chrome 119 to 131 and Edge 119/120, the
-last Chromium hellos before the post-quantum key share — shows a second JA4
-spelling on some connections (`…1517…` beside `…1516…`): its hello sits near
-512 bytes, and the padding extension appears or not with the random size of
-the ECH GREASE payload, exactly as in the browsers themselves. The baselines
-list both. `list_profiles()` names them all.
+294 profiles ship in the wheel. 56 of them are captured — by this project's
+own runs of `curlpro capture` or by the curl-impersonate signatures it
+imported, each with the hashes to prove it: 29 Chrome (98 to 153), 7 Edge,
+5 Firefox (133, 135, 144, 155, 156), 11 Safari (15.3 to 26.0.1, macOS and
+iOS), Tor 14, Yandex Browser 26.8 for Android, and two okhttp 5.5 (JVM and
+Conscrypt). The other 238 are transcribed from `0x676e67/wreq-util` (108
+Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera) — see the next paragraph,
+and prefer `list_profiles(measured=True)` when drawing a profile at random.
+Many share a TLS fingerprint: the captured profiles form 17 distinct JA4
+values, and a transcribed one always replays a captured hello, so the count
+does not grow. A browser family keeps its ClientHello across several versions
+and differs in the User-Agent and headers. One group — Chrome 119 to 131 and
+Edge 119/120, the last Chromium hellos before the post-quantum key share —
+shows a second JA4 spelling on some connections (`…1517…` beside `…1516…`):
+its hello sits near 512 bytes, and the padding extension appears or not with
+the random size of the ECH GREASE payload, exactly as in the browsers
+themselves. The baselines list both. `list_profiles()` names them all.
+
+**Transcribed profiles.** wreq-util describes each browser version as a tuple
+of BoringSSL options and an HTTP/2 option set, versions inheriting each other's
+tuple in its source; it carries no ClientHello, no frame capture and no hash.
+`scripts/transcribe-wreq.py` reads those equivalence claims — "Chrome 145
+uses the tuple of Chrome 142" — and, where the claimed twin is a version this
+project captured, writes the new version as a delta on the captured profile:
+the captured ClientHello, HTTP/2 frames and header sets, wreq-util's brand
+list and accept-language, the family's User-Agent shape with the new version,
+and a `source` block naming the project, the commit, the file and what
+exactly was taken. Versions whose tuple matches nothing captured are left out
+(Chrome 105, Firefox 109/117/128, Firefox private and Android, Chromium on
+Android and iOS); four Safari versions stand on a captured one with a single
+HTTP/2 setting changed, and say so. The mark is visible at every level:
+`capabilities(name)["measured"]` is `False` and `["source"]` says where from,
+`s.fingerprint().measured` and `.source` say the same, and `s.audit()` reports
+`transcribed_profile` on every such session, whatever the mode. What the mark
+means: nothing such a profile sends was seen on the wire by this project. The
+hello is a real browser's, of the version wreq-util names as the twin; whether
+the named version really sends it is wreq-util's claim — and some of its claims
+contradict measurements here, which the profile's `note` spells out (Firefox
+136–151 declared equal to 135, though the Firefox 155/156 captured here differ;
+Safari 26.1–26.4 declared equal to 18.5, without the post-quantum key share
+26.0 carries; every Opera declared to use Chromium 131's ALPS codepoint).
+Captured profiles are never overwritten by the transcription: a version this
+project has measured keeps its measurement.
 
 What each family carries, resolved through inheritance:
 
@@ -534,6 +566,36 @@ a defence that knows about the reduction can tell an unreduced string. Without
 a device the profile goes out as captured, reduced string included. Your own
 list goes in `devices=[{"name": ..., "model": ..., "platform_version": ...}]`.
 A name not in the list is refused.
+
+**Desktop identities.** Since 0.11 the Chromium desktops of 151–153
+(`chrome-151…153-windows/macos/linux`) carry what varies between real users of
+one browser version besides the phone: on Windows the release —
+`sec-ch-ua-platform-version` is the UniversalApiContract version, `10.0.0` on
+Windows 10 22H2, `14.0.0`/`15.0.0`/`19.0.0` on Windows 11 22H2/23H2/24H2 — the
+exact build in `sec-ch-ua-full-version` and inside `-full-version-list`
+(chromiumdash's stable releases), and whether the browser is a 32-bit process
+(`sec-ch-ua-wow64`); on macOS the system version and the CPU
+(`sec-ch-ua-arch: "arm"` on Apple silicon, `"x86"` on Intel); on Linux only
+the build, because Chromium reports an empty platform version there. The same
+profiles gained the `client_hints` section they lacked, measured on Chrome 153
+/ Windows 10 (`docs/STAGE19-RESULTS.md`): the eleven hints in the navigation
+order Chrome uses from the second page on, and the fetch order of the Pixel
+capture. The iOS Safari profiles carry the iOS versions of their Safari line —
+Safari 18 writes the version twice (`iPhone OS 18_1_1`, `Version/18.1.1`),
+Safari 26 froze the OS token at `18_7` and writes the real version only in
+`Version/26.0.1`, as real traffic shows — and the Firefox Linux profiles the
+`Ubuntu; ` token some builds carry. `device="random"` draws one identity for
+the session, as on Android, and `fingerprint().device` names it; without
+`device=` the profile sends the capture machine's values (Windows 10 22H2,
+build 153.0.8010.52, a 32-bit Chrome, on `chrome-153-windows`), elsewhere the
+pool's first identity, and on Safari and Firefox the captured string. The TLS
+never moves. The seed is `scripts/identities.json`, every list with its source;
+`scripts/gen-identities.py` writes the profiles and `--check` fails CI on
+drift. `edge-153-windows` has no pool: Edge writes its own build next to
+Chromium's in the list, and neither is known here without a real Edge on the
+stand. The macOS Safari profiles have none either: the desktop string says
+`10_15_7` on every Mac and Safari sends no hints, so in HTTP one Mac is every
+other.
 
 **Inheritance.** A profile may name `based_on`; it then stores only its
 differences. Chrome 110 over Chrome 98 is one line: extension shuffling on.
@@ -611,7 +673,7 @@ what a server would see:
 | `client_hello` | the marshalled ClientHello as bytes; `len()` answers whether it fits one TCP segment |
 | `to_dict()`, `diff(other)`, `==` | everything as data; a field-by-field difference (extensions compared as sets, `ja3` and `client_hello` excluded) |
 
-The values are checked against 50 live captures in `reference/baselines`: JA4,
+The values are checked against 56 live captures in `reference/baselines`: JA4,
 JA3N and the Akamai string match the oracle on every one. The session's own
 options count — `force_http1` and `post_quantum=False` change the hello, and
 the fingerprint shows the hello that session sends.
@@ -632,6 +694,7 @@ profile is silent except a phone profile with no device chosen:
 | `accept_encoding` | medium | an `accept-encoding` that is not the profile's, or none at all |
 | `no_user_agent` | high | no User-Agent at all — the shape `default_headers=False` leaves behind |
 | `referer_site` | high | a Referer that disagrees with the fetch metadata or the Origin beside it: a hand-written Referer next to `sec-fetch-site: none`, a Referer from another origin under `same-origin`, or Origin and Referer naming two pages |
+| `transcribed_profile` | medium | the profile is transcribed from another project's description (section 11): nothing it sends was seen on the wire here. Fires whatever the mode; `capabilities(name)["measured"]` tells the same without a session |
 | `derived_fetch_set` | medium | the session is sending Safari's derived fetch set, whose order was not measured (section 11) — judged by the sets its requests actually went out with, not only the mode it was built with; `s.audit(mode="fetch")` asks before any went out |
 
 `Persona` binds one identity — profile, proxy, device, headers (removals
@@ -672,7 +735,7 @@ should reach for the existing feature instead. Each line names it:
 - **Removing a header** — `None`, not `default_headers=False`.
 - **Fetch versus navigation sets** — `mode`, chosen automatically.
 - **Referer, Origin and sec-fetch-site for a request from a page** — `page=` on the session or the request, never a hand-written `Referer`.
-- **Client hints and phone models** — `device=`, `devices=`, already answering `Accept-CH` and `Critical-CH`.
+- **Client hints, phone models and desktop identities** — `device=`, `devices=`, already answering `Accept-CH` and `Critical-CH`.
 - **Proxies** with environment variables, SOCKS5 with remote DNS, CONNECT authentication — `proxy=`, `trust_env`.
 - **HTTP/3** with `Alt-Svc` and fallback — on by default where the profile has the section.
 - **WebSocket** with the browser's handshake and `permessage-deflate` — `s.websocket()`.
@@ -685,6 +748,7 @@ should reach for the existing feature instead. Each line names it:
 - **Which cookies a cross-origin request carries** — `credentials=` and the SameSite rules, applied from `page=`; never a hand-filtered `Cookie` header.
 - **Telling a dead proxy from a refused tunnel from a 407** — `ProxyError.stage` and `.status`, `ProxyAuthError`; never a substring of the message.
 - **Asking whether a profile can do something** — `curlpro.capabilities(name)`, not a probe request and a substring in the error text.
+- **Choosing profiles to rotate through** — `list_profiles(measured=True)`; a transcribed profile (`capabilities(name)["measured"] == False`) is another project's claim, and the audit says so.
 - **Telling a permanent failure from a passing one** — `except curlpro.PermanentError`, not a match on the message.
 - **Reading a profile's data** — `curlpro.get_profile(name).data`, not the JSON inside `site-packages`.
 - **A `requests` shim** — `import curlpro.requests as requests` exists; unsupported arguments raise instead of being ignored.
@@ -716,6 +780,35 @@ Facts that are easy to doubt and are true:
   `post_quantum=False` is the knob to test paths that dislike it.
 - Firefox 155 sends three key shares (X25519MLKEM768, x25519, secp256r1); the
   profile replays the raw hello captured from a live browser.
+- 238 profiles are transcribed from wreq-util, and each says so (section 11):
+  the transcription never builds a hello of its own, only points a version
+  at a captured twin the source names. It is the first data in the corpus
+  that this project did not see on the wire, and `list_profiles(measured=True)`
+  is the list without it.
+- Four profiles are derived from live Windows captures rather than captured
+  themselves: `edge-153-windows` is `chrome-153-windows` with Edge's User-Agent
+  and brand list, and `chrome-151-macos`, `chrome-152-macos`, `chrome-153-macos`
+  are the Windows captures with macOS in the User-Agent and
+  `sec-ch-ua-platform`. The evidence for the derivation: in every Chrome/Edge
+  pair and every Linux/macOS pair the corpus holds (Chrome 98 to 120) the
+  JA3N, the Akamai string and the header order are identical, and only the
+  User-Agent and the brand list differ — the ClientHello and HTTP/2 come from
+  BoringSSL and the Chromium network stack, not from the OS or the shell. Edge
+  153 is installed on the capture machine but its headless mode never reached
+  the stand (three runs, no sample), so the delta is data, not a capture, and a
+  live run replaces it. Each derived profile has a baseline in
+  `reference/baselines` that only proves the replay is consistent, not that
+  the browser sends it.
+- Chrome 153 adds a TLS extension uTLS does not know — `0xca34`, the
+  trust-anchor identifiers draft, 186 bytes — beside Chrome 152's set; the
+  profile replays it as raw bytes (`allow_blunt_mimicry`). JA4 is unchanged
+  from 152 (the extension set is the same as far as JA4 counts), JA3N moves.
+  Captured live on 2026-09-22, five samples, HTTP/2 identical to 152.
+- Firefox 156 dropped the two FFDHE groups (ffdhe2048, ffdhe3072) from
+  `supported_groups`: five groups instead of seven, a hello four bytes shorter,
+  the same JA4 (which hashes no groups) and a different JA3N. Captured live on
+  2026-09-21, five samples; everything else — HTTP/2 settings, header sets —
+  matched Firefox 155 and is inherited from it.
 - postman-echo.com sits behind Cloudflare, which rewrites `Accept-Encoding` to
   `gzip, br` before the origin echoes it. Judge headers on a raw stand
   (`python/tests/rawserver.py`), not on a public echo.
@@ -753,7 +846,8 @@ Facts that are easy to doubt and are true:
 | `Persona`, `load_all(dir)` | class, function | an identity between runs; a folder of them |
 | `Profile` | class | a profile as an object: `from_file`, `derive`, `register`, `save` |
 | `load_profiles(dir)`, `register_profile(x)`, `list_profiles()`, `ensure_loaded()` | function | profile management |
-| `capabilities(name)`, `get_profile(name)`, `library_version()` | function | what a profile can do, a profile as data, the native library's own version |
+| `capabilities(name)`, `get_profile(name)`, `library_version()` | function | what a profile can do (`measured` and `source` included), a profile as data, the native library's own version |
+| `list_profiles(measured=None)` | function | every profile; `True` the captured ones only, `False` the transcribed ones |
 | `s.headers_for(method, url, ...)` | method | the headers a request would carry, without sending it |
 | `s.preflight_for(method, url, ...)` | method | the CORS preflight a request would be preceded by, or `None` |
 | `request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options` | function | one request in its own session; `impersonate=` picks the profile |
@@ -777,7 +871,7 @@ For research in the repository:
 | `internal/profile/` | the profile schema, inheritance and validation |
 | `internal/fingerprint/` | JA3, JA4, JA4H, Akamai |
 | `lib/` | the cgo exports the Python side calls |
-| `profiles/` | the 50 profiles; `scripts/gen-devices.py` owns the phone pool |
+| `profiles/` | the 56 profiles; `scripts/gen-devices.py` owns the phone pool |
 | `cmd/curlpro/` | capture, validate, diff, collapse, list |
 | `docs/` | schema, capture method, fingerprint spec, research, the stage-by-stage record |
 | `python/tests/` | the behaviour, one file per feature; `rawserver.py` is the raw-header stand |

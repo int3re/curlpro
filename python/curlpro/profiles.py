@@ -63,9 +63,21 @@ def register_profile(profile: dict[str, Any] | str | bytes) -> list[str]:
     return data["profiles"]
 
 
-def list_profiles() -> list[str]:
-    """Names of the registered profiles."""
-    return _call("curlpro_profiles_list")["profiles"]
+def list_profiles(*, measured: bool | None = None) -> list[str]:
+    """Names of the registered profiles.
+
+    ``measured=True`` keeps only the profiles captured from a browser — by
+    this project or by the signatures it imported; ``measured=False`` only
+    the transcribed ones, taken from another project's description and
+    marked so (see :func:`capabilities`). A scraper that draws a random
+    profile should draw from ``measured=True``: a transcribed profile
+    replays a captured version's hello under another version's User-Agent,
+    which is what its source claims and nothing this project has seen.
+    """
+    names = _call("curlpro_profiles_list")["profiles"]
+    if measured is None:
+        return names
+    return [n for n in names if capabilities(n)["measured"] is measured]
 
 
 def capabilities(name: str) -> dict[str, Any]:

@@ -94,7 +94,8 @@ def test_a_profile_that_cannot_is_told_apart_from_a_network_that_blinked():
         # okhttp is a library: it has no fetch concept, and never will.
         ("no fetch set", lambda: curlpro.Session("okhttp-5.5-jvm", mode="fetch"),
          curlpro.ProfileCapabilityError),
-        ("no devices", lambda: curlpro.Session("chrome-151-windows", device="random"),
+        # chrome-150-macos carries no identity pool; the 151–153 desktops do since 0.11.
+        ("no devices", lambda: curlpro.Session("chrome-150-macos", device="random"),
          curlpro.ProfileCapabilityError),
         ("no http3", lambda: curlpro.Session("firefox-155-windows", http3=True),
          curlpro.ProfileCapabilityError),

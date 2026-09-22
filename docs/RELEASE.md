@@ -6,7 +6,20 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.10.1** — a patch on 0.10.0 for two edges a third field report found the
+**0.11.0** — a minor, because `list_profiles()` now returns 294 names where it
+returned 56: 238 profiles transcribed from `0x676e67/wreq-util` joined the
+corpus, each a delta on a captured profile with a `source` block, `measured:
+false` in `capabilities()` and a `transcribed_profile` audit finding;
+`list_profiles(measured=True)` is the captured list, and code that draws a
+profile at random should use it. Beside them: `chrome-153-windows` and
+`firefox-156-windows` captured live, `edge-153-windows` and three Chrome macOS
+variants derived from the Windows captures, `fingerprint().device` naming
+the phone actually chosen, and identity pools — Windows release and Chrome
+build, macOS version and CPU, iOS version, the Ubuntu token — on the 151–153
+desktops (with the `client_hints` section they lacked), the iOS Safari and the
+Firefox Linux profiles, drawn by `device="random"`. ABI 0.22.0: a profile file with a `source` block
+does not load into an older library, and `list_profiles(measured=)` reads a
+new capability. Before it, **0.10.1** — a patch on 0.10.0 for two edges a third field report found the
 same day: a response to an uncredentialed fetch no longer sets cookies, and an
 `AsyncSession` response carries `preflights`, `history` and `elapsed` like the
 sync one; an imported cookie with an IP-address domain is now actually sent.

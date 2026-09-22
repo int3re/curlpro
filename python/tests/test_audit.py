@@ -39,7 +39,7 @@ def test_every_desktop_profile_is_quiet():
     complains out of the box would make the whole thing noise.
     """
     noisy = {}
-    for name in curlpro.list_profiles():
+    for name in curlpro.list_profiles(measured=True):
         with curlpro.Session(name) as s:
             found = s.audit()
         if found:
@@ -48,6 +48,12 @@ def test_every_desktop_profile_is_quiet():
     # The only expected ones are phone profiles that offer devices and have
     # none chosen — a real thing to tell the caller about.
     assert all(c == {"mobile_no_device"} for c in noisy.values()), noisy
+
+    # A transcribed profile says exactly one thing about itself, always: that
+    # it is transcribed. Anything else would be the same noise as above.
+    for name in curlpro.list_profiles(measured=False):
+        with curlpro.Session(name) as s:
+            assert codes(s.audit()) == {"transcribed_profile"}, name
 
 
 def test_safari_on_ios_is_not_asked_for_a_device():

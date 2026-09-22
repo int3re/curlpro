@@ -206,7 +206,8 @@
         "value": "gzip, deflate, br, zstd"
       }
     ],
-    "custom_anchor": "accept-encoding"
+    "custom_anchor": "accept-encoding",
+    "user_agent_template": "Mozilla/5.0 (iPhone; CPU iPhone OS {os_version} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{version} Mobile/15E148 Safari/604.1"
   },
   "fetch": {
     "order": [
@@ -285,5 +286,92 @@
     ],
     "custom_anchor": "accept-encoding",
     "derived": true
-  }
+  },
+  "devices": [
+    {
+      "name": "iPhone, iOS 26.0",
+      "os_version": "18_7",
+      "version": "26.0"
+    },
+    {
+      "name": "iPhone, iOS 26.0.1",
+      "os_version": "18_7",
+      "version": "26.0.1"
+    },
+    {
+      "name": "iPhone, iOS 26.1",
+      "os_version": "18_7",
+      "version": "26.1"
+    },
+    {
+      "name": "iPhone, iOS 26.2",
+      "os_version": "18_7",
+      "version": "26.2"
+    },
+    {
+      "name": "iPhone, iOS 26.2.1",
+      "os_version": "18_7",
+      "version": "26.2.1"
+    },
+    {
+      "name": "iPhone, iOS 26.3",
+      "os_version": "18_7",
+      "version": "26.3"
+    },
+    {
+      "name": "iPhone, iOS 26.3.1",
+      "os_version": "18_7",
+      "version": "26.3.1"
+    },
+    {
+      "name": "iPhone, iOS 26.4",
+      "os_version": "18_7",
+      "version": "26.4"
+    },
+    {
+      "name": "iPhone, iOS 26.4.1",
+      "os_version": "18_7",
+      "version": "26.4.1"
+    },
+    {
+      "name": "iPhone, iOS 26.4.2",
+      "os_version": "18_7",
+      "version": "26.4.2"
+    },
+    {
+      "name": "iPhone, iOS 26.5",
+      "os_version": "18_7",
+      "version": "26.5"
+    },
+    {
+      "name": "iPhone, iOS 26.5.1",
+      "os_version": "18_7",
+      "version": "26.5.1"
+    },
+    {
+      "name": "iPhone, iOS 26.5.2",
+      "os_version": "18_7",
+      "version": "26.5.2"
+    },
+    {
+      "name": "iPhone, iOS 26.6",
+      "os_version": "18_7",
+      "version": "26.6"
+    },
+    {
+      "name": "iPhone, iOS 26.6.1",
+      "os_version": "18_7",
+      "version": "26.6.1"
+    },
+    {
+      "name": "iPhone, iOS 26.6.2",
+      "os_version": "18_7",
+      "version": "26.6.2"
+    },
+    {
+      "name": "iPhone, iOS 26.7",
+      "os_version": "18_7",
+      "version": "26.7"
+    }
+  ]
 }

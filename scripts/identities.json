@@ -1,0 +1,209 @@
+{
+  "_about": "Seed for scripts/gen-identities.py: what varies between real users of one browser version besides the phone model. Every list names its source; nothing here is a guess. Chrome builds: chromiumdash.appspot.com/fetch_releases (Stable, Windows), read 2026-09-22. Windows platform versions: Sec-CH-UA-Platform-Version is the Windows.Foundation.UniversalApiContract version (learn.microsoft.com/microsoft-edge/web-platform/how-to-detect-win11; Chromium components/embedder_support/user_agent_utils.cc, highest known contract 19) — 10.0.0 for Windows 10 22H2 measured on the capture machine (STAGE19), 13/14/15 for Windows 11 21H2/22H2/23H2, 19.0.0 for 24H2. macOS versions: Wikipedia release tables of macOS Sequoia (15) and Tahoe (26), read 2026-09-22; Chromium reports the version with dots. iOS versions: Wikipedia release tables of iOS 18 and iOS 26, read 2026-09-22; Safari 18 on iOS writes the OS version into the User-Agent twice, iPhone OS 18_1_1 and Version/18.1.1 (real strings on useragents.io and user-agents.net). Safari 26 froze the OS token at 18_7 and writes the real version only in Version/: every 26.0, 26.0.1, 26.1, 26.2, 26.3 and 26.5 observed in real traffic (user-agents.net, useragents.io, deviceandbrowserinfo.com, read 2026-09-22) says iPhone OS 18_7; frozen_os carries that.",
+  "chrome_builds": {
+    "151": [
+      "151.0.7922.109",
+      "151.0.7922.137",
+      "151.0.7922.139",
+      "151.0.7922.140",
+      "151.0.7922.169",
+      "151.0.7922.171",
+      "151.0.7922.173",
+      "151.0.7922.175",
+      "151.0.7922.176"
+    ],
+    "152": [
+      "152.0.7977.42",
+      "152.0.7977.54",
+      "152.0.7977.65",
+      "152.0.7977.75",
+      "152.0.7977.77",
+      "152.0.7977.78",
+      "152.0.7977.83",
+      "152.0.7977.84",
+      "152.0.7977.85"
+    ],
+    "153": [
+      "153.0.8010.12",
+      "153.0.8010.27",
+      "153.0.8010.36",
+      "153.0.8010.47",
+      "153.0.8010.49",
+      "153.0.8010.50",
+      "153.0.8010.52",
+      "153.0.8010.53"
+    ]
+  },
+  "windows": [
+    {
+      "name": "Windows 10 22H2",
+      "platform_version": "10.0.0",
+      "wow64": "?0"
+    },
+    {
+      "name": "Windows 10 22H2, 32-bit Chrome",
+      "platform_version": "10.0.0",
+      "wow64": "?1"
+    },
+    {
+      "name": "Windows 11 22H2",
+      "platform_version": "14.0.0",
+      "wow64": "?0"
+    },
+    {
+      "name": "Windows 11 23H2",
+      "platform_version": "15.0.0",
+      "wow64": "?0"
+    },
+    {
+      "name": "Windows 11 24H2",
+      "platform_version": "19.0.0",
+      "wow64": "?0"
+    },
+    {
+      "name": "Windows 11 25H2",
+      "platform_version": "19.0.0",
+      "wow64": "?0"
+    }
+  ],
+  "macos": [
+    {
+      "name": "macOS 15.6.1",
+      "platform_version": "15.6.1",
+      "arch": "arm"
+    },
+    {
+      "name": "macOS 15.7",
+      "platform_version": "15.7",
+      "arch": "arm"
+    },
+    {
+      "name": "macOS 15.7.1",
+      "platform_version": "15.7.1",
+      "arch": "x86"
+    },
+    {
+      "name": "macOS 15.7.5",
+      "platform_version": "15.7.5",
+      "arch": "arm"
+    },
+    {
+      "name": "macOS 15.7.9",
+      "platform_version": "15.7.9",
+      "arch": "x86"
+    },
+    {
+      "name": "macOS 15.8",
+      "platform_version": "15.8",
+      "arch": "arm"
+    },
+    {
+      "name": "macOS 26.0.1",
+      "platform_version": "26.0.1",
+      "arch": "arm"
+    },
+    {
+      "name": "macOS 26.1",
+      "platform_version": "26.1",
+      "arch": "arm"
+    },
+    {
+      "name": "macOS 26.2",
+      "platform_version": "26.2",
+      "arch": "arm"
+    },
+    {
+      "name": "macOS 26.3.2",
+      "platform_version": "26.3.2",
+      "arch": "arm"
+    },
+    {
+      "name": "macOS 26.4.1",
+      "platform_version": "26.4.1",
+      "arch": "arm"
+    },
+    {
+      "name": "macOS 26.5.2",
+      "platform_version": "26.5.2",
+      "arch": "arm"
+    },
+    {
+      "name": "macOS 26.6.2",
+      "platform_version": "26.6.2",
+      "arch": "arm"
+    },
+    {
+      "name": "macOS 26.7",
+      "platform_version": "26.7",
+      "arch": "arm"
+    }
+  ],
+  "ios": {
+    "safari-18.0-ios": {
+      "versions": [
+        "18.0",
+        "18.0.1",
+        "18.1",
+        "18.1.1",
+        "18.2",
+        "18.2.1",
+        "18.3",
+        "18.3.1",
+        "18.3.2"
+      ]
+    },
+    "safari-18.4-ios": {
+      "versions": [
+        "18.4",
+        "18.4.1",
+        "18.5",
+        "18.6",
+        "18.6.1",
+        "18.6.2",
+        "18.7",
+        "18.7.1",
+        "18.7.2",
+        "18.7.3",
+        "18.7.4",
+        "18.7.5",
+        "18.7.6",
+        "18.7.7",
+        "18.7.8",
+        "18.7.9",
+        "18.7.10"
+      ]
+    },
+    "safari-26-ios": {
+      "frozen_os": "18_7",
+      "versions": [
+        "26.0",
+        "26.0.1",
+        "26.1",
+        "26.2",
+        "26.2.1",
+        "26.3",
+        "26.3.1",
+        "26.4",
+        "26.4.1",
+        "26.4.2",
+        "26.5",
+        "26.5.1",
+        "26.5.2",
+        "26.6",
+        "26.6.1",
+        "26.6.2",
+        "26.7"
+      ]
+    }
+  },
+  "firefox_linux": [
+    {
+      "name": "Linux, generic build",
+      "distro": ""
+    },
+    {
+      "name": "Linux, Ubuntu build",
+      "distro": "Ubuntu; "
+    }
+  ]
+}

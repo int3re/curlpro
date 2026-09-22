@@ -187,8 +187,27 @@ Go structures in `internal/profile` is rejected. Implemented today: `tls` —
 `settings_order`, `pseudo_order`, `send_grease_frame`, `priority_param`; `quic` —
 `parrot`, `connection_options`, `send_initial_rtt`,
 `legacy_version_information_id`, `grease_version_first`; `headers` —
-`user_agent`, `order`, `form_boundary`, `custom_anchor`; `websocket` — `order`.
-The rest is plan.
+`user_agent`, `order`, `form_boundary`, `custom_anchor`; `websocket` — `order`;
+and the top-level `source`. The rest is plan.
+
+### `source`
+
+Provenance of a profile this project did not capture. Absent on a captured
+profile; inherited along the `based_on` chain, so a delta on a transcribed
+profile is transcribed too. Reported by `capabilities()` (`measured: false`,
+`source`), by the fingerprint and by the audit (`transcribed_profile`).
+
+| Field | Purpose |
+|---|---|
+| `kind` | `transcribed` — another project's description, copied |
+| `from` | the project, e.g. `github.com/0x676e67/wreq-util` |
+| `ref`, `path` | the commit the data was read at, and the file inside it |
+| `date` | when it was transcribed, `YYYY-MM-DD` |
+| `note` | what exactly was taken — which captured profile supplies the hello and HTTP/2, what the source claimed, and where that claim contradicts a measurement |
+
+`scripts/transcribe-wreq.py` writes these; a transcribed profile is always a
+delta on a captured one and carries only `headers` (and, for four Safari
+versions, one `http2` setting) besides the mark.
 
 ### `tls`
 | Field | Purpose |
@@ -307,6 +326,30 @@ committed seed (`scripts/android-devices.json`) and writes it into
 `python/tests/test_devices.py` fails if a profile drifts from the seed. To grow
 the pool, edit the seed and re-run the generator.
 
+The desktop and iOS pools, since 0.11, hold identities rather than phones.
+`scripts/gen-identities.py` writes them from `scripts/identities.json` into
+the Chromium desktops of 151–153, the iOS Safari profiles and the Firefox
+Linux profiles (`--check` in CI catches drift). A Windows identity carries the
+hint values, an iOS one the two version tokens of the string, a Linux Firefox
+one the distribution token:
+
+```json
+{ "name": "Windows 11 24H2, Chrome 153.0.8010.52", "platform_version": "19.0.0",
+  "full_version": "153.0.8010.52", "hint_arch": "x86", "bitness": "64",
+  "wow64": "?0", "form_factors": "Desktop" },
+{ "name": "iPhone, iOS 26.0.1", "os_version": "18_7", "version": "26.0.1" },
+{ "name": "Linux, Ubuntu build", "distro": "Ubuntu; " }
+```
+
+`full_version` goes into `sec-ch-ua-full-version` and into `-full-version-list`,
+which is the brand list with the builds written in and the GREASE brand's major
+padded to `N.0.0.0`, as Chromium pads it; `hint_arch` is the `sec-ch-ua-arch`
+value (the Android pool's `arch` is Yandex's User-Agent token, a different
+thing); `bitness`, `wow64` and `form_factors` are their hints verbatim. A Linux
+identity has no `platform_version`, and the hint goes out as `""`, which is what
+Chromium on Linux sends. An iOS identity's `os_version` is what `iPhone OS`
+says — frozen at `18_7` by Safari 26 — and `version` what `Version/` says.
+
 ```json
 "client_hints": {
   "values": { "sec-ch-ua-form-factors": "\"Mobile\"" },
@@ -332,8 +375,11 @@ there too. Such a profile declares a template:
 }
 ```
 
-`{model}`, `{android}` (the major version), `{platform_version}` and `{arch}` are
-understood. Without a `device=` the string stays exactly as captured.
+`{model}`, `{android}` (the major version), `{platform_version}`, `{arch}`,
+`{os_version}`, `{version}` and `{distro}` are understood; a placeholder whose
+field the identity leaves empty becomes empty text, which is how the generic
+Firefox Linux build loses the `Ubuntu; ` token. Without a `device=` the string
+stays exactly as captured.
 
 The library will not substitute a model into a `User-Agent` where there is no
 template: a modern Chrome has no such string at all, and one would give the client

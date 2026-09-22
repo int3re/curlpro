@@ -209,7 +209,8 @@
         "value": "gzip, deflate, br"
       }
     ],
-    "custom_anchor": "accept-encoding"
+    "custom_anchor": "accept-encoding",
+    "user_agent_template": "Mozilla/5.0 (iPhone; CPU iPhone OS {os_version} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{version} Mobile/15E148 Safari/604.1"
   },
   "fetch": {
     "order": [
@@ -288,5 +289,52 @@
     ],
     "custom_anchor": "accept-encoding",
     "derived": true
-  }
+  },
+  "devices": [
+    {
+      "name": "iPhone, iOS 18.0",
+      "os_version": "18_0",
+      "version": "18.0"
+    },
+    {
+      "name": "iPhone, iOS 18.0.1",
+      "os_version": "18_0_1",
+      "version": "18.0.1"
+    },
+    {
+      "name": "iPhone, iOS 18.1",
+      "os_version": "18_1",
+      "version": "18.1"
+    },
+    {
+      "name": "iPhone, iOS 18.1.1",
+      "os_version": "18_1_1",
+      "version": "18.1.1"
+    },
+    {
+      "name": "iPhone, iOS 18.2",
+      "os_version": "18_2",
+      "version": "18.2"
+    },
+    {
+      "name": "iPhone, iOS 18.2.1",
+      "os_version": "18_2_1",
+      "version": "18.2.1"
+    },
+    {
+      "name": "iPhone, iOS 18.3",
+      "os_version": "18_3",
+      "version": "18.3"
+    },
+    {
+      "name": "iPhone, iOS 18.3.1",
+      "os_version": "18_3_1",
+      "version": "18.3.1"
+    },
+    {
+      "name": "iPhone, iOS 18.3.2",
+      "os_version": "18_3_2",
+      "version": "18.3.2"
+    }
+  ]
 }

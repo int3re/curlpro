@@ -130,5 +130,697 @@
         "value": "u=0, i"
       }
     ]
-  }
+  },
+  "client_hints": {
+    "values": {
+      "sec-ch-ua-full-version": "\"152.0.7977.42\"",
+      "sec-ch-ua-arch": "\"x86\"",
+      "sec-ch-ua-platform-version": "\"10.0.0\"",
+      "sec-ch-ua-model": "\"\"",
+      "sec-ch-ua-bitness": "\"64\"",
+      "sec-ch-ua-wow64": "?0",
+      "sec-ch-ua-form-factors": "\"Desktop\"",
+      "sec-ch-ua-full-version-list": "\"Chromium\";v=\"152.0.7977.42\", \"Not?A_Brand\";v=\"24.0.0.0\", \"Google Chrome\";v=\"152.0.7977.42\""
+    },
+    "order": [
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ],
+    "fetch_order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ]
+  },
+  "devices": [
+    {
+      "name": "Windows 10 22H2, Chrome 152.0.7977.42",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.42",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, Chrome 152.0.7977.54",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.54",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, Chrome 152.0.7977.65",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.65",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, Chrome 152.0.7977.75",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.75",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, Chrome 152.0.7977.77",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.77",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, Chrome 152.0.7977.78",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.78",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, Chrome 152.0.7977.83",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.83",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, Chrome 152.0.7977.84",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.84",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, Chrome 152.0.7977.85",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.85",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, 32-bit Chrome, Chrome 152.0.7977.42",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.42",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?1",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, 32-bit Chrome, Chrome 152.0.7977.54",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.54",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?1",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, 32-bit Chrome, Chrome 152.0.7977.65",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.65",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?1",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, 32-bit Chrome, Chrome 152.0.7977.75",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.75",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?1",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, 32-bit Chrome, Chrome 152.0.7977.77",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.77",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?1",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, 32-bit Chrome, Chrome 152.0.7977.78",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.78",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?1",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, 32-bit Chrome, Chrome 152.0.7977.83",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.83",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?1",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, 32-bit Chrome, Chrome 152.0.7977.84",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.84",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?1",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 10 22H2, 32-bit Chrome, Chrome 152.0.7977.85",
+      "platform_version": "10.0.0",
+      "full_version": "152.0.7977.85",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?1",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 22H2, Chrome 152.0.7977.42",
+      "platform_version": "14.0.0",
+      "full_version": "152.0.7977.42",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 22H2, Chrome 152.0.7977.54",
+      "platform_version": "14.0.0",
+      "full_version": "152.0.7977.54",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 22H2, Chrome 152.0.7977.65",
+      "platform_version": "14.0.0",
+      "full_version": "152.0.7977.65",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 22H2, Chrome 152.0.7977.75",
+      "platform_version": "14.0.0",
+      "full_version": "152.0.7977.75",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 22H2, Chrome 152.0.7977.77",
+      "platform_version": "14.0.0",
+      "full_version": "152.0.7977.77",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 22H2, Chrome 152.0.7977.78",
+      "platform_version": "14.0.0",
+      "full_version": "152.0.7977.78",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 22H2, Chrome 152.0.7977.83",
+      "platform_version": "14.0.0",
+      "full_version": "152.0.7977.83",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 22H2, Chrome 152.0.7977.84",
+      "platform_version": "14.0.0",
+      "full_version": "152.0.7977.84",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 22H2, Chrome 152.0.7977.85",
+      "platform_version": "14.0.0",
+      "full_version": "152.0.7977.85",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 23H2, Chrome 152.0.7977.42",
+      "platform_version": "15.0.0",
+      "full_version": "152.0.7977.42",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 23H2, Chrome 152.0.7977.54",
+      "platform_version": "15.0.0",
+      "full_version": "152.0.7977.54",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 23H2, Chrome 152.0.7977.65",
+      "platform_version": "15.0.0",
+      "full_version": "152.0.7977.65",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 23H2, Chrome 152.0.7977.75",
+      "platform_version": "15.0.0",
+      "full_version": "152.0.7977.75",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 23H2, Chrome 152.0.7977.77",
+      "platform_version": "15.0.0",
+      "full_version": "152.0.7977.77",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 23H2, Chrome 152.0.7977.78",
+      "platform_version": "15.0.0",
+      "full_version": "152.0.7977.78",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 23H2, Chrome 152.0.7977.83",
+      "platform_version": "15.0.0",
+      "full_version": "152.0.7977.83",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 23H2, Chrome 152.0.7977.84",
+      "platform_version": "15.0.0",
+      "full_version": "152.0.7977.84",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 23H2, Chrome 152.0.7977.85",
+      "platform_version": "15.0.0",
+      "full_version": "152.0.7977.85",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 24H2, Chrome 152.0.7977.42",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.42",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 24H2, Chrome 152.0.7977.54",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.54",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 24H2, Chrome 152.0.7977.65",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.65",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 24H2, Chrome 152.0.7977.75",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.75",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 24H2, Chrome 152.0.7977.77",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.77",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 24H2, Chrome 152.0.7977.78",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.78",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 24H2, Chrome 152.0.7977.83",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.83",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 24H2, Chrome 152.0.7977.84",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.84",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 24H2, Chrome 152.0.7977.85",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.85",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 25H2, Chrome 152.0.7977.42",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.42",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 25H2, Chrome 152.0.7977.54",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.54",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 25H2, Chrome 152.0.7977.65",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.65",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 25H2, Chrome 152.0.7977.75",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.75",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 25H2, Chrome 152.0.7977.77",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.77",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 25H2, Chrome 152.0.7977.78",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.78",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 25H2, Chrome 152.0.7977.83",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.83",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 25H2, Chrome 152.0.7977.84",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.84",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Windows 11 25H2, Chrome 152.0.7977.85",
+      "platform_version": "19.0.0",
+      "full_version": "152.0.7977.85",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    }
+  ]
 }

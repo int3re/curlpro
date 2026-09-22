@@ -43,6 +43,32 @@ type Profile struct {
 
 	// Fetch describes fetch/XHR requests: their set, order and anchor are their own.
 	Fetch FetchSpec `json:"fetch,omitempty"`
+
+	// Source says where a profile that this project did not capture came
+	// from. Nil for a captured profile — the corpus, or a live run of
+	// curlpro capture. A transcribed profile carries another project's
+	// description of the browser, taken on trust: nothing in it was seen on
+	// the wire here. Inherited along the based_on chain, so a delta on a
+	// transcribed profile is transcribed too; a transcribed delta on a
+	// captured base marks only what the delta changed as taken on trust.
+	Source *SourceSpec `json:"source,omitempty"`
+}
+
+// SourceSpec is the provenance of a profile that was not captured here.
+type SourceSpec struct {
+	// Kind is "transcribed": another project's description, copied.
+	Kind string `json:"kind"`
+	// From names the project, e.g. "github.com/0x676e67/wreq-util".
+	From string `json:"from"`
+	// Ref is the commit the data was read at; Path the file(s) inside it.
+	Ref  string `json:"ref,omitempty"`
+	Path string `json:"path,omitempty"`
+	// Date is when it was transcribed, YYYY-MM-DD.
+	Date string `json:"date,omitempty"`
+	// Note says what exactly was taken and what was not — which captured
+	// profile supplies the ClientHello and HTTP/2, what the source claimed,
+	// and where the source's claim contradicts a measurement.
+	Note string `json:"note,omitempty"`
 }
 
 // FetchSpec holds the headers of fetch() and XMLHttpRequest calls.
@@ -135,6 +161,35 @@ func (p *Profile) hintValue(key string, dev Device, base []HeaderPair) string {
 		if dev.PlatformVersion != "" {
 			return quoteHint(dev.PlatformVersion)
 		}
+	case "sec-ch-ua-full-version":
+		if dev.FullVersion != "" {
+			return quoteHint(dev.FullVersion)
+		}
+	case "sec-ch-ua-full-version-list":
+		// The brand list of the low-entropy sec-ch-ua with every version
+		// written in full, the GREASE brand's as "8.0.0.0" — measured on
+		// Chrome 153 (Windows) and Chrome 152 (Android), same rule.
+		if dev.FullVersion != "" {
+			if brands := findHeader(base, "sec-ch-ua"); brands != "" {
+				return fullVersionList(brands, dev.FullVersion)
+			}
+		}
+	case "sec-ch-ua-arch":
+		if dev.HintArch != "" {
+			return quoteHint(dev.HintArch)
+		}
+	case "sec-ch-ua-bitness":
+		if dev.Bitness != "" {
+			return quoteHint(dev.Bitness)
+		}
+	case "sec-ch-ua-wow64":
+		if dev.WOW64 != "" {
+			return dev.WOW64
+		}
+	case "sec-ch-ua-form-factors":
+		if dev.FormFactors != "" {
+			return quoteHint(dev.FormFactors)
+		}
 	}
 	if v, ok := p.ClientHints.Values[strings.ToLower(key)]; ok {
 		return v
@@ -202,6 +257,11 @@ type Capabilities struct {
 	// Cookies is the family's cookie policy — what a request made from a
 	// page on another site carries — or nil for a library that has none.
 	Cookies *CookiePolicy `json:"cookies,omitempty"`
+	// Measured says every part of the profile was captured from the browser
+	// by this project or its corpus. False for a transcribed profile, whose
+	// Source says what was taken from where; the audit reports the same.
+	Measured bool        `json:"measured"`
+	Source   *SourceSpec `json:"source,omitempty"`
 }
 
 // Capabilities answers what this profile can do.
@@ -221,6 +281,8 @@ func (p *Profile) Capabilities() Capabilities {
 		UserAgentVaries: p.Headers.UserAgentTemplate != "",
 		DerivedFetch:    p.Fetch.Derived,
 		Cookies:         CookiePolicyFor(familyOf(p.Name)),
+		Measured:        p.Source == nil,
+		Source:          p.Source,
 	}
 	if p.Fetch.Enabled() {
 		c.Modes = append(c.Modes, "fetch")
@@ -473,13 +535,78 @@ func (h HeaderPair) For(method string) string {
 // placeholder for everyone. The real device lives in the sec-ch-ua-model and
 // sec-ch-ua-platform-version hints, which the browser sends only after Accept-CH.
 type Device struct {
-	Name            string `json:"name"`
-	Model           string `json:"model"`
-	PlatformVersion string `json:"platform_version"`
+	Name string `json:"name"`
+	// Model is the phone's ro.product.model: sec-ch-ua-model, and {model} in
+	// a User-Agent template. Empty for a device that is not a phone.
+	Model string `json:"model,omitempty"`
+	// PlatformVersion is sec-ch-ua-platform-version: the Android version on
+	// a phone, the Windows UniversalApiContract version ("10.0.0" for
+	// Windows 10 22H2, "19.0.0" for Windows 11 24H2) or the macOS version
+	// ("15.7.1") on a desktop, nothing on Linux, where Chromium sends "".
+	PlatformVersion string `json:"platform_version,omitempty"`
 	// Arch is the architecture exactly as written into the User-Agent by a browser
 	// that writes it there (Yandex: arm_64). It does not match the sec-ch-ua-arch
 	// hint: on Android that one is empty — measured on a Pixel 7.
 	Arch string `json:"arch,omitempty"`
+
+	// The rest describes a desktop or an iPhone: what varies between real
+	// users of one browser version besides the phone model. Measured on
+	// Chrome 153 / Windows 10 22H2 (STAGE19): sec-ch-ua-full-version
+	// "153.0.8010.52", arch "x86", bitness "64", wow64 ?1, form-factors
+	// "Desktop", platform-version "10.0.0".
+	//
+	// FullVersion is the exact browser build, sec-ch-ua-full-version and the
+	// versions inside sec-ch-ua-full-version-list; users of one major run
+	// several builds at any time. HintArch, Bitness, WOW64 and FormFactors
+	// are the hints of the same names. OSVersion and Version are for a
+	// User-Agent template: iOS writes the OS into the string ("iPhone OS
+	// 26_0_1") and Safari's Version/ follows it ("26.0.1"). Distro is the
+	// token some Linux builds of Firefox carry ("Ubuntu; ").
+	FullVersion string `json:"full_version,omitempty"`
+	HintArch    string `json:"hint_arch,omitempty"`
+	Bitness     string `json:"bitness,omitempty"`
+	WOW64       string `json:"wow64,omitempty"`
+	FormFactors string `json:"form_factors,omitempty"`
+	OSVersion   string `json:"os_version,omitempty"`
+	Version     string `json:"version,omitempty"`
+	Distro      string `json:"distro,omitempty"`
+}
+
+// findHeader returns a header's value from a resolved set, or "".
+func findHeader(set []HeaderPair, name string) string {
+	for _, h := range set {
+		if strings.EqualFold(h.Key, name) && h.Value != "" {
+			return h.Value
+		}
+	}
+	return ""
+}
+
+// fullVersionList rewrites a sec-ch-ua brand list with the full build in
+// place of every major, and the GREASE brand's major padded to four parts:
+// `"Google Chrome";v="153", "Not_A Brand";v="8", "Chromium";v="153"` with
+// 153.0.8010.52 becomes `"Google Chrome";v="153.0.8010.52", "Not_A
+// Brand";v="8.0.0.0", "Chromium";v="153.0.8010.52"`. The GREASE brand is the
+// one whose major is not the build's major.
+func fullVersionList(brands, full string) string {
+	major := full
+	if i := strings.Index(full, "."); i > 0 {
+		major = full[:i]
+	}
+	parts := strings.Split(brands, ", ")
+	for i, part := range parts {
+		name, v, ok := strings.Cut(part, ";v=")
+		if !ok {
+			continue
+		}
+		v = strings.Trim(v, `"`)
+		if v == major {
+			parts[i] = name + `;v="` + full + `"`
+		} else {
+			parts[i] = name + `;v="` + v + `.0.0.0"`
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // UserAgentFor substitutes the device into the User-Agent string.
@@ -487,24 +614,30 @@ type Device struct {
 // It only works where the browser writes the device into the string: Yandex
 // writes "Linux; arm_64; Android 17; Pixel 7", while Chrome since version 110
 // writes the placeholder "Android 10; K", the same for everyone, leaving
-// nothing to substitute. The template comes from the profile, so the code never decides on the browser's behalf.
+// nothing to substitute; iOS Safari writes the OS version and its own; a
+// Linux Firefox may carry a distribution token. The template comes from the
+// profile, so the code never decides on the browser's behalf.
 //
-// Supported: {model}, {android} (major version), {platform_version} and {arch}.
+// Supported: {model}, {android} (major version), {platform_version}, {arch},
+// {os_version}, {version} and {distro}. Without a device chosen the plain
+// User-Agent goes out, template or not.
 func (p *Profile) UserAgentFor(dev Device) string {
 	tpl := p.Headers.UserAgentTemplate
-	if tpl == "" || dev.Model == "" {
+	if tpl == "" || dev.Name == "" {
 		return p.Headers.UserAgent
 	}
 	android := dev.PlatformVersion
 	if i := strings.Index(android, "."); i > 0 {
 		android = android[:i]
 	}
-	arch := dev.Arch
 	r := strings.NewReplacer(
 		"{model}", dev.Model,
 		"{android}", android,
 		"{platform_version}", dev.PlatformVersion,
-		"{arch}", arch,
+		"{arch}", dev.Arch,
+		"{os_version}", dev.OSVersion,
+		"{version}", dev.Version,
+		"{distro}", dev.Distro,
 	)
 	return r.Replace(tpl)
 }
@@ -709,6 +842,12 @@ func namesOf(ps []*Profile) []string {
 
 // merge applies src on top of dst. Set fields override, empty ones do not.
 func merge(dst, src *Profile) {
+	// Provenance travels down the chain: a delta that names a source is
+	// transcribed, and so is anything built on it. A delta without one keeps
+	// whatever its ancestors said.
+	if src.Source != nil {
+		dst.Source = src.Source
+	}
 	// ClientHello sources are mutually exclusive: one set in the child displaces
 	// the inherited one, otherwise two different descriptions would mix.
 	switch {

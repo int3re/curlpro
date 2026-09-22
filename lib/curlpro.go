@@ -149,7 +149,12 @@ func curlpro_free(s *C.char) {
 // 0.20.0: codes on configuration and capability failures, so a caller can tell
 // "never retry" from "retry"; curlpro_profile_capabilities, curlpro_profile_get
 // and curlpro_session_preview.
-const Version = "0.21.0"
+// 0.21.0: credentials, samesite and preflight on the session and per request,
+// preflights and history on every response, proxy and CORS error details.
+// 0.22.0: the profile-level source block (a profile file carrying it does not
+// load into an older library), measured and source in the capabilities and
+// the fingerprint, which list_profiles(measured=) reads.
+const Version = "0.22.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {

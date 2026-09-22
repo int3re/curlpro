@@ -1,0 +1,53 @@
+{
+  "name": "safari-18.2-macos",
+  "based_on": "safari-18.0-macos",
+  "source": {
+    "kind": "transcribed",
+    "from": "github.com/0x676e67/wreq-util",
+    "ref": "e3922a2b2d976487cb4cf4e7b0ac290b3ce77f66",
+    "path": "src/emulate/profile/safari.rs",
+    "date": "2026-09-22",
+    "note": "ClientHello, HTTP/2 frames and header sets are those captured for safari-18.0-macos; wreq-util declares safari 18.2 to use the same TLS and HTTP/2 configuration (safari18_2: tls_options!('2', 'CIPHER_LIST_2', 'SIGALGS_LIST_2'), http2_options!(3)). The User-Agent is wreq-util's; accept-language is wreq-util's. Nothing was seen on the wire for this version here. wreq-util declares these to differ from 18.0 by dropping ecdsa_sha1 from the signature algorithms; the captured 18.0 already sends the list without it, so the hello is 18.0's."
+  },
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
+    "order": [
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "accept-language",
+        "value": "en-US,en;q=0.9"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br"
+      }
+    ]
+  }
+}

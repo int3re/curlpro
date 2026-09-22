@@ -115,6 +115,7 @@ def _audit(fp: Any, persona: Any, mode: str | None = None) -> list[Finding]:
     out += _check_accept_encoding(pairs, profile_pairs)
     out += _check_referer(pairs, data.get("url", ""))
     out += _check_derived_fetch(profile, data, mode)
+    out += _check_transcribed(profile, data)
 
     order = {level: i for i, level in enumerate(LEVELS)}
     out.sort(key=lambda f: order[f.level])
@@ -254,6 +255,11 @@ def _check_mobile_device(profile: str, data: dict) -> list[Finding]:
         return []
     if not data.get("devices"):
         return []
+    # A desktop profile with a pool (Windows builds, macOS versions, Chrome
+    # builds) is complete without a choice: the captured machine's own hints
+    # go out, a real desktop. Only a phone that names no phone contradicts itself.
+    if (_header(data.get("header_values") or [], "sec-ch-ua-mobile") or "?0") != "?1":
+        return []
     return [Finding(
         code="mobile_no_device",
         level="medium",
@@ -386,6 +392,30 @@ def _check_derived_fetch(profile: str, data: dict, mode: str | None = None) -> l
             "in this profile",
         fix="use a Chromium or Firefox profile where the fetch set is measured, "
             "or capture Safari's own with curlpro capture on a Mac or iPhone")]
+
+
+def _check_transcribed(profile: str, data: dict) -> list[Finding]:
+    """A profile taken from another project's description, not captured.
+
+    Every other profile in the corpus was seen on the wire — by this project
+    or by the signatures it imported, which carry the hashes to prove it. A
+    transcribed one carries what wreq-util (or another library) believes the
+    browser sends: its ClientHello and HTTP/2 come from the nearest captured
+    version the source claims to be identical, its User-Agent and brand list
+    from the source, and nothing of it was checked against a browser here.
+    Fires whatever the mode, because all of it is on trust.
+    """
+    src = data.get("source")
+    if not src:
+        return []
+    return [Finding(
+        code="transcribed_profile",
+        level="medium",
+        what=f"profile {profile} is transcribed from {src.get('from', '?')}, not captured",
+        why=(src.get("note") or "another project's description of the browser, taken on "
+             "trust: nothing this profile sends was seen on the wire by this project"),
+        fix="prefer a captured profile of the same family — capabilities(name)['measured'] "
+            "is True for those — or capture this version with curlpro capture")]
 
 
 def _origin_of(url: str) -> str:

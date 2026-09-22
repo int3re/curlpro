@@ -54,7 +54,7 @@ curlpro.register_profile({
 
 ## Что умеет
 
-- **50 профилей**: Chrome 98–152, Edge, Firefox 133–155, Safari, Tor, Яндекс.Браузер, okhttp 5.5;
+- **294 профиля**, 56 из них сняты (Chrome 98–153, Edge, Firefox 133–156, Safari, Tor, Яндекс.Браузер, okhttp 5.5), а 238 транскрибированы из wreq-util и помечены — `list_profiles(measured=True)` даёт список снятых;
   мобильные — Chrome и Яндекс для Android, Safari для iOS.
 - **Все слои отпечатка сразу** — TLS, HTTP/2, HTTP/3, HTTP/1.1 и WebSocket
   (таблица ниже).
@@ -148,7 +148,7 @@ go build -tags nofoxio -buildmode=c-shared -o dist/libcurlpro.so ./lib
 pip install curlpro
 ```
 
-Ни Go, ни компилятора не нужно: нативная библиотека и все 50 профилей уже
+Ни Go, ни компилятора не нужно: нативная библиотека и все 294 профиля уже
 внутри колеса. Готовые колёса собраны для пяти платформ:
 
 | Платформа | Колесо |
@@ -253,7 +253,7 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 | `preflight` | CORS-preflight перед непростым кросс-origin fetch со страницы — отправляется, проверяется, хранится на `Access-Control-Max-Age`; отказ — `CORSError`, и запрос не уходит. `False` шлёт сразу |
 | `keep_alive`, `max_idle_conns`, `idle_conn_timeout` | переиспользование соединений и размер пула |
 | `resolve`, `ip_version` | подмена адреса узла, семейство адресов (`"4"`/`"6"`) |
-| `device`, `devices` | телефон для мобильных профилей и свой список устройств |
+| `device`, `devices` | личность для профилей с пулом — телефон, выпуск Windows и сборка Chrome, версия iOS — и свой список |
 | `max_response_size` | предел размера тела; без него бесконечный ответ съест память. Ограничивает `read()`, но не `iter_content()` |
 | `hooks` | перехватчики `request`, `response`, `error` |
 
@@ -719,6 +719,18 @@ with curlpro.Session("chrome-152-android", device="random") as s:
 и защита, знающая о сокращении, это заметит. Без устройства профиль уходит как
 снят, с сокращённой строкой; строка и подсказки всегда называют один телефон и
 один Android.
+
+С 0.11 свой пул есть и у десктопа. `chrome-151…153-windows/macos/linux` несут
+то, чем настоящие пользователи одной версии Chrome различаются: выпуск Windows
+(`sec-ch-ua-platform-version`), точную сборку (`sec-ch-ua-full-version`,
+`-full-version-list`) и то, 32-битный ли процесс у браузера
+(`sec-ch-ua-wow64`); версию macOS и процессор; на Linux — сборку. Профили
+Safari на iOS несут версии iOS своей линейки — Safari 26 замораживает токен
+системы на `18_7` и настоящую версию пишет только в `Version/`, — а профили
+Firefox на Linux — токен `Ubuntu; `. `device="random"` выбирает одну личность
+на сессию, `fingerprint().device` её называет, без `device=` уходят значения
+машины захвата. TLS остаётся один; зерно с источниками —
+`scripts/identities.json`.
 
 ## Навигация и fetch
 

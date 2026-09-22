@@ -71,6 +71,32 @@ func TestPreviewKnowsCleartextIsHTTP1(t *testing.T) {
 	}
 }
 
+// The fingerprint names the device actually chosen — with device="random"
+// it used to say "random", and a parser recording which phones get banned
+// had nothing to record (a field report).
+func TestFingerprintNamesTheChosenDevice(t *testing.T) {
+	s := auditSessionProfile(t, "chrome-152-android", Options{DefaultHeaders: true, Device: "random"})
+	fp, err := s.Fingerprint("https://example.com/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp.Device == "" || fp.Device == "random" {
+		t.Fatalf("device %q", fp.Device)
+	}
+	var listed bool
+	for _, d := range fp.Devices {
+		listed = listed || d == fp.Device
+	}
+	if !listed {
+		t.Errorf("device %q is not one of the profile's %d", fp.Device, len(fp.Devices))
+	}
+	// A desktop profile without an identity pool (the 151–153 desktops have
+	// one since 0.11) reports neither a device nor a list.
+	if fp2, _ := auditSessionProfile(t, "chrome-150-macos", Options{DefaultHeaders: true}).Fingerprint("https://example.com/"); fp2.Device != "" || len(fp2.Devices) != 0 {
+		t.Errorf("a desktop profile reports device %q, devices %v", fp2.Device, fp2.Devices)
+	}
+}
+
 func TestCapabilitiesSayWhetherFetchMetadataIsSent(t *testing.T) {
 	for _, tc := range []struct {
 		profile string

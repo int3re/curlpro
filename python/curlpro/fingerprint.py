@@ -169,6 +169,35 @@ class Fingerprint:
     def profile(self) -> str:
         return self._d.get("profile", "")
 
+    @property
+    def device(self) -> str:
+        """The phone this session presents itself as — the name chosen from
+        the profile's list, also when it was chosen with ``device="random"``
+        — or ``""`` on a profile without devices. What a parser records
+        beside the profile name to see which devices get banned."""
+        return self._d.get("device", "")
+
+    @property
+    def devices(self) -> list[str]:
+        """The names the profile offers; empty for a desktop profile."""
+        return list(self._d.get("devices") or [])
+
+    @property
+    def measured(self) -> bool:
+        """True when every part of the profile was captured from the browser.
+
+        False for a transcribed profile — one taken from another project's
+        description (``source`` says which) rather than seen on the wire
+        here. The audit reports the same as ``transcribed_profile``."""
+        return not self._d.get("source")
+
+    @property
+    def source(self) -> dict[str, Any] | None:
+        """Where a transcribed profile came from: ``kind``, ``from``, ``ref``,
+        ``path``, ``date`` and a ``note`` on what was taken; ``None`` for a
+        captured profile."""
+        return self._d.get("source") or None
+
     def to_dict(self) -> dict[str, Any]:
         """Everything as plain data — serialisable, storable, comparable."""
         return dict(self._d)

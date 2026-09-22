@@ -55,7 +55,7 @@ curlpro.register_profile({
 
 ## Features
 
-- **50 profiles**: Chrome 98-152, Edge, Firefox 133-155, Safari, Tor, Yandex Browser, okhttp 5.5;
+- **294 profiles**, 56 of them captured (Chrome 98-153, Edge, Firefox 133-156, Safari, Tor, Yandex Browser, okhttp 5.5) and 238 transcribed from wreq-util and marked as such — `list_profiles(measured=True)` is the captured list;
   mobile — Chrome and Yandex for Android, Safari for iOS.
 - **Every fingerprint layer at once** — TLS, HTTP/2, HTTP/3, HTTP/1.1 and WebSocket
   (table below).
@@ -151,7 +151,7 @@ The wheels on PyPI are built without the tag, so JA4H is present there.
 pip install curlpro
 ```
 
-Neither Go nor a compiler is needed: the native library and all 50 profiles are
+Neither Go nor a compiler is needed: the native library and all 294 profiles are
 already inside the wheel. Wheels are built for five platforms:
 
 | Platform | Wheel |
@@ -258,7 +258,7 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 | `preflight` | the CORS preflight before a non-simple cross-origin fetch from a page — sent, checked, cached for its `Access-Control-Max-Age`; a refusal is `CORSError` and the request is not sent. `False` sends straight out |
 | `keep_alive`, `max_idle_conns`, `idle_conn_timeout` | connection reuse and pool size |
 | `resolve`, `ip_version` | host address override, address family (`"4"`/`"6"`) |
-| `device`, `devices` | the phone for mobile profiles and your own device list |
+| `device`, `devices` | the identity for profiles with a pool — a phone, a Windows release and Chrome build, an iOS version — and your own list |
 | `max_response_size` | body size limit; without one an endless response eats memory. Binds `read()`, not `iter_content()` |
 | `hooks` | the `request`, `response` and `error` hooks |
 
@@ -734,6 +734,18 @@ Chrome ≥110 sends the reduced `Android 10; K` and discloses the model only in 
 hints — and a defence that knows about the reduction can tell. Without a device
 the profile goes out as captured, reduced string included; the string and the
 hints always name the same phone and the same Android.
+
+The desktop has its own pool since 0.11. `chrome-151…153-windows/macos/linux`
+carry what varies between real users of one Chrome version: the Windows release
+(`sec-ch-ua-platform-version`), the exact build (`sec-ch-ua-full-version`,
+`-full-version-list`) and whether the browser is a 32-bit process
+(`sec-ch-ua-wow64`); the macOS version and CPU; on Linux the build. The iOS
+Safari profiles carry the iOS versions of their line — Safari 26 freezes the OS
+token at `18_7` and writes the real version only in `Version/` — and the Firefox
+Linux profiles the `Ubuntu; ` token. `device="random"` draws one for the
+session, `fingerprint().device` names it, and without `device=` the capture
+machine's values go out. The TLS stays one; the seed with its sources is
+`scripts/identities.json`.
 
 ## Navigation vs fetch
 
