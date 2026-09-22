@@ -122,7 +122,9 @@ def test_a_delta_on_a_pooled_profile_has_no_pool_unless_it_says_so():
     pooled = {f"chrome-{v}-{o}" for v in (151, 152, 153) for o in ("windows", "macos", "linux")} | set(SEED["ios"]) | {
         p.stem for p in (REPO / "profiles").glob("firefox-*-linux.json")}
     pooled |= {"chrome-152-android", "yandex-26.8-android"}
-    for name in curlpro.list_profiles():
+    # The files on disk, not the registry: another test may register a delta on
+    # a pooled profile, and that one inherits the pool by design.
+    for name in sorted(p.stem for p in (REPO / "profiles").glob("*.json")):
         caps = curlpro.capabilities(name)
         if name in pooled:
             assert caps["devices"], name

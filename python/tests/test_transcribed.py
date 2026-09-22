@@ -44,9 +44,13 @@ def test_every_transcribed_profile_is_a_delta_with_a_note():
         seen += 1
         assert d["based_on"], p.name
         assert d["source"]["note"] and d["source"]["ref"], p.name
-        # devices and client_hints are the identity pools gen-identities.py adds on top.
-        assert set(d) <= {"name", "based_on", "source", "headers", "http2", "devices", "client_hints"}, \
+        # devices and client_hints are what gen-identities.py adds on top (an
+        # empty pool, on a delta of a pooled profile); fetch is the derived
+        # Safari set gen-safari-fetch.py writes from the delta's own navigation order.
+        assert set(d) <= {"name", "based_on", "source", "headers", "http2", "devices", "client_hints", "fetch"}, \
             f"{p.name}: a transcribed delta carries {set(d)}"
+        if "fetch" in d:
+            assert p.name.startswith("safari-") and d["fetch"]["derived"] is True, p.name
     assert seen > 200
 
 
