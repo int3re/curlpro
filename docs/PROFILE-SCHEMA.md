@@ -350,6 +350,15 @@ identity has no `platform_version`, and the hint goes out as `""`, which is what
 Chromium on Linux sends. An iOS identity's `os_version` is what `iPhone OS`
 says — frozen at `18_7` by Safari 26 — and `version` what `Version/` says.
 
+A delta inherits its parent's pool, template and hint values like any other
+section, and most deltas on a pooled profile must not have them: the macOS
+Safari profiles stand on the iOS captures, `edge-153-windows` on
+`chrome-153-windows`, the transcribed iOS and iPadOS deltas on the iOS
+captures. An explicit `"devices": []` removes the pool (and, under a desktop
+parent, an empty `client_hints` removes the values, which would otherwise
+carry the parent's brands and build); the generator writes both into every
+such delta, and a profile without devices never reports `user_agent_varies`.
+
 ```json
 "client_hints": {
   "values": { "sec-ch-ua-form-factors": "\"Mobile\"" },

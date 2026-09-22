@@ -120,5 +120,6 @@
     ],
     "custom_anchor": "accept-encoding",
     "derived": true
-  }
+  },
+  "devices": []
 }

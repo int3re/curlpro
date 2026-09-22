@@ -75,6 +75,34 @@ func TestDesktopIdentityFillsTheHints(t *testing.T) {
 
 // An iOS identity rewrites the two places the User-Agent carries the OS
 // version; a Linux Firefox one adds or omits the distribution token.
+// A delta inherits its parent's pool unless it says otherwise, and the ones
+// that must not have one say so: the macOS Safari profiles stand on the iOS
+// captures, Edge on Chrome 153.
+func TestDeltasOnPooledProfilesDeclineThePool(t *testing.T) {
+	reg := NewRegistry()
+	if err := reg.LoadFS(os.DirFS(filepath.Join("..", "..", "profiles")), "."); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"safari-18.0-macos", "safari-18.4-macos", "safari-26.2-macos", "safari-26-ipados", "edge-153-windows"} {
+		p, err := reg.Resolve(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := p.Capabilities()
+		if len(c.Devices) != 0 || c.UserAgentVaries {
+			t.Errorf("%s: devices %v, user_agent_varies %v", name, c.Devices, c.UserAgentVaries)
+		}
+	}
+	edge, _ := reg.Resolve("edge-153-windows")
+	if edge.ClientHints.Enabled() || len(edge.ClientHints.Values) != 0 {
+		t.Errorf("edge-153-windows inherits Chrome's hint values: %v", edge.ClientHints.Values)
+	}
+	mac, _ := reg.Resolve("safari-18.0-macos")
+	if ua := mac.UserAgentFor(Device{}); !strings.Contains(ua, "Macintosh") {
+		t.Errorf("safari-18.0-macos user agent: %q", ua)
+	}
+}
+
 func TestTemplatedUserAgents(t *testing.T) {
 	reg := NewRegistry()
 	if err := reg.LoadFS(os.DirFS(filepath.Join("..", "..", "profiles")), "."); err != nil {

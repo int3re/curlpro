@@ -49,5 +49,6 @@
         "value": "gzip, deflate, br"
       }
     ]
-  }
+  },
+  "devices": []
 }

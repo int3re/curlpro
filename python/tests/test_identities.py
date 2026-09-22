@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 import curlpro
+import pytest
 from echo_stand import EchoStand
 
 REPO = Path(__file__).resolve().parents[2]
@@ -112,6 +113,27 @@ def test_firefox_on_linux_may_carry_the_ubuntu_token():
         assert "(X11; Ubuntu; Linux x86_64; rv:150.0)" in s.fingerprint().user_agent
     with curlpro.Session("firefox-150-linux", device="Linux, generic build") as s:
         assert "(X11; Linux x86_64; rv:150.0)" in s.fingerprint().user_agent
+
+
+def test_a_delta_on_a_pooled_profile_has_no_pool_unless_it_says_so():
+    """The macOS Safari profiles stand on the iOS captures, Edge on Chrome 153,
+    the transcribed iOS and iPadOS deltas on the iOS captures: none of them may
+    inherit a pool, a template or the parent's hint values."""
+    pooled = {f"chrome-{v}-{o}" for v in (151, 152, 153) for o in ("windows", "macos", "linux")} | set(SEED["ios"]) | {
+        p.stem for p in (REPO / "profiles").glob("firefox-*-linux.json")}
+    pooled |= {"chrome-152-android", "yandex-26.8-android"}
+    for name in curlpro.list_profiles():
+        caps = curlpro.capabilities(name)
+        if name in pooled:
+            assert caps["devices"], name
+            continue
+        assert caps["devices"] == [] and not caps["user_agent_varies"], name
+        if name.startswith(("chrome-", "edge-", "opera-")) and caps.get("based_on") in pooled:
+            assert not caps["client_hints"], name
+    with pytest.raises(curlpro.ProfileCapabilityError):
+        curlpro.Session("safari-18.0-macos", device="random")
+    with curlpro.Session("edge-153-windows") as s:
+        assert "sec-ch-ua-full-version-list" not in s.headers_for("GET", "https://a.test/")
 
 
 def test_capabilities_list_the_identities():

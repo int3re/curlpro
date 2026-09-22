@@ -77,5 +77,11 @@
         "value": "u=0, i"
       }
     ]
+  },
+  "devices": [],
+  "client_hints": {
+    "values": {},
+    "order": [],
+    "fetch_order": []
   }
 }

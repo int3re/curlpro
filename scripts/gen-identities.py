@@ -187,7 +187,37 @@ def wanted() -> dict[str, dict]:
         # Firefox strings do); the template takes either shape.
         tpl = re.sub(r"\(X11; (?:Ubuntu; )?Linux x86_64;", "(X11; {distro}Linux x86_64;", ua)
         out[p.stem] = {"devices": list(s["firefox_linux"]), "user_agent_template": tpl}
+    # A delta inherits its parent's pool, and most deltas on a pooled profile
+    # must not have one: the macOS Safari profiles stand on the iOS captures,
+    # edge-153-windows on chrome-153-windows (Edge writes its own build into the
+    # list, unknown here), the transcribed iOS and iPadOS deltas on the iOS
+    # captures. Each gets an explicit empty pool — and, under a desktop parent,
+    # an empty hints section, because the inherited values would carry the
+    # parent's brands and build.
+    desktop = {name for name, _, _ in DESKTOP}
+    for p in sorted(PROFILES.glob("*.json")):
+        if p.stem in out or json.loads(p.read_text(encoding="utf-8")).get("devices"):
+            continue  # pooled here, or by gen-devices.py (the Android phones)
+        pooled = [a for a in chain(p.stem) if a in out]
+        if not pooled:
+            continue
+        want = {"devices": []}
+        if any(a in desktop for a in pooled):
+            want["client_hints"] = {"values": {}, "order": [], "fetch_order": []}
+        out[p.stem] = want
     return out
+
+
+def chain(name: str) -> list[str]:
+    """The ancestors of a profile, nearest first."""
+    out, seen = [], {name}
+    while True:
+        d = json.loads((PROFILES / f"{name}.json").read_text(encoding="utf-8"))
+        name = d.get("based_on")
+        if not name or name in seen:
+            return out
+        seen.add(name)
+        out.append(name)
 
 
 def main() -> int:
@@ -219,7 +249,8 @@ def main() -> int:
             continue
         text = json.dumps(profile, ensure_ascii=False, indent=2) + "\n"
         io.open(path, "wb").write(text.replace("\n", nl).encode("utf-8"))
-        print(f"{name}: wrote {len(want.get('devices', []))} identities")
+        n = len(want.get("devices", []))
+        print(f"{name}: wrote {n} identities" if n else f"{name}: no pool of its own")
     return 1 if (check and drift) else 0
 
 

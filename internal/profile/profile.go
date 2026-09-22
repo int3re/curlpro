@@ -278,7 +278,7 @@ func (p *Profile) Capabilities() Capabilities {
 		HTTP1Set:    p.HTTP1.Enabled(),
 		UserAgent:   p.Headers.UserAgent,
 		// A template means the chosen device reaches the string itself.
-		UserAgentVaries: p.Headers.UserAgentTemplate != "",
+		UserAgentVaries: p.Headers.UserAgentTemplate != "" && len(p.Devices) > 0,
 		DerivedFetch:    p.Fetch.Derived,
 		Cookies:         CookiePolicyFor(familyOf(p.Name)),
 		Measured:        p.Source == nil,
