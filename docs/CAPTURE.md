@@ -102,6 +102,12 @@ Two traps, each of which cost a run:
   datagrams and drops the handshake silently. What is needed is
   `--ignore-certificate-errors-spki-list` with the stand key's fingerprint;
   hcapture computes it itself from `capture/certs/tls.crt`.
+- **A delta does not inherit its parent's pool.** `curlpro capture
+  -based-on chrome-153-windows` writes explicit empty `devices` and
+  `client_hints` where the parent has them: a Chrome 154 capture would
+  otherwise answer Accept-CH with 153's build. Add the new version to
+  `scripts/identities.json` and run `scripts/gen-identities.py`; for a
+  profile `scripts/derive-current.py` wrote, the capture replaces it.
 - **Nor to the high-entropy client hints.** Chrome answers `Accept-CH` with
   `sec-ch-ua-full-version-list` and the rest only from a secure origin, and a
   certificate waved through by `--ignore-certificate-errors` does not make one:

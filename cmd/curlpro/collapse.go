@@ -186,6 +186,23 @@ func diffProfile(base, child map[string]any) map[string]any {
 		}
 		out[key] = cv
 	}
+	// A key only the base has would be inherited silently. Two sections can
+	// say "none" explicitly, and do; the rest have no empty form a delta can
+	// carry, so the operator is told rather than the profile quietly changed.
+	for key := range base {
+		if _, ok := child[key]; ok || key == "name" || key == "based_on" {
+			continue
+		}
+		switch key {
+		case "devices":
+			out[key] = []any{}
+		case "client_hints":
+			out[key] = map[string]any{"values": map[string]any{}, "order": []any{}, "fetch_order": []any{}}
+		case "device_kind":
+		default:
+			fmt.Fprintf(os.Stderr, "  warning: %q is in the base only and would be inherited\n", key)
+		}
+	}
 	return out
 }
 

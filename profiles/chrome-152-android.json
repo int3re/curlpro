@@ -566,5 +566,6 @@
       "model": "Infinix X6853",
       "platform_version": "14.0.0"
     }
-  ]
+  ],
+  "device_kind": "phone"
 }

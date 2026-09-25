@@ -62,7 +62,7 @@ func (s *Session) cookiePolicy() *profile.CookiePolicy {
 // cookiesFor returns the cookies a request carries: the jar's matches for
 // the URL, filtered the way the browser would filter them.
 func (s *Session) cookiesFor(r *Request, u *url.URL) []*http.Cookie {
-	all := s.jar.Cookies(u)
+	all := s.cookieJar().Cookies(u)
 	if len(all) == 0 {
 		return nil
 	}

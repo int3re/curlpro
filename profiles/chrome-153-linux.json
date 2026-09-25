@@ -316,8 +316,24 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "Linux, Chrome 153.0.8010.37",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "Linux, Chrome 153.0.8010.47",
       "full_version": "153.0.8010.47",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Linux, Chrome 153.0.8010.48",
+      "full_version": "153.0.8010.48",
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
@@ -354,6 +370,23 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
+    },
+    {
+      "name": "Linux, Chrome 153.0.8010.54",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Linux, Chrome 153.0.8010.55",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
     }
-  ]
+  ],
+  "device_kind": "desktop"
 }

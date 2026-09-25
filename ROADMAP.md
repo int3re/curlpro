@@ -990,6 +990,25 @@ users of one browser version, per family, and what the wire shows of it:
 fingerprint names it; without `device=` the capture machine goes out. The TLS
 never moves — that was the point of the project, and it still is.
 
+## Stage 37 — a field report, three reviews, the presets of 26 September ✅ done 2026-09-26
+
+A field report (response headers a plain dict, `devices` changing meaning, the
+exceptions in a private module, untyped verbs, no body limit, and whether a
+dead kept-alive connection is resent) and the owner's request to go over the
+whole project for bugs and speed, and to bring the presets up to date. Three
+reviews ran in parallel over the Go client, the profiles with the FFI and the
+tools, and the Python package; every finding was reproduced before it was
+fixed. The answer to the question was worse than the question: over HTTP/1.1
+the pool handed out a connection the server had already closed, so the first
+request after any keep-alive timeout failed. Now the pool watches its idle
+connections, and a request whose reused connection dies before a response byte
+goes again on a new one, Chromium's rule. In the corpus, fourteen old profiles
+had sent an empty SETTINGS frame and 41 transcribed brand lists were wrong;
+both fixed and marked. The presets current on 2026-09-26 that could not be
+captured — Chrome 154, Edge 154, Opera 136, Safari 27 — are derived on
+captured twins and marked `derived`: each waits for its browser on the stand.
+The details are in [STAGE20](docs/STAGE20-RESULTS.md).
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

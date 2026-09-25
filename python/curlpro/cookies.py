@@ -101,6 +101,31 @@ class Cookies(Mapping[str, str]):
     def __len__(self) -> int:
         return len(self.all())
 
+    # One export each: the Mapping defaults walk the keys and look every one
+    # up, and each lookup exported the whole jar — dict(s.cookies) with 300
+    # cookies took 280 ms, against under a millisecond for one export.
+    def __contains__(self, name: object) -> bool:
+        return any(c.name == name for c in self.all())
+
+    def get(self, name: str, default: Any = None) -> Any:  # type: ignore[override]
+        for c in self.all():
+            if c.name == name:
+                return c.value
+        return default
+
+    def items(self) -> Any:  # type: ignore[override]
+        return [(c.name, c.value) for c in self.all()]
+
+    def values(self) -> Any:  # type: ignore[override]
+        return [c.value for c in self.all()]
+
+    def keys(self) -> Any:  # type: ignore[override]
+        return [c.name for c in self.all()]
+
+    def to_dict(self) -> dict[str, str]:
+        """Name to value, from one export; ``dict(s.cookies)`` asks per name."""
+        return dict(self.items())
+
     def __repr__(self) -> str:
         items = ", ".join(f"{c.name}={c.value!r}" for c in self.all())
         return f"<Cookies {items}>"
@@ -124,6 +149,15 @@ class Cookies(Mapping[str, str]):
     def clear(self) -> None:
         """Forgets every cookie of the session."""
         _call("curlpro_session_clear_cookies", self._live())
+
+    def _undo(self, changes: list[Mapping[str, Any]]) -> None:
+        """Reverts the jar records one request changed (its cookie_changes).
+
+        Exactly those: rollback_cookies used to clear the jar and reload a
+        snapshot, which also erased what other threads' requests received
+        meanwhile."""
+        if changes:
+            _call("curlpro_session_undo_cookies", self._live(), encode(list(changes)))
 
     # -- transactions --------------------------------------------------------
 
@@ -242,15 +276,16 @@ def format_netscape(cookies: list[dict[str, Any]]) -> str:
         domain = str(c.get("domain", ""))
         if not domain:
             continue
-        # A leading dot means "subdomains too". Our cookies behave exactly
-        # that way: a measurement showed a cookie for example.test also goes
-        # to sub.example.test — hence the dot and the TRUE flag.
-        if not domain.startswith("."):
-            domain = "." + domain
+        # A leading dot and TRUE mean "subdomains too"; a host-only cookie
+        # (set without a Domain attribute) is written bare with FALSE. Every
+        # cookie used to be written with the dot, and a reload sent host-only
+        # ones to every subdomain.
+        host_only = bool(c.get("host_only"))
+        domain = domain.lstrip(".") if host_only else ("." + domain.lstrip("."))
         prefix = _HTTP_ONLY_PREFIX if c.get("http_only") else ""
         lines.append("\t".join([
             prefix + domain,
-            "TRUE",
+            "FALSE" if host_only else "TRUE",
             str(c.get("path") or "/"),
             "TRUE" if c.get("secure") else "FALSE",
             str(int(c.get("expires", 0) or 0)),
@@ -288,7 +323,7 @@ def parse_netscape(text: str) -> list[dict[str, Any]]:
                 f"line {number}: {len(parts)} fields, but the Netscape format has seven "
                 f"(domain, subdomains, path, secure, expiry, name, value)"
             )
-        domain, _subdomains, path, secure, expires, name, value = parts
+        domain, subdomains, path, secure, expires, name, value = parts
         try:
             # Some extensions write the expiry with a fractional part.
             when = int(float(expires or 0))
@@ -304,5 +339,7 @@ def parse_netscape(text: str) -> list[dict[str, Any]]:
             "secure": secure.strip().upper() == "TRUE",
             "http_only": http_only,
             "same_site": "",
+            # FALSE in the second field is a host-only cookie.
+            "host_only": subdomains.strip().upper() == "FALSE" and not domain.startswith("."),
         })
     return out

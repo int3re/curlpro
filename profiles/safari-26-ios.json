@@ -290,7 +290,7 @@
   "devices": [
     {
       "name": "iPhone, iOS 26.0",
-      "os_version": "18_7",
+      "os_version": "18_6",
       "version": "26.0"
     },
     {
@@ -373,5 +373,6 @@
       "os_version": "18_7",
       "version": "26.7"
     }
-  ]
+  ],
+  "device_kind": "iphone"
 }

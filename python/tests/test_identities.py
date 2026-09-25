@@ -102,8 +102,10 @@ def test_ios_pools_follow_each_safari_line():
         # Safari 18 wrote the OS version into the string; Safari 26 pins it at
         # 18_7 (every 26.x seen in real traffic) and keeps the real one in Version/.
         frozen = spec.get("frozen_os")
+        by_version = spec.get("frozen_os_by_version") or {}
         for d in devs:
-            assert d["os_version"] == (frozen or d["version"].replace(".", "_")), (name, d)
+            assert d["os_version"] == (by_version.get(d["version"]) or frozen
+                                       or d["version"].replace(".", "_")), (name, d)
     assert SEED["ios"]["safari-26-ios"]["frozen_os"] == "18_7"
     assert "frozen_os" not in SEED["ios"]["safari-18.4-ios"]
 
@@ -119,7 +121,7 @@ def test_a_delta_on_a_pooled_profile_has_no_pool_unless_it_says_so():
     """The macOS Safari profiles stand on the iOS captures, Edge on Chrome 153,
     the transcribed iOS and iPadOS deltas on the iOS captures: none of them may
     inherit a pool, a template or the parent's hint values."""
-    pooled = {f"chrome-{v}-{o}" for v in (151, 152, 153) for o in ("windows", "macos", "linux")} | set(SEED["ios"]) | {
+    pooled = {f"chrome-{v}-{o}" for v in (151, 152, 153, 154) for o in ("windows", "macos", "linux")} | set(SEED["ios"]) | {
         p.stem for p in (REPO / "profiles").glob("firefox-*-linux.json")}
     pooled |= {"chrome-152-android", "yandex-26.8-android"}
     # The files on disk, not the registry: another test may register a delta on
@@ -140,7 +142,8 @@ def test_a_delta_on_a_pooled_profile_has_no_pool_unless_it_says_so():
 
 def test_capabilities_list_the_identities():
     caps = curlpro.capabilities("chrome-153-windows")
-    assert len(caps["devices"]) == 48 and "Windows 11 24H2, Chrome 153.0.8010.53" in caps["devices"]
+    want = len(SEED["windows"]) * len(SEED["chrome_builds"]["153"])
+    assert len(caps["devices"]) == want and "Windows 11 24H2, Chrome 153.0.8010.53" in caps["devices"]
     assert caps["client_hints"] is True
     assert curlpro.capabilities("safari-26-ios")["user_agent_varies"] is True
     assert curlpro.capabilities("chrome-153-windows")["user_agent_varies"] is False

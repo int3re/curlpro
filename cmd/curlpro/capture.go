@@ -156,7 +156,13 @@ profile from a single capture would pin a random permutation.
 	if err := os.MkdirAll(*out, 0o755); err != nil {
 		return err
 	}
-	enc, err := json.MarshalIndent(p, "", "  ")
+	var written any = p
+	if *basedOn != "" {
+		if written, err = declineInherited(p, *basedOn, *out); err != nil {
+			return err
+		}
+	}
+	enc, err := json.MarshalIndent(written, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -287,6 +293,47 @@ func toDelta(p *profile.Profile, basedOn, dir string) (*profile.Profile, error) 
 		delta.HTTP2 = p.HTTP2
 	}
 	return delta, nil
+}
+
+// declined is a delta written with explicit empty sections where its parent
+// has something the capture must not inherit.
+type declined struct {
+	*profile.Profile
+	Devices     json.RawMessage `json:"devices,omitempty"`
+	ClientHints json.RawMessage `json:"client_hints,omitempty"`
+}
+
+// declineInherited stops a new capture from inheriting its parent's identity
+// pool and client-hint values. A delta inherits every section it leaves out,
+// and these two describe the parent's version: chrome-154 captured on
+// chrome-153-windows would have answered Accept-CH with 153.0.8010.52 next to
+// a 154 User-Agent, and drawn 153 builds from the pool. Written explicitly
+// empty, the sections are the new profile's to fill (scripts/gen-identities.py
+// once its version is in the seed). The same class of mistake was fixed by
+// hand in the transcribed deltas (commit c79cc9f).
+func declineInherited(p *profile.Profile, basedOn, dir string) (any, error) {
+	reg := profile.NewRegistry()
+	if err := reg.LoadFS(os.DirFS(dir), "."); err != nil {
+		return nil, err
+	}
+	base, err := reg.Resolve(basedOn)
+	if err != nil {
+		return nil, fmt.Errorf("parent: %w", err)
+	}
+	out := declined{Profile: p}
+	if len(p.Devices) > 0 {
+		out.Devices, _ = json.Marshal(p.Devices)
+	} else if len(base.Devices) > 0 {
+		out.Devices = json.RawMessage(`[]`)
+		fmt.Printf("the parent's %d identities are not inherited: add %s to scripts/identities.json\n",
+			len(base.Devices), p.Name)
+	}
+	if p.ClientHints.Enabled() || len(p.ClientHints.Values) > 0 {
+		out.ClientHints, _ = json.Marshal(p.ClientHints)
+	} else if base.ClientHints.Enabled() || len(base.ClientHints.Values) > 0 {
+		out.ClientHints = json.RawMessage(`{"values": {}, "order": [], "fetch_order": []}`)
+	}
+	return out, nil
 }
 
 // collect starts the stand, drives the browser and collects samples from its output.

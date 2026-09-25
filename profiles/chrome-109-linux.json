@@ -7,7 +7,7 @@
     "ref": "e3922a2b2d976487cb4cf4e7b0ac290b3ce77f66",
     "path": "src/emulate/profile/chrome.rs",
     "date": "2026-09-22",
-    "note": "ClientHello, HTTP/2 frames and header sets are those captured for chrome-107-windows; wreq-util declares chrome 109 to use the same TLS and HTTP/2 configuration (v109: tls_options!('3',), http2_options!(2)). The User-Agent is the family's reduced shape with this version; sec-ch-ua and accept-language are wreq-util's. Nothing was seen on the wire for this version here."
+    "note": "ClientHello, HTTP/2 frames and header sets are those captured for chrome-107-windows; wreq-util declares chrome 109 to use the same TLS and HTTP/2 configuration (v109: tls_options!('3',), http2_options!(2)). The User-Agent is the family's reduced shape with this version; sec-ch-ua and accept-language are wreq-util's. Nothing was seen on the wire for this version here. The SETTINGS frame of chrome-107-windows is itself transcribed from wreq-util: its captured signature recorded none."
   },
   "headers": {
     "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",

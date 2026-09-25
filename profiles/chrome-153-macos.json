@@ -311,9 +311,27 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "15.6.1",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.47",
       "platform_version": "15.6.1",
       "full_version": "153.0.8010.47",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "15.6.1",
+      "full_version": "153.0.8010.48",
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
@@ -356,8 +374,26 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "15.6.1",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "15.6.1",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.12",
-      "platform_version": "15.7",
+      "platform_version": "15.7.0",
       "full_version": "153.0.8010.12",
       "hint_arch": "arm",
       "bitness": "64",
@@ -366,7 +402,7 @@
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.27",
-      "platform_version": "15.7",
+      "platform_version": "15.7.0",
       "full_version": "153.0.8010.27",
       "hint_arch": "arm",
       "bitness": "64",
@@ -375,7 +411,7 @@
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.36",
-      "platform_version": "15.7",
+      "platform_version": "15.7.0",
       "full_version": "153.0.8010.36",
       "hint_arch": "arm",
       "bitness": "64",
@@ -383,8 +419,17 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "15.7.0",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.47",
-      "platform_version": "15.7",
+      "platform_version": "15.7.0",
       "full_version": "153.0.8010.47",
       "hint_arch": "arm",
       "bitness": "64",
@@ -392,8 +437,17 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "15.7.0",
+      "full_version": "153.0.8010.48",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.49",
-      "platform_version": "15.7",
+      "platform_version": "15.7.0",
       "full_version": "153.0.8010.49",
       "hint_arch": "arm",
       "bitness": "64",
@@ -402,7 +456,7 @@
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.50",
-      "platform_version": "15.7",
+      "platform_version": "15.7.0",
       "full_version": "153.0.8010.50",
       "hint_arch": "arm",
       "bitness": "64",
@@ -411,7 +465,7 @@
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.52",
-      "platform_version": "15.7",
+      "platform_version": "15.7.0",
       "full_version": "153.0.8010.52",
       "hint_arch": "arm",
       "bitness": "64",
@@ -420,8 +474,26 @@
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.53",
-      "platform_version": "15.7",
+      "platform_version": "15.7.0",
       "full_version": "153.0.8010.53",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "15.7.0",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "15.7.0",
+      "full_version": "153.0.8010.55",
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
@@ -455,9 +527,27 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.37",
+      "platform_version": "15.7.1",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.47",
       "platform_version": "15.7.1",
       "full_version": "153.0.8010.47",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.48",
+      "platform_version": "15.7.1",
+      "full_version": "153.0.8010.48",
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
@@ -500,6 +590,24 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.54",
+      "platform_version": "15.7.1",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.55",
+      "platform_version": "15.7.1",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.12",
       "platform_version": "15.7.5",
       "full_version": "153.0.8010.12",
@@ -527,9 +635,27 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "15.7.5",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.47",
       "platform_version": "15.7.5",
       "full_version": "153.0.8010.47",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "15.7.5",
+      "full_version": "153.0.8010.48",
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
@@ -572,6 +698,24 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "15.7.5",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "15.7.5",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.12",
       "platform_version": "15.7.9",
       "full_version": "153.0.8010.12",
@@ -599,9 +743,27 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.37",
+      "platform_version": "15.7.9",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.47",
       "platform_version": "15.7.9",
       "full_version": "153.0.8010.47",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.48",
+      "platform_version": "15.7.9",
+      "full_version": "153.0.8010.48",
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
@@ -644,8 +806,26 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.54",
+      "platform_version": "15.7.9",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.55",
+      "platform_version": "15.7.9",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.12",
-      "platform_version": "15.8",
+      "platform_version": "15.8.0",
       "full_version": "153.0.8010.12",
       "hint_arch": "arm",
       "bitness": "64",
@@ -654,7 +834,7 @@
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.27",
-      "platform_version": "15.8",
+      "platform_version": "15.8.0",
       "full_version": "153.0.8010.27",
       "hint_arch": "arm",
       "bitness": "64",
@@ -663,7 +843,7 @@
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.36",
-      "platform_version": "15.8",
+      "platform_version": "15.8.0",
       "full_version": "153.0.8010.36",
       "hint_arch": "arm",
       "bitness": "64",
@@ -671,8 +851,17 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "15.8.0",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.47",
-      "platform_version": "15.8",
+      "platform_version": "15.8.0",
       "full_version": "153.0.8010.47",
       "hint_arch": "arm",
       "bitness": "64",
@@ -680,8 +869,17 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "15.8.0",
+      "full_version": "153.0.8010.48",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.49",
-      "platform_version": "15.8",
+      "platform_version": "15.8.0",
       "full_version": "153.0.8010.49",
       "hint_arch": "arm",
       "bitness": "64",
@@ -690,7 +888,7 @@
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.50",
-      "platform_version": "15.8",
+      "platform_version": "15.8.0",
       "full_version": "153.0.8010.50",
       "hint_arch": "arm",
       "bitness": "64",
@@ -699,7 +897,7 @@
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.52",
-      "platform_version": "15.8",
+      "platform_version": "15.8.0",
       "full_version": "153.0.8010.52",
       "hint_arch": "arm",
       "bitness": "64",
@@ -708,8 +906,26 @@
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.53",
-      "platform_version": "15.8",
+      "platform_version": "15.8.0",
       "full_version": "153.0.8010.53",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "15.8.0",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "15.8.0",
+      "full_version": "153.0.8010.55",
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
@@ -743,9 +959,27 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "26.0.1",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.47",
       "platform_version": "26.0.1",
       "full_version": "153.0.8010.47",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "26.0.1",
+      "full_version": "153.0.8010.48",
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
@@ -788,8 +1022,26 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "26.0.1",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "26.0.1",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.12",
-      "platform_version": "26.1",
+      "platform_version": "26.1.0",
       "full_version": "153.0.8010.12",
       "hint_arch": "arm",
       "bitness": "64",
@@ -798,7 +1050,7 @@
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.27",
-      "platform_version": "26.1",
+      "platform_version": "26.1.0",
       "full_version": "153.0.8010.27",
       "hint_arch": "arm",
       "bitness": "64",
@@ -807,7 +1059,7 @@
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.36",
-      "platform_version": "26.1",
+      "platform_version": "26.1.0",
       "full_version": "153.0.8010.36",
       "hint_arch": "arm",
       "bitness": "64",
@@ -815,8 +1067,17 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "26.1.0",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.47",
-      "platform_version": "26.1",
+      "platform_version": "26.1.0",
       "full_version": "153.0.8010.47",
       "hint_arch": "arm",
       "bitness": "64",
@@ -824,8 +1085,17 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "26.1.0",
+      "full_version": "153.0.8010.48",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.49",
-      "platform_version": "26.1",
+      "platform_version": "26.1.0",
       "full_version": "153.0.8010.49",
       "hint_arch": "arm",
       "bitness": "64",
@@ -834,7 +1104,7 @@
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.50",
-      "platform_version": "26.1",
+      "platform_version": "26.1.0",
       "full_version": "153.0.8010.50",
       "hint_arch": "arm",
       "bitness": "64",
@@ -843,7 +1113,7 @@
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.52",
-      "platform_version": "26.1",
+      "platform_version": "26.1.0",
       "full_version": "153.0.8010.52",
       "hint_arch": "arm",
       "bitness": "64",
@@ -852,7 +1122,7 @@
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.53",
-      "platform_version": "26.1",
+      "platform_version": "26.1.0",
       "full_version": "153.0.8010.53",
       "hint_arch": "arm",
       "bitness": "64",
@@ -860,8 +1130,26 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "26.1.0",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "26.1.0",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.12",
-      "platform_version": "26.2",
+      "platform_version": "26.2.0",
       "full_version": "153.0.8010.12",
       "hint_arch": "arm",
       "bitness": "64",
@@ -870,7 +1158,7 @@
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.27",
-      "platform_version": "26.2",
+      "platform_version": "26.2.0",
       "full_version": "153.0.8010.27",
       "hint_arch": "arm",
       "bitness": "64",
@@ -879,7 +1167,7 @@
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.36",
-      "platform_version": "26.2",
+      "platform_version": "26.2.0",
       "full_version": "153.0.8010.36",
       "hint_arch": "arm",
       "bitness": "64",
@@ -887,8 +1175,17 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "26.2.0",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.47",
-      "platform_version": "26.2",
+      "platform_version": "26.2.0",
       "full_version": "153.0.8010.47",
       "hint_arch": "arm",
       "bitness": "64",
@@ -896,8 +1193,17 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "26.2.0",
+      "full_version": "153.0.8010.48",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.49",
-      "platform_version": "26.2",
+      "platform_version": "26.2.0",
       "full_version": "153.0.8010.49",
       "hint_arch": "arm",
       "bitness": "64",
@@ -906,7 +1212,7 @@
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.50",
-      "platform_version": "26.2",
+      "platform_version": "26.2.0",
       "full_version": "153.0.8010.50",
       "hint_arch": "arm",
       "bitness": "64",
@@ -915,7 +1221,7 @@
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.52",
-      "platform_version": "26.2",
+      "platform_version": "26.2.0",
       "full_version": "153.0.8010.52",
       "hint_arch": "arm",
       "bitness": "64",
@@ -924,8 +1230,26 @@
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.53",
-      "platform_version": "26.2",
+      "platform_version": "26.2.0",
       "full_version": "153.0.8010.53",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "26.2.0",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "26.2.0",
+      "full_version": "153.0.8010.55",
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
@@ -959,9 +1283,27 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "26.3.2",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.47",
       "platform_version": "26.3.2",
       "full_version": "153.0.8010.47",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "26.3.2",
+      "full_version": "153.0.8010.48",
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
@@ -1004,6 +1346,24 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "26.3.2",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "26.3.2",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.12",
       "platform_version": "26.4.1",
       "full_version": "153.0.8010.12",
@@ -1031,9 +1391,27 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "26.4.1",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.47",
       "platform_version": "26.4.1",
       "full_version": "153.0.8010.47",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "26.4.1",
+      "full_version": "153.0.8010.48",
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
@@ -1076,6 +1454,24 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "26.4.1",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "26.4.1",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.12",
       "platform_version": "26.5.2",
       "full_version": "153.0.8010.12",
@@ -1103,9 +1499,27 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "26.5.2",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.47",
       "platform_version": "26.5.2",
       "full_version": "153.0.8010.47",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "26.5.2",
+      "full_version": "153.0.8010.48",
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
@@ -1148,6 +1562,24 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "26.5.2",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "26.5.2",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.12",
       "platform_version": "26.6.2",
       "full_version": "153.0.8010.12",
@@ -1175,9 +1607,27 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "26.6.2",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.47",
       "platform_version": "26.6.2",
       "full_version": "153.0.8010.47",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "26.6.2",
+      "full_version": "153.0.8010.48",
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
@@ -1220,8 +1670,26 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "26.6.2",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "26.6.2",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.12",
-      "platform_version": "26.7",
+      "platform_version": "26.7.0",
       "full_version": "153.0.8010.12",
       "hint_arch": "arm",
       "bitness": "64",
@@ -1230,7 +1698,7 @@
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.27",
-      "platform_version": "26.7",
+      "platform_version": "26.7.0",
       "full_version": "153.0.8010.27",
       "hint_arch": "arm",
       "bitness": "64",
@@ -1239,7 +1707,7 @@
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.36",
-      "platform_version": "26.7",
+      "platform_version": "26.7.0",
       "full_version": "153.0.8010.36",
       "hint_arch": "arm",
       "bitness": "64",
@@ -1247,8 +1715,17 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "26.7.0",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.47",
-      "platform_version": "26.7",
+      "platform_version": "26.7.0",
       "full_version": "153.0.8010.47",
       "hint_arch": "arm",
       "bitness": "64",
@@ -1256,8 +1733,17 @@
       "form_factors": "Desktop"
     },
     {
+      "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "26.7.0",
+      "full_version": "153.0.8010.48",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.49",
-      "platform_version": "26.7",
+      "platform_version": "26.7.0",
       "full_version": "153.0.8010.49",
       "hint_arch": "arm",
       "bitness": "64",
@@ -1266,7 +1752,7 @@
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.50",
-      "platform_version": "26.7",
+      "platform_version": "26.7.0",
       "full_version": "153.0.8010.50",
       "hint_arch": "arm",
       "bitness": "64",
@@ -1275,7 +1761,7 @@
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.52",
-      "platform_version": "26.7",
+      "platform_version": "26.7.0",
       "full_version": "153.0.8010.52",
       "hint_arch": "arm",
       "bitness": "64",
@@ -1284,12 +1770,139 @@
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.53",
-      "platform_version": "26.7",
+      "platform_version": "26.7.0",
       "full_version": "153.0.8010.53",
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "26.7.0",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "26.7.0",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.12",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.12",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.27",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.27",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.36",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.36",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.37",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.37",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.47",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.47",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.48",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.48",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.49",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.49",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.50",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.50",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.52",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.52",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.53",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.53",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.54",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.54",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.55",
+      "platform_version": "27.0.0",
+      "full_version": "153.0.8010.55",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
     }
-  ]
+  ],
+  "device_kind": "desktop"
 }

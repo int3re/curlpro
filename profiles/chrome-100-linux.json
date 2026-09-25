@@ -7,7 +7,7 @@
     "ref": "e3922a2b2d976487cb4cf4e7b0ac290b3ce77f66",
     "path": "src/emulate/profile/chrome.rs",
     "date": "2026-09-22",
-    "note": "ClientHello, HTTP/2 frames and header sets are those captured for chrome-100-windows; wreq-util declares chrome 100 to use the same TLS and HTTP/2 configuration (v100: tls_options!('1',), http2_options!(1)). The User-Agent is the family's reduced shape with this version; sec-ch-ua and accept-language are wreq-util's. Nothing was seen on the wire for this version here."
+    "note": "ClientHello, HTTP/2 frames and header sets are those captured for chrome-100-windows; wreq-util declares chrome 100 to use the same TLS and HTTP/2 configuration (v100: tls_options!('1',), http2_options!(1)). The User-Agent is the family's reduced shape with this version; accept-language is wreq-util's. Nothing was seen on the wire for this version here. sec-ch-ua recomputed on 2026-09-26: wreq-util's string was wrong for this version (the GREASE brand lost its leading space); taken from the captured chrome-100-windows, the same version. The SETTINGS frame of chrome-100-windows is itself transcribed from wreq-util: its captured signature recorded none."
   },
   "headers": {
     "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.0.0 Safari/537.36",
@@ -18,7 +18,7 @@
       },
       {
         "key": "sec-ch-ua",
-        "value": "\"Not A;Brand\";v=\"99\", \"Chromium\";v=\"100\", \"Google Chrome\";v=\"100\""
+        "value": "\" Not A;Brand\";v=\"99\", \"Chromium\";v=\"100\", \"Google Chrome\";v=\"100\""
       },
       {
         "key": "sec-ch-ua-mobile",

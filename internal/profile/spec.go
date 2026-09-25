@@ -83,7 +83,7 @@ func specFromDeclared(t *TLSSpec) (*utls.ClientHelloSpec, error) {
 	if err != nil {
 		return nil, err
 	}
-	comp := t.CompressionMethods
+	comp := append([]uint8(nil), t.CompressionMethods...)
 	if len(comp) == 0 {
 		comp = []uint8{0} // null is the only one browsers send
 	}

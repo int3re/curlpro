@@ -122,7 +122,7 @@ def _settle(future: asyncio.Future, request_id: int) -> None:
 completions = Completions()
 
 
-async def settle(started: dict) -> tuple[Any, bytes]:
+async def settle(started: dict, on_orphan: Any = None) -> tuple[Any, bytes]:
     """Awaits the result of work already started: a request, a read, a receive.
 
     Cancelling the task drops the wait and cancels the work natively. For a
@@ -139,4 +139,14 @@ async def settle(started: dict) -> tuple[Any, bytes]:
     except asyncio.CancelledError:
         completions.forget(request_id)
         _call("curlpro_request_cancel", request_id)
+        # A cancellation can land after the result arrived and before the
+        # task resumed (asyncio.timeout, a TaskGroup sibling failing). The
+        # native call is gone then, and cancelling it frees nothing: an opened
+        # stream or socket would stay open for good. The caller's closer gets it.
+        if (on_orphan is not None and future.done() and not future.cancelled()
+                and future.exception() is None):
+            try:
+                on_orphan(future.result())
+            except Exception:  # noqa: BLE001 — the cancellation is what propagates
+                pass
         raise

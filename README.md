@@ -55,7 +55,7 @@ curlpro.register_profile({
 
 ## Features
 
-- **294 profiles**, 56 of them captured (Chrome 98-153, Edge, Firefox 133-156, Safari, Tor, Yandex Browser, okhttp 5.5) and 238 transcribed from wreq-util and marked as such — `list_profiles(measured=True)` is the captured list;
+- **302 profiles**: 42 captured whole (Chrome 118-153, Edge, Firefox 133-156, Safari, Tor, Yandex Browser, okhttp 5.5), 14 captured but for their HTTP/2 SETTINGS, 238 transcribed from wreq-util and 8 derived for the versions current on 2026-09-26 (Chrome 154, Edge 154, Opera 136, Safari 27) — each marked, and `list_profiles(measured=True)` is the captured list;
   mobile — Chrome and Yandex for Android, Safari for iOS.
 - **Every fingerprint layer at once** — TLS, HTTP/2, HTTP/3, HTTP/1.1 and WebSocket
   (table below).
@@ -151,7 +151,7 @@ The wheels on PyPI are built without the tag, so JA4H is present there.
 pip install curlpro
 ```
 
-Neither Go nor a compiler is needed: the native library and all 294 profiles are
+Neither Go nor a compiler is needed: the native library and all 302 profiles are
 already inside the wheel. Wheels are built for five platforms:
 
 | Platform | Wheel |
@@ -259,7 +259,7 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 | `keep_alive`, `max_idle_conns`, `idle_conn_timeout` | connection reuse and pool size |
 | `resolve`, `ip_version` | host address override, address family (`"4"`/`"6"`) |
 | `device`, `devices` | the identity for profiles with a pool — a phone, a Windows release and Chrome build, an iOS version — and your own list |
-| `max_response_size` | body size limit; without one an endless response eats memory. Binds `read()`, not `iter_content()` |
+| `max_response_size` | body size limit; an endless response would eat memory. Not given: 100 MiB for a buffered response, none for a stream; `0` means no limit. Binds `read()`, not `iter_content()` |
 | `hooks` | the `request`, `response` and `error` hooks |
 
 ## Request
@@ -412,8 +412,10 @@ with s.cookies.transaction():          # the same across several requests
     s.get(account).raise_for_status()  # an exception rolls the whole block back
 ```
 
-The snapshot is taken before sending: after a failure the jar has already changed
-and there is nothing left to copy. Half a login is worse than no login.
+A request's rollback is exact since 0.12: the native side logs the cookies the
+request changed and undoes just those, so cookies another thread's request
+received meanwhile stay. `transaction()` restores the snapshot it took before
+the block. Half a login is worse than no login.
 
 ## Errors and hooks
 

@@ -272,7 +272,9 @@ def measured_profiles(data: dict) -> dict[str, tuple]:
     out = {}
     for p in sorted(PROFILES.glob("*.json")):
         d = json.loads(p.read_text(encoding="utf-8"))
-        if d.get("source"):
+        # A capture whose SETTINGS alone are transcribed (source.covers) is a
+        # capture: it stays a base to stand on.
+        if d.get("source") and not d["source"].get("covers"):
             continue
         fam, ver, os_ = profile_family_version(p.stem)
         if fam not in ("chrome", "edge", "firefox", "safari"):
@@ -345,6 +347,22 @@ def write_profile(name: str, base: str, fam: str, ver: str, os_: str, ua: str, s
     (PROFILES / f"{name}.json").write_text(json.dumps(prof, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
 
+def fixed_brands(fam: str, ver: str, ua: str | None, sec: str) -> str:
+    """wreq-util's sec-ch-ua, or the right one where it is wrong."""
+    from chromium_brands import sec_ch_ua
+    m = re.search(r"Chrome/(\d+)\.", ua or "")
+    chromium = int(m.group(1)) if m else int(ver.split(".")[0])
+    if chromium >= 105:
+        product = {"chrome": "Google Chrome", "edge": "Microsoft Edge", "opera": "Opera"}[fam]
+        return sec_ch_ua(chromium, product, int(ver.split(".")[0]))
+    twin = f"{fam}-{int(ver.split('.')[0])}-windows"
+    if (PROFILES / f"{twin}.json").exists():
+        for h in (resolved(twin, "headers") or {}).get("order", []):
+            if h["key"].lower() == "sec-ch-ua" and h.get("value"):
+                return h["value"]
+    return sec
+
+
 def plan(data: dict, sha: str) -> tuple[list[dict], list[tuple[str, str]]]:
     measured = measured_profiles(data)
     # Existing profiles by (family, normalised version, os): "safari-18.0-macos"
@@ -381,6 +399,12 @@ def plan(data: dict, sha: str) -> tuple[list[dict], list[tuple[str, str]]]:
                     plat = b["platforms"][0] if b["platforms"] else None
                 wua = plat["ua"] if plat else None
                 sec = plat["sec_ch_ua"] if plat else None
+                # wreq-util copies brand lists between versions and leaves some
+                # unterminated; from Chromium 105 the list is computed as the
+                # browser computes it (chromium_brands.py), and the note below
+                # says so. Before 105 the captured twin of the version decides.
+                if sec and ofam in ("chrome", "edge", "opera"):
+                    sec = fixed_brands(ofam, ver, wua, sec)
                 base, http2, cnote = None, None, None
                 constructed = CONSTRUCTED.get((ofam, ver, variant))
                 if constructed:

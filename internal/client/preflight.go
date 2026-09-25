@@ -352,7 +352,10 @@ func (s *Session) preflight(r *Request, u *url.URL, unsafe []string, deadline ti
 	if err != nil {
 		return Preflight{}, fmt.Errorf("CORS preflight for %s %s: %w", method, u, err)
 	}
-	if !drain(resp, cancel) {
+	// Only an HTTP/1.1 connection is lost with an unread body: on HTTP/2
+	// closing the body resets its own stream, and a hard close here used to
+	// kill every other stream sharing the connection.
+	if !drain(resp, cancel) && used != nil && used.h2 == nil {
 		s.evict(used, true)
 	}
 	s.release(used)
@@ -448,7 +451,7 @@ func (s *Session) PreviewPreflight(r *Request) ([]string, []fingerprint.HeaderKV
 	if err := s.checkMode(&req); err != nil {
 		return nil, nil, false, err
 	}
-	if err := req.validate(s.jar != nil); err != nil {
+	if err := req.validate(s.cookieJar() != nil); err != nil {
 		return nil, nil, false, err
 	}
 	u, err := parseURL(req.URL)

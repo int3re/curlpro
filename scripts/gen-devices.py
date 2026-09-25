@@ -63,13 +63,14 @@ def main() -> int:
         nl = "\r\n" if b"\r\n" in raw else "\n"
         profile = json.loads(raw.decode("utf-8"))
         want = devices(with_arch)
-        if profile.get("devices") == want:
+        if profile.get("devices") == want and profile.get("device_kind") == "phone":
             continue
         if check:
             print(f"{name}: devices differ from the seed", file=sys.stderr)
             changed = True
             continue
         profile["devices"] = want
+        profile["device_kind"] = "phone"
         text = json.dumps(profile, ensure_ascii=False, indent=2) + "\n"
         io.open(path, "wb").write(text.replace("\n", nl).encode("utf-8"))
         print(f"{name}: wrote {len(want)} devices")

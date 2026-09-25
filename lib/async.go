@@ -240,12 +240,14 @@ func curlpro_async_pending() C.longlong {
 
 func okFrame(resp *client.Response) []byte {
 	return buildFrame(responseJSON{
-		Status:     resp.Status,
-		Proto:      resp.Proto,
-		Headers:    resp.Headers,
-		URL:        resp.URL,
-		History:    resp.History,
-		Preflights: resp.Preflights,
+		Status:        resp.Status,
+		Proto:         resp.Proto,
+		Headers:       resp.Headers,
+		URL:           resp.URL,
+		BodyLen:       len(resp.Body),
+		History:       resp.History,
+		Preflights:    resp.Preflights,
+		CookieChanges: resp.CookieChanges,
 	}, resp.Body, nil)
 }
 
@@ -279,6 +281,10 @@ func buildFrame(data any, body []byte, err error) []byte {
 	js, mErr := json.Marshal(r)
 	if mErr != nil {
 		js, _ = json.Marshal(result{Error: "encoding: " + mErr.Error()})
+		body = nil
+	}
+	if frameHeaderLen+len(js)+len(body) > maxFrame {
+		js, _ = json.Marshal(tooBigForFrame(len(body)))
 		body = nil
 	}
 	out := make([]byte, frameHeaderLen+len(js)+len(body))

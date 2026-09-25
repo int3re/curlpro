@@ -822,5 +822,6 @@
       "wow64": "?0",
       "form_factors": "Desktop"
     }
-  ]
+  ],
+  "device_kind": "desktop"
 }

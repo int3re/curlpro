@@ -32,23 +32,36 @@ def _profiles():
 
 def test_the_profile_count_and_families():
     names = NAMES
-    assert len(names) == 294
+    assert len(names) == 302
     assert set(names) <= set(curlpro.list_profiles())
-    import json
-    measured = [n for n in names if "source" not in json.loads((REPO / "profiles" / f"{n}.json").read_text("utf-8"))]
-    transcribed = [n for n in names if n not in measured]
-    assert len(measured) == 56 and len(transcribed) == 238
-    families = {}
-    for n in measured:
-        families[n.split("-")[0]] = families.get(n.split("-")[0], 0) + 1
-    assert families == {"chrome": 29, "edge": 7, "firefox": 5, "safari": 11,
-                        "tor": 1, "yandex": 1, "okhttp": 2}
-    families = {}
-    for n in transcribed:
-        families[n.split("-")[0]] = families.get(n.split("-")[0], 0) + 1
-    assert families == {"chrome": 108, "edge": 37, "firefox": 39, "safari": 22, "opera": 32}
-    assert "294 profiles" in TEXT and "56 of them are captured" in TEXT and "29 Chrome" in TEXT
-    assert "238 are transcribed" in TEXT and "238" in LLMS
+    # By the resolved profile, not the file: a captured delta inherits nothing
+    # from a base whose mark covers a part it brings itself (source.covers).
+    classes: dict[str, list[str]] = {"captured": [], "settings": [], "transcribed": [], "derived": []}
+    for n in names:
+        caps = curlpro.capabilities(n)
+        src = caps.get("source") or {}
+        if caps["measured"]:
+            classes["captured"].append(n)
+        elif src.get("covers"):
+            classes["settings"].append(n)
+        else:
+            classes[src["kind"]].append(n)
+
+    def families(group: str) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for n in classes[group]:
+            out[n.split("-")[0]] = out.get(n.split("-")[0], 0) + 1
+        return out
+
+    assert families("captured") == {"chrome": 20, "edge": 4, "firefox": 5, "safari": 9,
+                                    "tor": 1, "yandex": 1, "okhttp": 2}
+    assert families("settings") == {"chrome": 9, "edge": 3, "safari": 2}
+    assert families("transcribed") == {"chrome": 108, "edge": 37, "firefox": 39, "safari": 22, "opera": 32}
+    assert families("derived") == {"chrome": 3, "edge": 1, "opera": 2, "safari": 2}
+    assert "302 profiles" in TEXT and "42 of them are captured whole" in TEXT and "20 Chrome" in TEXT
+    assert "14 more are captured but for their HTTP/2 SETTINGS" in TEXT
+    assert "238 are transcribed" in TEXT and "8 are derived" in TEXT
+    assert "238" in LLMS and "302" in LLMS
 
 
 def test_the_number_of_distinct_ja4_values():

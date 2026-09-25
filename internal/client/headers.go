@@ -12,7 +12,7 @@ import (
 // cookieHeader builds the cookie header value from the session jar, after
 // the browser's rules for the request (cookiesFor).
 func (s *Session) cookieHeader(r *Request, u *url.URL) string {
-	if s.jar == nil {
+	if s.cookieJar() == nil {
 		return ""
 	}
 	cookies := s.cookiesFor(r, u)

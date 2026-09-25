@@ -89,4 +89,13 @@ func TaintsOriginOnNavigationRedirect(family string) bool {
 }
 
 // Family is the browser family of the profile: "safari" of safari-26-ios.
-func (p *Profile) Family() string { return familyOf(p.Name) }
+func (p *Profile) Family() string {
+	if p.family != "" {
+		return p.family
+	}
+	return familyOf(p.Name)
+}
+
+// knownFamily reports a family the library has browser behaviour for: a
+// cookie policy, a preflight layout, the Origin rule on redirects.
+func knownFamily(f string) bool { return CookiePolicyFor(f) != nil || f == "okhttp" }

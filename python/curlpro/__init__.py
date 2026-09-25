@@ -18,7 +18,8 @@ belongs to the browser and is not covered here.
 
 from __future__ import annotations
 
-from ._ffi import (
+from . import errors
+from .errors import (
     ConfigurationError,
     CORSError,
     CurlProError,
@@ -30,13 +31,29 @@ from ._ffi import (
     Timeout,
     WebSocketClosed,
 )
+from ._headers import Headers
+from ._kwargs import RequestKwargs
 from .expect import Expect, ExpectationFailed
 from .fingerprint import Fingerprint
 from .audit import Finding, audit
 from .persona import Persona, load_all
 from .aio import AsyncSession, AsyncStreamResponse, AsyncWebSocket
 from .cookies import Cookie, Cookies
-from .session import Preflight, Redirect, Response, Session, delete, get, head, options, patch, post, put, request
+from .session import (
+    DEFAULT_MAX_RESPONSE_SIZE,
+    Preflight,
+    Redirect,
+    Response,
+    Session,
+    delete,
+    get,
+    head,
+    options,
+    patch,
+    post,
+    put,
+    request,
+)
 from .profiles import (
     Profile,
     capabilities,
@@ -59,6 +76,7 @@ __all__ = [
     "ConfigurationError",
     "CORSError",
     "CurlProError",
+    "DEFAULT_MAX_RESPONSE_SIZE",
     "Expect",
     "Finding",
     "ExpectationFailed",
@@ -70,7 +88,9 @@ __all__ = [
     "ProxyAuthError",
     "ProxyError",
     "HTTPError",
+    "Headers",
     "Redirect",
+    "RequestKwargs",
     "Timeout",
     "Profile",
     "Response",
@@ -79,6 +99,7 @@ __all__ = [
     "WebSocket",
     "WebSocketClosed",
     "audit",
+    "errors",
     "capabilities",
     "delete",
     "ensure_loaded",
@@ -97,7 +118,7 @@ __all__ = [
     "request",
 ]
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 try:  # an installed distribution is the authority; a source checkout has none
     from importlib.metadata import version as _dist_version

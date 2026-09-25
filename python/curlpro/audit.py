@@ -408,10 +408,16 @@ def _check_transcribed(profile: str, data: dict) -> list[Finding]:
     src = data.get("source")
     if not src:
         return []
+    kind = src.get("kind") or "transcribed"
+    covers = src.get("covers") or []
+    if covers:
+        what = f"profile {profile}: {', '.join(covers)} {kind} from {src.get('from', '?')}, not captured"
+    else:
+        what = f"profile {profile} is {kind} from {src.get('from', '?')}, not captured"
     return [Finding(
         code="transcribed_profile",
         level="medium",
-        what=f"profile {profile} is transcribed from {src.get('from', '?')}, not captured",
+        what=what,
         why=(src.get("note") or "another project's description of the browser, taken on "
              "trust: nothing this profile sends was seen on the wire by this project"),
         fix="prefer a captured profile of the same family — capabilities(name)['measured'] "

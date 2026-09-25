@@ -38,6 +38,18 @@ from .session import Session
 FORMAT = 1
 
 
+
+def _draw_device(profile: str) -> str | None:
+    """One device of the profile's pool, or None when it has none."""
+    import random
+
+    from .profiles import capabilities
+    try:
+        devices = capabilities(profile).get("devices") or []
+    except Exception:  # noqa: BLE001 — an unknown profile fails where it is used
+        return None
+    return random.choice(devices) if devices else None
+
 class Persona:
     """One network identity: profile, exit, device, headers and cookies."""
 
@@ -61,6 +73,11 @@ class Persona:
         self.profile = profile
         self.name = name or uuid.uuid4().hex[:12]
         self.proxy = proxy
+        # "random" is drawn once, here, and the persona keeps that device: it
+        # used to be saved as "random", and every session of the "same
+        # machine" came up with another phone.
+        if device is not None and device.lower() == "random":
+            device = _draw_device(profile) or device
         self.device = device
         #: Session headers carried with the identity — Accept-Language above
         #: all, which is as much a part of looking consistent as the TLS is.

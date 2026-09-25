@@ -7,9 +7,11 @@
 package profile
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"math/big"
 	"path"
@@ -36,8 +38,23 @@ type Profile struct {
 	// WebSocket describes the handshake: its header set and order differ from
 	// the navigation ones.
 	WebSocket WebSocketSpec `json:"websocket,omitempty"`
-	// Devices are the phones a session can present itself as.
+	// Devices are the identities a session can present itself as: phones on
+	// the Android profiles and, since 0.11, a Windows or macOS release with a
+	// Chrome build on the Chromium desktops, an iOS version on the iPhone, a
+	// distribution token on Linux Firefox. DeviceKind says which.
 	Devices []Device `json:"devices,omitempty"`
+	// family is the browser family the chain says: the profile's own name
+	// when it names one, else the nearest ancestor's. Set by Resolve, so that
+	// Profile.derive("acme-153") on chrome-153-windows keeps Chromium's cookie
+	// policy, preflight layout and redirect rules — keyed on the name alone,
+	// such a delta used to lose all three, and send every cookie cross-site.
+	family string
+
+	// DeviceKind names what the entries of Devices are: "phone", "desktop",
+	// "iphone" or "distro". Empty on a profile with devices means "phone" —
+	// the only kind before 0.11, and what a profile written for an older
+	// library holds.
+	DeviceKind string `json:"device_kind,omitempty"`
 	// ClientHints are the high-entropy hints, when the browser supports them.
 	ClientHints ClientHintsSpec `json:"client_hints,omitempty"`
 
@@ -54,10 +71,20 @@ type Profile struct {
 	Source *SourceSpec `json:"source,omitempty"`
 }
 
-// SourceSpec is the provenance of a profile that was not captured here.
+// SourceSpec is the provenance of a profile, or a part of one, that was not
+// captured here.
 type SourceSpec struct {
-	// Kind is "transcribed": another project's description, copied.
+	// Kind is "transcribed" (another project's description, copied) or
+	// "derived" (built here from published facts about the browser — a
+	// release note naming its Chromium, a real User-Agent — on a captured
+	// twin, without the browser on a stand).
 	Kind string `json:"kind"`
+	// Covers names the parts the source supplied when it is not the whole
+	// profile: "http2.settings" (the SETTINGS frame and the connection
+	// WINDOW_UPDATE). A delta that brings its own of every covered part is
+	// not marked by it — a captured Safari 17 on safari-15.5-macos, whose
+	// SETTINGS alone are transcribed, is measured.
+	Covers []string `json:"covers,omitempty"`
 	// From names the project, e.g. "github.com/0x676e67/wreq-util".
 	From string `json:"from"`
 	// Ref is the commit the data was read at; Path the file(s) inside it.
@@ -213,8 +240,40 @@ func quoteHint(v string) string {
 	return "\"" + v + "\""
 }
 
-// HasDevices reports whether the profile offers phones to choose from.
+// HasDevices reports whether the profile offers identities to choose from.
 func (p *Profile) HasDevices() bool { return len(p.Devices) > 0 }
+
+// coverable are the parts source.covers may name, with the test of whether a
+// profile file brings its own of that part.
+var coverable = map[string]func(*Profile) bool{
+	"http2.settings": func(p *Profile) bool { return p.HTTP2.Settings != nil },
+}
+
+// overridesAll reports whether this profile file supplies every named part.
+func (p *Profile) overridesAll(parts []string) bool {
+	for _, part := range parts {
+		has, ok := coverable[part]
+		if !ok || !has(p) {
+			return false
+		}
+	}
+	return true
+}
+
+// DeviceKinds are the values device_kind may take.
+var DeviceKinds = []string{"phone", "desktop", "iphone", "distro"}
+
+// DevicesKind is what the profile's devices are, "" without any; a pool
+// with no kind declared is phones, as every pool was before 0.11.
+func (p *Profile) DevicesKind() string {
+	switch {
+	case len(p.Devices) == 0:
+		return ""
+	case p.DeviceKind == "":
+		return "phone"
+	}
+	return p.DeviceKind
+}
 
 // Capabilities is what a profile can do, answerable without sending anything.
 //
@@ -233,8 +292,14 @@ type Capabilities struct {
 	// Protocols are the transports it can speak: "http1" and "h2" always
 	// (the server chooses through ALPN), "h3" with an http3 section.
 	Protocols []string `json:"protocols"`
-	// Devices lists the phones it offers, empty for a desktop profile.
-	Devices []string `json:"devices"`
+	// Devices lists the identities it offers, and DeviceKind what they are:
+	// "phone" (a phone model and its Android), "desktop" (a Windows or macOS
+	// release, a CPU and a Chrome build), "iphone" (an iOS version), "distro"
+	// (a Linux distribution token). Both empty on a profile without a pool.
+	// Until 0.11 every pool was a phone, and code that read "has devices" as
+	// "is a phone" was right; since then it needs DeviceKind.
+	Devices    []string `json:"devices"`
+	DeviceKind string   `json:"device_kind"`
 	// ClientHints is true when the profile answers Accept-CH with
 	// high-entropy hints; WebSocket, when it carries a handshake template;
 	// HTTP1Set, when it has a measured HTTP/1.1 order rather than an
@@ -269,7 +334,7 @@ func (p *Profile) Capabilities() Capabilities {
 	c := Capabilities{
 		Name:        p.Name,
 		BasedOn:     p.BasedOn,
-		Family:      familyOf(p.Name),
+		Family:      p.Family(),
 		Modes:       []string{"navigate"},
 		Protocols:   []string{"http1", "h2"},
 		Devices:     []string{},
@@ -280,7 +345,7 @@ func (p *Profile) Capabilities() Capabilities {
 		// A template means the chosen device reaches the string itself.
 		UserAgentVaries: p.Headers.UserAgentTemplate != "" && len(p.Devices) > 0,
 		DerivedFetch:    p.Fetch.Derived,
-		Cookies:         CookiePolicyFor(familyOf(p.Name)),
+		Cookies:         CookiePolicyFor(p.Family()),
 		Measured:        p.Source == nil,
 		Source:          p.Source,
 	}
@@ -293,6 +358,7 @@ func (p *Profile) Capabilities() Capabilities {
 	for _, d := range p.Devices {
 		c.Devices = append(c.Devices, d.Name)
 	}
+	c.DeviceKind = p.DevicesKind()
 	for _, h := range p.Headers.Order {
 		if strings.HasPrefix(strings.ToLower(h.Key), "sec-fetch-") && h.For("GET") != "" {
 			c.FetchMetadata = true
@@ -681,6 +747,7 @@ func (r *Registry) LoadFS(fsys fs.FS, dir string) error {
 	if err != nil {
 		return fmt.Errorf("reading profile directory %s: %w", dir, err)
 	}
+	var batch []*Profile
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
@@ -689,27 +756,77 @@ func (r *Registry) LoadFS(fsys fs.FS, dir string) error {
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", e.Name(), err)
 		}
-		if err := r.Register(b); err != nil {
+		p, err := parseProfile(b)
+		if err != nil {
 			return fmt.Errorf("%s: %w", e.Name(), err)
 		}
+		batch = append(batch, p)
 	}
-	return nil
+	// All of the directory or none of it: the files are registered together,
+	// because a delta may come before its parent in name order, and checked
+	// together, so that one bad file leaves the registry as it was.
+	return r.registerChecked(batch)
 }
 
 // Register parses and registers a profile from JSON.
+//
+// When its whole chain is registered the profile must resolve — no cycle, a
+// ClientHello somewhere in it, nothing validate refuses — or it is refused and
+// the registry is unchanged; such an error used to surface only when a session
+// was opened with it. A profile whose parent is not registered yet is accepted
+// as before: profiles may arrive in any order, and Resolve names the gap.
 func (r *Registry) Register(data []byte) error {
+	p, err := parseProfile(data)
+	if err != nil {
+		return err
+	}
+	return r.registerChecked([]*Profile{p})
+}
+
+func parseProfile(data []byte) (*Profile, error) {
 	var p Profile
-	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields() // a typo in a field must not silently drop a setting
 	if err := dec.Decode(&p); err != nil {
-		return fmt.Errorf("parsing profile: %w", err)
+		return nil, fmt.Errorf("parsing profile: %w", err)
+	}
+	// Two profiles pasted into one file, or a truncated edit, would otherwise
+	// load the first half silently.
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, fmt.Errorf("parsing profile: data after the profile object")
 	}
 	if p.Name == "" {
-		return fmt.Errorf("profile has no name")
+		return nil, fmt.Errorf("profile has no name")
 	}
+	return &p, nil
+}
+
+// registerChecked adds profiles, resolves each of them, and puts the registry
+// back as it was if any fails.
+func (r *Registry) registerChecked(batch []*Profile) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.raw[p.Name] = &p
+	previous := make(map[string]*Profile, len(batch))
+	for _, p := range batch {
+		if _, seen := previous[p.Name]; !seen {
+			previous[p.Name] = r.raw[p.Name]
+		}
+		r.raw[p.Name] = p
+	}
+	r.mu.Unlock()
+	for _, p := range batch {
+		if _, err := r.Resolve(p.Name); err != nil && !r.awaitsParent(p.Name) {
+			r.mu.Lock()
+			for name, old := range previous {
+				if old == nil {
+					delete(r.raw, name)
+				} else {
+					r.raw[name] = old
+				}
+			}
+			r.mu.Unlock()
+			return err
+		}
+	}
 	return nil
 }
 
@@ -746,6 +863,12 @@ func (r *Registry) Resolve(name string) (*Profile, error) {
 	// chain is already applied — and re-resolving a resolved profile is not a
 	// thing the registry does.
 	out.BasedOn = chain[0].BasedOn
+	for _, link := range chain {
+		if f := familyOf(link.Name); knownFamily(f) {
+			out.family = f
+			break
+		}
+	}
 	if err := out.validate(); err != nil {
 		return nil, fmt.Errorf("profile %q: %w", name, err)
 	}
@@ -781,6 +904,28 @@ func (p *Profile) validate() error {
 				"recapture the profile on a fresh connection, where padding sits in its place")
 		}
 	}
+	if p.Source != nil {
+		switch p.Source.Kind {
+		case "transcribed", "derived":
+		default:
+			return fmt.Errorf("source.kind %q is not transcribed or derived", p.Source.Kind)
+		}
+		for _, part := range p.Source.Covers {
+			if _, ok := coverable[part]; !ok {
+				return fmt.Errorf("source.covers names %q, which is not a part a source can cover", part)
+			}
+		}
+	}
+	// A misspelt kind would read as "no kind" and pass for a phone.
+	if p.DeviceKind != "" {
+		known := false
+		for _, k := range DeviceKinds {
+			known = known || p.DeviceKind == k
+		}
+		if !known {
+			return fmt.Errorf("device_kind %q is not one of %s", p.DeviceKind, strings.Join(DeviceKinds, ", "))
+		}
+	}
 	// On the wire the weight is one less and fits a byte (RFC 7540): a value
 	// above 256 would wrap silently when cast to uint8.
 	if w := p.HTTP2.StreamWeight; w != nil && *w > 256 {
@@ -804,6 +949,22 @@ func (p *Profile) validate() error {
 }
 
 // chain collects the chain from leaf to root, catching cycles and dead ends.
+// awaitsParent reports a chain that ends in a profile not registered yet.
+func (r *Registry) awaitsParent(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	seen := map[string]bool{}
+	for cur := name; cur != "" && !seen[cur]; {
+		seen[cur] = true
+		p, ok := r.raw[cur]
+		if !ok {
+			return true
+		}
+		cur = p.BasedOn
+	}
+	return false
+}
+
 func (r *Registry) chain(name string) ([]*Profile, error) {
 	var out []*Profile
 	seen := map[string]bool{}
@@ -847,6 +1008,8 @@ func merge(dst, src *Profile) {
 	// whatever its ancestors said.
 	if src.Source != nil {
 		dst.Source = src.Source
+	} else if dst.Source != nil && len(dst.Source.Covers) > 0 && src.overridesAll(dst.Source.Covers) {
+		dst.Source = nil
 	}
 	// ClientHello sources are mutually exclusive: one set in the child displaces
 	// the inherited one, otherwise two different descriptions would mix.
@@ -944,8 +1107,14 @@ func merge(dst, src *Profile) {
 	if src.Headers.UserAgentTemplate != "" {
 		dst.Headers.UserAgentTemplate = src.Headers.UserAgentTemplate
 	}
+	// A pool and its kind travel together: a delta that brings its own
+	// devices without a kind brings phones (the pre-0.11 meaning), whatever
+	// the parent's pool was.
 	if src.Devices != nil {
 		dst.Devices = src.Devices
+		dst.DeviceKind = src.DeviceKind
+	} else if src.DeviceKind != "" {
+		dst.DeviceKind = src.DeviceKind
 	}
 	if src.ClientHints.Values != nil {
 		dst.ClientHints.Values = src.ClientHints.Values

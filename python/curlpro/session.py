@@ -8,12 +8,14 @@ import json
 import sys
 import time
 import traceback
-from typing import Any, Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
-from ._ffi import HTTPError, _call, call_framed, encode
+from ._ffi import _call, call_framed, encode
+from ._headers import Headers
+from .errors import HTTPError
 from .cookies import Cookies
-from .encoding import detect as detect_encoding
+from .encoding import detect as detect_encoding, without_bom
 from .expect import Expect
 from .fingerprint import Fingerprint
 from .headers import SessionHeaders
@@ -50,6 +52,17 @@ def _ms(value: float | None, name: str) -> int | None:
     if v < 0:
         raise ValueError(f"{name} cannot be negative, got {value}")
     return int(v * 1000)
+
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
+
+    from ._kwargs import OneOffKwargs, RequestKwargs, _OneOffRest
+
+#: The body limit a buffered response gets when ``max_response_size`` is not
+#: given: 100 MiB. Streams are not bound by it — reading in chunks is how a
+#: large body is meant to be handled.
+DEFAULT_MAX_RESPONSE_SIZE = 100 * 1024 * 1024
 
 
 def _size(value: Any) -> int:
@@ -157,12 +170,19 @@ def _retry_config(
     """
     if retries is None:
         return None
+    if isinstance(retries, bool) or not isinstance(retries, int) or retries < 0:
+        raise ValueError(f"retries must be a non-negative int, got {retries!r}")
+    for name, value in (("retry_backoff", backoff), ("retry_max_backoff", max_backoff)):
+        if value is not None and value < 0:
+            raise ValueError(f"{name} cannot be negative, got {value}")
     return {
         "attempts": int(retries),
         "statuses": list(statuses) if statuses else None,
         "methods": list(methods) if methods else None,
-        "backoff_ms": int((backoff or 0.2) * 1000),
-        "max_backoff_ms": int((max_backoff or 10.0) * 1000),
+        # None keeps the native default; 0 is honoured as no pause (it used
+        # to be read as "not given", and retry_backoff=0 slept 0.2 s).
+        "backoff_ms": None if backoff is None else int(backoff * 1000),
+        "max_backoff_ms": None if max_backoff is None else int(max_backoff * 1000),
         "respect_retry_after": respect_retry_after,
     }
 
@@ -183,12 +203,16 @@ def _build_multipart(
     fields = dict(fields or {})
     described: list[dict[str, str]] = []
     sizes: list[int] = []
-    blob = bytearray()
+    chunks: list[bytes] = []
 
     for field, value in (files or {}).items():
         content_type = ""
-        if isinstance(value, (bytes, bytearray)):
-            filename, content = field, bytes(value)
+        if isinstance(value, (bytes, bytearray, memoryview)) or hasattr(value, "read"):
+            filename, content = getattr(value, "name", None) or field, value
+            if not isinstance(filename, str):
+                filename = field
+            else:
+                filename = filename.replace("\\", "/").rsplit("/", 1)[-1]
         elif isinstance(value, tuple):
             if len(value) == 2:
                 filename, content = value
@@ -197,15 +221,19 @@ def _build_multipart(
             else:
                 raise ValueError(f"files[{field!r}]: expected a tuple of 2 or 3 items")
         else:
-            raise TypeError(f"files[{field!r}]: expected bytes or a tuple")
+            raise TypeError(f"files[{field!r}]: expected bytes, a file object or a tuple")
 
+        # A file object (open(...), BytesIO) is read, as requests reads it.
+        if hasattr(content, "read"):
+            content = content.read()
         if isinstance(content, str):
             content = content.encode("utf-8")
+        content = bytes(content)
         described.append(
             {"field": field, "filename": filename, "content_type": content_type}
         )
         sizes.append(len(content))
-        blob += content
+        chunks.append(content)
 
     meta = {
         "fields": fields,
@@ -213,7 +241,7 @@ def _build_multipart(
         "files": described,
         "file_sizes": sizes,
     }
-    return meta, bytes(blob)
+    return meta, b"".join(chunks)
 
 
 def _with_params(url: str, params: Mapping[str, Any] | Iterable[tuple[str, Any]] | None) -> str:
@@ -224,15 +252,24 @@ def _with_params(url: str, params: Mapping[str, Any] | Iterable[tuple[str, Any]]
     """
     if not params:
         return url
-    items: list[tuple[str, str]] = []
+    if isinstance(params, (str, bytes)):
+        # A ready query string, as requests takes it: appended as it is.
+        raw = params.decode("utf-8") if isinstance(params, bytes) else params
+        parts = urlsplit(url)
+        query = parts.query + "&" + raw.lstrip("?&") if parts.query else raw.lstrip("?")
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+    items: list[tuple[str, Any]] = []
     pairs = params.items() if hasattr(params, "items") else params
     for key, value in pairs:
         if value is None:
             continue
         if isinstance(value, (list, tuple, set)):
-            items.extend((key, str(v)) for v in value if v is not None)
+            items.extend((key, v if isinstance(v, bytes) else str(v)) for v in value if v is not None)
         elif isinstance(value, bool):
             items.append((key, "true" if value else "false"))
+        elif isinstance(value, bytes):
+            # Percent-encoded as bytes; str() gave "b'v'".
+            items.append((key, value))
         else:
             items.append((key, str(value)))
     if not items:
@@ -344,7 +381,8 @@ def _request_meta(
     url = _with_params(url, params)
     if basic := _auth_header(auth):
         headers = dict(headers or {})
-        headers.setdefault("Authorization", basic)
+        if not any(k.lower() == "authorization" for k in headers):
+            headers["Authorization"] = basic
     """Builds the request frame. Shared by request() and stream(): the stream
     used to keep its own cut-down copy without timeout, proxy, retries or files."""
     hdrs, suppress = _split_headers(headers)
@@ -362,7 +400,11 @@ def _request_meta(
         if data is not None:
             raise ValueError("pass either data or json_body, not both")
         data = encode(json_body)
-        hdrs.setdefault("content-type", "application/json")
+        # The caller's Content-Type in any spelling wins: "Content-Type:
+        # text/plain" is how a page avoids a CORS preflight, and the default
+        # used to overwrite it because it looked for the lowercase name only.
+        if not any(k.lower() == "content-type" for k in hdrs):
+            hdrs["content-type"] = "application/json"
 
     if isinstance(data, str):
         data = data.encode("utf-8")
@@ -420,6 +462,7 @@ class Preflight:
     __slots__ = ("url", "status", "headers", "cached")
 
     def __init__(self, url: str, status: int, headers: dict[str, list[str]], cached: bool = False):
+        headers = Headers(headers)
         self.url = url
         self.status = status
         self.headers = headers
@@ -460,7 +503,8 @@ class Response:
                  history: list | None = None, preflights: list | None = None):
         self.status = status
         self.proto = proto
-        self.headers = headers
+        #: Every header of the response; lookups ignore case (see Headers).
+        self.headers = Headers(headers)
         self.content = content
         self.url = url
         #: Time of the whole request, redirects and retries included, in seconds.
@@ -513,16 +557,16 @@ class Response:
 
     @property
     def text(self) -> str:
-        return self.content.decode(self.encoding, errors="replace")
+        return without_bom(self.content, self.encoding).decode(self.encoding, errors="replace")
 
-    def json(self) -> Any:
-        """Parses the body as JSON.
+    def json(self, **kwargs: Any) -> Any:
+        """Parses the body as JSON; keyword arguments go to :func:`json.loads`.
 
         The bytes are handed over untouched: json.loads recognises UTF-8,
         UTF-16 and UTF-32 itself, per RFC 8259. The header charset is no help
         here — sites declare anything in it while the body is UTF-8 anyway.
         """
-        return json.loads(self.content)
+        return json.loads(self.content, **kwargs)
 
     @property
     def ok(self) -> bool:
@@ -577,7 +621,10 @@ class Session:
         ``ALL_PROXY`` environment variables, honouring ``NO_PROXY``. An
         explicit ``proxy`` always wins
     :param max_response_size: body size limit in bytes; 0 means no limit.
-        Without one, a server with an endless response eats the process memory
+        Without one, a server with an endless response eats the process memory.
+        Not given, a buffered response is capped at 100 MiB
+        (:data:`DEFAULT_MAX_RESPONSE_SIZE`, since 0.12) and a stream is not
+        capped; given, the number binds both, a stream's ``read()`` included
     :param timeout: limit for the whole request including redirects, in
         seconds. A ``(connect, total)`` pair sets a separate limit on
         establishing the connection — name resolution, TCP and the TLS
@@ -685,7 +732,7 @@ class Session:
         verify: bool | str = True,
         cert: tuple[str, str] | None = None,
         trust_env: bool = True,
-        max_response_size: int = 0,
+        max_response_size: int | None = None,
         timeout: float | tuple[float, float] = 30.0,
         connect_timeout: float | None = None,
         response_timeout: float | None = None,
@@ -741,7 +788,8 @@ class Session:
                     # sees it as it was when the process started, so an
                     # os.environ change at runtime never reaches it.
                     "trust_env": False,
-                    "max_response_size": _size(max_response_size),
+                    "max_response_size": (DEFAULT_MAX_RESPONSE_SIZE if max_response_size is None
+                                          else _size(max_response_size)),
                     "timeout_ms": _ms(session_total, "timeout") or 0,
                     "connect_timeout_ms": _ms(session_connect, "connect_timeout") or 0,
                     "response_timeout_ms": _ms(response_timeout, "response_timeout") or 0,
@@ -777,10 +825,13 @@ class Session:
         )["session"]
         self.impersonate = impersonate
         self._trust_env = trust_env
+        #: The session's own proxy: it beats the environment (see _route).
+        self._proxy = proxy or ""
         self._closed = False
         # Kept for the streaming path: the limit lives in the native part,
-        # which never sees a stream read as a whole body.
-        self._max_response_size = _size(max_response_size)
+        # which never sees a stream read as a whole body. The default binds
+        # buffered responses only.
+        self._max_response_size = 0 if max_response_size is None else _size(max_response_size)
         #: Headers added to every request of the session. Kept apart from
         #: the profile's, so clear() restores the plain fingerprint.
         self.headers = SessionHeaders(self._id)
@@ -873,14 +924,7 @@ class Session:
         if self._closed:
             raise RuntimeError("session is closed")
 
-        # The snapshot is taken before sending: after a failure there is nothing
-        # to take it from, and the jar has already changed.
-        saved = self.cookies.snapshot() if rollback_cookies else None
-
-        if proxy is None and self._trust_env:
-            # An explicit proxy beats the environment; False means "go
-            # directly" and is not overridden either.
-            proxy = env_proxy(url)
+        proxy = self._route(url, proxy)
 
         meta, body = _request_meta(
             method, url, headers=headers, params=params, auth=auth,
@@ -896,14 +940,21 @@ class Session:
             respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page, credentials=credentials,
             preflight=preflight,
         )
+        if rollback_cookies:
+            # The native side logs what this request changes in the jar and
+            # undoes it itself when the request fails; the log comes back for
+            # the failures only Python sees (an expectation, a hook).
+            meta["track_cookies"] = True
         for hook in self.hooks["request"]:
             replaced = hook(meta)
             if replaced is not None:
                 meta = replaced
 
         started = time.perf_counter()
+        changes: list | None = None
         try:
             payload, content = call_framed("curlpro_request", self._id, body=body, meta=meta)
+            changes = payload.get("cookie_changes")
             spent = time.perf_counter() - started
             return self._after(Response(
                 status=payload["status"],
@@ -917,9 +968,9 @@ class Session:
                 preflights=_preflights(payload.get("preflights")),
             ), expect)
         except BaseException as exc:
-            raise self._failed(exc, saved) from None
+            raise self._failed(exc, changes if rollback_cookies else None) from None
 
-    def _failed(self, exc: BaseException, saved: "list[dict[str, Any]] | None") -> BaseException:
+    def _failed(self, exc: BaseException, changes: "list[dict[str, Any]] | None") -> BaseException:
         """Handles a failed request: rolls the cookies back and runs the hooks.
 
         The rollback comes first: an error hook may itself go to the network,
@@ -929,8 +980,10 @@ class Session:
         Returns the exception to raise — a hook may replace it, which is how a
         library error is turned into one of the caller's own.
         """
-        if saved is not None:
-            self.cookies.restore(saved)
+        # A request that failed natively was undone there; a response that
+        # failed here (an expectation, a hook) is undone from its own log.
+        if changes:
+            self.cookies._undo(changes)
         # Cancellation and Ctrl+C are not request failures but control flow:
         # a hook returning its own exception in their place would swallow the
         # cancellation, and the task would never stop.
@@ -993,6 +1046,8 @@ class Session:
         url: str,
         *,
         headers: Mapping[str, str | None] | None = None,
+        params: Mapping[str, Any] | Iterable[tuple[str, Any]] | None = None,
+        auth: tuple[str, str] | str | None = None,
         data: bytes | str | None = None,
         json_body: Any = None,
         files: Mapping[str, Any] | None = None,
@@ -1030,8 +1085,9 @@ class Session:
         if self._closed:
             raise RuntimeError("session is closed")
 
+        proxy = self._route(url, proxy)
         meta, body = _request_meta(
-            method, url, headers=headers, data=data, json_body=json_body,
+            method, url, headers=headers, params=params, auth=auth, data=data, json_body=json_body,
             files=files, fields=fields, body_file=body_file,
             header_order=header_order, default_headers=default_headers,
             cookies=cookies, session_headers=session_headers,
@@ -1043,6 +1099,12 @@ class Session:
             respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page, credentials=credentials,
             preflight=preflight,
         )
+        # The request hooks see a stream's frame too, as they do on the async
+        # side: a hook that adds a signature header must not miss downloads.
+        for hook in self.hooks["request"]:
+            replaced = hook(meta)
+            if replaced is not None:
+                meta = replaced
         payload, _ = call_framed("curlpro_stream_open", self._id, body=body, meta=meta)
         return StreamResponse(payload, self._max_response_size)
 
@@ -1066,28 +1128,48 @@ class Session:
         if self._closed:
             raise RuntimeError("session is closed")
         return ws_connect(self._id, url, headers=headers, subprotocols=subprotocols,
-                          timeout=timeout, max_message_size=max_message_size)
+                          timeout=timeout, max_message_size=max_message_size,
+                          proxy=self._route(url))
 
-    def get(self, url: str, **kw: Any) -> Response:
+    def get(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return self.request("GET", url, **kw)
 
-    def post(self, url: str, **kw: Any) -> Response:
+    def post(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return self.request("POST", url, **kw)
 
-    def put(self, url: str, **kw: Any) -> Response:
+    def put(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return self.request("PUT", url, **kw)
 
-    def patch(self, url: str, **kw: Any) -> Response:
+    def patch(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return self.request("PATCH", url, **kw)
 
-    def delete(self, url: str, **kw: Any) -> Response:
+    def delete(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return self.request("DELETE", url, **kw)
 
-    def head(self, url: str, **kw: Any) -> Response:
+    def head(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return self.request("HEAD", url, **kw)
 
-    def options(self, url: str, **kw: Any) -> Response:
+    def options(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return self.request("OPTIONS", url, **kw)
+
+    def _route(self, url: str, proxy: str | bool | None = None) -> str | bool | None:
+        """The proxy a request, stream or socket to ``url`` goes through.
+
+        The request's own ``proxy`` wins; ``None`` means "the session's". A
+        session with a proxy of its own keeps it — the native side applies it
+        when the request names none. Without one, ``trust_env`` reads the
+        environment for this URL, ``NO_PROXY`` included. Until 0.12 the
+        environment beat an explicit session proxy on requests, and streams
+        and WebSockets never read it: they went direct, from the real address.
+        """
+        if proxy is not None or self._proxy:
+            return proxy
+        if not self._trust_env:
+            return None
+        scheme, sep, rest = url.partition("://")
+        plain = {"ws": "http", "wss": "https"}.get(scheme.lower(), scheme) + sep + rest
+        # "" is "go direct": NO_PROXY excluded the host, or nothing is set.
+        return env_proxy(plain) or ""
 
     def fingerprint(self, url: str = "https://example.com/") -> "Fingerprint":
         """What a server would see from this session — without sending anything.
@@ -1277,42 +1359,43 @@ class Session:
 
 def request(method: str, url: str, *, impersonate: str = DEFAULT_PROFILE,
             verify: bool = True, timeout: float | tuple[float, float] = 30.0, proxy: str | None = None,
-            **kw: Any) -> Response:
+            **kw: Unpack[_OneOffRest]) -> Response:
     """A one-off request. For a series of them use Session."""
-    session_kw = {
-        k: kw.pop(k)
+    session_kw: dict[str, Any] = {
+        k: kw.pop(k)  # type: ignore[misc]
         for k in ("default_headers", "header_order", "allow_redirects",
                   "max_redirects", "cookies", "force_http1", "http3", "post_quantum")
         if k in kw
     }
     with Session(impersonate, verify=verify, timeout=timeout, proxy=proxy,
                  **session_kw) as s:
-        return s.request(method, url, **kw)
+        # The session switches were popped into session_kw above.
+        return s.request(method, url, **kw)  # type: ignore[misc]
 
 
-def get(url: str, **kw: Any) -> Response:
+def get(url: str, **kw: Unpack[OneOffKwargs]) -> Response:
     return request("GET", url, **kw)
 
 
-def post(url: str, **kw: Any) -> Response:
+def post(url: str, **kw: Unpack[OneOffKwargs]) -> Response:
     return request("POST", url, **kw)
 
 
-def put(url: str, **kw: Any) -> Response:
+def put(url: str, **kw: Unpack[OneOffKwargs]) -> Response:
     return request("PUT", url, **kw)
 
 
-def patch(url: str, **kw: Any) -> Response:
+def patch(url: str, **kw: Unpack[OneOffKwargs]) -> Response:
     return request("PATCH", url, **kw)
 
 
-def delete(url: str, **kw: Any) -> Response:
+def delete(url: str, **kw: Unpack[OneOffKwargs]) -> Response:
     return request("DELETE", url, **kw)
 
 
-def head(url: str, **kw: Any) -> Response:
+def head(url: str, **kw: Unpack[OneOffKwargs]) -> Response:
     return request("HEAD", url, **kw)
 
 
-def options(url: str, **kw: Any) -> Response:
+def options(url: str, **kw: Unpack[OneOffKwargs]) -> Response:
     return request("OPTIONS", url, **kw)

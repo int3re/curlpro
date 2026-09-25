@@ -192,14 +192,16 @@ and the top-level `source`. The rest is plan.
 
 ### `source`
 
-Provenance of a profile this project did not capture. Absent on a captured
-profile; inherited along the `based_on` chain, so a delta on a transcribed
-profile is transcribed too. Reported by `capabilities()` (`measured: false`,
+Provenance of a profile, or a part of one, this project did not capture.
+Absent on a captured profile; inherited along the `based_on` chain, so a
+delta on a transcribed profile is transcribed too — unless the mark covers
+parts only and the delta brings its own of every one of them. Reported by `capabilities()` (`measured: false`,
 `source`), by the fingerprint and by the audit (`transcribed_profile`).
 
 | Field | Purpose |
 |---|---|
-| `kind` | `transcribed` — another project's description, copied |
+| `kind` | `transcribed` — another project's description, copied; `derived` — built here from published facts (a release note naming the Chromium, a real User-Agent) on a captured twin, by `scripts/derive-current.py` |
+| `covers` | the parts the mark concerns when not the whole profile: `http2.settings` (the SETTINGS frame and the connection WINDOW_UPDATE), on the fourteen corpus profiles whose signature recorded none |
 | `from` | the project, e.g. `github.com/0x676e67/wreq-util` |
 | `ref`, `path` | the commit the data was read at, and the file inside it |
 | `date` | when it was transcribed, `YYYY-MM-DD` |
@@ -325,6 +327,11 @@ committed seed (`scripts/android-devices.json`) and writes it into
 `chrome-152-android` and `yandex-26.8-android` (the latter with `arch`);
 `python/tests/test_devices.py` fails if a profile drifts from the seed. To grow
 the pool, edit the seed and re-run the generator.
+
+`device_kind` names what a pool holds: `phone`, `desktop`, `iphone` or
+`distro`. A pool without one is phones, the only kind before 0.11; a delta
+that brings its own `devices` brings its own kind with them (none means
+phones), and a misspelt kind is refused at load. The generators write it.
 
 The desktop and iOS pools, since 0.11, hold identities rather than phones.
 `scripts/gen-identities.py` writes them from `scripts/identities.json` into

@@ -6,6 +6,7 @@ package main
 import "C"
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -32,6 +33,7 @@ type wsConnectJSON struct {
 	TimeoutMS        int               `json:"timeout_ms"`
 	ConnectTimeoutMS int               `json:"connect_timeout_ms"`
 	MaxMessageSize   int64             `json:"max_message_size"`
+	Proxy            *string           `json:"proxy"`
 }
 
 // wsRequest finds the session and parses the configuration.
@@ -54,13 +56,15 @@ func wsRequest(id C.longlong, cfg *C.char) (*client.Session, wsConnectJSON, erro
 }
 
 // wsDial opens a socket from an already parsed configuration.
-func wsDial(sess *client.Session, c wsConnectJSON) (*client.WebSocket, error) {
+func wsDial(ctx context.Context, sess *client.Session, c wsConnectJSON) (*client.WebSocket, error) {
 	return sess.DialWebSocket(c.URL, client.WebSocketOptions{
+		Context:        ctx,
 		Headers:        c.Headers,
 		Subprotocols:   c.Subprotocols,
 		Timeout:        time.Duration(c.TimeoutMS) * time.Millisecond,
 		ConnectTimeout: time.Duration(c.ConnectTimeoutMS) * time.Millisecond,
 		MaxMessageSize: c.MaxMessageSize,
+		Proxy:          c.Proxy,
 	})
 }
 
@@ -80,7 +84,7 @@ func curlpro_ws_connect(id C.longlong, cfg *C.char) (out *C.char) {
 	if err != nil {
 		return respond(nil, err)
 	}
-	ws, err := wsDial(sess, c)
+	ws, err := wsDial(context.Background(), sess, c)
 	if err != nil {
 		return respond(nil, err)
 	}
@@ -102,12 +106,13 @@ func curlpro_ws_connect_start(id C.longlong, cfg *C.char) (out *C.char) {
 	}
 
 	opened := new(int64)
-	return startAsync(nil, func([]byte) {
+	ctx, cancel := context.WithCancel(context.Background())
+	return startAsync(cancel, func([]byte) {
 		if sid := atomic.LoadInt64(opened); sid != 0 {
 			closeSocket(sid, 1000, "")
 		}
 	}, func(int64) []byte {
-		ws, err := wsDial(sess, c)
+		ws, err := wsDial(ctx, sess, c)
 		if err != nil {
 			return errorFrame(err)
 		}

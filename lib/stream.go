@@ -235,6 +235,22 @@ func curlpro_stream_read(sid C.longlong, buf *C.char, bufLen C.int) (n C.int) {
 	return 0
 }
 
+// curlpro_stream_error reports the error a failed read stored, with its code
+// and details, so the caller raises a Timeout as a Timeout: the read itself
+// returns only -1. The stream stays open; ok with no error means none.
+//
+//export curlpro_stream_error
+func curlpro_stream_error(sid C.longlong) (out *C.char) {
+	defer recoverInto(&out)
+	streamsMu.RLock()
+	st, ok := streams[int64(sid)]
+	streamsMu.RUnlock()
+	if !ok {
+		return respond(nil, fmt.Errorf("stream %d not found", int64(sid)))
+	}
+	return respond(nil, st.lastErr())
+}
+
 //export curlpro_stream_close
 func curlpro_stream_close(sid C.longlong) (out *C.char) {
 	defer recoverInto(&out)

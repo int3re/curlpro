@@ -171,16 +171,26 @@ class Fingerprint:
 
     @property
     def device(self) -> str:
-        """The phone this session presents itself as — the name chosen from
-        the profile's list, also when it was chosen with ``device="random"``
-        — or ``""`` on a profile without devices. What a parser records
-        beside the profile name to see which devices get banned."""
+        """The identity this session presents itself as — the name chosen
+        from the profile's list, also when it was chosen with
+        ``device="random"`` — or ``""`` when none was chosen. What a parser
+        records beside the profile name to see which devices get banned;
+        :attr:`device_kind` says whether that is a phone."""
         return self._d.get("device", "")
 
     @property
     def devices(self) -> list[str]:
-        """The names the profile offers; empty for a desktop profile."""
+        """The names the profile offers; empty on a profile without a pool."""
         return list(self._d.get("devices") or [])
+
+    @property
+    def device_kind(self) -> str:
+        """What the devices are: ``"phone"`` (a model and its Android),
+        ``"desktop"`` (a Windows or macOS release, a CPU and a Chrome build),
+        ``"iphone"`` (an iOS version) or ``"distro"`` (a Linux distribution
+        token); ``""`` on a profile without a pool. Until 0.11 every pool was
+        phones, so "has devices" meant "is a phone"; since then it does not."""
+        return self._d.get("device_kind", "")
 
     @property
     def measured(self) -> bool:
@@ -189,7 +199,7 @@ class Fingerprint:
         False for a transcribed profile — one taken from another project's
         description (``source`` says which) rather than seen on the wire
         here. The audit reports the same as ``transcribed_profile``."""
-        return not self._d.get("source")
+        return not self._d.get("source")  # a covers-only mark counts: that part was not measured
 
     @property
     def source(self) -> dict[str, Any] | None:

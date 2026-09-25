@@ -95,6 +95,14 @@ type WebSocketOptions struct {
 	// MaxMessageSize caps an incoming message in bytes, decompressed size
 	// included. Zero means defaultMaxMessageSize.
 	MaxMessageSize int64
+	// Proxy overrides the session's proxy for this socket: nil keeps the
+	// session's, "" goes direct. The Python side resolves the environment
+	// (trust_env) into it; before 0.12 a socket ignored the environment and
+	// went direct while every request of the session went through the proxy.
+	Proxy *string
+	// Context, when set, cancels the handshake: an abandoned async connect
+	// used to dial on until its own timeout.
+	Context context.Context
 }
 
 // errWSClosed — the connection is closed: by the server or by the caller.
@@ -132,7 +140,11 @@ func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocke
 	if maxMessage <= 0 {
 		maxMessage = defaultMaxMessageSize
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	parent := opts.Context
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	if opts.ConnectTimeout > 0 {
 		ctx = withConnectLimit(ctx, opts.ConnectTimeout)
@@ -140,7 +152,7 @@ func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocke
 
 	// The handshake runs over HTTP/1.1: Upgrade in HTTP/2 works differently
 	// (RFC 8441, extended CONNECT) and is not supported everywhere.
-	c, err := s.dialHTTP1(ctx, u)
+	c, err := s.dialHTTP1(ctx, u, opts.Proxy)
 	if err != nil {
 		return nil, err
 	}
@@ -320,8 +332,12 @@ func (s *Session) websocketRequest(u *url.URL, key string, opts WebSocketOptions
 // editing s.opts on the fly was a race and changed the ALPN in the ClientHello
 // for every connection, ordinary requests included. A WebSocket connection is
 // not pooled: it becomes the socket's property and lives until it closes.
-func (s *Session) dialHTTP1(ctx context.Context, u *url.URL) (*conn, error) {
-	c, err := s.dial(ctx, u, s.newDialSpec(u, s.opts.Proxy, true))
+func (s *Session) dialHTTP1(ctx context.Context, u *url.URL, proxyOverride *string) (*conn, error) {
+	proxy := s.opts.Proxy
+	if proxyOverride != nil {
+		proxy = *proxyOverride
+	}
+	c, err := s.dial(ctx, u, s.newDialSpec(u, proxy, true))
 	if err != nil {
 		return nil, err
 	}

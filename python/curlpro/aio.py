@@ -15,15 +15,24 @@ from __future__ import annotations
 import asyncio
 import time
 import warnings
-from typing import Any, AsyncIterator, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, AsyncIterator, Iterable, Mapping
+
+import weakref
 
 from ._completions import settle
-from ._ffi import WebSocketClosed, _call, call_with_frame, encode
-from .proxies import proxy_for as env_proxy
+from ._ffi import _call, call_with_frame, encode
+from ._headers import Headers
+from .errors import WebSocketClosed
 from .session import DEFAULT_PROFILE, Redirect, Response, Session, _preflights, _request_meta
 from .timeouts import split_timeout as _split_timeout
 from .stream import DEFAULT_CHUNK, lines_from, too_large
+from .websocket import _proxy_field
 
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
+
+    from ._kwargs import RequestKwargs, StreamKwargs
 
 class _Opener:
     """Opens a resource both with ``async with`` and with ``await``.
@@ -50,6 +59,34 @@ class _Opener:
         await self._obj.close()
 
 
+
+def _quiet_call(name: str, *args: Any) -> None:
+    """A native close from a finaliser or an orphan handler: never raises."""
+    try:
+        _call(name, *args)
+    except Exception:  # noqa: BLE001 — already closed, or the session is gone
+        pass
+
+
+async def _await_pending(owner: Any) -> tuple[Any, bytes]:
+    """Awaits owner._pending without cancelling it when the waiter is.
+
+    The read or receive in flight stays in ``owner._pending`` across a
+    cancelled wait; any other outcome, a result or an error, clears it.
+    """
+    task = owner._pending
+    try:
+        result = await asyncio.shield(task)
+    except asyncio.CancelledError:
+        if task.cancelled():
+            owner._pending = None
+        raise
+    except BaseException:
+        owner._pending = None
+        raise
+    owner._pending = None
+    return result
+
 class AsyncStreamResponse:
     """A body read in chunks without tying up a thread.
 
@@ -61,12 +98,13 @@ class AsyncStreamResponse:
     """
 
     __slots__ = ("status", "proto", "headers", "url", "history", "preflights",
-                 "_id", "_closed", "_max_size")
+                 "_id", "_closed", "_max_size", "_pending", "_finalizer", "__weakref__")
 
     def __init__(self, payload: dict, max_size: int = 0):
+        self._pending: asyncio.Task | None = None
         self.status: int = payload["status"]
         self.proto: str = payload.get("proto", "")
-        self.headers: dict[str, list[str]] = payload.get("headers") or {}
+        self.headers = Headers(payload.get("headers"))
         self.url: str = payload.get("url", "")
         from .session import Redirect, _preflights
         #: The redirect hops before this response, first to last.
@@ -78,6 +116,9 @@ class AsyncStreamResponse:
         self._closed = False
         # See StreamResponse: the limit binds read(), not iter_content().
         self._max_size = max_size
+        # A stream nobody closed is closed when collected: the sync one was,
+        # the async one held its connection until the process ended.
+        self._finalizer = weakref.finalize(self, _quiet_call, "curlpro_stream_close", self._id)
 
     @property
     def ok(self) -> bool:
@@ -96,8 +137,13 @@ class AsyncStreamResponse:
             raise RuntimeError("stream is closed")
         if size <= 0:
             raise ValueError("chunk size must be positive")
-        started = _call("curlpro_stream_read_start", self._id, size)
-        _meta, data = await settle(started)
+        # A read in flight survives a cancelled wait: wait_for(read_chunk(), t)
+        # used as an idle timeout cancelled the wait while the native read went
+        # on, and whatever it read was thrown away. The next call gets it.
+        if self._pending is None:
+            started = _call("curlpro_stream_read_start", self._id, size)
+            self._pending = asyncio.ensure_future(settle(started))
+        _meta, data = await _await_pending(self)
         return data
 
     async def iter_content(self, chunk_size: int = DEFAULT_CHUNK) -> AsyncIterator[bytes]:
@@ -141,6 +187,10 @@ class AsyncStreamResponse:
         if self._closed:
             return
         self._closed = True
+        self._finalizer.detach()
+        if self._pending is not None:
+            self._pending.cancel()
+            self._pending = None
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, _call, "curlpro_stream_close", self._id)
 
@@ -151,9 +201,11 @@ class AsyncStreamResponse:
 class AsyncWebSocket:
     """A WebSocket that ties up no thread, neither on receive nor on send."""
 
-    __slots__ = ("_id", "_closed")
+    __slots__ = ("_id", "_closed", "_pending", "_finalizer", "__weakref__")
 
     def __init__(self, socket_id: int):
+        self._pending: asyncio.Task | None = None
+        self._finalizer = weakref.finalize(self, _quiet_call, "curlpro_ws_close", socket_id, 1001, b"")
         self._id = socket_id
         self._closed = False
 
@@ -174,8 +226,12 @@ class AsyncWebSocket:
         wire these are different opcodes, and a server may tell them apart.
         """
         self._check()
-        started = _call("curlpro_ws_recv_start", self._id)
-        meta, data = await settle(started)
+        # As with a stream read: a receive in flight survives a cancelled
+        # wait, and the next recv() gets its message instead of losing it.
+        if self._pending is None:
+            started = _call("curlpro_ws_recv_start", self._id)
+            self._pending = asyncio.ensure_future(settle(started))
+        meta, data = await _await_pending(self)
         return data if (meta or {}).get("binary") else data.decode("utf-8")
 
     async def __aiter__(self) -> AsyncIterator[str | bytes]:
@@ -190,6 +246,10 @@ class AsyncWebSocket:
         if self._closed:
             return
         self._closed = True
+        self._finalizer.detach()
+        if self._pending is not None:
+            self._pending.cancel()
+            self._pending = None
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             None, _call, "curlpro_ws_close", self._id, code, reason.encode("utf-8")
@@ -295,7 +355,7 @@ class AsyncSession:
     def on_error(self, fn):  # noqa: ANN001, ANN201
         return self._session.on_error(fn)
 
-    async def request(self, method: str, url: str, **kw: Any) -> Response:
+    async def request(self, method: str, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         """Sends a request. Takes the same arguments as :meth:`Session.request`,
         including ``expect`` and ``rollback_cookies``."""
         if self._session._closed:
@@ -303,13 +363,12 @@ class AsyncSession:
 
         expect = kw.pop("expect", None)
         rollback = kw.pop("rollback_cookies", False)
-        # The snapshot is taken before sending: after a failure the jar has
-        # already changed and there is nothing left to copy.
-        saved = self._session.cookies.snapshot() if rollback else None
 
-        if kw.get("proxy") is None and self._session._trust_env:
-            kw["proxy"] = env_proxy(url)
-        meta, body = _request_meta(method, url, **kw)
+        kw["proxy"] = self._session._route(url, kw.get("proxy"))
+        # expect and rollback_cookies were popped above.
+        meta, body = _request_meta(method, url, **kw)  # type: ignore[misc]
+        if rollback:
+            meta["track_cookies"] = True
         for hook in self._session.hooks["request"]:
             replaced = hook(meta)
             if replaced is not None:
@@ -322,13 +381,12 @@ class AsyncSession:
             )
             payload, content = await settle(started)
         except asyncio.CancelledError:
-            # The rollback still applies — the request did not finish — but the
-            # cancellation itself must reach the task loop untouched.
-            if saved is not None:
-                self._session.cookies.restore(saved)
+            # The native request fails with the cancellation and undoes its
+            # own cookie changes there; the cancellation reaches the task loop
+            # untouched.
             raise
         except BaseException as exc:
-            raise self._session._failed(exc, saved) from None
+            raise self._session._failed(exc, None) from None
 
         try:
             # The same fields the synchronous path fills: a response built
@@ -349,30 +407,30 @@ class AsyncSession:
         except BaseException as exc:
             # A failed expectation is a request failure too: the caller was
             # promised a response of a certain shape and did not get it.
-            raise self._session._failed(exc, saved) from None
+            raise self._session._failed(exc, payload.get("cookie_changes") if rollback else None) from None
 
-    async def get(self, url: str, **kw: Any) -> Response:
+    async def get(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return await self.request("GET", url, **kw)
 
-    async def post(self, url: str, **kw: Any) -> Response:
+    async def post(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return await self.request("POST", url, **kw)
 
-    async def put(self, url: str, **kw: Any) -> Response:
+    async def put(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return await self.request("PUT", url, **kw)
 
-    async def patch(self, url: str, **kw: Any) -> Response:
+    async def patch(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return await self.request("PATCH", url, **kw)
 
-    async def delete(self, url: str, **kw: Any) -> Response:
+    async def delete(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return await self.request("DELETE", url, **kw)
 
-    async def head(self, url: str, **kw: Any) -> Response:
+    async def head(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return await self.request("HEAD", url, **kw)
 
-    async def options(self, url: str, **kw: Any) -> Response:
+    async def options(self, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         return await self.request("OPTIONS", url, **kw)
 
-    def stream(self, method: str, url: str, **kw: Any) -> _Opener:
+    def stream(self, method: str, url: str, **kw: Unpack[StreamKwargs]) -> _Opener:
         """Opens a response for reading in chunks.
 
             async with session.stream("GET", url) as r:
@@ -408,8 +466,7 @@ class AsyncSession:
     async def _open_stream(self, method: str, url: str, **kw: Any) -> AsyncStreamResponse:
         if self._session._closed:
             raise RuntimeError("session is closed")
-        if kw.get("proxy") is None and self._session._trust_env:
-            kw["proxy"] = env_proxy(url)
+        kw["proxy"] = self._session._route(url, kw.get("proxy"))
         meta, body = _request_meta(method, url, **kw)
         for hook in self._session.hooks["request"]:
             replaced = hook(meta)
@@ -419,7 +476,8 @@ class AsyncSession:
         started = call_with_frame(
             "curlpro_stream_open_start", self._session._id, body=body, meta=meta
         )
-        payload, _ = await settle(started)
+        payload, _ = await settle(started, on_orphan=lambda r: _quiet_call(
+            "curlpro_stream_close", r[0]["stream"]))
         return AsyncStreamResponse(payload, self._session._max_response_size)
 
     async def _open_websocket(
@@ -445,9 +503,11 @@ class AsyncSession:
                 "connect_timeout_ms":
                     int(connect_timeout * 1000) if connect_timeout else 0,
                 "max_message_size": int(max_message_size),
+                **_proxy_field(self._session._route(url)),
             }),
         )
-        payload, _ = await settle(started)
+        payload, _ = await settle(started, on_orphan=lambda r: _quiet_call(
+            "curlpro_ws_close", r[0]["socket"], 1001, b""))
         return AsyncWebSocket(payload["socket"])
 
     async def close(self) -> None:

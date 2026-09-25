@@ -6,7 +6,21 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.11.0** — a minor, because `list_profiles()` now returns 294 names where it
+**0.12.0** — a minor, because three defaults changed: a buffered response is
+capped at 100 MiB unless `max_response_size` says otherwise, a request whose
+reused keep-alive connection dies before any response byte is sent once more
+on a new connection (any method, as Chromium does), and `response.headers` is
+a `Headers` — still a dict of lists, looked up by any case. Beside them, from a
+field report and three code reviews (docs/STAGE20-RESULTS.md): `device_kind`,
+`curlpro.errors`, typed verbs (`RequestKwargs`), exact `rollback_cookies`, the
+proxy of the environment on streams and WebSockets, and some thirty fixes in
+the Go client, the FFI boundary and the Python package; in the corpus, the
+HTTP/2 SETTINGS of fourteen old profiles (transcribed, marked with
+`source.covers`), 41 brand lists computed as Chromium computes them, and eight
+derived presets for the versions current on 2026-09-26 — Chrome 154, Edge 154,
+Opera 136, Safari 27 — marked `source.kind = "derived"`, 302 profiles in all.
+ABI 0.23.0: `device_kind`, `source.covers` and `derived` do not load into an
+older library. Before it, **0.11.0** — a minor, because `list_profiles()` now returns 294 names where it
 returned 56: 238 profiles transcribed from `0x676e67/wreq-util` joined the
 corpus, each a delta on a captured profile with a `source` block, `measured:
 false` in `capabilities()` and a `transcribed_profile` audit finding;

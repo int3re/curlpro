@@ -8,6 +8,20 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
+// registerOrResolveError registers the profiles and resolves one of them,
+// returning the first error on the way. Since 0.12 a profile whose chain is
+// complete is checked at registration, so an invalid one fails there rather
+// than at Resolve; either place is a refusal.
+func registerOrResolveError(r *Registry, name string, jsons ...string) error {
+	for _, j := range jsons {
+		if err := r.Register([]byte(j)); err != nil {
+			return err
+		}
+	}
+	_, err := r.Resolve(name)
+	return err
+}
+
 func mustRegister(t *testing.T, r *Registry, jsons ...string) {
 	t.Helper()
 	for _, j := range jsons {
@@ -85,8 +99,7 @@ func TestResolveErrors(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := NewRegistry()
-			mustRegister(t, r, tc.profs...)
-			_, err := r.Resolve(tc.resolve)
+			err := registerOrResolveError(r, tc.resolve, tc.profs...)
 			if err == nil {
 				t.Fatal("expected an error, got nil")
 			}
@@ -164,5 +177,29 @@ func TestOverrideAppliesSigAlgs(t *testing.T) {
 	got := ext.SupportedSignatureAlgorithms
 	if len(got) != 2 || got[0] != utls.SignatureScheme(0x0904) {
 		t.Errorf("the sigalgs were not applied: %v", got)
+	}
+}
+
+// A profile that cannot resolve is refused at registration when its chain is
+// complete, and the registry is left as it was; trailing data after the JSON
+// is refused; a profile waiting for its parent is accepted.
+func TestRegisterChecksWhatItCan(t *testing.T) {
+	r := NewRegistry()
+	good := `{"name":"a","tls":{"raw_client_hello":"AAAA","permute_extensions":false},"http2":{},"headers":{}}`
+	if err := r.Register([]byte(good)); err != nil {
+		t.Fatal(err)
+	}
+	bad := `{"name":"a","tls":{"raw_client_hello":"AAAA"},"http2":{},"headers":{}}`
+	if err := r.Register([]byte(bad)); err == nil {
+		t.Fatal("a profile without permute_extensions was accepted")
+	}
+	if _, err := r.Resolve("a"); err != nil {
+		t.Fatalf("the refused replacement damaged the registered profile: %v", err)
+	}
+	if err := r.Register([]byte(good + `{"name":"b"}`)); err == nil || !strings.Contains(err.Error(), "after the profile") {
+		t.Errorf("trailing data: %v", err)
+	}
+	if err := r.Register([]byte(`{"name":"child","based_on":"later","headers":{}}`)); err != nil {
+		t.Errorf("a delta registered before its parent was refused: %v", err)
 	}
 }

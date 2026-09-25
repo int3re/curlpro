@@ -37,6 +37,8 @@ type Stream struct {
 	// Preflights are the CORS preflights sent before the request and its
 	// hops, in order; empty when none was needed.
 	Preflights []Preflight
+	// CookieChanges are the jar records the request changed (TrackCookies).
+	CookieChanges []CookieChange
 
 	body io.ReadCloser
 
@@ -87,7 +89,20 @@ func (s *Stream) Close() error {
 // A response with Critical-CH is repeated once: Chrome does not wait for the
 // next request in that case but asks again immediately with the hints the site
 // declared critical.
-func (s *Session) DoStream(r *Request) (*Stream, error) {
+func (s *Session) DoStream(r *Request) (st *Stream, err error) {
+	if r.TrackCookies && r.cookieLog == nil {
+		r.cookieLog = &cookieLog{}
+	}
+	defer func() {
+		// A failed request leaves the jar as it found it — a cancelled one
+		// too, which Python cannot undo because no response comes back.
+		if err != nil && r.cookieLog != nil {
+			_ = s.UndoCookies(r.cookieLog.changes())
+		}
+		if st != nil {
+			st.CookieChanges = r.cookieLog.changes()
+		}
+	}()
 	stream, err := s.doStream(r)
 	if err != nil || stream == nil {
 		return stream, err
@@ -95,15 +110,21 @@ func (s *Session) DoStream(r *Request) (*Stream, error) {
 	if u, uerr := url.Parse(stream.URL); uerr == nil {
 		s.noteAltSvc(u, stream.Headers)
 	}
-	if u, uerr := url.Parse(stream.URL); uerr == nil && s.noteAcceptCH(u, stream.Headers) {
+	// Chromium restarts a navigation on Critical-CH; a fetch or a POST is not
+	// repeated — the hints go out from the next request on. The retry's own
+	// failure is the caller's error (it used to be dropped, and a nil stream
+	// came back with a nil error).
+	if u, uerr := url.Parse(stream.URL); uerr == nil && s.noteAcceptCH(u, stream.Headers) &&
+		s.modeFor(r) == ModeNavigate && isIdempotent(r.Method) {
 		stream.Close()
-		if retried, rerr := s.doStream(r); rerr == nil {
-			if u2, uerr2 := url.Parse(retried.URL); uerr2 == nil {
-				s.noteAcceptCH(u2, retried.Headers)
-			}
-			return retried, nil
+		retried, rerr := s.doStream(r)
+		if rerr != nil {
+			return nil, rerr
 		}
-		return nil, err
+		if u2, uerr2 := url.Parse(retried.URL); uerr2 == nil {
+			s.noteAcceptCH(u2, retried.Headers)
+		}
+		return retried, nil
 	}
 	return stream, nil
 }
@@ -115,7 +136,7 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 	if err := s.checkMode(r); err != nil {
 		return nil, err
 	}
-	if err := r.validate(s.jar != nil); err != nil {
+	if err := r.validate(s.cookieJar() != nil); err != nil {
 		return nil, err
 	}
 	limit := s.timeout(r)
@@ -337,7 +358,10 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 
 		// The intermediate response body is drained up to a limit; if it did not
 		// end, the connection cannot be reused.
-		if !drain(resp, cancel) {
+		// Only an HTTP/1.1 connection is lost with an unread body: on HTTP/2
+		// closing the body resets its own stream, and a hard close here used
+		// to kill every other stream sharing the connection.
+		if !drain(resp, cancel) && used != nil && used.h2 == nil {
 			s.evict(used, true)
 		}
 		s.release(used)

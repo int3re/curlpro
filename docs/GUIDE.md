@@ -5,7 +5,7 @@
 This is the whole library in one document, written for two readers: a person
 integrating it, and an AI assistant researching it before touching code. Every
 number and every behaviour here was checked against the code on 2026-09-22, at
-version 0.11.0. Where the README says less, this document says more; where the
+version 0.12.0. Where the README says less, this document says more; where the
 two disagree, this one is wrong and should be fixed — say so.
 
 An assistant reading this: the library already does most of what a scraper
@@ -89,7 +89,7 @@ touch it.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `impersonate` | `chrome-151-windows` | the profile name; `list_profiles()` has all 294, `list_profiles(measured=True)` the 56 captured ones |
+| `impersonate` | `chrome-151-windows` | the profile name; `list_profiles()` has all 302, `list_profiles(measured=True)` the 42 captured whole |
 | `verify` | `True` | `True` — system roots; a PEM path — trust only that root; `False` — no verification |
 | `cert` | `None` | `(certificate, key)` paths for mutual TLS |
 | `trust_env` | `True` | take the proxy from `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, honouring `NO_PROXY`; an explicit `proxy` always wins |
@@ -108,7 +108,7 @@ touch it.
 | `alt_svc` | `True` | move to HTTP/3 after an `Alt-Svc` header, as a browser does; a failed attempt falls back to TCP and is not retried for 5 minutes, doubling up to 24 hours. Needs an `http3` section; not through a proxy |
 | `resolve` | `None` | `{"example.com:443": "10.0.0.7"}` — curl's `--resolve`; SNI and `Host` keep the name. Not through a proxy |
 | `ip_version` | `None` | `"4"` or `"6"` — one address family |
-| `keep_alive` | `True` | reuse connections. `False` closes after each response, without sending `Connection: close` |
+| `keep_alive` | `True` | reuse connections. `False` closes after each response, without sending `Connection: close`. An idle connection the server closed is dropped from the pool, and a request whose reused connection dies before any response byte goes once more on a new one, whatever the method, as Chromium does (section 9) |
 | `max_idle_conns`, `idle_conn_timeout` | `0`, `0.0` | pool size and idle lifetime; zero means the library's defaults |
 | `retries` | `0` | attempts after the first. Only idempotent methods are retried unless `retry_methods` says otherwise |
 | `retry_statuses` | 408, 429, 500, 502, 503, 504 | which responses count as failures worth repeating |
@@ -121,7 +121,7 @@ touch it.
 | `samesite` | `True` | apply the cookies' `SameSite` attribute and the family's third-party rule to requests made from a `page`; `False` sends every cookie the jar matches, as before 0.10 (section 10) |
 | `preflight` | `True` | send the CORS preflight a browser sends before a non-simple cross-origin fetch, check its answer and keep it for its `Access-Control-Max-Age`; a refusal raises `CORSError` and the request is not sent. `False` sends straight out, as before 0.10 (section 7) |
 | `device`, `devices` | `None` | the identity for a profile with a pool — a phone on Android, a Windows release and Chrome build on the desktop, an iOS version on the iPhone — a name from the profile's list or `"random"` — and a list of your own (section 11) |
-| `max_response_size` | `0` | a body limit in bytes; exceeding it raises with code `too_large`. Binds `read()`, not `iter_content()` |
+| `max_response_size` | `None` | a body limit in bytes; exceeding it raises with code `too_large`. Not given: 100 MiB for a buffered response (`DEFAULT_MAX_RESPONSE_SIZE`, since 0.12) and none for a stream; given, it binds both, a stream's `read()` included; `0` means no limit. `iter_content()` is never bound |
 | `hooks` | `None` | `{"request": [...], "response": [...], "error": [...]}`; section 9 |
 
 Session attributes worth knowing: `s.headers` (a mapping of the headers you
@@ -134,7 +134,10 @@ added, plus `s.headers.suppressed`), `s.cookies` (section 10), `s.hooks`,
 `s.request(method, url, **kw)`, with `get`, `post`, `put`, `patch`, `delete`,
 `head`, `options` as shorthands. The module-level `curlpro.get(url, impersonate=...)`
 and friends open a session for one request. Everything a session sets can be
-overridden here for one request; `None` means "the session's".
+overridden here for one request; `None` means "the session's". The verbs are
+typed since 0.12: `**kw` is `Unpack[curlpro.RequestKwargs]`, so mypy, pyright and
+editors check every name and type, and a wrapper can annotate its own `**kw`
+the same way.
 
 | Parameter | Meaning |
 |---|---|
@@ -166,7 +169,7 @@ The response:
 | Member | Meaning |
 |---|---|
 | `status`, `ok`, `proto` | `200`, `status < 400`, `"HTTP/1.1"` / `"HTTP/2.0"` / `"HTTP/3.0"` |
-| `headers` | `dict[str, list[str]]` — every value of every header |
+| `headers` | `Headers`: a `dict[str, list[str]]` of every value of every header whose lookups ignore case — `r.headers.get("retry-after")` finds `Retry-After`; `.first(name)` gives the first value as a string. A plain dict until 0.12, where a lower-case `.get` returned `None` |
 | `header(name)` | the first value, case-insensitive, or `None` |
 | `content`, `text` | bytes; str decoded with the detected charset |
 | `encoding` | detected from `Content-Type`, then the BOM, then a `<meta charset>` in the first kilobytes; assignable when a site declares it wrongly |
@@ -339,8 +342,14 @@ they returned.
 
 `rollback_cookies=True` on a request, or `with s.cookies.transaction():` around
 several, restores the jar if the block raises — a half-finished login is worse
-than none. The snapshot is taken before sending; the rollback happens before the
-error hooks run, so a hook that goes to the network sees the jar as it was.
+than none. The rollback happens before the error hooks run, so a hook that goes
+to the network sees the jar as it was. Since 0.12 a request's rollback is
+exact: the native side logs the records the request changed and what each
+replaced, undoes them itself when the request fails (a cancelled async one
+too), and a response that fails an expectation is undone from the log it
+carries — cookies other threads' requests received meanwhile are left alone.
+It used to clear the jar and reload a snapshot, erasing them. `transaction()`
+still restores the snapshot it took, which suits one thread.
 
 ## 9. Errors and hooks
 
@@ -362,7 +371,19 @@ except curlpro.CurlProError as e:        # everything else: e.code, str(e)
 
 `CurlProError` is a `RuntimeError`; everything else here derives from it.
 Branch on the type or on `code`, never on the message — messages are written
-for people and are improved freely.
+for people and are improved freely. The classes live in `curlpro.errors` and
+are importable from `curlpro` itself; code that imported them from the
+private `curlpro._ffi` keeps working.
+
+A dead kept-alive connection is not an error. A server closing an idle
+connection is noticed while it idles, and the pool never hands that connection
+out; a request whose reused connection dies before a single response byte is
+sent once more on a new connection, whatever the method, exactly as Chromium
+resends (`ShouldResendRequest`: the connection was reused, no headers arrived).
+A response cut off after its first byte is not resent — the server may have
+processed the request — and neither is a timeout. Until 0.12 the first request
+after a server's keep-alive timeout failed on HTTP/1.1 every time, and a POST
+failed under any `retries=`.
 
 The first question a scraper asks is whether to retry, and the hierarchy
 answers it:
@@ -480,23 +501,48 @@ cookie was recorded but never sent.
 
 ## 11. Profiles, devices and mobile
 
-294 profiles ship in the wheel. 56 of them are captured — by this project's
-own runs of `curlpro capture` or by the curl-impersonate signatures it
-imported, each with the hashes to prove it: 29 Chrome (98 to 153), 7 Edge,
-5 Firefox (133, 135, 144, 155, 156), 11 Safari (15.3 to 26.0.1, macOS and
+302 profiles ship in the wheel. 42 of them are captured whole — by this
+project's own runs of `curlpro capture` or by the curl-impersonate signatures
+it imported, each with the hashes to prove it: 20 Chrome (118 to 153), 4 Edge,
+5 Firefox (133, 135, 144, 155, 156), 9 Safari (15.6.1 to 26.0.1, macOS and
 iOS), Tor 14, Yandex Browser 26.8 for Android, and two okhttp 5.5 (JVM and
-Conscrypt). The other 238 are transcribed from `0x676e67/wreq-util` (108
-Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera) — see the next paragraph,
-and prefer `list_profiles(measured=True)` when drawing a profile at random.
-Many share a TLS fingerprint: the captured profiles form 17 distinct JA4
-values, and a transcribed one always replays a captured hello, so the count
-does not grow. A browser family keeps its ClientHello across several versions
+Conscrypt). 14 more are captured but for their HTTP/2 SETTINGS (Chrome 98 to
+116, Chrome 99 for Android, Edge 98 to 101, Safari 15.3 and 15.5): those
+signatures recorded no SETTINGS frame, and until 0.12 the profiles sent an
+empty one — a frame no browser sends; the values are now wreq-util's for each
+version, and the profile says so. 238 are transcribed from `0x676e67/wreq-util`
+(108 Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera), and 8 are derived here
+for the versions current on 2026-09-26 that were not on the stand — see the
+next paragraphs, and prefer `list_profiles(measured=True)` when drawing a
+profile at random. Many share a TLS fingerprint: all of them together form 17
+distinct JA4 values, because a transcribed or derived profile always replays a
+captured hello, so the count does not grow. A browser family keeps its ClientHello across several versions
 and differs in the User-Agent and headers. One group — Chrome 119 to 131 and
 Edge 119/120, the last Chromium hellos before the post-quantum key share —
 shows a second JA4 spelling on some connections (`…1517…` beside `…1516…`):
 its hello sits near 512 bytes, and the padding extension appears or not with
 the random size of the ECH GREASE payload, exactly as in the browsers
 themselves. The baselines list both. `list_profiles()` names them all.
+
+**Derived profiles and partial marks.** `scripts/derive-current.py` writes the
+presets for the browser versions that were current on 2026-09-26 and not yet
+on this project's stand, as deltas on captured twins: `chrome-154-windows`,
+`-macos` and `-linux` (Chrome 154 went stable on 2026-09-22; its hello is
+153's, taken on trust), `edge-154-windows` (on the derived Chrome 154),
+`opera-136-windows` and `-macos` (Opera 136 is built on Chromium 152, whose
+capture it replays), `safari-27-ios` (a real iOS 27.0 Safari User-Agent on the
+Safari 26 capture) and `safari-27-macos`. Their `source` block has kind
+`derived` and names the published fact each rests on; like a transcription
+they report `measured: False` and raise `transcribed_profile`, and a live
+capture replaces each the day its browser is on the stand. A mark may also
+cover a part only: the fourteen profiles whose SETTINGS are transcribed carry
+`source.covers = ["http2.settings"]`, and a captured delta that brings its own
+SETTINGS — Safari 16 and 17 stand on Safari 15.5 — is measured again. The
+brand lists of 41 transcribed Edge, Opera and early Chrome profiles were
+wrong in wreq-util (copied between versions, unterminated, a lost leading
+space); `sec-ch-ua` is now computed as Chromium computes it
+(`scripts/chromium_brands.py`), a rule every captured profile from Chromium 105
+up confirms, and `tests/test_brands.py` checks the whole corpus against it.
 
 **Transcribed profiles.** wreq-util describes each browser version as a tuple
 of BoringSSL options and an HTTP/2 option set, versions inheriting each other's
@@ -597,6 +643,19 @@ stand. The macOS Safari profiles have none either: the desktop string says
 `10_15_7` on every Mac and Safari sends no hints, so in HTTP one Mac is every
 other.
 
+**What a pool holds.** `capabilities(name)["device_kind"]` and
+`fingerprint().device_kind` say what the devices are: `"phone"` (a model and
+its Android), `"desktop"` (a Windows or macOS release, a CPU and a Chrome
+build), `"iphone"` (an iOS version) or `"distro"` (a Linux distribution
+token), and `""` on a profile without a pool. Until 0.11 every pool was
+phones, and code that read "has devices" as "is a phone" was right; 0.11
+changed that without a word in the API (a field report), and this field is
+the way to ask. The pools were refreshed on 2026-09-26: the Chrome 153 builds
+released since, the Chrome 154 builds for its derived profiles, macOS 27.0,
+and macOS versions in the three-part form Chromium sends (`15.7.0`, never
+`15.7` — `user_agent_utils.cc` formats `%d.%d.%d`); Safari 26.0 on iOS
+freezes the OS token at `18_6`, 26.0.1 and later at `18_7`.
+
 **Inheritance.** A profile may name `based_on`; it then stores only its
 differences. Chrome 110 over Chrome 98 is one line: extension shuffling on.
 `Profile.from_file(path).derive("chrome-153-windows", headers={...}).register()`
@@ -644,8 +703,11 @@ with s.stream("GET", url) as r:                 # the same arguments as request(
 ```
 
 A stream holds its connection until closed, hence `with`. `r.read()` collects
-the rest and is bounded by `max_response_size`; `iter_content()` is not, on
-purpose. Closing with the body unread drops the connection rather than draining
+the rest and is bounded by `max_response_size` when one was given;
+`iter_content()` is not, on purpose. On `AsyncSession` a chunk read or a
+WebSocket receive cancelled by `asyncio.wait_for` keeps running and hands its
+data to the next call — an idle timeout used to lose it — and a stream or
+socket nobody closed is closed when collected. Closing with the body unread drops the connection rather than draining
 it. Uploads stream with `body_file=path`.
 
 `AsyncSession` takes the same arguments as `Session` and offers the same
@@ -780,6 +842,11 @@ Facts that are easy to doubt and are true:
   `post_quantum=False` is the knob to test paths that dislike it.
 - Firefox 155 sends three key shares (X25519MLKEM768, x25519, secp256r1); the
   profile replays the raw hello captured from a live browser.
+- The HTTP/2 SETTINGS of 14 corpus profiles were empty until 0.12 — their
+  signatures recorded no SETTINGS frame — and are now wreq-util's, marked
+  with `source.covers`; the baselines were re-recorded against browserleaks.
+- 41 transcribed brand lists were wrong in wreq-util; `sec-ch-ua` is computed
+  as Chromium computes it, and every capture from Chromium 105 up agrees.
 - 238 profiles are transcribed from wreq-util, and each says so (section 11):
   the transcription never builds a hello of its own, only points a version
   at a captured twin the source names. It is the first data in the corpus
@@ -851,7 +918,11 @@ Facts that are easy to doubt and are true:
 | `s.headers_for(method, url, ...)` | method | the headers a request would carry, without sending it |
 | `s.preflight_for(method, url, ...)` | method | the CORS preflight a request would be preceded by, or `None` |
 | `request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options` | function | one request in its own session; `impersonate=` picks the profile |
-| `CurlProError`, `Timeout`, `HTTPError`, `WebSocketClosed` | exception | the hierarchy; `.code` on all |
+| `CurlProError`, `Timeout`, `HTTPError`, `WebSocketClosed` | exception | the hierarchy; `.code` on all; declared in the public `errors` module |
+| `errors` | module | the exception classes, importable from here or from `curlpro` |
+| `Headers` | class | the response headers: a `dict[str, list[str]]` looked up by any case, with `.first(name)` |
+| `RequestKwargs` | type | the keyword arguments of the request verbs, for `Unpack` in a wrapper's signature |
+| `DEFAULT_MAX_RESPONSE_SIZE` | constant | 100 MiB: the body limit of a buffered response when `max_response_size` is not given |
 | `PermanentError`, `ProfileCapabilityError`, `ConfigurationError` | exception | failures a retry cannot fix (section 9) |
 | `ProxyError`, `ProxyAuthError`, `CORSError` | exception | the proxy failed, with `.stage` and `.status`; the permanent 407; a refused CORS preflight with its answer |
 | `curlpro.requests` | module | the `requests`-shaped face: `get`, `Session`, `status_code`, the same exceptions |
@@ -867,6 +938,8 @@ For research in the repository:
 | `python/curlpro/cookies.py`, `persona.py`, `headers.py` | the jar, personas, the session header mapping |
 | `python/curlpro/fingerprint.py`, `audit.py`, `expect.py`, `encoding.py` | fingerprint, audit checks, expectations, charset detection |
 | `python/curlpro/requests.py`, `proxies.py`, `timeouts.py`, `profiles.py`, `_ffi.py` | the compat layer, environment proxies, timeout parsing, profile loading, the native binding and ABI check |
+| `python/curlpro/errors.py`, `_headers.py`, `_kwargs.py` | the exceptions, the response header mapping, the typed keyword arguments |
+| `scripts/derive-current.py`, `chromium_brands.py`, `check-typing.py` | the derived presets, Chromium's brand algorithm, the mypy check of the typed verbs |
 | `internal/client/` | the Go client: header assembly (`headers.go`, `mode.go`), dialling and TLS (`client.go`, `conn.go`), HTTP/3 (`http3.go`), cookies, redirects, retries, WebSocket, fingerprint |
 | `internal/profile/` | the profile schema, inheritance and validation |
 | `internal/fingerprint/` | JA3, JA4, JA4H, Akamai |

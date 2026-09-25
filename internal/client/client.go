@@ -246,6 +246,16 @@ type Request struct {
 	// means "take it from the file".
 	BodySize int64
 
+	// freshConn sends the request on a new connection, past the pool: the
+	// resend after a reused connection died under it.
+	freshConn bool
+
+	// TrackCookies logs the records the request changes in the jar, so a
+	// failure can be undone exactly (rollback_cookies): the log comes back on
+	// the response, and a failed request is undone before it returns.
+	TrackCookies bool
+	cookieLog    *cookieLog
+
 	// HeaderOrder overrides the order for a single request.
 	HeaderOrder []string
 	// DefaultHeaders switches the profile headers on or off for a single
@@ -401,7 +411,7 @@ func (s *Session) ModesUsed() []string {
 
 // useCookies decides whether the jar takes part in this request.
 func (s *Session) useCookies(r *Request) bool {
-	if s.jar == nil {
+	if s.cookieJar() == nil {
 		return false
 	}
 	if r != nil && r.Cookies != nil {
@@ -627,6 +637,9 @@ type Response struct {
 	// Preflights are the CORS preflights sent (or found cached) before the
 	// request and its redirect hops, in order. Empty when none was needed.
 	Preflights []Preflight
+	// CookieChanges are the jar records the request changed, when it was
+	// asked to track them (Request.TrackCookies).
+	CookieChanges []CookieChange
 }
 
 // Session performs requests with a single profile.
@@ -634,7 +647,8 @@ type Session struct {
 	profile *profile.Profile
 	opts    Options
 	alpn    []string
-	jar     *cookiejar.Jar
+	// jar is swapped by ClearCookies while requests read it: atomic.
+	jar atomic.Pointer[cookiejar.Jar]
 
 	// tlsSessions holds the tickets servers issued to this session, so a second
 	// connection to the same host can be abbreviated the way a browser's is.
@@ -792,7 +806,7 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 		if err != nil {
 			return nil, err
 		}
-		s.jar = jar
+		s.jar.Store(jar)
 	}
 	// A missing http3 section in the profile must surface when the session is
 	// created, not on the first request.
@@ -871,17 +885,19 @@ func (s *Session) Do(r *Request) (*Response, error) {
 	if limit := s.opts.MaxResponseSize; limit > 0 && int64(len(data)) > limit {
 		return nil, withCode(CodeTooLarge, fmt.Errorf(
 			"response body is larger than the max_response_size limit of %d bytes; "+
-				"read it as a stream to handle a body this large without collecting it in memory",
+				"read it as a stream to handle a body this large without collecting it in memory, "+
+				"or raise max_response_size (0 means no limit)",
 			limit))
 	}
 	return &Response{
-		History:    stream.History,
-		Preflights: stream.Preflights,
-		Status:     stream.Status,
-		Headers:    stream.Headers,
-		Body:       data,
-		Proto:      stream.Proto,
-		URL:        stream.URL,
+		History:       stream.History,
+		Preflights:    stream.Preflights,
+		Status:        stream.Status,
+		Headers:       stream.Headers,
+		Body:          data,
+		Proto:         stream.Proto,
+		URL:           stream.URL,
+		CookieChanges: stream.CookieChanges,
 	}, nil
 }
 
@@ -928,13 +944,27 @@ func (s *Session) prepare(r *Request) (Request, error) {
 // through the same table (x/net/idna, already used on the HTTP/3 path). The
 // port and an IPv6 literal pass through untouched; a name IDNA rejects is an
 // error here rather than a DNS failure three layers down.
+// cookieJar is the session's jar, nil when cookies are off.
+func (s *Session) cookieJar() *cookiejar.Jar { return s.jar.Load() }
+
 func parseURL(raw string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, fmt.Errorf("parsing URL: %w", err)
 	}
 	host := u.Hostname()
-	if host == "" || isASCII(host) || strings.HasPrefix(u.Host, "[") {
+	// Browsers lower-case the host and drop the scheme's default port (the
+	// URL standard does both), and Host, Origin and the cookie domain follow.
+	if strings.EqualFold(u.Scheme, "https") && u.Port() == "443" || strings.EqualFold(u.Scheme, "http") && u.Port() == "80" {
+		u.Host = strings.TrimSuffix(u.Host, ":"+u.Port())
+	}
+	if host == "" || strings.HasPrefix(u.Host, "[") {
+		return u, nil
+	}
+	if isASCII(host) {
+		if lower := strings.ToLower(u.Host); lower != u.Host {
+			u.Host = lower
+		}
 		return u, nil
 	}
 	ascii, err := idna.Lookup.ToASCII(host)
@@ -982,7 +1012,10 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	req, err := http.NewRequest(method, r.URL, body)
+	// The parsed URL, not the caller's string: its host is punycode, lower
+	// case and without a default port, which is what a browser puts in Host.
+	// An internationalised name used to go out as raw UTF-8.
+	req, err := http.NewRequest(method, u.String(), body)
 	if err != nil {
 		if c, ok := body.(io.Closer); ok {
 			c.Close()
@@ -1107,6 +1140,11 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		resp, err := s.sendH3(req.Context(), r, u)
 		err = headersDone(err)
 		if err == nil {
+			// sendH3 opened its own copy of the body; this one would stay
+			// open (and a file locked on Windows) until collected.
+			if closer, ok := body.(io.Closer); ok {
+				closer.Close()
+			}
 			// HTTP/3 keeps its own connection inside the transport, nothing to release.
 			return fromStdResponse(resp), cancel, nil, nil
 		}
@@ -1126,7 +1164,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if plain {
 		spec.plain = true
 	}
-	c, err := s.conn(req.Context(), u, spec)
+	c, reused, err := s.conn(req.Context(), u, spec, r.freshConn)
 	if err != nil {
 		// No connection — the request never reached the server, a retry is safe.
 		return fail(&unprocessedError{err})
@@ -1151,7 +1189,32 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		// The connection is no longer usable. For HTTP/2 close it gently: a hard
 		// close would cut the streams of neighbouring requests.
 		s.release(c)
-		s.evict(c, c.h2 == nil)
+		// HTTP/1.1 is dead after any failure. An HTTP/2 connection is retired
+		// only when it failed as a whole: a cancelled request, a
+		// response_timeout or one stream's reset leave it serving the rest,
+		// as in a browser — every such error used to cost a new handshake.
+		if c.h2 == nil || !c.usable() || connectionDropped(err) || h2Unprocessed(err) {
+			s.evict(c, c.h2 == nil)
+		}
+		// A kept-alive connection can die under a request: the server closed it
+		// as the request went out, or a middlebox dropped it while it idled. No
+		// response header arrived, so the request goes once more on a new
+		// connection — whatever the method, as Chromium does
+		// (HttpNetworkTransaction::ShouldResendRequest: the connection was
+		// reused and no headers were received). A new connection that fails is
+		// not resent: that is a real failure, and retries= decides about it.
+		if reused && (connectionDropped(err) || (c.h2 != nil && h2Unprocessed(err))) &&
+			req.Context().Err() == nil && (deadline.IsZero() || time.Now().Before(deadline)) {
+			if closer, ok := body.(io.Closer); ok {
+				closer.Close()
+			}
+			if cancel != nil {
+				cancel()
+			}
+			again := *r
+			again.freshConn = true
+			return s.send(&again, deadline)
+		}
 		err = fmt.Errorf("request failed: %w", err)
 		if c.h2 != nil && h2Unprocessed(err) {
 			return fail(&unprocessedError{err})
@@ -1161,8 +1224,8 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 
 	if s.useCookies(r) && s.includesCredentials(r, u) {
 		if cookies := s.acceptCookies(resp.Cookies()); len(cookies) > 0 {
-			s.jar.SetCookies(u, cookies)
-			s.recordCookies(u, cookies)
+			s.cookieJar().SetCookies(u, cookies)
+			s.recordCookies(u, cookies, r.cookieLog)
 		}
 	}
 	return resp, cancel, c, nil
@@ -1300,6 +1363,10 @@ func (s *Session) transport() *http2.Transport {
 		SettingsOrder:     order,
 		ConnectionFlow:    h2.ConnectionWindowUpdate,
 		PseudoHeaderOrder: h2.PseudoOrder,
+		// The body is decoded by conn.roundTrip, as on HTTP/1.1: fhttp's own
+		// decoder took zstd with a 512 MB window allocated up front, and knew
+		// no stacked encodings.
+		DisableCompression: true,
 	}
 	// Priority on the HEADERS frame.
 	//

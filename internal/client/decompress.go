@@ -114,7 +114,11 @@ func openDecoder(codec string, src io.Reader) (io.Reader, io.Closer, error) {
 		return brotli.NewReader(src), nil, nil
 
 	case "zstd":
-		zr, err := zstd.NewReader(src)
+		// The library's default window is 512 MB, allocated up front: a
+		// ten-byte frame declaring windowLog 29 took 513 MB before the body
+		// limit could see a byte. Chromium caps the window at 8 MB, and a
+		// response past that fails there too.
+		zr, err := zstd.NewReader(src, zstd.WithDecoderMaxWindow(8<<20), zstd.WithDecoderConcurrency(1))
 		if err != nil {
 			return nil, nil, decodeErr("zstd", err)
 		}

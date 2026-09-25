@@ -3,6 +3,7 @@ package client
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -50,6 +51,10 @@ type conn struct {
 	// pooled and lastUsed are read and written only under Session.mu.
 	pooled   bool
 	lastUsed time.Time
+
+	// idleWatch is where the read watchIdle keeps on an idle HTTP/1.1
+	// connection reports; set and cleared under Session.mu.
+	idleWatch chan error
 }
 
 func newH2Conn(cc *http2.ClientConn, spec dialSpec) *conn {
@@ -70,6 +75,89 @@ func (c *conn) usable() bool {
 	return true
 }
 
+// watchIdle keeps a read pending on an idle pooled HTTP/1.1 connection, so
+// that a server giving it up is noticed the moment it happens: closed (the
+// usual end of a keep-alive timeout), reset, or written to unasked — some
+// servers send a 408 before closing. The connection is then marked dead and
+// the pool never hands it out. Chromium checks the same before reusing a
+// socket (IsConnectedAndIdle); net/http keeps such a read on every idle
+// connection. Without it the next request went out on a dead connection and
+// failed, every time a server's keep-alive timer ran out between two requests.
+//
+// Called under Session.mu with the connection idle (busy == 0): a pick takes
+// the same mutex, so the read cannot start under a request.
+func (c *conn) watchIdle() {
+	if c.h2 != nil || c.raw == nil || c.idleWatch != nil || c.dead.Load() || c.busy.Load() != 0 {
+		return
+	}
+	// The last request's deadline may still be on the socket; it would end the
+	// watch early and blind it.
+	_ = c.raw.SetReadDeadline(time.Time{})
+	ch := make(chan error, 1)
+	c.idleWatch = ch
+	go func() {
+		_, err := c.br.Peek(1)
+		if !isTimeout(err) {
+			c.dead.Store(true)
+		}
+		ch <- err
+	}()
+}
+
+// endIdleWatch stops the read watchIdle started and reports whether the
+// connection is still good. A deadline in the past wakes the pending read with
+// a timeout, which leaves no mark on the TLS state: crypto/tls and uTLS treat a
+// timeout as temporary and keep what they had read.
+func (c *conn) endIdleWatch(ch chan error) bool {
+	if ch != nil {
+		_ = c.raw.SetReadDeadline(aLongTimeAgo)
+		<-ch
+		_ = c.raw.SetReadDeadline(time.Time{})
+	}
+	return !c.dead.Load()
+}
+
+// aLongTimeAgo is a deadline that has already passed, as net/http names it.
+var aLongTimeAgo = time.Unix(1, 0)
+
+func isTimeout(err error) bool {
+	var ne net.Error
+	return err != nil && errors.As(err, &ne) && ne.Timeout()
+}
+
+// readResponse reads the final response to req.
+//
+// Nothing at all before the connection ended is an empty response — on a
+// reused connection the request is sent again, as Chromium resends on
+// ERR_EMPTY_RESPONSE. A response cut off after its first byte is not: the
+// server may have processed the request, and Chromium does not resend
+// ERR_RESPONSE_HEADERS_TRUNCATED either (partialResponse keeps the two apart).
+// Interim 1xx responses — 103 Early Hints, an unsolicited 100 — are skipped,
+// as net/http and Chromium skip them; the first one used to be returned as
+// the response, with the real one left in the buffer.
+func (c *conn) readResponse(req *http.Request) (*http.Response, error) {
+	if _, err := c.br.Peek(1); err != nil {
+		return nil, err
+	}
+	for {
+		resp, err := http.ReadResponse(c.br, req)
+		if err != nil {
+			return nil, &partialResponse{err}
+		}
+		if resp.StatusCode >= 100 && resp.StatusCode < 200 && resp.StatusCode != http.StatusSwitchingProtocols {
+			resp.Body.Close()
+			continue
+		}
+		return resp, nil
+	}
+}
+
+// partialResponse is a response that began and did not complete.
+type partialResponse struct{ err error }
+
+func (e *partialResponse) Error() string { return "response cut off: " + e.err.Error() }
+func (e *partialResponse) Unwrap() error { return e.err }
+
 // canTake reports whether the connection can serve one more request.
 // HTTP/2 multiplexes, HTTP/1.1 does not.
 func (c *conn) canTake() bool {
@@ -86,7 +174,21 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 	if c.h2 != nil {
 		// For HTTP/2 the limit comes from the request context: the connection is
 		// shared by several streams, and a socket deadline would cut the others.
-		return c.h2.RoundTrip(req)
+		resp, err := c.h2.RoundTrip(req)
+		if err != nil {
+			return nil, err
+		}
+		if ce := resp.Header.Get("Content-Encoding"); ce != "" && req.Method != http.MethodHead {
+			body, err := decompress(resp.Body, ce)
+			if err != nil {
+				resp.Body.Close()
+				return nil, err
+			}
+			resp.Body = body
+			resp.Uncompressed = true
+			resp.ContentLength = -1
+		}
+		return resp, nil
 	}
 
 	c.mu.Lock()
@@ -125,7 +227,7 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 		case <-unblock:
 		}
 	}()
-	resp, err := http.ReadResponse(c.br, req)
+	resp, err := c.readResponse(req)
 	close(unblock)
 	<-watched
 	if deadline, ok := ctx.Deadline(); ok {
@@ -156,7 +258,14 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 	// wrapper, and Transport is not used here — so "read a kilobyte and close"
 	// meant downloading the whole body. The h1Body wrapper tracks EOF: an unread
 	// connection is cheaper to drop than to drain.
-	resp.Body = &h1Body{inner: resp.Body, conn: c, want: resp.ContentLength}
+	// Cancelling the request has to reach a body being read too: past the
+	// headers only the socket deadline applied, and a cancelled download
+	// kept its goroutine and its connection until the full timeout. HTTP/2
+	// aborts on the context by itself.
+	raw := c.raw
+	body := &h1Body{inner: resp.Body, conn: c, want: resp.ContentLength}
+	body.unwatch = context.AfterFunc(ctx, func() { _ = raw.SetReadDeadline(aLongTimeAgo) })
+	resp.Body = body
 
 	// Decompression on the HTTP/1.1 path is our own. In fhttp it lives in
 	// Transport (persistConn.readLoop) and in the HTTP/2 transport; conn.roundTrip
@@ -190,6 +299,8 @@ type h1Body struct {
 	read   int64
 	sawEOF bool
 	closed bool
+	// unwatch stops the cancellation watch the body is read under.
+	unwatch func() bool
 }
 
 func (b *h1Body) Read(p []byte) (int, error) {
@@ -212,6 +323,9 @@ func (b *h1Body) Close() error {
 	b.closed = true
 	complete := b.sawEOF || (b.want >= 0 && b.read >= b.want)
 	b.mu.Unlock()
+	if b.unwatch != nil {
+		b.unwatch()
+	}
 
 	if complete {
 		return b.inner.Close()

@@ -236,5 +236,6 @@
       "os_version": "18_7_10",
       "version": "18.7.10"
     }
-  ]
+  ],
+  "device_kind": "iphone"
 }

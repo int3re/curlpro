@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from typing import Iterable, Iterator, Mapping
 
-from ._ffi import WebSocketClosed, _call, call_framed, call_framed_out, encode
+from ._ffi import _call, call_framed, call_framed_out, encode
+from .errors import WebSocketClosed
 from .timeouts import split_timeout as _split_timeout
 
 
@@ -102,6 +103,14 @@ class WebSocket:
         return f"<WebSocket {self._id} {state}>"
 
 
+def _proxy_field(proxy: str | bool | None) -> dict:
+    """The socket's proxy for the native side: absent keeps the session's,
+    "" goes direct, a URL goes through it. False means direct, as on requests."""
+    if proxy is None:
+        return {}
+    return {"proxy": "" if proxy is False else str(proxy)}
+
+
 def connect(
     session_id: int,
     url: str,
@@ -110,6 +119,7 @@ def connect(
     subprotocols: Iterable[str] | None = None,
     timeout: float | tuple[float, float] = 30.0,
     max_message_size: int = 0,
+    proxy: str | bool | None = None,
 ) -> WebSocket:
     connect_timeout, timeout = _split_timeout(timeout)
     data = _call(
@@ -126,6 +136,7 @@ def connect(
                 # Zero means the native default (64 MiB). A limit is needed
                 # because the frame length is whatever the server says.
                 "max_message_size": int(max_message_size),
+                **_proxy_field(proxy),
             }
         ),
     )

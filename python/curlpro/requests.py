@@ -49,7 +49,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, Iterator, Mapping
 
-from ._ffi import CurlProError, HTTPError, Timeout
+from .errors import CurlProError, HTTPError, Timeout
 from .session import Response as _Response
 from .session import Session as _Session
 
@@ -263,7 +263,7 @@ _REFUSED = {
 }
 
 
-def _translate(kw: dict[str, Any]) -> dict[str, Any]:
+def _translate(kw: dict[str, Any], url: str | None = None) -> dict[str, Any]:
     """Renames requests keywords to ours. No refusals: both callers share this."""
     out = dict(kw)
     if "json" in out:
@@ -271,15 +271,47 @@ def _translate(kw: dict[str, Any]) -> dict[str, Any]:
     if "proxies" in out:
         proxies = out.pop("proxies")
         if isinstance(proxies, Mapping):
-            # requests keys by scheme; one connection has one proxy here, and
-            # https is the scheme this library is for.
-            out["proxy"] = proxies.get("https") or proxies.get("http") or ""
-        else:
+            # requests picks by the URL's scheme, then "all". An empty mapping
+            # means "not set" — it used to mean "direct", bypassing the
+            # session's proxy.
+            scheme = (url or "https:").split(":", 1)[0].lower()
+            chosen = proxies.get(scheme) or proxies.get("all") or (
+                None if url else proxies.get("https") or proxies.get("http"))
+            if chosen:
+                out["proxy"] = chosen
+        elif proxies is not None:
             out["proxy"] = proxies
+    data = out.get("data")
+    files = out.get("files")
+    if files is not None and isinstance(data, Mapping):
+        # requests sends data= beside files= as form fields of the multipart.
+        out["fields"] = {k: str(v) for k, v in out.pop("data").items()}
+    elif isinstance(data, Mapping) or (isinstance(data, list) and data and isinstance(data[0], tuple)):
+        # A dict or a list of pairs is form-encoded, as requests does.
+        from urllib.parse import urlencode
+        pairs = data.items() if isinstance(data, Mapping) else data
+        out["data"] = urlencode([(k, v) for k, v in pairs if v is not None], doseq=True)
+        headers = dict(out.get("headers") or {})
+        if not any(k.lower() == "content-type" for k in headers):
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+        out["headers"] = headers
+    cookies = out.get("cookies")
+    if isinstance(cookies, Mapping):
+        # requests' per-request cookies ride along with the jar's for this
+        # request; here they go out as a Cookie header beside the jar's.
+        out.pop("cookies")
+        headers = dict(out.get("headers") or {})
+        extra = "; ".join(f"{k}={v}" for k, v in cookies.items())
+        existing = next((k for k in headers if k.lower() == "cookie"), None)
+        if existing:
+            headers[existing] = headers[existing] + "; " + extra
+        else:
+            headers["Cookie"] = extra
+        out["headers"] = headers
     return out
 
 
-def _request_kw(kw: dict[str, Any]) -> dict[str, Any]:
+def _request_kw(kw: dict[str, Any], url: str | None = None) -> dict[str, Any]:
     """The same, for a single request, refusing what cannot be honoured there.
 
     The refusals belong here and not in the constructor: verify and cert are
@@ -290,7 +322,7 @@ def _request_kw(kw: dict[str, Any]) -> dict[str, Any]:
     for name, why in _REFUSED.items():
         if name in kw:
             raise TypeError(why)
-    return _translate(kw)
+    return _translate(kw, url)
 
 
 class Session:
@@ -325,7 +357,7 @@ class Session:
         return self._s
 
     def request(self, method: str, url: str, **kw: Any) -> Response:
-        return Response(self._s.request(method, url, **_request_kw(kw)))
+        return Response(self._s.request(method, url, **_request_kw(kw, url)))
 
     def get(self, url: str, **kw: Any) -> Response:
         return self.request("GET", url, **kw)
@@ -343,6 +375,8 @@ class Session:
         return self.request("DELETE", url, **kw)
 
     def head(self, url: str, **kw: Any) -> Response:
+        # requests does not follow redirects for HEAD unless asked.
+        kw.setdefault("allow_redirects", False)
         return self.request("HEAD", url, **kw)
 
     def options(self, url: str, **kw: Any) -> Response:
@@ -393,6 +427,7 @@ def delete(url: str, **kw: Any) -> Response:
 
 
 def head(url: str, **kw: Any) -> Response:
+    kw.setdefault("allow_redirects", False)
     return request("HEAD", url, **kw)
 
 

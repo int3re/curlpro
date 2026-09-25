@@ -7,7 +7,7 @@
     "ref": "e3922a2b2d976487cb4cf4e7b0ac290b3ce77f66",
     "path": "src/emulate/profile/opera.rs",
     "date": "2026-09-22",
-    "note": "ClientHello, HTTP/2 frames and header sets are those captured for chrome-131-macos; wreq-util declares opera 127 to use the same TLS and HTTP/2 configuration (opera127: tls_options!('CURVES',), http2_options!(())). The User-Agent is wreq-util's; sec-ch-ua and accept-language are wreq-util's. Nothing was seen on the wire for this version here. wreq-util gives every Opera version one tuple — the ALPS codepoint of Chromium 131 — although the User-Agent names Chromium up to 147; taken as claimed."
+    "note": "ClientHello, HTTP/2 frames and header sets are those captured for chrome-131-macos; wreq-util declares opera 127 to use the same TLS and HTTP/2 configuration (opera127: tls_options!('CURVES',), http2_options!(())). The User-Agent is wreq-util's; accept-language is wreq-util's. Nothing was seen on the wire for this version here. wreq-util gives every Opera version one tuple — the ALPS codepoint of Chromium 131 — although the User-Agent names Chromium up to 147; taken as claimed. sec-ch-ua recomputed on 2026-09-26: wreq-util's string was wrong for this version (copied from another version); computed from the Chromium major as the browser computes it."
   },
   "headers": {
     "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 OPR/127.0.0.0",
@@ -18,7 +18,7 @@
       },
       {
         "key": "sec-ch-ua",
-        "value": "\"Not:A-Brand\";v=\"99\", \"Opera\";v=\"127\", \"Chromium\";v=\"143\""
+        "value": "\"Opera\";v=\"127\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\""
       },
       {
         "key": "sec-ch-ua-mobile",

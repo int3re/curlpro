@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Iterator
 
-from ._ffi import CurlProError, _call, stream_read
+from ._ffi import _call, stream_read
+from ._headers import Headers
+from .errors import CurlProError
 
 DEFAULT_CHUNK = 64 * 1024
 
@@ -58,7 +60,7 @@ class StreamResponse:
     def __init__(self, payload: dict, max_size: int = 0):
         self.status: int = payload["status"]
         self.proto: str = payload.get("proto", "")
-        self.headers: dict[str, list[str]] = payload.get("headers") or {}
+        self.headers = Headers(payload.get("headers"))
         self.url: str = payload.get("url", "")
         # Imported here: session imports this module, and a module-level
         # import the other way would be a cycle.

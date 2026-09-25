@@ -80,15 +80,17 @@ type Fingerprint struct {
 
 	UserAgent string `json:"user_agent"`
 
-	// Device is the phone this session presents itself as, and Devices are the
-	// ones the profile offers.
+	// Device is the identity this session presents itself as, Devices the
+	// ones the profile offers, and DeviceKind what they are: "phone",
+	// "desktop", "iphone" or "distro" (profile.Capabilities says more).
 	//
 	// Both are reported because "no device chosen" only means something when
 	// there is something to choose: a Safari-on-iOS profile sends no client
 	// hints at all, and advising a device there would be advice that cannot be
 	// followed.
-	Device  string   `json:"device"`
-	Devices []string `json:"devices"`
+	Device     string   `json:"device"`
+	Devices    []string `json:"devices"`
+	DeviceKind string   `json:"device_kind"`
 
 	// Mode is the header set the preview was built with: "navigate" or
 	// "fetch". DerivedFetch says that set was worked out from the Fetch
@@ -195,6 +197,7 @@ func (s *Session) Fingerprint(rawURL string) (Fingerprint, error) {
 	for _, d := range s.profile.Devices {
 		out.Devices = append(out.Devices, d.Name)
 	}
+	out.DeviceKind = s.profile.DevicesKind()
 	out.Mode = s.modeFor(&Request{Method: "GET", URL: u.String()})
 	out.DerivedFetch = s.profile.Fetch.Derived
 	out.ModesUsed = s.ModesUsed()
@@ -232,7 +235,7 @@ func (s *Session) PreviewHeaders(r *Request) ([]string, []fingerprint.HeaderKV, 
 	if err := s.checkMode(&req); err != nil {
 		return nil, nil, err
 	}
-	if err := req.validate(s.jar != nil); err != nil {
+	if err := req.validate(s.cookieJar() != nil); err != nil {
 		return nil, nil, err
 	}
 	u, err := parseURL(req.URL)

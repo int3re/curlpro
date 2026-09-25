@@ -74,5 +74,37 @@
     "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.75 Safari/537.36",
     "custom_anchor": "accept"
   },
-  "name": "chrome-100-windows"
+  "name": "chrome-100-windows",
+  "http2": {
+    "settings": [
+      {
+        "id": 1,
+        "value": 65536
+      },
+      {
+        "id": 3,
+        "value": 1000
+      },
+      {
+        "id": 4,
+        "value": 6291456
+      },
+      {
+        "id": 6,
+        "value": 262144
+      }
+    ],
+    "connection_window_update": 15663105
+  },
+  "source": {
+    "kind": "transcribed",
+    "covers": [
+      "http2.settings"
+    ],
+    "from": "github.com/0x676e67/wreq-util",
+    "ref": "e3922a2b2d976487cb4cf4e7b0ac290b3ce77f66",
+    "path": "src/emulation/device/chrome/http2.rs",
+    "date": "2026-09-26",
+    "note": "The ClientHello and the header set are captured (the curl-impersonate corpus), but that signature recorded no SETTINGS frame: the HTTP/2 SETTINGS and the connection WINDOW_UPDATE are transcribed (wreq-util says v100: http2_options!(1)). Until 0.12 the profile sent a SETTINGS frame with no entries, which no browser sends."
+  }
 }

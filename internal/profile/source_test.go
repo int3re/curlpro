@@ -78,6 +78,11 @@ func TestEveryTranscribedProfileStandsOnACapturedOne(t *testing.T) {
 		if p.Source.Note == "" || p.Source.Date == "" || p.Source.Path == "" {
 			t.Errorf("%s: an incomplete source block: %+v", name, p.Source)
 		}
+		// A captured profile with one part transcribed (its SETTINGS) is a
+		// capture: it may be a root, and others may stand on it.
+		if len(p.Source.Covers) > 0 {
+			continue
+		}
 		if p.BasedOn == "" {
 			t.Errorf("%s: a transcribed profile with no base", name)
 			continue
@@ -86,7 +91,10 @@ func TestEveryTranscribedProfileStandsOnACapturedOne(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if base.Source != nil {
+		// A transcription stands on a capture. A derived profile (built here
+		// from published facts) may stand on another derived one — edge-154 on
+		// chrome-154 — and says so in its note.
+		if p.Source.Kind == "transcribed" && base.Source != nil && len(base.Source.Covers) == 0 {
 			t.Errorf("%s stands on %s, which is transcribed itself", name, p.BasedOn)
 		}
 	}

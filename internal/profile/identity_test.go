@@ -136,3 +136,86 @@ func TestTemplatedUserAgents(t *testing.T) {
 		t.Errorf("generic: %q", ua)
 	}
 }
+
+// The pools grew in 0.11 from phones to desktop identities, iOS versions and
+// a distribution token under the same name; device_kind says which (a field
+// report: code reading "has devices" as "is a phone" broke silently).
+func TestDeviceKindSaysWhatThePoolIs(t *testing.T) {
+	reg := NewRegistry()
+	if err := reg.LoadFS(os.DirFS(filepath.Join("..", "..", "profiles")), "."); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{
+		"chrome-152-android":  "phone",
+		"yandex-26.8-android": "phone",
+		"chrome-153-windows":  "desktop",
+		"chrome-151-macos":    "desktop",
+		"chrome-152-linux":    "desktop",
+		"safari-26-ios":       "iphone",
+		"safari-18.0-ios":     "iphone",
+		"firefox-150-linux":   "distro",
+		"chrome-150-macos":    "",
+		"edge-153-windows":    "", // a delta that declines its parent's pool
+		"safari-18.0-macos":   "",
+		"firefox-156-windows": "",
+	} {
+		p, err := reg.Resolve(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := p.Capabilities().DeviceKind; got != want {
+			t.Errorf("%s: device_kind %q, want %q", name, got, want)
+		}
+	}
+
+	// A profile written for an older library has a pool and no kind: phones,
+	// as every pool was then.
+	base, _ := os.ReadFile(filepath.Join("..", "..", "profiles", "chrome-150-macos.json"))
+	old := strings.Replace(string(base), `"name": "chrome-150-macos"`,
+		`"name": "old-phone", "devices": [{"name": "Pixel 7", "model": "Pixel 7", "platform_version": "15.0.0"}]`, 1)
+	if err := reg.Register([]byte(old)); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := reg.Resolve("old-phone"); p.Capabilities().DeviceKind != "phone" {
+		t.Errorf("a pool without a kind: %q", p.Capabilities().DeviceKind)
+	}
+
+	// A misspelt kind is refused rather than read as a phone.
+	bad := strings.Replace(string(base), `"name": "chrome-150-macos"`,
+		`"name": "bad-kind", "device_kind": "phones"`, 1)
+	if err := reg.Register([]byte(bad)); err == nil {
+		if _, err := reg.Resolve("bad-kind"); err == nil || !strings.Contains(err.Error(), "device_kind") {
+			t.Errorf("a misspelt device_kind was accepted: %v", err)
+		}
+	}
+}
+
+// A derived profile keeps its browser's behaviour, and a delta's own pool
+// brings its own kind (a review of 0.12: both were keyed wrongly).
+func TestDerivedProfileKeepsFamilyAndPoolKind(t *testing.T) {
+	reg := NewRegistry()
+	if err := reg.LoadFS(os.DirFS(filepath.Join("..", "..", "profiles")), "."); err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Register([]byte(`{"name": "acme-153", "based_on": "chrome-153-windows"}`)); err != nil {
+		t.Fatal(err)
+	}
+	acme, err := reg.Resolve("acme-153")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acme.Family() != "chrome" || acme.Capabilities().Cookies == nil || !acme.Capabilities().Cookies.LaxByDefault {
+		t.Errorf("acme-153 on chrome-153-windows: family %q, cookies %+v", acme.Family(), acme.Capabilities().Cookies)
+	}
+	if err := reg.Register([]byte(`{"name": "phones-on-desktop", "based_on": "chrome-151-windows",
+		"devices": [{"name": "Pixel 7", "model": "Pixel 7", "platform_version": "15.0.0"}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	p, err := reg.Resolve("phones-on-desktop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Capabilities().DeviceKind; got != "phone" {
+		t.Errorf("a delta's own pool without a kind inherited %q", got)
+	}
+}

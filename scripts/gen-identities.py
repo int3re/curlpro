@@ -82,6 +82,9 @@ DESKTOP = [
     ("chrome-151-windows", "windows", "151"), ("chrome-151-macos", "macos", "151"), ("chrome-151-linux", "linux", "151"),
     ("chrome-152-windows", "windows", "152"), ("chrome-152-macos", "macos", "152"), ("chrome-152-linux", "linux", "152"),
     ("chrome-153-windows", "windows", "153"), ("chrome-153-macos", "macos", "153"), ("chrome-153-linux", "linux", "153"),
+    # Derived, not captured (scripts/derive-current.py): the pool is Chrome 154's
+    # builds on the 153 capture's hints order.
+    ("chrome-154-windows", "windows", "154"), ("chrome-154-macos", "macos", "154"), ("chrome-154-linux", "linux", "154"),
 ]
 # Not edge-153-windows: Edge writes its own build into "Microsoft Edge";v= and
 # sec-ch-ua-full-version (153.0.3xxx.xx) next to Chromium's in the list, and
@@ -160,7 +163,9 @@ def ios_devices(spec: dict) -> list[dict]:
     """One identity per iOS version of the line; ``frozen_os`` is the OS token
     Safari 26 pins the string to while ``Version/`` keeps the real one."""
     frozen = spec.get("frozen_os")
-    return [{"name": f"iPhone, iOS {v}", "os_version": frozen or v.replace(".", "_"), "version": v}
+    by_version = spec.get("frozen_os_by_version") or {}
+    return [{"name": f"iPhone, iOS {v}", "os_version": by_version.get(v) or frozen or v.replace(".", "_"),
+             "version": v}
             for v in spec["versions"]]
 
 
@@ -177,16 +182,19 @@ def wanted() -> dict[str, dict]:
                 "fetch_order": [{"key": k, "value": ""} for k in FETCH_ORDER],
             },
             "devices": desktop_devices(os_, major, s),
+            "device_kind": "desktop",
         }
     for name, spec in s["ios"].items():
-        out[name] = {"devices": ios_devices(spec), "user_agent_template": IOS_TEMPLATE}
+        out[name] = {"devices": ios_devices(spec), "device_kind": "iphone",
+                     "user_agent_template": IOS_TEMPLATE}
     for p in sorted(PROFILES.glob("firefox-*-linux.json")):
         d = json.loads(p.read_text(encoding="utf-8"))
         ua = d["headers"]["user_agent"]
         # The profile's own string may already carry the Ubuntu token (wreq-util's
         # Firefox strings do); the template takes either shape.
         tpl = re.sub(r"\(X11; (?:Ubuntu; )?Linux x86_64;", "(X11; {distro}Linux x86_64;", ua)
-        out[p.stem] = {"devices": list(s["firefox_linux"]), "user_agent_template": tpl}
+        out[p.stem] = {"devices": list(s["firefox_linux"]), "device_kind": "distro",
+                       "user_agent_template": tpl}
     # A delta inherits its parent's pool, and most deltas on a pooled profile
     # must not have one: the macOS Safari profiles stand on the iOS captures,
     # edge-153-windows on chrome-153-windows (Edge writes its own build into the

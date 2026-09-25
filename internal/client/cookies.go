@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	http "github.com/bogdanfinn/fhttp"
@@ -37,17 +38,91 @@ type Cookie struct {
 	// attribute still goes on a cross-site POST navigation while younger
 	// than two minutes. 0 — an import that did not say — counts as old.
 	Created int64 `json:"created,omitempty"`
+	// HostOnly marks a cookie set without a Domain attribute: it goes to the
+	// host that set it and to none of its subdomains (RFC 6265 5.3 step 6).
+	// The export used to drop it, and a saved and reloaded jar sent such a
+	// cookie to every subdomain — a different jar from the one saved.
+	HostOnly bool `json:"host_only,omitempty"`
 }
 
 func cookieKey(domain, path, name string) string {
 	return strings.ToLower(domain) + "\x00" + path + "\x00" + name
 }
 
+// CookieChange is one record a request changed: its key, whether the new
+// one was host-only, and the record it replaced (nil when there was none).
+// Undone in reverse order, a request's changes put the jar back exactly,
+// touching nothing another request wrote meanwhile.
+type CookieChange struct {
+	Domain   string  `json:"domain"`
+	Path     string  `json:"path"`
+	Name     string  `json:"name"`
+	HostOnly bool    `json:"host_only,omitempty"`
+	Before   *Cookie `json:"before"`
+}
+
+// cookieLog collects one request's changes across its hops, preflights and
+// retries; the copies of a Request share it.
+type cookieLog struct {
+	mu   sync.Mutex
+	list []CookieChange
+}
+
+func (l *cookieLog) add(c CookieChange) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	l.list = append(l.list, c)
+	l.mu.Unlock()
+}
+
+func (l *cookieLog) changes() []CookieChange {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]CookieChange(nil), l.list...)
+}
+
+// UndoCookies reverts changes a request logged, last first.
+func (s *Session) UndoCookies(changes []CookieChange) error {
+	jar := s.cookieJar()
+	if jar == nil {
+		return nil
+	}
+	for i := len(changes) - 1; i >= 0; i-- {
+		ch := changes[i]
+		if ch.Before != nil {
+			if err := s.SetCookies([]Cookie{*ch.Before}); err != nil {
+				return err
+			}
+			continue
+		}
+		// The record did not exist: remove what the request set. The jar
+		// keys a host-only cookie apart from a domain one, so the deletion
+		// takes the same form the cookie was set in.
+		u := &url.URL{Scheme: "https", Host: ch.Domain, Path: ch.Path}
+		gone := &http.Cookie{Name: ch.Name, Path: ch.Path, MaxAge: -1}
+		if !ch.HostOnly {
+			gone.Domain = ch.Domain
+		}
+		jar.SetCookies(u, []*http.Cookie{gone})
+		u.Scheme = "http"
+		jar.SetCookies(u, []*http.Cookie{gone})
+		s.mu.Lock()
+		delete(s.cookies, cookieKey(ch.Domain, ch.Path, ch.Name))
+		s.mu.Unlock()
+	}
+	return nil
+}
+
 // recordCookies remembers the cookies from a response.
 //
 // The domain and path come from the cookie itself; when it has none they are
 // derived from the request URL per RFC 6265: bare domain, directory as path.
-func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie) {
+func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie, log *cookieLog) {
 	if len(cs) == 0 {
 		return
 	}
@@ -57,16 +132,33 @@ func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie) {
 	if s.cookies == nil {
 		s.cookies = make(map[string]Cookie)
 	}
+	host := strings.ToLower(u.Hostname())
 	for _, c := range cs {
 		domain := strings.TrimPrefix(strings.ToLower(c.Domain), ".")
 		if domain == "" {
-			domain = strings.ToLower(u.Hostname())
+			domain = host
+		}
+		// A Domain the request host is not inside is refused by the jar
+		// (RFC 6265 5.3 step 6), and must be refused here too: evil.test
+		// setting sid for bank.example used to overwrite bank's record, so
+		// the export carried the forged value and bank's Strict cookie was
+		// judged by the forger's SameSite=None.
+		if host != domain && !strings.HasSuffix(host, "."+domain) {
+			continue
 		}
 		path := c.Path
 		if path == "" {
 			path = defaultCookiePath(u.Path)
 		}
 		key := cookieKey(domain, path, c.Name)
+		if log != nil {
+			ch := CookieChange{Domain: domain, Path: path, Name: c.Name, HostOnly: c.Domain == ""}
+			if prev, ok := s.cookies[key]; ok {
+				prev := prev
+				ch.Before = &prev
+			}
+			log.add(ch)
+		}
 
 		// MaxAge<0 and an expiry in the past mean deletion: that is how a server
 		// clears a cookie, and it must not appear in the export.
@@ -91,6 +183,7 @@ func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie) {
 			HTTPOnly: c.HttpOnly,
 			SameSite: sameSiteName(c.SameSite),
 			Created:  now.Unix(),
+			HostOnly: c.Domain == "",
 		}
 	}
 }
@@ -166,7 +259,7 @@ func (s *Session) Cookies() []Cookie {
 // They go both into the jar and into the record: the jar handles sending, the
 // record the next export. The domain is required: without it there is nobody to send to.
 func (s *Session) SetCookies(cs []Cookie) error {
-	if s.jar == nil {
+	if s.cookieJar() == nil {
 		return fmt.Errorf("cookie jar is disabled for this session")
 	}
 	for _, c := range cs {
@@ -196,13 +289,13 @@ func (s *Session) SetCookies(cs []Cookie) error {
 		// net/http rule fhttp's copy keeps), and an imported cookie for
 		// 127.0.0.1 was recorded but never sent. An IP cookie is host-only
 		// by nature; setting it without the attribute says exactly that.
-		if net.ParseIP(strings.TrimPrefix(c.Domain, ".")) != nil {
+		if net.ParseIP(strings.TrimPrefix(c.Domain, ".")) != nil || c.HostOnly {
 			hc.Domain = ""
 		}
 		if c.Expires != 0 {
 			hc.Expires = time.Unix(c.Expires, 0)
 		}
-		s.jar.SetCookies(u, []*http.Cookie{hc})
+		s.cookieJar().SetCookies(u, []*http.Cookie{hc})
 
 		s.mu.Lock()
 		if s.cookies == nil {
@@ -222,7 +315,7 @@ func (s *Session) SetCookies(cs []Cookie) error {
 // The jar is recreated whole: it cannot delete one by one, and clearing every
 // cookie with an empty value would leave junk with foreign expiries inside.
 func (s *Session) ClearCookies() error {
-	if s.jar == nil {
+	if s.cookieJar() == nil {
 		return nil
 	}
 	jar, err := newCookieJar()
@@ -230,7 +323,7 @@ func (s *Session) ClearCookies() error {
 		return err
 	}
 	s.mu.Lock()
-	s.jar = jar
+	s.jar.Store(jar)
 	s.cookies = nil
 	s.mu.Unlock()
 	return nil

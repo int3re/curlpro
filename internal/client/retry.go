@@ -1,11 +1,15 @@
 package client
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
+	"io"
 	"math/big"
+	"net"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	// The same fork as in the rest of the client: the response types must match.
@@ -121,6 +125,46 @@ func (e *fatalError) Unwrap() error { return e.err }
 func isFatal(err error) bool {
 	var fe *fatalError
 	return errors.As(err, &fe) || Permanent(err)
+}
+
+// connectionDropped recognises a connection that died under a request: reset,
+// aborted, closed with or without a word (EOF), or HTTP/2's "connection lost".
+// Timeouts and cancellations are not among them — the connection did not fail,
+// the caller's budget did. These are the errors Chromium's HandleIOError
+// resends on (ERR_CONNECTION_RESET, _CLOSED, _ABORTED, ERR_SOCKET_NOT_CONNECTED,
+// ERR_EMPTY_RESPONSE).
+func connectionDropped(err error) bool {
+	if err == nil {
+		return false
+	}
+	var partial *partialResponse
+	if errors.As(err, &partial) {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNABORTED) || errors.Is(err, syscall.EPIPE) {
+		return true
+	}
+	// Windows reports the same through its own numbers, which syscall's
+	// ECONNRESET does not match: WSAECONNABORTED, WSAECONNRESET, WSAESHUTDOWN.
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		switch uintptr(errno) {
+		case 10053, 10054, 10058:
+			return true
+		}
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "client connection lost") ||
+		strings.Contains(msg, "client conn is closed") ||
+		strings.Contains(msg, "connection is closed")
 }
 
 // h2Unprocessed recognises HTTP/2 errors where the stream was not processed.

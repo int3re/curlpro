@@ -72,48 +72,67 @@ func (s *Session) newDialSpec(u *url.URL, proxy string, forceHTTP1 bool) dialSpe
 }
 
 // conn returns a connection matching spec, opening a new one when needed.
-func (s *Session) conn(ctx context.Context, u *url.URL, spec dialSpec) (*conn, error) {
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return nil, errSessionClosed
-	}
-	// Expired ones are collected under the mutex and closed after releasing it:
-	// closing is a network call, and holding the whole pool through it is pointless.
-	victims := s.sweepLocked(time.Now())
+//
+// The second result says whether the connection came from the pool: a request
+// on a reused connection that dies before its response is sent again, one on a
+// new connection is not. fresh skips the pool — that resend.
+func (s *Session) conn(ctx context.Context, u *url.URL, spec dialSpec, fresh bool) (*conn, bool, error) {
+	for {
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			return nil, false, errSessionClosed
+		}
+		// Expired ones are collected under the mutex and closed after releasing it:
+		// closing is a network call, and holding the whole pool through it is pointless.
+		victims := s.sweepLocked(time.Now())
 
-	if c := s.pickLocked(spec); c != nil && !s.opts.DisableKeepAlive {
+		var c *conn
+		if !fresh && !s.opts.DisableKeepAlive {
+			c = s.pickLocked(spec)
+		}
+		if c == nil {
+			s.mu.Unlock()
+			closeAll(victims)
+			break
+		}
 		c.acquire()
 		c.lastUsed = time.Now()
+		watch := c.idleWatch
+		c.idleWatch = nil
 		s.mu.Unlock()
 		closeAll(victims)
-		return c, nil
+		// An idle HTTP/1.1 connection the server gave up meanwhile is dropped,
+		// and the next one is looked at.
+		if c.h2 == nil && !c.endIdleWatch(watch) {
+			s.evict(c, true)
+			continue
+		}
+		return c, true, nil
 	}
-	s.mu.Unlock()
-	closeAll(victims)
 
 	c, err := s.dial(ctx, u, spec)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		c.close()
-		return nil, errSessionClosed
+		return nil, false, errSessionClosed
 	}
 	// While the handshake ran, another call may have opened a connection. For
 	// HTTP/2 a second one is useless — streams multiplex, so the new one closes.
 	// For HTTP/1.1 parallel requests live on separate connections, so the new one stays.
-	// so the new one stays.
-	if c.h2 != nil && !s.opts.DisableKeepAlive {
+	// A resend asked for a new connection on purpose, and keeps it.
+	if c.h2 != nil && !s.opts.DisableKeepAlive && !fresh {
 		if old := s.pickLocked(spec); old != nil && old.h2 != nil {
 			old.acquire()
 			old.lastUsed = time.Now()
 			s.mu.Unlock()
 			c.close()
-			return old, nil
+			return old, true, nil
 		}
 	}
 
@@ -135,9 +154,8 @@ func (s *Session) conn(ctx context.Context, u *url.URL, spec dialSpec) (*conn, e
 	over := s.evictLRULocked()
 	s.mu.Unlock()
 
-	closeAll(victims)
 	closeAll(over)
-	return c, nil
+	return c, false, nil
 }
 
 // pickLocked picks a pooled connection ready to take a request.
@@ -191,8 +209,8 @@ func (s *Session) release(c *conn) {
 	if pooled {
 		// Idle time counts from the return, not from the hand-out: otherwise a long
 		// stream would make a connection look expired the moment it stopped working.
-		// it had just been working.
 		c.lastUsed = time.Now()
+		c.watchIdle()
 	}
 	s.mu.Unlock()
 	// A connection outside the pool will never be handed out again — close it

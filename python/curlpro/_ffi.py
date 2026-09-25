@@ -12,151 +12,25 @@ import ctypes
 import json
 import os
 import platform
+import threading
 from pathlib import Path
 from typing import Any
 
+# The exceptions live in curlpro.errors; the names stay importable from here
+# because code written before 0.12 imported them from this module.
+from .errors import (  # noqa: F401
+    ConfigurationError,
+    CORSError,
+    CurlProError,
+    HTTPError,
+    PermanentError,
+    ProfileCapabilityError,
+    ProxyAuthError,
+    ProxyError,
+    Timeout,
+    WebSocketClosed,
+)
 
-class CurlProError(RuntimeError):
-    """An error raised by the native part.
-
-    ``code`` is the machine-readable code when the native side knows one:
-    ``timeout``, ``session_closed``, ``too_large``, ``ws_closed``,
-    ``ws_too_big``, ``ws_protocol``. Never branch on the message text — it is
-    for humans.
-    """
-
-    def __init__(self, message: str, code: str | None = None):
-        super().__init__(message)
-        self.code = code
-
-
-class Timeout(CurlProError):
-    """The request ran out of time.
-
-    A class of its own because a timeout is the one outcome a scraper treats
-    differently from other network errors: it retries it.
-    """
-
-
-class HTTPError(CurlProError):
-    """A response with an error status; raised by :meth:`Response.raise_for_status`.
-
-    That method used to raise a bare RuntimeError, indistinguishable from an
-    internal failure. ``response`` stays attached: an error response usually
-    carries a body, and that body is the reason to look at it.
-    """
-
-    def __init__(self, message: str, response=None, code: str | None = None):  # noqa: ANN001
-        super().__init__(message, code)
-        self.response = response
-        self.status = getattr(response, "status", None)
-
-
-class WebSocketClosed(CurlProError):
-    """The WebSocket is closed: by the server's Close frame or by the caller.
-
-    A class of its own so that ``for message in ws`` stops on a close only,
-    while read timeouts and protocol errors reach the caller.
-    """
-
-
-class PermanentError(CurlProError):
-    """A failure that will repeat: retrying it changes nothing.
-
-    The two below are its kinds, and this is what a caller catches to mean
-    "do not retry". Until it existed, a profile that could not serve
-    ``mode="fetch"`` raised the same ``CurlProError`` as a blinked
-    connection: a worker retried it three times and dropped the task.
-    """
-
-
-class ProfileCapabilityError(PermanentError):
-    """The profile cannot do what was asked.
-
-    No fetch header set, no ``http3`` section, no ALPN extension to restrict,
-    no devices to choose from. Ask :func:`curlpro.capabilities` before
-    choosing a profile, or catch this and move to another one — the profile
-    will not grow the section between attempts. ``code == "profile_capability"``.
-    """
-
-
-class ConfigurationError(PermanentError):
-    """The arguments do not make sense together.
-
-    An unregistered profile name, a device that is not in the list, a page
-    that is not a URL, a header listed twice, a negative timeout.
-    ``code == "configuration"``.
-    """
-
-
-class ProxyError(CurlProError):
-    """The proxy, not the target, failed the request.
-
-    ``stage`` says where:
-
-    - ``"dial"`` — the proxy itself could not be reached: TCP, or TLS for an
-      ``https://`` proxy. The target was never asked for.
-    - ``"auth"`` — it wanted credentials it did not get, or rejected the ones
-      it got. That one arrives as :class:`ProxyAuthError`, which is also a
-      :class:`PermanentError`: the same login will not pass next time.
-    - ``"connect"`` — it was reached and could not or would not open the
-      tunnel. ``status`` then carries its answer: the HTTP status of the
-      CONNECT reply (502 from a gateway, 403 for a forbidden target) or the
-      SOCKS5 reply code (5 is "connection refused" *at the target*, 4 "host
-      unreachable"); ``None`` when it hung up without one — that case keeps
-      ``code == "proxy_closed"``, everything else is ``code == "proxy"``.
-
-    A pool decides from these, not from the message: a 502 is a minute's
-    rest for the address, a 407 is never, a SOCKS reply 5 blames the
-    destination rather than the proxy. Until 0.10 all four were one
-    ``CurlProError`` with an empty code, and pools parsed the text.
-    """
-
-    def __init__(self, message: str, code: str | None = None, *,
-                 stage: str | None = None, status: int | None = None):
-        super().__init__(message, code)
-        self.stage = stage
-        self.status = status
-
-
-class ProxyAuthError(ProxyError, PermanentError):
-    """The proxy answered 407, or a SOCKS5 proxy rejected the login.
-
-    Without credentials configured, or with credentials it did not accept.
-    ``code == "proxy_auth"``, ``stage == "auth"``; retries are skipped.
-    """
-
-
-class CORSError(CurlProError):
-    """The CORS preflight was refused, and the request itself was not sent.
-
-    A browser sends ``OPTIONS`` before a cross-origin fetch that is not
-    simple, and sends the request only when the answer allows it. This is
-    that refusal: ``status`` and ``headers`` are the preflight's answer,
-    ``reason`` says which check failed (no ``Access-Control-Allow-Origin``,
-    a method or a header not allowed, a wildcard with credentials, a non-2xx
-    status), ``method`` and ``url`` name the request that was not sent.
-
-    Not a :class:`PermanentError` on purpose: a 503 to the OPTIONS is a bad
-    minute, a missing ``Access-Control-Allow-Origin`` is forever, and the
-    caller tells them apart by ``status`` better than a guess here would.
-    A site that works in a browser answers a browser's preflight; if it
-    refuses ours, the page named in ``page=`` is not one the site allows —
-    or the preflight differs from the browser's, which is a bug to report.
-    ``code == "cors"``. ``preflight=False`` on the session or the request
-    sends without one, as before 0.10.
-    """
-
-    def __init__(self, message: str, code: str | None = None, *,
-                 method: str | None = None, url: str | None = None,
-                 reason: str | None = None, status: int | None = None,
-                 headers: dict | None = None):
-        super().__init__(message, code)
-        self.method = method
-        self.url = url
-        self.reason = reason
-        self.status = status
-        self.headers = headers or {}
 
 
 #: Error codes that map to a class of their own. Everything else arrives as a
@@ -247,6 +121,8 @@ for _name, _args in (
         [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int, ctypes.POINTER(ctypes.c_int)],
     ),
     ("curlpro_stream_close", [ctypes.c_longlong]),
+    ("curlpro_stream_error", [ctypes.c_longlong]),
+    ("curlpro_session_undo_cookies", [ctypes.c_longlong, ctypes.c_char_p]),
     ("curlpro_ws_connect", [ctypes.c_longlong, ctypes.c_char_p]),
     (
         "curlpro_ws_send",
@@ -301,13 +177,24 @@ _lib.curlpro_stream_read.argtypes = [ctypes.c_longlong, ctypes.c_char_p, ctypes.
 _lib.curlpro_stream_read.restype = ctypes.c_int
 
 
+#: One read buffer per thread, reused: a fresh zeroed 64 KiB buffer per chunk
+#: and a double copy out of it cost a third of the Python side's time.
+_read_buffers = threading.local()
+
+
 def stream_read(stream_id: int, size: int) -> bytes:
     """Reads up to size bytes. An empty result means the body ended."""
-    buf = ctypes.create_string_buffer(size)
+    buf = getattr(_read_buffers, "buf", None)
+    if buf is None or len(buf) < size:
+        buf = ctypes.create_string_buffer(size)
+        _read_buffers.buf = buf
     n = _lib.curlpro_stream_read(stream_id, buf, size)
     if n < 0:
+        # The read stored its error natively; raise it as what it is — a
+        # Timeout, a proxy failure — rather than a bare message with no code.
+        _call("curlpro_stream_error", stream_id)
         raise CurlProError("stream read failed")
-    return buf.raw[:n]
+    return ctypes.string_at(buf, n)
 
 
 def _call(name: str, *args: Any) -> Any:
@@ -328,7 +215,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Minimum version of the native part: major and minor. Raise it together
 # with lib/curlpro.go whenever Python starts depending on a new export or field.
-REQUIRED_VERSION = (0, 22)
+REQUIRED_VERSION = (0, 23)
 
 
 def _check_version() -> None:
@@ -367,9 +254,39 @@ _check_version()
 _HEADER = 4
 
 
+#: The frame length is a C int on the native side.
+_MAX_FRAME = 2**31 - 1
+
+
 def _frame(meta: Any, body: bytes = b"") -> bytes:
     js = encode(meta)
+    if _HEADER + len(js) + len(body) > _MAX_FRAME:
+        # ctypes would truncate the length silently and the native side would
+        # read a different body than the one given.
+        raise CurlProError(
+            f"a request body of {len(body)} bytes does not fit one call (the limit is 2 GiB): "
+            "send it with body_file=, which streams it from disk", "too_large")
     return len(js).to_bytes(_HEADER, "little") + js + body
+
+
+def _take(name: str, ptr: Any, n: int) -> tuple[Any, bytes]:
+    """Reads a native frame straight into its two parts.
+
+    Copying the whole frame and slicing the body out of it copied a large
+    body twice; reading by offset copies it once (a 50 MiB body: 41 ms down
+    to 23 ms, and on the async path that time is the event loop's)."""
+    if n < _HEADER:
+        raise CurlProError(f"{name}: frame is shorter than its header ({n} bytes)")
+    meta_len = int.from_bytes(ctypes.string_at(ptr, _HEADER), "little")
+    if _HEADER + meta_len > n:
+        raise CurlProError(f"{name}: JSON length ({meta_len}) runs past the frame ({n})")
+    address = ctypes.cast(ptr, ctypes.c_void_p).value or 0
+    envelope = json.loads(ctypes.string_at(address + _HEADER, meta_len))
+    if not envelope.get("ok"):
+        _raise(envelope, name)
+    body_len = n - _HEADER - meta_len
+    body = ctypes.string_at(address + _HEADER + meta_len, body_len) if body_len else b""
+    return envelope.get("data"), body
 
 
 def _unframe(name: str, raw: bytes) -> tuple[Any, bytes]:
@@ -390,10 +307,9 @@ def call_framed(name: str, *args: Any, body: bytes = b"", meta: Any) -> tuple[An
     if not ptr:
         raise CurlProError(f"{name}: the native side returned NULL")
     try:
-        raw = ctypes.string_at(ptr, out_len.value)
+        return _take(name, ptr, out_len.value)
     finally:
         _lib.curlpro_free(ptr)
-    return _unframe(name, raw)
 
 
 def call_with_frame(name: str, *args: Any, body: bytes = b"", meta: Any) -> Any:
@@ -413,10 +329,9 @@ def call_framed_out(name: str, *args: Any) -> tuple[Any, bytes]:
     if not ptr:
         raise CurlProError(f"{name}: the native side returned NULL")
     try:
-        raw = ctypes.string_at(ptr, out_len.value)
+        return _take(name, ptr, out_len.value)
     finally:
         _lib.curlpro_free(ptr)
-    return _unframe(name, raw)
 
 
 def encode(obj: Any) -> bytes:

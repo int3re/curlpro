@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"runtime"
 	"sync"
@@ -154,7 +155,10 @@ func curlpro_free(s *C.char) {
 // 0.22.0: the profile-level source block (a profile file carrying it does not
 // load into an older library), measured and source in the capabilities and
 // the fingerprint, which list_profiles(measured=) reads.
-const Version = "0.22.0"
+// 0.23.0: device_kind on the profile (a file carrying it does not load into an
+// older library), in the capabilities and in the fingerprint; a per-socket
+// proxy on WebSocket connect, which the Python side fills from trust_env.
+const Version = "0.23.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -273,12 +277,14 @@ type sessionConfig struct {
 
 // retryJSON describes the retry policy.
 type retryJSON struct {
-	Attempts          int      `json:"attempts"`
-	Statuses          []int    `json:"statuses"`
-	Methods           []string `json:"methods"`
-	BackoffMS         int      `json:"backoff_ms"`
-	MaxBackoffMS      int      `json:"max_backoff_ms"`
-	RespectRetryAfter bool     `json:"respect_retry_after"`
+	Attempts int      `json:"attempts"`
+	Statuses []int    `json:"statuses"`
+	Methods  []string `json:"methods"`
+	// Absent means the library's default; 0 means no pause at all — it used
+	// to mean the default too, and retry_backoff=0 slept 200 ms.
+	BackoffMS         *int `json:"backoff_ms"`
+	MaxBackoffMS      *int `json:"max_backoff_ms"`
+	RespectRetryAfter bool `json:"respect_retry_after"`
 }
 
 // toPolicy turns JSON into a policy. A missing object (null) means "take the
@@ -296,8 +302,8 @@ func (r *retryJSON) toPolicy() *client.RetryPolicy {
 		Attempts:          attempts,
 		Statuses:          r.Statuses,
 		Methods:           r.Methods,
-		Backoff:           time.Duration(r.BackoffMS) * time.Millisecond,
-		MaxBackoff:        time.Duration(r.MaxBackoffMS) * time.Millisecond,
+		Backoff:           pause(r.BackoffMS),
+		MaxBackoff:        pause(r.MaxBackoffMS),
 		RespectRetryAfter: r.RespectRetryAfter,
 	}
 }
@@ -499,6 +505,23 @@ func curlpro_session_clear_cookies(id C.longlong) (out *C.char) {
 	return respond(nil, nil)
 }
 
+// curlpro_session_undo_cookies reverts the jar changes a response logged
+// (its cookie_changes) — rollback_cookies after a failed expectation.
+//
+//export curlpro_session_undo_cookies
+func curlpro_session_undo_cookies(id C.longlong, changes *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	var list []client.CookieChange
+	if err := json.Unmarshal([]byte(C.GoString(changes)), &list); err != nil {
+		return respond(nil, fmt.Errorf("parsing cookie changes: %w", err))
+	}
+	return respond(nil, s.UndoCookies(list))
+}
+
 //export curlpro_session_close
 func curlpro_session_close(id C.longlong) (out *C.char) {
 	defer recoverInto(&out)
@@ -589,6 +612,8 @@ type requestJSON struct {
 	// SuppressHeaders names headers to leave out of this request whatever
 	// set them — the Python side sends here every header given as None.
 	SuppressHeaders []string `json:"suppress_headers"`
+	// TrackCookies asks for the log of jar changes (rollback_cookies).
+	TrackCookies bool `json:"track_cookies"`
 }
 
 // applyOverrides copies the request overrides into client.Request.
@@ -629,6 +654,7 @@ func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 		SessionHeaders:  r.SessionHeaders,
 		SuppressHeaders: r.SuppressHeaders,
 		Protocol:        r.Protocol,
+		TrackCookies:    r.TrackCookies,
 	}
 	r.applyOverrides(req)
 	if r.Multipart != nil {
@@ -693,6 +719,20 @@ type responseJSON struct {
 	History []client.Redirect   `json:"history,omitempty"`
 	// Preflights are the CORS preflights sent before the request, in order.
 	Preflights []client.Preflight `json:"preflights,omitempty"`
+	// CookieChanges is the log a rollback undoes (track_cookies).
+	CookieChanges []client.CookieChange `json:"cookie_changes,omitempty"`
+}
+
+// pause turns a millisecond setting into a duration: nil keeps the policy's
+// default (a zero duration), an explicit 0 is the shortest pause there is.
+func pause(ms *int) time.Duration {
+	switch {
+	case ms == nil:
+		return 0
+	case *ms <= 0:
+		return time.Nanosecond
+	}
+	return time.Duration(*ms) * time.Millisecond
 }
 
 // Bodies travel as binary, separately from the JSON.
@@ -704,10 +744,25 @@ type responseJSON struct {
 // Frame layout: [uint32 LE JSON length][JSON][raw body].
 const frameHeaderLen = 4
 
+// maxFrame is the largest frame the C int length can carry. A response past it
+// used to wrap: 2 GiB came back as a negative length, 4 GiB as a small positive
+// one and a truncated body marked ok. Such a body is read as a stream.
+const maxFrame = math.MaxInt32
+
+// tooBigForFrame is the error that takes the place of such a body.
+func tooBigForFrame(n int) result {
+	return result{Code: "too_large", Error: fmt.Sprintf(
+		"response of %d bytes does not fit one call (the limit is 2 GiB): read it as a stream", n)}
+}
+
 func encodeFrame(meta any, body []byte) (*C.char, C.int) {
 	js, err := json.Marshal(meta)
 	if err != nil {
 		js, _ = json.Marshal(result{Error: "encoding: " + err.Error()})
+	}
+	if frameHeaderLen+len(js)+len(body) > maxFrame {
+		js, _ = json.Marshal(tooBigForFrame(len(body)))
+		body = nil
 	}
 	total := frameHeaderLen + len(js) + len(body)
 
@@ -799,13 +854,14 @@ func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int
 			return respondFrame(nil, nil, err)
 		}
 		return respondFrame(responseJSON{
-			Status:     resp.Status,
-			Proto:      resp.Proto,
-			Headers:    resp.Headers,
-			URL:        resp.URL,
-			BodyLen:    len(resp.Body),
-			History:    resp.History,
-			Preflights: resp.Preflights,
+			Status:        resp.Status,
+			Proto:         resp.Proto,
+			Headers:       resp.Headers,
+			URL:           resp.URL,
+			BodyLen:       len(resp.Body),
+			CookieChanges: resp.CookieChanges,
+			History:       resp.History,
+			Preflights:    resp.Preflights,
 		}, resp.Body, nil)
 	})
 }

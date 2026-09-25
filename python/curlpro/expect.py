@@ -24,7 +24,7 @@ import codecs
 from typing import Any, Iterable, Mapping
 
 from .encoding import normalize
-from ._ffi import CurlProError
+from .errors import CurlProError
 
 
 class ExpectationFailed(CurlProError):

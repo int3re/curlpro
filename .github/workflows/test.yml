@@ -43,6 +43,13 @@ jobs:
           pip install ruff
           ruff check python --select E9,F,B
 
+      # The request methods are typed (0.12): mypy must name a misspelt or
+      # mistyped keyword argument on the sync, async and one-off paths.
+      - name: the typed signatures catch a misspelt argument
+        run: |
+          pip install mypy
+          python scripts/check-typing.py
+
       # The nofoxio build leaves out the FoxIO-licensed JA4H code, so a legal
       # department that objects to that licence can decline JA4H rather than
       # the library. An option nobody builds is an option that rots: it is
@@ -60,6 +67,10 @@ jobs:
       # The desktop, iOS and Firefox Linux identity pools likewise.
       - name: the identity pools are in sync with their seed
         run: python scripts/gen-identities.py --check
+
+      # The presets derived for versions not yet on the stand (0.12).
+      - name: the derived presets are in sync with their plan
+        run: python scripts/derive-current.py --check
 
       # Safari's fetch sets are derived rather than captured, so they are
       # generated: a hand edit that drifts from the generator is caught here.

@@ -336,5 +336,6 @@
       "os_version": "18_3_2",
       "version": "18.3.2"
     }
-  ]
+  ],
+  "device_kind": "iphone"
 }

@@ -57,13 +57,30 @@ def from_document(data: bytes) -> str | None:
 
 
 def detect(content: bytes, content_type: str | None, default: str = "utf-8") -> str:
-    """Response charset: header first, then the BOM, then the document."""
+    """Response charset: the BOM first, then the header, then the document.
+
+    A byte order mark wins over the Content-Type charset, as the Encoding
+    standard has it and every browser does: a UTF-8 body with a BOM under
+    ``charset=windows-1251`` used to decode as mojibake. The mark itself is
+    not text: :func:`without_bom` takes it off before decoding.
+    """
     return (
-        from_content_type(content_type)
-        or from_bom(content)
+        from_bom(content)
+        or from_content_type(content_type)
         or from_document(content)
         or default
     )
+
+
+def without_bom(content: bytes, encoding: str) -> bytes:
+    """The body without its byte order mark, when the mark names ``encoding``.
+
+    A browser does not show the mark; ``.text`` used to begin with U+FEFF.
+    """
+    for bom, name in _BOMS:
+        if content.startswith(bom):
+            return content[len(bom):] if _normalize(encoding) == name else content
+    return content
 
 
 def normalize(name: str) -> str | None:

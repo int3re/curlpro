@@ -117,7 +117,7 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 		if len(e.Formats) == 0 {
 			return nil, errMissing("formats")
 		}
-		return &utls.SupportedPointsExtension{SupportedPoints: e.Formats}, nil
+		return &utls.SupportedPointsExtension{SupportedPoints: clone(e.Formats)}, nil
 
 	case "signature_algorithms":
 		if len(e.Algorithms) == 0 {
@@ -153,13 +153,13 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 		if len(e.Versions) == 0 {
 			return nil, errMissing("versions")
 		}
-		return &utls.SupportedVersionsExtension{Versions: e.Versions}, nil
+		return &utls.SupportedVersionsExtension{Versions: clone(e.Versions)}, nil
 
 	case "psk_key_exchange_modes":
 		if len(e.Modes) == 0 {
 			return nil, errMissing("modes")
 		}
-		return &utls.PSKKeyExchangeModesExtension{Modes: e.Modes}, nil
+		return &utls.PSKKeyExchangeModesExtension{Modes: clone(e.Modes)}, nil
 
 	case "compress_certificate":
 		if len(e.Algorithms) == 0 {
@@ -175,19 +175,19 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 		if len(e.ALPN) == 0 {
 			return nil, errMissing("alpn")
 		}
-		return &utls.ALPNExtension{AlpnProtocols: e.ALPN}, nil
+		return &utls.ALPNExtension{AlpnProtocols: clone(e.ALPN)}, nil
 
 	case "application_settings":
 		if len(e.ALPN) == 0 {
 			return nil, errMissing("alpn")
 		}
-		return &utls.ApplicationSettingsExtension{SupportedProtocols: e.ALPN}, nil
+		return &utls.ApplicationSettingsExtension{SupportedProtocols: clone(e.ALPN)}, nil
 
 	case "application_settings_new":
 		if len(e.ALPN) == 0 {
 			return nil, errMissing("alpn")
 		}
-		return &utls.ApplicationSettingsExtensionNew{SupportedProtocols: e.ALPN}, nil
+		return &utls.ApplicationSettingsExtensionNew{SupportedProtocols: clone(e.ALPN)}, nil
 
 	case "record_size_limit":
 		if e.Limit == 0 {
@@ -240,6 +240,16 @@ func randomGREASE() uint16 {
 // 0xAAAA. A constant value would give the client away to anyone watching a few
 // connections in a row. ApplyPreset draws the placeholder in ciphers, groups
 // and versions, but not here — measured: four connections kept 0x0A0A.
+// clone copies a slice out of the registry before uTLS gets it. The profile
+// is shared by every session and connection of it, and uTLS writes into what
+// it is given: ApplyPreset replaces the GREASE entry of supported_versions in
+// place, and setALPN edits the ALPN list. Handing the registry's own slice over
+// made concurrent handshakes race on one array — one ClientHello could carry
+// another connection's GREASE value — and the resolved profile drifted with use.
+func clone[T any](in []T) []T {
+	return append([]T(nil), in...)
+}
+
 func toSigSchemes(in []uint16) []utls.SignatureScheme {
 	out := make([]utls.SignatureScheme, len(in))
 	for i, a := range in {

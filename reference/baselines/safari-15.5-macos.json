@@ -4,8 +4,10 @@
   "ja4": [
     "t13d2014h2_a09f3c656075_14788d8d241b"
   ],
-  "ja3n": "44f7ed5185d22c92b96da72dbe68d307",
-  "akamai": "|15663105|0|m,s,p,a",
-  "recorded": "2026-09-02T19:14:59Z",
+  "ja3n": [
+    "44f7ed5185d22c92b96da72dbe68d307"
+  ],
+  "akamai": "4:4194304;3:100|10485760|0|m,s,p,a",
+  "recorded": "2026-09-25T23:36:50Z",
   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15"
 }

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -58,7 +59,7 @@ func (u *udpTransports) closeAll() {
 
 func (s *Session) http3() (*h3.Transport, error) {
 	s.h3.once.Do(func() {
-		s.h3.tr, s.h3.err = buildH3Transport(s.profile, s.opts, &s.h3.udp)
+		s.h3.tr, s.h3.err = buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts)
 	})
 	if s.h3.tr == nil && s.h3.err == nil {
 		// once already ran in closeH3: the transport was never created and never will be.
@@ -67,7 +68,8 @@ func (s *Session) http3() (*h3.Transport, error) {
 	return s.h3.tr, s.h3.err
 }
 
-func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports) (*h3.Transport, error) {
+func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
+	roots *x509.CertPool, certs []utls.Certificate) (*h3.Transport, error) {
 	if !p.HTTP3.Enabled() {
 		return nil, capabilityErr("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
@@ -89,7 +91,10 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports) (*h3
 	}
 
 	return &h3.Transport{
-		TLSClientConfig: &utls.Config{InsecureSkipVerify: opts.InsecureSkipVerify},
+		// The session's CA and client certificate apply here as on TCP: a
+		// stand with its own CA used to fail QUIC every time and fall back.
+		TLSClientConfig: &utls.Config{InsecureSkipVerify: opts.InsecureSkipVerify,
+			RootCAs: roots, Certificates: certs},
 		QUICConfig: &quic.Config{
 			EnableDatagrams: datagrams,
 			// The handshake limit is explicit: during an Alt-Svc upgrade a failed QUIC
@@ -120,11 +125,21 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports) (*h3
 			if err != nil {
 				return nil, err
 			}
-			udpConn, err := net.ListenUDP("udp", nil)
+			// resolve= and ip_version= bind QUIC as they bind TCP: a host pinned
+			// to a staging address that advertised h3 used to be reached at its
+			// DNS address instead.
+			network := "udp"
+			switch opts.IPVersion {
+			case "4":
+				network = "udp4"
+			case "6":
+				network = "udp6"
+			}
+			udpConn, err := net.ListenUDP(network, nil)
 			if err != nil {
 				return nil, err
 			}
-			ua, err := net.ResolveUDPAddr("udp", addr)
+			ua, err := net.ResolveUDPAddr(network, resolveAddr(opts.Resolve, addr))
 			if err != nil {
 				udpConn.Close()
 				return nil, err
@@ -273,11 +288,13 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL) (*nethttp.
 	if err != nil {
 		return nil, explainH3Error(err, s.profile.Name)
 	}
-	if s.useCookies(r) {
-		if cookies := resp.Cookies(); len(cookies) > 0 {
-			fc := toFhttpCookies(cookies)
-			s.jar.SetCookies(u, fc)
-			s.recordCookies(u, fc)
+	// The same gate as on TCP: a response to a request made without
+	// credentials sets nothing (0.10.1), and the family's SameSite rules
+	// decide what is kept. After an Alt-Svc upgrade that fix used to be lost.
+	if s.useCookies(r) && s.includesCredentials(r, u) {
+		if cookies := s.acceptCookies(toFhttpCookies(resp.Cookies())); len(cookies) > 0 {
+			s.cookieJar().SetCookies(u, cookies)
+			s.recordCookies(u, cookies, r.cookieLog)
 		}
 	}
 

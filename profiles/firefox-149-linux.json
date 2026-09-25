@@ -88,5 +88,6 @@
       "name": "Linux, Ubuntu build",
       "distro": "Ubuntu; "
     }
-  ]
+  ],
+  "device_kind": "distro"
 }

@@ -33,8 +33,7 @@ func TestResolveValidation(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := NewRegistry()
-			mustRegister(t, r, tc.json)
-			_, err := r.Resolve("a")
+			err := registerOrResolveError(r, "a", tc.json)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("expected an error containing %q, got %v", tc.want, err)
 			}
@@ -84,12 +83,16 @@ func TestDeltaCanTurnOffBooleans(t *testing.T) {
 // quietly loses the padding a browser sends in its place.
 func TestProfileWithPreSharedKeyRejected(t *testing.T) {
 	r := NewRegistry()
-	mustRegister(t, r, `{"name":"resumed","headers":{},
+	// Refused at registration since 0.12: its chain is complete, so there is
+	// nothing to wait for.
+	err := r.Register([]byte(`{"name":"resumed","headers":{},
 		"tls":{"permute_extensions":false,"extensions":[
-			{"type":"server_name"},{"type":"pre_shared_key"}]}}`)
-	_, err := r.Resolve("resumed")
+			{"type":"server_name"},{"type":"pre_shared_key"}]}}`))
 	if err == nil {
 		t.Fatal("a profile with pre_shared_key was accepted")
+	}
+	if _, rerr := r.Resolve("resumed"); rerr == nil {
+		t.Fatal("the refused profile is registered anyway")
 	}
 	if !strings.Contains(err.Error(), "pre_shared_key") {
 		t.Errorf("the error does not name the reason: %v", err)
