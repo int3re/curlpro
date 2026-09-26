@@ -3,10 +3,12 @@ package client
 import (
 	"bufio"
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -55,6 +57,27 @@ type conn struct {
 	// idleWatch is where the read watchIdle keeps on an idle HTTP/1.1
 	// connection reports; set and cleared under Session.mu.
 	idleWatch chan error
+
+	// handed counts the requests the pool gave the connection; under
+	// Session.mu. The first one is on a new connection, the rest on a reused.
+	handed int
+
+	// remote and leaf are the address the connection went to and the
+	// certificate the server showed, kept on a direct HTTP/2 connection
+	// whose certificate was verified: what pooling by address needs.
+	remote string
+	leaf   *x509.Certificate
+}
+
+// notePeer keeps what ipPooled matches on. Only a verified certificate on a
+// direct connection counts: Chrome does not pool over a certificate error,
+// and through a proxy the address is the proxy's.
+func (c *conn) notePeer(raw net.Conn, state utls.ConnectionState, verified bool) {
+	if !verified || len(state.PeerCertificates) == 0 {
+		return
+	}
+	c.remote = raw.RemoteAddr().String()
+	c.leaf = state.PeerCertificates[0]
 }
 
 func newH2Conn(cc *http2.ClientConn, spec dialSpec) *conn {
@@ -372,6 +395,16 @@ func setALPN(spec *utls.ClientHelloSpec, protos []string) bool {
 		if alpn, ok := e.(*utls.ALPNExtension); ok {
 			alpn.AlpnProtocols = protos
 			return true
+		}
+	}
+	return false
+}
+
+// offersH2 reports whether a ClientHello offers HTTP/2 in its ALPN.
+func offersH2(spec *utls.ClientHelloSpec) bool {
+	for _, e := range spec.Extensions {
+		if alpn, ok := e.(*utls.ALPNExtension); ok {
+			return slices.Contains(alpn.AlpnProtocols, "h2")
 		}
 	}
 	return false

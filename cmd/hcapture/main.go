@@ -11,12 +11,15 @@
 //	go run ./cmd/hcapture -auto               # HTTP/2
 //	go run ./cmd/hcapture -auto -h3           # HTTP/3, Chrome is forced onto QUIC
 //	go run ./cmd/hcapture -h3                 # no browser: open the address yourself
+//	go run ./cmd/hcapture -auto -subres -certs capture/certs-multi       # a page's resources, connections
+//	go run ./cmd/hcapture -auto -subres -h1 -certs capture/certs-multi   # the same over HTTP/1.1
 //
 // The page itself performs a fetch, an XHR and a link navigation, so one run
 // captures both header sets — the navigational one and the fetch one.
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -35,6 +38,7 @@ import (
 	"os/exec"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -59,6 +63,8 @@ func main() {
 	out := flag.String("json", "", "file to write the capture to")
 	certs := flag.String("certs", "capture/certs", "directory holding tls.crt and tls.key")
 	flag.BoolVar(&origins, "origins", false, "serve the three-origin page: what a page sends to its own origin, its site and another site")
+	flag.BoolVar(&subres, "subres", false, "serve the subresource page: stylesheets, scripts, images, fonts, an iframe, and bursts of parallel fetches to fresh hosts")
+	flag.BoolVar(&h1Only, "h1", false, "offer only http/1.1 in ALPN and record HTTP/1.1 requests with their case and order")
 	flag.BoolVar(&closeAfter, "close", false, "close every connection after its first response, so later requests resume TLS on new ones")
 	flag.Parse()
 
@@ -126,6 +132,12 @@ type record struct {
 	// request only.
 	Resumed     bool   `json:"resumed,omitempty"`
 	ClientHello string `json:"client_hello,omitempty"`
+	// Conn numbers the TCP connection the request came on, in accept order,
+	// and At is when it arrived, in milliseconds from the stand's start:
+	// together they show how a browser spends connections and in what order
+	// it asks for a page's resources.
+	Conn int   `json:"conn"`
+	At   int64 `json:"at_ms"`
 }
 
 type srv struct {
@@ -150,6 +162,7 @@ func (s *srv) note(text string) {
 }
 
 func (s *srv) add(r record) {
+	r.At = time.Since(started).Milliseconds()
 	s.mu.Lock()
 	s.records = append(s.records, r)
 	s.mu.Unlock()
@@ -302,6 +315,133 @@ var primeCookies = []string{
 // origins is set by -origins: the stand serves the three-name page instead.
 var origins bool
 
+// subres is set by -subres: the stand serves the subresource page.
+var subres bool
+
+// h1Only is set by -h1: the stand offers http/1.1 alone, so the browser's
+// HTTP/1.1 requests — their header case and order, and how many connections
+// it opens — are recorded instead of its HTTP/2 ones.
+var h1Only bool
+
+// started is when the stand came up; records carry their arrival from it.
+var started = time.Now()
+
+// connSeq numbers accepted connections.
+var connSeq atomic.Int64
+
+// The subresource run: what a page on www.a.localhost asks for while it
+// loads — a render-blocking stylesheet with a font and a background image in
+// it, a preloaded font, a synchronous, an async, a deferred and a module
+// script, images from its own origin, from a sibling of its site and from
+// another site (one of them CORS-mode), a cross-site stylesheet and script,
+// an icon and a cross-site iframe. Once loaded it measures connections:
+// eight parallel uncredentialed fetches to a host it never touched, eight
+// credentialed ones to another, and an uncredentialed then a credentialed
+// fetch to a host a credentialed image already reached. Then it navigates on.
+const subresStart = "/sub/index.html"
+
+const subresPage = `<!doctype html><html><head><meta charset=utf-8><title>subres</title>
+<link rel=stylesheet href="/sub/style.css">
+<link rel=icon href="/sub/favicon.ico">
+<link rel=preload as=font type="font/woff2" href="/sub/preload.woff2" crossorigin>
+<link rel=preload as=script href="/sub/preload.js">
+<link rel=preload as=style href="/sub/preload.css">
+<link rel=modulepreload href="/sub/modpre.js">
+<link rel=prefetch href="/sub/prefetch.js">
+<script src="/sub/head.js"></script>
+<script async src="/sub/async.js"></script>
+<script defer src="/sub/defer.js"></script>
+<script type=module src="/sub/mod.js"></script>
+<link rel=stylesheet href="https://b.localhost:PORT/sub/cs-style.css">
+</head><body><h1 class=f>subres</h1><pre id=out></pre>
+<img src="/sub/img.png" width=1 height=1>
+<img src="https://api.a.localhost:PORT/sub/ss-img.png" width=1 height=1>
+<img src="https://b.localhost:PORT/sub/cs-img.png" width=1 height=1>
+<img src="https://b.localhost:PORT/sub/cs-img-cors.png" crossorigin width=1 height=1>
+<script src="https://b.localhost:PORT/sub/cs.js"></script>
+<iframe src="https://b.localhost:PORT/sub/frame.html" width=10 height=10></iframe>
+<script>
+const log = m => { document.getElementById('out').textContent += m + "\n"; };
+const quiet = p => p.catch(e => log('x ' + e));
+const stage = s => fetch('/sub/stage/' + s).catch(() => {});
+const img = (src, co) => new Promise(r => {
+  const i = new Image(); if (co) i.crossOrigin = co; i.onload = i.onerror = r; i.src = src; });
+const script = src => new Promise(r => {
+  const s = document.createElement('script'); s.src = src; s.onload = s.onerror = r; document.head.append(s); });
+const frame = src => new Promise(r => {
+  const f = document.createElement('iframe'); f.onload = r; f.src = src; document.body.append(f);
+  setTimeout(r, 2000); });
+window.onerror = (m) => { stage('error-' + encodeURIComponent(m)); };
+stage('script');
+window.addEventListener('load', async () => {
+  await stage('load');
+  await new Promise(r => setTimeout(r, 300));
+  await Promise.all([...Array(8).keys()].map(i =>
+    quiet(fetch('https://c.localhost:PORT/burst/' + i))));
+  log('burst');
+  await Promise.all([...Array(8).keys()].map(i =>
+    quiet(fetch('https://d.localhost:PORT/burst-cred/' + i, {credentials: 'include'}))));
+  log('burst-cred');
+  // Bursts of other sizes to fresh hosts: how many connections a browser
+  // opens for n parallel first requests, and whether that depends on n.
+  for (const [host, n] of [['e', 1], ['f', 2], ['g', 4], ['h', 16]]) {
+    await Promise.all([...Array(n).keys()].map(i =>
+      quiet(fetch('https://' + host + '.localhost:PORT/burst-' + n + '/' + i))));
+    await new Promise(r => setTimeout(r, 200));
+  }
+  log('bursts');
+  await quiet(fetch('https://api.a.localhost:PORT/ps-omit', {credentials: 'omit'}));
+  await quiet(fetch('https://api.a.localhost:PORT/ps-include', {credentials: 'include'}));
+  // d.localhost set a SameSite=None cookie on the credentialed burst: from
+  // here on its cross-site requests carry one, next to the storage-access header.
+  await quiet(fetch('https://d.localhost:PORT/cred-get', {credentials: 'include'}));
+  await quiet(fetch('https://d.localhost:PORT/cred-post', {method: 'POST', credentials: 'include',
+    headers: {'content-type': 'application/x-www-form-urlencoded'}, body: 'x=1'}));
+  await img('https://d.localhost:PORT/sub/d-img.png');
+  await img('https://d.localhost:PORT/sub/d-img-cred.png', 'use-credentials');
+  await img('https://d.localhost:PORT/sub/d-img-anon.png', 'anonymous');
+  await script('https://d.localhost:PORT/sub/dyn.js');
+  await script('/sub/dyn-same.js');
+  navigator.sendBeacon('/sub/beacon', 'x=1');
+  navigator.sendBeacon('https://d.localhost:PORT/beacon-cs', 'x=1');
+  await frame('https://d.localhost:PORT/sub/frame2.html');
+  log('cookies');
+  await new Promise(r => { const i = new Image(); i.onload = i.onerror = r; i.src = '/sub/js-img.png'; });
+  log('done');
+  setTimeout(() => { location.href = '/sub/next.html'; }, 500);
+});
+</script></body></html>`
+
+// png1x1 is a valid one-pixel PNG, so an image request completes as a browser expects.
+const png1x1 = "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+
+func subresRoute(path string) (reply, bool) {
+	const html = "text/html; charset=utf-8"
+	switch {
+	case path == subresStart:
+		return reply{200, strings.ReplaceAll(subresPage, "PORT", listenPort), html, "", []string{"hc=1; path=/"}}, true
+	case path == "/sub/style.css":
+		css := `@font-face{font-family:F;src:url(/sub/css-font.woff2) format("woff2")}` +
+			`.f{font-family:F}body{background-image:url(/sub/bg.png)}`
+		return reply{200, css, "text/css", "", nil}, true
+	case strings.HasSuffix(path, ".css"):
+		return reply{200, "h1{margin:0}", "text/css", "", nil}, true
+	case strings.HasPrefix(path, "/burst-cred/"):
+		return reply{200, "ok", "text/plain", "", []string{"dc=1; Path=/; SameSite=None; Secure"}}, true
+	case strings.HasSuffix(path, ".woff2"):
+		return reply{200, "wOF2", "font/woff2", "", nil}, true
+	case strings.HasSuffix(path, ".png"):
+		return reply{200, png1x1, "image/png", "", nil}, true
+	case strings.HasSuffix(path, ".ico"):
+		return reply{200, png1x1, "image/x-icon", "", nil}, true
+	case strings.HasSuffix(path, ".js"):
+		return reply{200, "void 0;", "text/javascript", "", nil}, true
+	case path == "/sub/frame.html", path == "/sub/frame2.html", path == "/sub/next.html":
+		return reply{200, second, html, "", nil}, true
+	}
+	return reply{}, false
+}
+
 // originsStart is the page's path (query included), as the browser opens it.
 const originsStart = "/app/index.html?tab=1"
 
@@ -318,6 +458,11 @@ type reply struct {
 // which are the same path on every name.
 func route(path, host string) reply {
 	const html = "text/html; charset=utf-8"
+	if subres {
+		if rep, ok := subresRoute(path); ok {
+			return rep
+		}
+	}
 	if origins {
 		other := "https://" + originsOther + ":" + listenPort
 		site := "https://" + originsSite + ":" + listenPort
@@ -405,7 +550,11 @@ func serverTLSConfig(next []string) (*tls.Config, error) {
 }
 
 func (s *srv) listenTCP(addr string, wg *sync.WaitGroup) error {
-	cfg, err := serverTLSConfig([]string{"h2", "http/1.1"})
+	protos := []string{"h2", "http/1.1"}
+	if h1Only {
+		protos = []string{"http/1.1"}
+	}
+	cfg, err := serverTLSConfig(protos)
 	if err != nil {
 		return err
 	}
@@ -422,7 +571,7 @@ func (s *srv) listenTCP(addr string, wg *sync.WaitGroup) error {
 			if err != nil {
 				return
 			}
-			rc := &recordingConn{Conn: c}
+			rc := &recordingConn{Conn: c, id: int(connSeq.Add(1))}
 			go s.serveConn(tls.Server(rc, cfg), rc)
 		}
 	}()
@@ -432,11 +581,93 @@ func (s *srv) listenTCP(addr string, wg *sync.WaitGroup) error {
 func (s *srv) serveConn(c *tls.Conn, rc *recordingConn) {
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(2 * time.Minute))
+	opened := time.Since(started).Milliseconds()
+	if subres {
+		// The subresource run is about how connections are spent, and a
+		// connection that carries no request is part of that: each one's
+		// life is logged, with who ended it.
+		defer func() {
+			fmt.Fprintf(os.Stderr, "conn c%d: %s %s, %dms..%dms, handshake %v\n", rc.id,
+				c.ConnectionState().ServerName, c.ConnectionState().NegotiatedProtocol, opened,
+				time.Since(started).Milliseconds(), c.ConnectionState().HandshakeComplete)
+		}()
+	}
 	if err := c.Handshake(); err != nil {
+		if subres {
+			fmt.Fprintf(os.Stderr, "conn c%d: handshake failed: %v\n", rc.id, err)
+		}
 		return
 	}
-	if c.ConnectionState().NegotiatedProtocol == "h2" {
-		s.serveH2(c, c.ConnectionState().DidResume, rc.clientHello())
+	switch c.ConnectionState().NegotiatedProtocol {
+	case "h2":
+		s.serveH2(c, c.ConnectionState().DidResume, rc.clientHello(), rc.id)
+	case "http/1.1", "":
+		s.serveH1(c, c.ConnectionState().DidResume, rc.clientHello(), rc.id)
+	}
+}
+
+// serveH1 reads HTTP/1.1 requests off a kept-alive connection by hand, for
+// the reason serveH2 parses frames: net/http canonicalises header names and
+// loses their order, and both are what is captured here.
+func (s *srv) serveH1(c net.Conn, resumed bool, hello []byte, connID int) {
+	br := bufio.NewReader(c)
+	for n := 0; ; n++ {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			return
+		}
+		parts := strings.SplitN(strings.TrimRight(line, "\r\n"), " ", 3)
+		if len(parts) != 3 {
+			return
+		}
+		r := record{Proto: "http/1.1", Method: parts[0], Path: parts[1], Resumed: resumed, Conn: connID}
+		if n == 0 && len(hello) > 0 {
+			r.ClientHello = base64.StdEncoding.EncodeToString(hello)
+		}
+		length := 0
+		for {
+			h, err := br.ReadString('\n')
+			if err != nil {
+				return
+			}
+			h = strings.TrimRight(h, "\r\n")
+			if h == "" {
+				break
+			}
+			name, value, _ := strings.Cut(h, ":")
+			value = strings.TrimSpace(value)
+			r.Headers = append(r.Headers, name+": "+value)
+			switch strings.ToLower(name) {
+			case "host":
+				r.Host = value
+			case "content-length":
+				length, _ = strconv.Atoi(value)
+			}
+		}
+		if length > 0 {
+			if _, err := io.CopyN(io.Discard, br, int64(length)); err != nil {
+				return
+			}
+		}
+		s.add(r)
+		rep, hdrs := answer(r)
+		var b strings.Builder
+		status := "OK"
+		if rep.status != 200 {
+			status = "Status"
+		}
+		fmt.Fprintf(&b, "HTTP/1.1 %d %s\r\n", rep.status, status)
+		for _, h := range hdrs {
+			fmt.Fprintf(&b, "%s: %s\r\n", h[0], h[1])
+		}
+		if closeAfter {
+			b.WriteString("connection: close\r\n")
+		}
+		b.WriteString("\r\n")
+		b.WriteString(rep.body)
+		if _, err := io.WriteString(c, b.String()); err != nil || closeAfter {
+			return
+		}
 	}
 }
 
@@ -445,6 +676,7 @@ func (s *srv) serveConn(c *tls.Conn, rc *recordingConn) {
 // Recording stops once the record is complete; the rest is passed through.
 type recordingConn struct {
 	net.Conn
+	id    int
 	mu    sync.Mutex
 	hello []byte
 	done  bool
@@ -482,7 +714,7 @@ var closeAfter bool
 
 // serveH2 parses the frames by hand: net/http loses the header order, and that
 // is exactly what is being captured here.
-func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte) {
+func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte, connID int) {
 	const preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 	answered := 0
 	// finish is what -close does after a response: a GOAWAY, then the socket.
@@ -518,6 +750,9 @@ func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte) {
 	for {
 		f, err := fr.ReadFrame()
 		if err != nil {
+			if subres {
+				fmt.Fprintf(os.Stderr, "conn c%d: read ended after %d requests: %v\n", connID, answered, err)
+			}
 			return
 		}
 		switch f := f.(type) {
@@ -528,7 +763,7 @@ func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte) {
 		case *http2.PingFrame:
 			_ = fr.WritePing(true, f.Data)
 		case *http2.MetaHeadersFrame:
-			r := record{Proto: "h2", Resumed: resumed}
+			r := record{Proto: "h2", Resumed: resumed, Conn: connID}
 			if answered == 0 && len(hello) > 0 {
 				r.ClientHello = base64.StdEncoding.EncodeToString(hello)
 			}
@@ -568,29 +803,38 @@ func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte) {
 				}
 			}
 		case *http2.GoAwayFrame:
+			if subres {
+				fmt.Fprintf(os.Stderr, "conn c%d: client GOAWAY after %d requests: %v\n", connID, answered, f.ErrCode)
+			}
 			return
 		}
 	}
 }
 
-func (s *srv) respondH2(fr *http2.Framer, enc *hpack.Encoder, buf *bytes.Buffer, id uint32, r record) {
+// answer is the response to a request: the reply and the header fields after
+// the status. One list for both transports, so an HTTP/1.1 run is answered
+// exactly as an HTTP/2 one.
+func answer(r record) (reply, [][2]string) {
 	rep := route(r.Path, r.Host)
-	buf.Reset()
-	_ = enc.WriteField(hpack.HeaderField{Name: ":status", Value: fmt.Sprint(rep.status)})
+	var h [][2]string
+	add := func(k, v string) { h = append(h, [2]string{k, v}) }
 	if rep.location != "" {
-		_ = enc.WriteField(hpack.HeaderField{Name: "location", Value: rep.location})
+		add("location", rep.location)
 	}
 	if rep.ctype != "" {
-		_ = enc.WriteField(hpack.HeaderField{Name: "content-type", Value: rep.ctype})
+		add("content-type", rep.ctype)
 	}
-	_ = enc.WriteField(hpack.HeaderField{Name: "content-length", Value: fmt.Sprint(len(rep.body))})
-	_ = enc.WriteField(hpack.HeaderField{Name: "cache-control", Value: "no-store"})
-	_ = enc.WriteField(hpack.HeaderField{Name: "accept-ch", Value: acceptCH})
-	_ = enc.WriteField(hpack.HeaderField{Name: "critical-ch", Value: acceptCH})
+	add("content-length", fmt.Sprint(len(rep.body)))
+	add("cache-control", "no-store")
+	// The subresource page measures an ordinary site, which asks for no hints.
+	if !subres {
+		add("accept-ch", acceptCH)
+		add("critical-ch", acceptCH)
+	}
 	if altSvc != "" {
-		_ = enc.WriteField(hpack.HeaderField{Name: "alt-svc", Value: altSvc})
+		add("alt-svc", altSvc)
 	}
-	if origins {
+	if origins || subres {
 		// CORS answers, so the cross-origin fetches on the page complete and the
 		// chain moves on; the preflight itself is recorded like any request.
 		// The origin is echoed and credentials allowed: a credentialed request
@@ -599,13 +843,23 @@ func (s *srv) respondH2(fr *http2.Framer, enc *hpack.Encoder, buf *bytes.Buffer,
 		if o := r.header("origin"); o != "" {
 			acao = o
 		}
-		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-origin", Value: acao})
-		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-credentials", Value: "true"})
-		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-headers", Value: "content-type, x-api-key"})
-		_ = enc.WriteField(hpack.HeaderField{Name: "access-control-allow-methods", Value: "GET, POST, DELETE, OPTIONS"})
+		add("access-control-allow-origin", acao)
+		add("access-control-allow-credentials", "true")
+		add("access-control-allow-headers", "content-type, x-api-key")
+		add("access-control-allow-methods", "GET, POST, DELETE, OPTIONS")
 	}
 	for _, c := range rep.cookies {
-		_ = enc.WriteField(hpack.HeaderField{Name: "set-cookie", Value: c})
+		add("set-cookie", c)
+	}
+	return rep, h
+}
+
+func (s *srv) respondH2(fr *http2.Framer, enc *hpack.Encoder, buf *bytes.Buffer, id uint32, r record) {
+	rep, hdrs := answer(r)
+	buf.Reset()
+	_ = enc.WriteField(hpack.HeaderField{Name: ":status", Value: fmt.Sprint(rep.status)})
+	for _, f := range hdrs {
+		_ = enc.WriteField(hpack.HeaderField{Name: f[0], Value: f[1]})
 	}
 	_ = fr.WriteHeaders(http2.HeadersFrameParam{
 		StreamID: id, BlockFragment: buf.Bytes(), EndHeaders: true,
@@ -1017,7 +1271,7 @@ func launch(browser, origin string, h3 bool) func() {
 		"--no-default-browser-check",
 		"--ignore-certificate-errors",
 	}
-	if origins {
+	if origins || subres {
 		// Chromium resolves *.localhost to loopback on its own; the rule makes
 		// that explicit rather than relied upon. The page is on www.a.localhost.
 		args = append(args, "--host-resolver-rules=MAP *.localhost 127.0.0.1")
@@ -1040,6 +1294,9 @@ func launch(browser, origin string, h3 bool) func() {
 	start := "https://" + origin + "/"
 	if origins {
 		start = "https://" + origin + originsStart
+	}
+	if subres {
+		start = "https://" + origin + subresStart
 	}
 	args = append(args, start)
 	cmd := exec.Command(browser, args...)

@@ -50,6 +50,8 @@ class _Common(TypedDict, total=False):
     page: str | bool | None
     credentials: str | None
     preflight: bool | None
+    resource: str | None
+    crossorigin: str | None
 
 
 class StreamKwargs(_Common, total=False):

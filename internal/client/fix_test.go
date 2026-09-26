@@ -691,6 +691,7 @@ func fetchSession(t *testing.T) *Session {
 	nav, h1, fetch := chromeWithFetch()
 	s := testSession(t, nav, h1)
 	s.profile.Fetch = fetch
+	s.buildTemplates()
 	return s
 }
 

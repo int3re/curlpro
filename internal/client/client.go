@@ -313,6 +313,17 @@ type Request struct {
 	// session's, an empty string means no page — a request with no initiator.
 	Page *string
 
+	// Resource names the kind of resource the request loads — "image",
+	// "script", "style", "font", "iframe" and the rest the profile's
+	// resources section lists — and takes that kind's header set: its
+	// Accept, sec-fetch-dest, sec-fetch-mode, priority and order. Empty for
+	// a navigation or a fetch (Mode).
+	Resource string
+	// CrossOrigin is the crossorigin attribute of the element: "anonymous"
+	// or "use-credentials" make the resource CORS; empty leaves it as its
+	// kind is (a font and a module script are CORS on their own).
+	CrossOrigin string
+
 	// Credentials overrides the session's credentials mode for a single
 	// fetch-mode request: "same-origin", "include" or "omit"; empty takes
 	// the session's.
@@ -661,6 +672,18 @@ type Session struct {
 
 	mu    sync.Mutex
 	conns map[dialSpec][]*conn
+	// dialing holds the attempts a burst is waiting on, per key; aliases
+	// the connections other names took on by address (ConnPolicy). Under mu.
+	dialing map[dialSpec]*dialGroup
+	aliases map[dialSpec]*conn
+	// connPolicy is the family's way of spending connections, and offersH2
+	// says the ClientHello offers HTTP/2 at all: without it every
+	// connection is HTTP/1.1 and a burst has nothing to wait for.
+	connPolicy profile.ConnPolicy
+	offersH2   bool
+	// lastSweep is when the pool was last swept for expired and dead
+	// connections. Under mu.
+	lastSweep time.Time
 
 	// orphans are HTTP/2 connections taken out of the pool but still finishing
 	// their streams. Untracked they would leak along with the read goroutine.
@@ -697,6 +720,9 @@ type Session struct {
 	// altSvc holds the HTTP/3 advertisements per origin along with the "broken" mark.
 	altSvc map[string]altSvcEntry
 
+	// tpl holds the header sets resolved once from the profile.
+	tpl templates
+
 	// roots and clientCerts are prepared once when the session is created:
 	// reading files per connection is wasted I/O on the hot path.
 	roots       *x509.CertPool
@@ -711,7 +737,8 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if p == nil {
 		return nil, configErr("no profile given: a session needs one to build its fingerprint")
 	}
-	if _, err := profile.BuildSpec(p); err != nil {
+	helloSpec, err := profile.BuildSpec(p)
+	if err != nil {
 		return nil, err
 	}
 	if opts.Timeout < 0 {
@@ -773,14 +800,19 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	}
 
 	s := &Session{
-		profile: p,
-		opts:    opts,
-		alpn:    alpnFromProfile(p),
-		conns:   make(map[dialSpec][]*conn),
-		orphans: make(map[*conn]struct{}),
-		headers: newSessionHeaders(),
-		device:  dev,
+		profile:    p,
+		opts:       opts,
+		alpn:       alpnFromProfile(p),
+		conns:      make(map[dialSpec][]*conn),
+		dialing:    make(map[dialSpec]*dialGroup),
+		aliases:    make(map[dialSpec]*conn),
+		orphans:    make(map[*conn]struct{}),
+		headers:    newSessionHeaders(),
+		device:     dev,
+		connPolicy: profile.ConnPolicyFor(p.Family()),
+		offersH2:   offersH2(helloSpec),
 	}
+	s.buildTemplates()
 	if opts.Resume {
 		// Thirty-two hosts is generous for one identity and small enough that
 		// an abandoned session costs nothing.
@@ -838,6 +870,12 @@ func (s *Session) Close() {
 	orphans := s.orphans
 	s.conns = map[dialSpec][]*conn{}
 	s.orphans = map[*conn]struct{}{}
+	s.aliases = map[dialSpec]*conn{}
+	// Attempts still dialing are abandoned; one that finishes anyway sees
+	// the session closed and closes what it opened.
+	for _, g := range s.dialing {
+		g.cancel()
+	}
 	s.mu.Unlock()
 
 	s.closeH3()
@@ -1164,6 +1202,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if plain {
 		spec.plain = true
 	}
+	spec = s.partition(spec, r, u)
 	c, reused, err := s.conn(req.Context(), u, spec, r.freshConn)
 	if err != nil {
 		// No connection — the request never reached the server, a retry is safe.
@@ -1232,6 +1271,13 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 }
 
 func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, error) {
+	return s.dialWith(ctx, u, ds, nil)
+}
+
+// dialWith is dial with a question put to a burst's spare: asked once the
+// server has chosen HTTP/2 and before the preface, a true answer closes the
+// connection there — the way Chrome closes the spares of a race it lost.
+func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare func() bool) (*conn, error) {
 	// The connect limit covers both TCP and the TLS handshake: for the caller
 	// this is one phase, "no connection yet", and splitting it serves nobody.
 	dialCtx, done := s.connectContext(ctx)
@@ -1328,14 +1374,21 @@ func (s *Session) dial(ctx context.Context, u *url.URL, ds dialSpec) (*conn, err
 
 	// The protocol was chosen by the server. An empty ALPN means HTTP/1.1 — that
 	// is how browser profiles that do not offer h2 behave.
-	switch proto := uconn.ConnectionState().NegotiatedProtocol; proto {
+	state := uconn.ConnectionState()
+	switch proto := state.NegotiatedProtocol; proto {
 	case "h2":
+		if spare != nil && spare() {
+			uconn.Close()
+			return nil, errSpare
+		}
 		cc, err := s.transport().NewClientConn(uconn)
 		if err != nil {
 			uconn.Close()
 			return nil, fmt.Errorf("h2: %w", err)
 		}
-		return newH2Conn(cc, ds), nil
+		c := newH2Conn(cc, ds)
+		c.notePeer(raw, state, ds.proxy == "" && !s.opts.InsecureSkipVerify)
+		return c, nil
 	case "http/1.1", "":
 		return newH1Conn(uconn, ds), nil
 	default:

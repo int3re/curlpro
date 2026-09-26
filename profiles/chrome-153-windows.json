@@ -306,7 +306,98 @@
       }
     ]
   },
-  "fetch": {},
+  "fetch": {
+    "order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "*/*"
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "same-origin"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "cors"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "empty"
+      },
+      {
+        "key": "sec-fetch-storage-access",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=1, i"
+      }
+    ],
+    "http1_order": [
+      "Host",
+      "Connection",
+      "Content-Length",
+      "sec-ch-ua-platform",
+      "User-Agent",
+      "sec-ch-ua",
+      "Content-Type",
+      "sec-ch-ua-mobile",
+      "Accept",
+      "Origin",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Dest",
+      "Sec-Fetch-Storage-Access",
+      "Referer",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie"
+    ]
+  },
   "devices": [
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.12",
@@ -957,5 +1048,213 @@
       "form_factors": "Desktop"
     }
   ],
-  "device_kind": "desktop"
+  "device_kind": "desktop",
+  "resources": {
+    "orders": {
+      "cors": [
+        "origin",
+        "sec-ch-ua-platform",
+        "user-agent",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "accept",
+        "sec-fetch-site",
+        "sec-fetch-mode",
+        "sec-fetch-dest",
+        "sec-fetch-storage-access",
+        "referer",
+        "accept-encoding",
+        "accept-language",
+        "cookie",
+        "priority"
+      ],
+      "navigate": [
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+        "upgrade-insecure-requests",
+        "user-agent",
+        "accept",
+        "sec-fetch-site",
+        "sec-fetch-mode",
+        "sec-fetch-dest",
+        "sec-fetch-storage-access",
+        "referer",
+        "accept-encoding",
+        "accept-language",
+        "cookie",
+        "priority"
+      ],
+      "no-cors": [
+        "content-length",
+        "sec-ch-ua-platform",
+        "user-agent",
+        "sec-ch-ua",
+        "content-type",
+        "sec-purpose",
+        "sec-ch-ua-mobile",
+        "accept",
+        "origin",
+        "sec-fetch-site",
+        "sec-fetch-mode",
+        "sec-fetch-dest",
+        "sec-fetch-storage-access",
+        "referer",
+        "accept-encoding",
+        "accept-language",
+        "cookie",
+        "priority"
+      ]
+    },
+    "http1_orders": {
+      "cors": [
+        "Host",
+        "Connection",
+        "Origin",
+        "sec-ch-ua-platform",
+        "User-Agent",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "Accept",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Sec-Fetch-Storage-Access",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "Cookie"
+      ],
+      "navigate": [
+        "Host",
+        "Connection",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+        "Upgrade-Insecure-Requests",
+        "User-Agent",
+        "Accept",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Sec-Fetch-Storage-Access",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "Cookie"
+      ],
+      "no-cors": [
+        "Host",
+        "Connection",
+        "Content-Length",
+        "sec-ch-ua-platform",
+        "User-Agent",
+        "sec-ch-ua",
+        "Content-Type",
+        "Sec-Purpose",
+        "sec-ch-ua-mobile",
+        "Accept",
+        "Origin",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Sec-Fetch-Storage-Access",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "Cookie"
+      ]
+    },
+    "kinds": {
+      "beacon": {
+        "dest": "empty",
+        "accept": "*/*",
+        "priority": "u=4, i"
+      },
+      "font": {
+        "dest": "font",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=0"
+      },
+      "font-preload": {
+        "dest": "font",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "icon": {
+        "dest": "image",
+        "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "priority": "u=1, i"
+      },
+      "iframe": {
+        "dest": "iframe",
+        "mode": "navigate",
+        "priority": "u=0, i"
+      },
+      "image": {
+        "dest": "image",
+        "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "priority": "i"
+      },
+      "image-css": {
+        "dest": "image",
+        "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "priority": "i"
+      },
+      "module": {
+        "dest": "script",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "module-preload": {
+        "dest": "script",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "prefetch": {
+        "dest": "empty",
+        "priority": "u=4, i",
+        "purpose": "prefetch"
+      },
+      "script": {
+        "dest": "script",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "script-async": {
+        "dest": "script",
+        "accept": "*/*"
+      },
+      "script-body": {
+        "dest": "script",
+        "accept": "*/*",
+        "priority": "u=2"
+      },
+      "script-defer": {
+        "dest": "script",
+        "accept": "*/*"
+      },
+      "script-preload": {
+        "dest": "script",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "style": {
+        "dest": "style",
+        "accept": "text/css,*/*;q=0.1",
+        "priority": "u=0"
+      },
+      "style-preload": {
+        "dest": "style",
+        "accept": "text/css,*/*;q=0.1",
+        "priority": "u=0"
+      }
+    },
+    "storage_access": "active",
+    "cors_origin": "always"
+  }
 }

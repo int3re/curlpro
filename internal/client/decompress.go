@@ -5,9 +5,11 @@ import (
 	"compress/flate"
 	"compress/gzip"
 	"compress/zlib"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/zstd"
@@ -54,15 +56,29 @@ func decompress(body io.ReadCloser, encoding string) (io.ReadCloser, error) {
 }
 
 // lazyDecoder creates the decoder on the first read.
+//
+// The decoder may come from a pool and goes back to it on Close. The mutex
+// is what makes that safe: a Close from another goroutine — the way a
+// response is abandoned mid-read — closes the source first, which wakes a
+// Read blocked on the network, and then waits for that Read to leave the
+// decoder before handing it on. Without the wait a decoder could be decoding
+// one response while the pool had already given it to the next.
 type lazyDecoder struct {
 	codec string
 	src   io.ReadCloser
-	r     io.Reader
-	done  io.Closer // codec resources, when it holds any (zstd)
-	err   error
+
+	mu   sync.Mutex
+	r    io.Reader
+	done func() // returns the codec to its pool, or releases what it holds
+	err  error
 }
 
+// errBodyClosed is what a read after Close returns.
+var errBodyClosed = errors.New("read on a closed response body")
+
 func (d *lazyDecoder) Read(p []byte) (int, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if d.r == nil && d.err == nil {
 		d.r, d.done, d.err = openDecoder(d.codec, d.src)
 	}
@@ -73,21 +89,56 @@ func (d *lazyDecoder) Read(p []byte) (int, error) {
 }
 
 func (d *lazyDecoder) Close() error {
+	err := d.src.Close()
+	d.mu.Lock()
 	if d.done != nil {
-		d.done.Close()
+		d.done()
+		d.done = nil
 	}
-	return d.src.Close()
+	d.r = nil
+	if d.err == nil {
+		d.err = errBodyClosed
+	}
+	d.mu.Unlock()
+	return err
+}
+
+// Decoders are pooled: a zstd decoder allocates its window and tables when
+// made, a gzip reader its inflate state, and a scraper makes one per
+// response. A decoder is reset onto the next body instead.
+var (
+	zstdPool sync.Pool // *zstd.Decoder
+	gzipPool sync.Pool // *gzip.Reader
+)
+
+// newZstd makes a decoder with the limits every body gets. The library's
+// default window is 512 MB, allocated up front: a ten-byte frame declaring
+// windowLog 29 took 513 MB before the body limit could see a byte. Chromium
+// caps the window at 8 MB, and a response past that fails there too.
+func newZstd() (*zstd.Decoder, error) {
+	return zstd.NewReader(nil, zstd.WithDecoderMaxWindow(8<<20), zstd.WithDecoderConcurrency(1))
 }
 
 // openDecoder picks the codec. An empty body yields io.EOF without an error.
-func openDecoder(codec string, src io.Reader) (io.Reader, io.Closer, error) {
+func openDecoder(codec string, src io.Reader) (io.Reader, func(), error) {
 	switch codec {
 	case "gzip", "x-gzip":
-		zr, err := gzip.NewReader(src)
+		// Reset reads the stream header just as NewReader does, so an empty
+		// body still ends in plain EOF.
+		zr, _ := gzipPool.Get().(*gzip.Reader)
+		var err error
+		if zr == nil {
+			zr, err = gzip.NewReader(src)
+		} else {
+			err = zr.Reset(src)
+		}
 		if err != nil {
+			if zr != nil {
+				gzipPool.Put(zr)
+			}
 			return nil, nil, decodeErr("gzip", err)
 		}
-		return zr, nil, nil
+		return zr, func() { gzipPool.Put(zr) }, nil
 
 	case "deflate":
 		// Per the RFC, deflate in HTTP is the zlib wrapper, but many servers send
@@ -114,15 +165,20 @@ func openDecoder(codec string, src io.Reader) (io.Reader, io.Closer, error) {
 		return brotli.NewReader(src), nil, nil
 
 	case "zstd":
-		// The library's default window is 512 MB, allocated up front: a
-		// ten-byte frame declaring windowLog 29 took 513 MB before the body
-		// limit could see a byte. Chromium caps the window at 8 MB, and a
-		// response past that fails there too.
-		zr, err := zstd.NewReader(src, zstd.WithDecoderMaxWindow(8<<20), zstd.WithDecoderConcurrency(1))
-		if err != nil {
+		zr, _ := zstdPool.Get().(*zstd.Decoder)
+		if zr == nil {
+			var err error
+			if zr, err = newZstd(); err != nil {
+				return nil, nil, decodeErr("zstd", err)
+			}
+		}
+		if err := zr.Reset(src); err != nil {
+			zstdPool.Put(zr)
 			return nil, nil, decodeErr("zstd", err)
 		}
-		return zr, closerFunc(zr.Close), nil
+		// Back to the pool detached from the body, so a pooled decoder holds
+		// no reference to a response that is gone.
+		return zr, func() { _ = zr.Reset(nil); zstdPool.Put(zr) }, nil
 
 	default:
 		return nil, nil, fmt.Errorf("unsupported content encoding %q", codec)
@@ -137,7 +193,3 @@ func decodeErr(codec string, err error) error {
 	}
 	return fmt.Errorf("%s: %w", codec, err)
 }
-
-type closerFunc func()
-
-func (f closerFunc) Close() error { f(); return nil }

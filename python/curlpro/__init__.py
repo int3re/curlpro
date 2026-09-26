@@ -64,6 +64,7 @@ from .profiles import (
     load_profiles,
     register_profile,
 )
+from .page import Page, PageResource
 from .stream import StreamResponse
 from .websocket import WebSocket
 
@@ -81,6 +82,8 @@ __all__ = [
     "Finding",
     "ExpectationFailed",
     "Fingerprint",
+    "Page",
+    "PageResource",
     "Persona",
     "PermanentError",
     "Preflight",
@@ -118,7 +121,7 @@ __all__ = [
     "request",
 ]
 
-__version__ = "0.12.0"
+__version__ = "0.13.0"
 
 try:  # an installed distribution is the authority; a source checkout has none
     from importlib.metadata import version as _dist_version

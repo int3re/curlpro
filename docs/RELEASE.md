@@ -6,6 +6,18 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
+**0.13.0** — a minor, because what goes on the wire changed without anyone
+asking: the pool spends connections as the profile's family does (a burst of
+first requests races four handshakes in Chromium and six in Firefox and rides
+one HTTP/2 connection; Chromium pools names by address and keeps
+uncredentialed requests and other sites' pages on connections of their own),
+and a credentialed cross-site fetch from the Chrome 153 and Firefox 156
+profiles carries `sec-fetch-storage-access` as those browsers do. Beside them:
+seventeen measured resource kinds behind `resource=` and `crossorigin=`,
+`load_page()`, free-threaded Python (3.14t) tested in CI with the GIL off, a
+start-up race in the loading of the bundled profiles fixed, and header
+assembly three times cheaper (docs/STAGE21-RESULTS.md). ABI 0.24.0: a profile
+with a `resources` section does not load into an older library. Before it,
 **0.12.0** — a minor, because three defaults changed: a buffered response is
 capped at 100 MiB unless `max_response_size` says otherwise, a request whose
 reused keep-alive connection dies before any response byte is sent once more

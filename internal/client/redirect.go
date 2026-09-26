@@ -214,10 +214,20 @@ func setHeader(h map[string]string, name, value string) {
 
 // siteRelation classifies a pair of URLs the way Fetch Metadata does.
 func siteRelation(a, b string) string {
+	ua, err1 := url.Parse(a)
+	ub, err2 := url.Parse(b)
+	if err1 != nil || err2 != nil {
+		return "cross-site"
+	}
+	return siteRelationURL(ua, ub)
+}
+
+// siteRelationURL is siteRelation on URLs already parsed.
+func siteRelationURL(a, b *url.URL) string {
 	switch {
-	case sameOrigin(a, b):
+	case sameOriginURL(a, b):
 		return "same-origin"
-	case sameSite(a, b):
+	case sameSiteURL(a, b):
 		return "same-site"
 	default:
 		return "cross-site"
@@ -240,10 +250,18 @@ func worseSite(a, b string) string {
 func sameSite(a, b string) bool {
 	ua, err1 := url.Parse(a)
 	ub, err2 := url.Parse(b)
-	if err1 != nil || err2 != nil || !strings.EqualFold(ua.Scheme, ub.Scheme) {
+	if err1 != nil || err2 != nil {
 		return false
 	}
-	return registrableDomain(ua.Hostname()) == registrableDomain(ub.Hostname())
+	return sameSiteURL(ua, ub)
+}
+
+// sameSiteURL is sameSite on URLs already parsed.
+func sameSiteURL(a, b *url.URL) bool {
+	if !strings.EqualFold(a.Scheme, b.Scheme) {
+		return false
+	}
+	return registrableDomain(a.Hostname()) == registrableDomain(b.Hostname())
 }
 
 func registrableDomain(host string) string {
@@ -280,9 +298,14 @@ func sameOrigin(a, b string) bool {
 	if err1 != nil || err2 != nil {
 		return false
 	}
-	return strings.EqualFold(ua.Scheme, ub.Scheme) &&
-		strings.EqualFold(ua.Hostname(), ub.Hostname()) &&
-		defaultPort(ua) == defaultPort(ub)
+	return sameOriginURL(ua, ub)
+}
+
+// sameOriginURL is sameOrigin on URLs already parsed.
+func sameOriginURL(a, b *url.URL) bool {
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) &&
+		defaultPort(a) == defaultPort(b)
 }
 
 func defaultPort(u *url.URL) string {

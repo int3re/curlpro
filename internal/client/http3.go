@@ -320,7 +320,8 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL) (*nethttp.
 // of the rules lived here, the HTTP/3 path silently lost SuppressHeaders and the
 // cookie slot. h1Order is not passed — HTTP/3 sends no Host or Connection.
 func (s *Session) applyH3Headers(req *nethttp.Request, r *Request, u *url.URL) {
-	built := s.buildHeaders(r, u, req.Host, nil)
+	tpl := s.templateAt(r, u)
+	built := s.buildHeadersWith(r, u, req.Host, nil, tpl)
 	s.noteMode(r)
 
 	for _, h := range built {
@@ -330,7 +331,6 @@ func (s *Session) applyH3Headers(req *nethttp.Request, r *Request, u *url.URL) {
 		req.Header[h.Key] = []string{h.Value}
 	}
 	suppressDefaultUA(req.Header, built, false)
-	tpl := s.template(r)
 	req.Header[h3.HeaderOrderKey] = wireOrder(built, s.wantOrder(r, nil, tpl), tpl.anchor)
 
 	pseudo := s.profile.HTTP3.PseudoOrder

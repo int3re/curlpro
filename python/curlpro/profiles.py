@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from ._ffi import _call, encode
 
 _BUNDLED = Path(__file__).resolve().parent / "profiles"
 _autoloaded = False
+_load_lock = threading.Lock()
 
 
 def load_profiles(directory: str | Path) -> list[str]:
@@ -30,13 +32,21 @@ def ensure_loaded() -> list[str]:
     wheel carries both the native part and the profiles. When running from
     the repository there is no such directory next to the package, and the
     caller loads the profiles itself, as before.
+
+    Safe from any number of threads at once. The flag used to be set before
+    the load: a second thread saw it, went on, and opened its session
+    against an empty registry while the first was still loading — the
+    native call releases the GIL, so it took no free-threaded build to lose
+    that race, only two threads starting together.
     """
     global _autoloaded
     if _autoloaded:
         return list_profiles()
-    _autoloaded = True
-    if _BUNDLED.is_dir():
-        return load_profiles(_BUNDLED)
+    with _load_lock:
+        if not _autoloaded:
+            if _BUNDLED.is_dir():
+                load_profiles(_BUNDLED)
+            _autoloaded = True
     return list_profiles()
 
 
@@ -95,6 +105,7 @@ def capabilities(name: str) -> dict[str, Any]:
     | ``client_hints``, ``websocket``, ``http1_set`` | whether it answers ``Accept-CH``, carries a handshake template, has a measured HTTP/1.1 order |
     | ``user_agent``, ``user_agent_varies`` | the string without a device, and whether a device changes it |
     | ``derived_fetch`` | the fetch set was worked out rather than captured (see the guide) |
+    | ``resources`` | the resource kinds a request can name with ``resource=``, empty without a ``resources`` section |
     | ``name``, ``based_on``, ``family`` | identity, after inheritance is resolved |
 
     This exists because the only way to learn any of it used to be to try: a

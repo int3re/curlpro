@@ -48,7 +48,8 @@ curlpro.register_profile({
 [Own fingerprint](#your-own-fingerprint-without-a-request) · [Personas](#personas-an-identity-between-runs) ·
 [requests compatibility](#requests-compatibility) · [Cookies](#cookies-between-runs) ·
 [Mobile profiles](#mobile-profiles-and-client-hints) ·
-[Navigation vs fetch](#navigation-vs-fetch) · [Profiles as data](#profiles-as-data) ·
+[Navigation vs fetch](#navigation-vs-fetch) · [Page loads](#page-loads-and-resources) ·
+[Profiles as data](#profiles-as-data) ·
 [Measured, not assumed](#measured-not-assumed) · [Limits](#limits)
 
 ---
@@ -60,7 +61,14 @@ curlpro.register_profile({
 - **Every fingerprint layer at once** — TLS, HTTP/2, HTTP/3, HTTP/1.1 and WebSocket
   (table below).
 - **HTTP/3 with a verified fingerprint** and the `Alt-Svc` upgrade a browser performs.
-- **Native async**: a request becomes a goroutine, and the process keeps one thread.
+- **Native async**: a request becomes a goroutine, and the process keeps one thread;
+  on free-threaded Python (3.14t) the GIL stays off and threads parse in parallel.
+- **Page loads as a browser loads them**: `load_page()` fetches a document and the
+  stylesheets, scripts, images, fonts and frames it names, each as its resource
+  kind — its own `Accept`, `sec-fetch-dest`, `priority`, header order.
+- **Connections as a browser spends them**: a burst races as many handshakes as
+  the browser does and rides one HTTP/2 connection, Chromium pools names by
+  address and keeps credentialed and uncredentialed requests apart.
 - **WebSocket** with a profile-driven handshake and `permessage-deflate`.
 - **Streaming reads and uploads**, multipart, `gzip`/`deflate`/`br`/`zstd` decoding.
 - **requests-compatible**: `params`, `auth`, `r.json()`, `r.history`, `r.elapsed`,
@@ -86,7 +94,8 @@ What exactly is reproduced:
 | HTTP/2 | SETTINGS and their order, window size, `PRIORITY` on HEADERS, pseudo-header order |
 | HTTP/3 | SETTINGS, the GREASE frame, `PRIORITY_UPDATE`, QUIC transport parameters, header order |
 | HTTP/1.1 | name order **and case**, `Host` and `Connection` — a set of its own, unlike HTTP/2 |
-| Headers | two sets (navigation and `fetch`), slot positions, the anchor for custom headers |
+| Headers | the navigation set, the `fetch` set and a set per resource kind, slot positions, the anchor for custom headers |
+| Connections | handshakes per burst, HTTP/2 pooling across names, the privacy-mode and site partitions |
 | WebSocket | the handshake header set and order, `permessage-deflate` |
 | Forms | the multipart boundary style: `----WebKitFormBoundary` in Chrome, dashes in Firefox |
 
@@ -800,6 +809,34 @@ before sending. Along a redirect chain `Origin` turns `null` where the Fetch
 standard says so. All of it measured on Chrome 153 and Firefox 156
 (`docs/STAGE18-RESULTS.md`); `samesite=False` and `preflight=False` restore
 the behaviour before 0.10.
+
+## Page loads and resources
+
+A page is more than its document: the browser asks for every stylesheet,
+script, image, font and frame the markup names, each as the kind of resource it
+is, and an anti-bot watches that happen. `resource=` sends a request as one of
+those kinds, and `load_page()` loads a document with its resources the way a
+browser does — at once, in the markup's order, the icon last:
+
+```python
+page = s.load_page("https://example.com/", css=True)  # css: the fonts the stylesheets declare
+for r in page.resources:
+    print(r.kind, r.status, r.url)                    # style 200 …, script-async 200 …, image 200 …
+
+s.get(img_url, resource="image", page=page.url)       # one resource by hand
+s.get(font_url, resource="font", page=page.url)       # a font: CORS, Origin, its own Accept
+```
+
+Seventeen kinds — `style`, `script`, `script-async`, `module`, `image`, `icon`,
+`font`, `iframe`, `prefetch`, `beacon` and the rest — measured on Chrome 153 and
+Firefox 156 over HTTP/2 and HTTP/1.1, down to a head script's `u=1` against a
+body script's `u=2` and Firefox asking for a stylesheet's font with
+`Accept-Encoding: identity` (`docs/STAGE21-RESULTS.md`). The pool spends
+connections the way the family does: a burst of first requests races four
+handshakes in Chromium and six in Firefox and rides the first HTTP/2 connection;
+Chromium lets an HTTP/2 connection serve another name on its address its
+certificate covers, and keeps requests without credentials, and requests from
+pages of other sites, on connections of their own.
 
 ## Profiles as data
 

@@ -78,6 +78,11 @@ jobs:
       - name: the Safari fetch sets are in sync with their generator
         run: python scripts/gen-safari-fetch.py --check
 
+      # The resources sections are written from the -subres captures in
+      # capture/subres; an edit by hand to a kind or an order drifts from them.
+      - name: the resources sections are in sync with their captures
+        run: python scripts/gen-resources.py --check
+
   go:
     strategy:
       fail-fast: false
@@ -164,6 +169,57 @@ jobs:
         env:
           CURLPRO_LIBRARY: ${{ github.workspace }}/dist/libcurlpro.so
         run: cd python && python -m pytest tests -q --tb=short -m "not network"
+
+  # Python without the GIL (3.14t). The package is ctypes and pure Python, so
+  # the py3-none wheel installs there as it is; what this job checks is that
+  # importing it leaves the GIL off — an extension module without
+  # free-threading support would switch it back on, and the parallelism
+  # with it — and that the Python side's shared state holds when threads
+  # really run at once (tests/test_threads.py). The last step prints how far
+  # fetching and parsing scale over the runner's cores.
+  free-threaded:
+    needs: go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14t"
+
+      - name: certs
+        run: bash scripts/gen-certs.sh
+
+      - name: build native library
+        run: CGO_ENABLED=1 go build -buildmode=c-shared -o dist/libcurlpro.so ./lib
+
+      - name: install
+        run: pip install pytest websockets ./python
+
+      # No PYTHON_GIL here: the question is whether the GIL stays off by
+      # itself once the package is imported.
+      - name: the GIL stays off
+        env:
+          CURLPRO_LIBRARY: ${{ github.workspace }}/dist/libcurlpro.so
+        run: |
+          python -c "import sys, sysconfig; assert sysconfig.get_config_var('Py_GIL_DISABLED'), 'not a free-threaded build'"
+          python -W error::RuntimeWarning -c "import sys, curlpro, curlpro.aio; assert not sys._is_gil_enabled(), 'importing curlpro switched the GIL on'; print(sys.version)"
+
+      # PYTHON_GIL=0 keeps it off for the test run even if a test dependency
+      # (websockets' C speedups) does not declare free-threading support.
+      - name: tests
+        env:
+          PYTHON_GIL: "0"
+          CURLPRO_LIBRARY: ${{ github.workspace }}/dist/libcurlpro.so
+        run: cd python && python -m pytest tests -q --tb=short -m "not network"
+
+      - name: scaling
+        env:
+          CURLPRO_LIBRARY: ${{ github.workspace }}/dist/libcurlpro.so
+        run: python scripts/ft-scaling.py
 
   # Tests against someone else's services, kept apart on purpose. They check
   # real-world behaviour that no local stand reproduces — an oracle's verdict on

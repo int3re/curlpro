@@ -158,7 +158,10 @@ func curlpro_free(s *C.char) {
 // 0.23.0: device_kind on the profile (a file carrying it does not load into an
 // older library), in the capabilities and in the fingerprint; a per-socket
 // proxy on WebSocket connect, which the Python side fills from trust_env.
-const Version = "0.23.0"
+// 0.24.0: resource requests — the profile's resources section (a file
+// carrying it does not load into an older library), resource and
+// crossorigin per request and in the preview, resources in the capabilities.
+const Version = "0.24.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -414,6 +417,10 @@ type previewJSON struct {
 	Mode        string  `json:"mode"`
 	Page        *string `json:"page"`
 	Credentials string  `json:"credentials"`
+	// Resource and CrossOrigin name a resource request's kind and its
+	// crossorigin attribute, as in a real request.
+	Resource    string `json:"resource"`
+	CrossOrigin string `json:"crossorigin"`
 	// Preflight asks for the OPTIONS a browser would send before this
 	// request instead of the request's own headers; "needed": false in the
 	// answer says there would be none.
@@ -451,6 +458,8 @@ func curlpro_session_preview(id C.longlong, spec *C.char) (out *C.char) {
 		Mode:            p.Mode,
 		Page:            p.Page,
 		Credentials:     p.Credentials,
+		Resource:        p.Resource,
+		CrossOrigin:     p.CrossOrigin,
 		Protocol:        p.Protocol,
 		HeaderOrder:     p.HeaderOrder,
 		DefaultHeaders:  p.DefaultHeaders,
@@ -607,6 +616,11 @@ type requestJSON struct {
 	Page *string `json:"page"`
 	// Credentials overrides the session's fetch credentials mode; "" takes it.
 	Credentials string `json:"credentials"`
+	// Resource names the kind of resource the request loads ("image",
+	// "script", ...) and CrossOrigin its crossorigin attribute; both empty
+	// for a navigation or a fetch.
+	Resource    string `json:"resource"`
+	CrossOrigin string `json:"crossorigin"`
 	// Preflight: null takes the session's, false sends without the OPTIONS.
 	Preflight *bool `json:"preflight"`
 	// SuppressHeaders names headers to leave out of this request whatever
@@ -637,6 +651,8 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 	req.Mode = r.Mode
 	req.Page = r.Page
 	req.Credentials = r.Credentials
+	req.Resource = r.Resource
+	req.CrossOrigin = r.CrossOrigin
 	req.Preflight = r.Preflight
 }
 

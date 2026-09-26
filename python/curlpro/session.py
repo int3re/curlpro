@@ -19,6 +19,7 @@ from .encoding import detect as detect_encoding, without_bom
 from .expect import Expect
 from .fingerprint import Fingerprint
 from .headers import SessionHeaders
+from .page import Page, PageResource, css_fonts, discover, is_html, ordered, request_args
 from .profiles import ensure_loaded
 from .proxies import proxy_for as env_proxy
 from .stream import StreamResponse
@@ -370,6 +371,8 @@ def _request_meta(
     page: str | bool | None = None,
     credentials: str | None = None,
     preflight: bool | None = None,
+    resource: str | None = None,
+    crossorigin: str | None = None,
 ) -> tuple[dict[str, Any], bytes]:
     # params and auth are the familiar requests arguments; here they turn
     # into a URL with a query string and an ordinary header, nothing special.
@@ -449,6 +452,10 @@ def _request_meta(
         # None takes the session's; False sends a cross-origin fetch without
         # the OPTIONS a browser would send first, True sends it when needed.
         "preflight": preflight,
+        # A resource kind ("image", "script", "style", "font", "iframe", ...)
+        # takes that kind's set; crossorigin is the element's attribute.
+        "resource": resource or "",
+        "crossorigin": crossorigin or "",
     }
     return meta, data or b""
 
@@ -887,6 +894,8 @@ class Session:
         page: str | bool | None = None,
         credentials: str | None = None,
         preflight: bool | None = None,
+        resource: str | None = None,
+        crossorigin: str | None = None,
         expect: "Expect | None" = None,
         rollback_cookies: bool = False,
     ) -> Response:
@@ -914,6 +923,16 @@ class Session:
             setting either way
         :param protocol: force the transport for this request: ``"http1"``,
             ``"h2"`` or ``"h3"`` (``1.1``, ``2`` and ``3`` also work)
+        :param resource: load the URL the way a page loads one of its
+            resources — ``"image"``, ``"script"``, ``"style"``, ``"font"``,
+            ``"iframe"`` and the rest :func:`~curlpro.capabilities` lists under
+            ``resources``: that kind's Accept, ``sec-fetch-dest``,
+            ``sec-fetch-mode``, ``priority`` and header order, with
+            ``Referer``, ``sec-fetch-site`` and cookies from ``page``
+        :param crossorigin: the element's ``crossorigin`` attribute,
+            ``"anonymous"`` or ``"use-credentials"``: the resource becomes a
+            CORS request, with ``Origin`` and the credentials that attribute
+            gives. A font and a module script are CORS without it
         :param expect: an :class:`~curlpro.Expect` describing what the response
             must and must not contain; a mismatch raises
             :class:`~curlpro.ExpectationFailed`
@@ -938,7 +957,7 @@ class Session:
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
             respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page, credentials=credentials,
-            preflight=preflight,
+            preflight=preflight, resource=resource, crossorigin=crossorigin,
         )
         if rollback_cookies:
             # The native side logs what this request changes in the jar and
@@ -1074,6 +1093,8 @@ class Session:
         page: str | bool | None = None,
         credentials: str | None = None,
         preflight: bool | None = None,
+        resource: str | None = None,
+        crossorigin: str | None = None,
     ) -> "StreamResponse":
         """Opens a response for reading in chunks.
 
@@ -1097,7 +1118,7 @@ class Session:
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
             respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page, credentials=credentials,
-            preflight=preflight,
+            preflight=preflight, resource=resource, crossorigin=crossorigin,
         )
         # The request hooks see a stream's frame too, as they do on the async
         # side: a hook that adds a signature header must not miss downloads.
@@ -1171,6 +1192,98 @@ class Session:
         # "" is "go direct": NO_PROXY excluded the host, or nothing is set.
         return env_proxy(plain) or ""
 
+    def load_page(
+        self,
+        url: str,
+        *,
+        page: str | bool | None = False,
+        css: bool = False,
+        favicon: bool = True,
+        frames: bool = True,
+        max_resources: int = 100,
+        timeout: float | tuple[float, float] | None = None,
+        **kw: Any,
+    ) -> Page:
+        """Loads a page the way a browser loads it: the document, then the
+        resources its markup names.
+
+            page = s.load_page("https://example.com/")
+            page.document.text
+            [(r.kind, r.url, r.status) for r in page.resources]
+
+        The document goes out as a top-level navigation (``page`` names the
+        page a link was followed from; the default is a typed address). Then
+        every stylesheet, script, preload, image and frame the markup names
+        is asked for at once, in the order the markup names it, as the kind
+        of resource it is — its own ``Accept``, ``sec-fetch-dest``,
+        ``priority`` and header order, ``Referer`` and ``sec-fetch-site``
+        from the document — and the icon and prefetches after them, when
+        the page has loaded. ``css=True`` also loads the fonts the
+        stylesheets declare, with the stylesheet as the referrer. A resource
+        that fails does not fail the page: it comes back with ``error`` set.
+
+        Nothing runs a script or lays the page out: what a script would load
+        and what only a rendered page asks for (lazy images, background
+        images) are not guessed. See :mod:`curlpro.page`.
+
+        :param frames: load the documents of the page's ``<iframe>``s
+        :param favicon: ask for the icon (``/favicon.ico`` without a
+            ``<link rel=icon>``), as both browsers do
+        :param max_resources: at most this many resources
+        :param timeout: the limit for each request, the document's included
+        :param kw: the document request's other arguments
+        """
+        from concurrent.futures import ThreadPoolExecutor
+
+        doc = self.request("GET", url, page=page, mode="navigate", timeout=timeout, **kw)
+        result = Page(doc)
+        if not is_html(doc):
+            return result
+        found = discover(doc.text, doc.url, favicon=favicon)
+        if not frames:
+            found = [f for f in found if f[1] != "iframe"]
+        now, after = ordered(found[:max_resources])
+        extra: dict[str, Any] = {} if timeout is None else {"timeout": timeout}
+
+        def fetch(item: PageResource) -> PageResource:
+            try:
+                item.response = self.request("GET", item.url, **request_args(
+                    item.url, item.kind, item.crossorigin, doc.url, extra, item.initiator))
+            except Exception as exc:  # noqa: BLE001 — a failed resource does not fail the page
+                item.error = exc
+            return item
+
+        items = [PageResource(u, k, c) for u, k, c in now]
+        result.resources.extend(items)
+        seen = {it.url for it in items}
+        # The workers take the requests in the order they were submitted, so
+        # they reach the wire in the markup's order, all at once.
+        with ThreadPoolExecutor(max_workers=max(1, min(32, len(items) + 8))) as pool:
+            futures = [pool.submit(fetch, it) for it in items]
+            if css:
+                for i, it in enumerate(items):
+                    if it.kind not in ("style", "style-preload"):
+                        continue
+                    futures[i].result()
+                    if not it.ok or it.response is None:
+                        continue
+                    sheet = it.response.url or it.url
+                    for font in css_fonts(it.response.text, sheet):
+                        if font in seen or len(result.resources) >= max_resources:
+                            continue
+                        seen.add(font)
+                        f = PageResource(font, "font", None, initiator=sheet)
+                        result.resources.append(f)
+                        futures.append(pool.submit(fetch, f))
+            for fut in futures:
+                fut.result()
+            # After the load: the icon, then what the page prefetches.
+            late = [PageResource(u, k, c) for u, k, c in after if u not in seen]
+            result.resources.extend(late)
+            for fut in [pool.submit(fetch, it) for it in late]:
+                fut.result()
+        return result
+
     def fingerprint(self, url: str = "https://example.com/") -> "Fingerprint":
         """What a server would see from this session — without sending anything.
 
@@ -1238,6 +1351,8 @@ class Session:
         protocol: str | float | None = None,
         default_headers: bool | None = None,
         session_headers: bool | None = None,
+        resource: str | None = None,
+        crossorigin: str | None = None,
     ) -> dict[str, str]:
         """The headers this request would carry, without sending it.
 
@@ -1273,6 +1388,8 @@ class Session:
             "protocol": _protocol(protocol),
             "default_headers": default_headers,
             "session_headers": session_headers,
+            "resource": resource or "",
+            "crossorigin": crossorigin or "",
         }))
         return {h["name"]: h["value"] for h in data["headers"]}
 

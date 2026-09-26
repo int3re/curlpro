@@ -23,6 +23,7 @@ from ._completions import settle
 from ._ffi import _call, call_with_frame, encode
 from ._headers import Headers
 from .errors import WebSocketClosed
+from .page import Page, PageResource, css_fonts, discover, is_html, ordered, request_args
 from .session import DEFAULT_PROFILE, Redirect, Response, Session, _preflights, _request_meta
 from .timeouts import split_timeout as _split_timeout
 from .stream import DEFAULT_CHUNK, lines_from, too_large
@@ -354,6 +355,92 @@ class AsyncSession:
 
     def on_error(self, fn):  # noqa: ANN001, ANN201
         return self._session.on_error(fn)
+
+    async def load_page(
+        self,
+        url: str,
+        *,
+        page: str | bool | None = False,
+        css: bool = False,
+        favicon: bool = True,
+        frames: bool = True,
+        max_resources: int = 100,
+        timeout: float | tuple[float, float] | None = None,
+        **kw: Any,
+    ) -> Page:
+        """Loads a page the way a browser loads it: the document, then the
+        resources its markup names.
+
+            page = await s.load_page("https://example.com/")
+            page.document.text
+            [(r.kind, r.url, r.status) for r in page.resources]
+
+        The document goes out as a top-level navigation (``page`` names the
+        page a link was followed from; the default is a typed address). Then
+        every stylesheet, script, preload, image and frame the markup names
+        is asked for at once, in the order the markup names it, as the kind
+        of resource it is — its own ``Accept``, ``sec-fetch-dest``,
+        ``priority`` and header order, ``Referer`` and ``sec-fetch-site``
+        from the document — and the icon and prefetches after them, when
+        the page has loaded. ``css=True`` also loads the fonts the
+        stylesheets declare, with the stylesheet as the referrer. A resource
+        that fails does not fail the page: it comes back with ``error`` set.
+
+        Nothing runs a script or lays the page out: what a script would load
+        and what only a rendered page asks for (lazy images, background
+        images) are not guessed. See :mod:`curlpro.page`.
+
+        :param frames: load the documents of the page's ``<iframe>``s
+        :param favicon: ask for the icon (``/favicon.ico`` without a
+            ``<link rel=icon>``), as both browsers do
+        :param max_resources: at most this many resources
+        :param timeout: the limit for each request, the document's included
+        :param kw: the document request's other arguments
+        """
+        doc = await self.request("GET", url, page=page, mode="navigate", timeout=timeout, **kw)
+        result = Page(doc)
+        if not is_html(doc):
+            return result
+        found = discover(doc.text, doc.url, favicon=favicon)
+        if not frames:
+            found = [f for f in found if f[1] != "iframe"]
+        now, after = ordered(found[:max_resources])
+        extra: dict[str, Any] = {} if timeout is None else {"timeout": timeout}
+
+        async def fetch(item: PageResource) -> PageResource:
+            try:
+                item.response = await self.request("GET", item.url, **request_args(
+                    item.url, item.kind, item.crossorigin, doc.url, extra, item.initiator))
+            except Exception as exc:  # noqa: BLE001 — a failed resource does not fail the page
+                item.error = exc
+            return item
+
+        items = [PageResource(u, k, c) for u, k, c in now]
+        result.resources.extend(items)
+        seen = {it.url for it in items}
+        # Tasks start in the order they are created: the requests reach the
+        # wire in the markup's order, all at once.
+        tasks = [asyncio.ensure_future(fetch(it)) for it in items]
+        if css:
+            for i, it in enumerate(items):
+                if it.kind not in ("style", "style-preload"):
+                    continue
+                await tasks[i]
+                if not it.ok or it.response is None:
+                    continue
+                sheet = it.response.url or it.url
+                for font in css_fonts(it.response.text, sheet):
+                    if font in seen or len(result.resources) >= max_resources:
+                        continue
+                    seen.add(font)
+                    f = PageResource(font, "font", None, initiator=sheet)
+                    result.resources.append(f)
+                    tasks.append(asyncio.ensure_future(fetch(f)))
+        await asyncio.gather(*tasks)
+        late = [PageResource(u, k, c) for u, k, c in after if u not in seen]
+        result.resources.extend(late)
+        await asyncio.gather(*(fetch(it) for it in late))
+        return result
 
     async def request(self, method: str, url: str, **kw: Unpack[RequestKwargs]) -> Response:
         """Sends a request. Takes the same arguments as :meth:`Session.request`,

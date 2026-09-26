@@ -61,6 +61,11 @@ type Profile struct {
 	// Fetch describes fetch/XHR requests: their set, order and anchor are their own.
 	Fetch FetchSpec `json:"fetch,omitempty"`
 
+	// Resources describes the requests a page makes for its stylesheets,
+	// scripts, images, fonts and frames: a kind per destination, each with
+	// its own Accept, priority and order.
+	Resources ResourcesSpec `json:"resources,omitempty"`
+
 	// Source says where a profile that this project did not capture came
 	// from. Nil for a captured profile — the corpus, or a live run of
 	// curlpro capture. A transcribed profile carries another project's
@@ -322,6 +327,9 @@ type Capabilities struct {
 	// Cookies is the family's cookie policy — what a request made from a
 	// page on another site carries — or nil for a library that has none.
 	Cookies *CookiePolicy `json:"cookies,omitempty"`
+	// Resources lists the resource kinds a request can name (resource=),
+	// empty for a profile that describes none.
+	Resources []string `json:"resources"`
 	// Measured says every part of the profile was captured from the browser
 	// by this project or its corpus. False for a transcribed profile, whose
 	// Source says what was taken from where; the audit reports the same.
@@ -338,6 +346,7 @@ func (p *Profile) Capabilities() Capabilities {
 		Modes:       []string{"navigate"},
 		Protocols:   []string{"http1", "h2"},
 		Devices:     []string{},
+		Resources:   p.Resources.KindNames(),
 		ClientHints: p.ClientHints.Enabled(),
 		WebSocket:   len(p.WebSocket.Order) > 0,
 		HTTP1Set:    p.HTTP1.Enabled(),
@@ -945,6 +954,9 @@ func (p *Profile) validate() error {
 			}
 		}
 	}
+	if err := p.Resources.validate(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -1134,6 +1146,7 @@ func merge(dst, src *Profile) {
 	if src.Fetch.CustomAnchor != "" {
 		dst.Fetch.CustomAnchor = src.Fetch.CustomAnchor
 	}
+	mergeResources(&dst.Resources, src.Resources)
 	// The flag travels with the order it describes: a child that brings its
 	// own measured set must not inherit its parent's "derived" mark.
 	if src.Fetch.Order != nil {

@@ -17,11 +17,13 @@ import (
 // while only the headers are checked here.
 func testSession(t *testing.T, headers profile.HeadersSpec, h1 profile.HTTP1Spec) *Session {
 	t.Helper()
-	return &Session{
+	s := &Session{
 		profile: &profile.Profile{Name: "test", Headers: headers, HTTP1: h1},
 		opts:    Options{DefaultHeaders: true},
 		headers: newSessionHeaders(),
 	}
+	s.buildTemplates()
+	return s
 }
 
 func chromeLike() profile.HeadersSpec {

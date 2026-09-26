@@ -154,6 +154,34 @@ Firefox profile carries the section; a delta inherits it, and a full capture
 takes it, with `http1` and `websocket`, from the newest profile of its family
 (`curlpro capture -sets`).
 
+### `resources`
+
+The requests a page makes for its resources — stylesheets, scripts, images,
+fonts, frames, prefetches, beacons — each kind with its own `Accept`,
+`sec-fetch-dest`, `sec-fetch-mode`, `priority` and order (since 0.13, ABI
+0.24: a file carrying the section does not load into an older library).
+Written by `scripts/gen-resources.py` from `cmd/hcapture -subres` captures,
+not by hand; present on `chrome-153-windows` and `firefox-156-windows` and
+inherited down their chains.
+
+| Field | Purpose |
+|---|---|
+| `orders` | header orders by name — `no-cors`, `cors`, `navigate` (a frame's document) — as lists of names, no values |
+| `http1_orders` | the same over HTTP/1.1, in the browser's case, `Host` and `Connection` included; a kind may have one of its own |
+| `kinds` | by name: `dest`, `mode` (`no-cors` by default, `cors` for what is always CORS, `navigate` for a frame), `accept` (empty: the navigation set's), `accept_encoding` (only where it differs), `priority` (empty: none sent), `purpose` (`sec-purpose`), `order` and `http1_order` (only where the kind needs its own) |
+| `storage_access` | the value of `sec-fetch-storage-access` on a cross-site credentialed request: `active` for Chrome 153, `none` for Firefox 156 |
+| `cors_origin` | `always` (Chrome: `Origin` on every CORS resource) or `cross-origin` (Firefox) |
+
+Every value of a request comes from the kind, from the navigation set by name
+(`user-agent`, `sec-ch-ua*`, `accept-encoding`, `accept-language`,
+`upgrade-insecure-requests`, `te`), or from the request itself (`cookie`,
+`origin`, `referer`, `sec-fetch-site`, `sec-fetch-storage-access`,
+`content-type`, `content-length`); a name with nothing for it is not sent. A
+delta replaces the orders and kinds it names and inherits the rest, so a new
+browser version edits the one kind that moved. The fetch and navigation
+orders may carry `sec-fetch-storage-access` as a slot; it is filled only on a
+cross-site request with credentials, never on a top-level navigation.
+
 ### What is mandatory
 
 `tls.permute_extensions` is set explicitly — on the profile itself or on an

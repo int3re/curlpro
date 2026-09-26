@@ -80,8 +80,12 @@ type headerKV struct{ Key, Value string }
 // h1Order is non-empty only for HTTP/1.1: there Host and Connection are added,
 // which HTTP/2 never has, and the case the profile sets is used.
 func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []string) []headerKV {
+	return s.buildHeadersWith(r, u, host, h1Order, s.templateAt(r, u))
+}
+
+// buildHeadersWith is buildHeaders over a template the caller already chose.
+func (s *Session) buildHeadersWith(r *Request, u *url.URL, host string, h1Order []string, tpl headerTemplate) []headerKV {
 	useDefaults := s.useDefaultHeaders(r)
-	tpl := s.template(r)
 	// The initiator, when the caller named one: Referer, Origin and
 	// sec-fetch-site are derived from it below, the way a browser derives them.
 	var page *url.URL
@@ -91,25 +95,25 @@ func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []st
 		}
 	}
 
-	out := make([]headerKV, 0, 16)
-	// slot keeps the actual map key for every lowercase name.
+	out := make([]headerKV, 0, len(tpl.pairs)+len(r.Headers)+2)
+	// A name already present is found case-insensitively and its value
+	// rewritten in place.
 	//
-	// Without it the profile put user-agent, the user passed User-Agent — and the
-	// map ended up with two keys for one name in the order. HTTP/1.1 emitted two
-	// lines, and HTTP/2 an unpredictable order, because the sorter treats such
-	// keys as equal. It reproduced without a user too: the profile puts
-	// Sec-Fetch-Site, a redirect puts sec-fetch-site.
-	slot := make(map[string]int, 16)
-
+	// Without that the profile put user-agent, the user passed User-Agent — and
+	// the map ended up with two keys for one name in the order. HTTP/1.1 emitted
+	// two lines, and HTTP/2 an unpredictable order, because the sorter treats
+	// such keys as equal. It reproduced without a user too: the profile puts
+	// Sec-Fetch-Site, a redirect puts sec-fetch-site. A scan over a set this
+	// small costs less than the map it replaced.
 	add := func(key, value string) {
-		lk := strings.ToLower(key)
-		if i, ok := slot[lk]; ok {
-			// The value is rewritten in place: overriding a profile header that way
-			// keeps its position in the fingerprint.
-			out[i].Value = value
-			return
+		for i := range out {
+			if strings.EqualFold(out[i].Key, key) {
+				// The value is rewritten in place: overriding a profile header that
+				// way keeps its position in the fingerprint.
+				out[i].Value = value
+				return
+			}
 		}
-		slot[lk] = len(out)
 		out = append(out, headerKV{Key: key, Value: value})
 	}
 
@@ -136,7 +140,7 @@ func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []st
 				// from the profile, whose value describes a request with none:
 				// a typed navigation (none) or a fetch to the page's own origin.
 				if page != nil && strings.EqualFold(h.Key, "sec-fetch-site") {
-					v = siteRelation(page.String(), u.String())
+					v = siteRelationURL(page, u)
 				}
 				add(caseFor(h.Key, h1Order), v)
 				continue
@@ -165,11 +169,16 @@ func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []st
 				// started from — a hop to another host does not make the
 				// request that host's own — and "null" once a hop has made
 				// the origin opaque (nextRequest decides that).
+				//
+				// A CORS resource — a font, a module script, an element made
+				// crossorigin — carries it like a cross-origin fetch, and in
+				// Chrome to its own origin as well (profile cors_origin).
 				var origin string
+				corsOrigin := tpl.cors && (tpl.corsAlways || page == nil || !sameOriginURL(page, u))
 				switch {
-				case page != nil && (sendsOrigin(r.Method) || (tpl.fetch && !sameOrigin(page.String(), u.String()))):
+				case page != nil && (sendsOrigin(r.Method) || (tpl.fetch && !sameOriginURL(page, u)) || corsOrigin):
 					origin = originOf(page)
-				case page == nil && sendsOrigin(r.Method):
+				case page == nil && (sendsOrigin(r.Method) || (tpl.cors && tpl.corsAlways)):
 					origin = originOf(u)
 					if r.chainOrigin != "" {
 						origin = r.chainOrigin
@@ -180,6 +189,17 @@ func (s *Session) buildHeaders(r *Request, u *url.URL, host string, h1Order []st
 						origin = "null"
 					}
 					add(caseFor(h.Key, h1Order), origin)
+				}
+			case "sec-fetch-storage-access":
+				// Both browsers send it on a cross-site request that carries
+				// credentials, and never on a top-level navigation: a no-cors
+				// resource, a credentialed fetch or CORS resource, a frame
+				// (Chrome 153 "active", Firefox 156 "none"). The navigation set
+				// has no such slot, so only fetch and resource sets get here.
+				if v := s.profile.Resources.StorageAccess; v != "" && page != nil &&
+					(tpl.fetch || tpl.resource) && siteRelationURL(page, u) == "cross-site" &&
+					s.includesCredentials(r, u) {
+					add(caseFor(h.Key, h1Order), v)
 				}
 			case "referer":
 				// strict-origin-when-cross-origin, the default policy of both
@@ -460,7 +480,7 @@ func refererFor(page, u *url.URL) string {
 	if page.Scheme == "https" && u.Scheme != "https" {
 		return ""
 	}
-	if sameOrigin(page.String(), u.String()) {
+	if sameOriginURL(page, u) {
 		full := *page
 		full.Fragment, full.RawFragment, full.User = "", "", nil
 		return full.String()
@@ -487,25 +507,30 @@ func wireOrder(built []headerKV, want []string, anchor string) []string {
 		return out
 	}
 
-	known := make(map[string]bool, len(want))
-	for _, w := range want {
-		known[strings.ToLower(w)] = true
-	}
-	custom := make([]string, 0, 4)
+	// built follows want for every name want knows — reorder put it so, and
+	// suppression only takes names out — so one forward pass tells the known
+	// names from the custom ones reorder placed before the anchor.
+	var custom []string
+	j := 0
 	for _, h := range built {
-		if lk := strings.ToLower(h.Key); !known[lk] {
-			custom = append(custom, lk)
+		k := j
+		for k < len(want) && !strings.EqualFold(want[k], h.Key) {
+			k++
 		}
+		if k == len(want) {
+			custom = append(custom, strings.ToLower(h.Key))
+			continue
+		}
+		j = k + 1
 	}
 
-	anchored := strings.ToLower(pickAnchor(anchor, want))
+	anchored := pickAnchor(anchor, want)
 	for _, w := range want {
-		lw := strings.ToLower(w)
-		if lw == anchored {
+		if custom != nil && anchored != "" && strings.EqualFold(w, anchored) {
 			out = append(out, custom...)
 			custom = nil
 		}
-		out = append(out, lw)
+		out = append(out, strings.ToLower(w))
 	}
 	// The anchor was not in the order — the rest goes to the end.
 	return append(out, custom...)
@@ -518,14 +543,22 @@ func (s *Session) applyHeaders(req *http.Request, r *Request, u *url.URL, h1 boo
 	if req.Host != "" {
 		host = req.Host
 	}
-	tpl := s.template(r)
+	tpl := s.templateAt(r, u)
 	h1Order := s.http1Order(h1, tpl)
-	built := s.buildHeaders(r, u, host, h1Order)
+	built := s.buildHeadersWith(r, u, host, h1Order, tpl)
 
-	for _, h := range built {
+	// The map is made at its final size, and every value slice is cut from one
+	// backing array: filling an empty map one header at a time grew it three
+	// times and allocated a slice per header.
+	if len(req.Header) == 0 {
+		req.Header = make(http.Header, len(built)+3)
+	}
+	vals := make([]string, len(built))
+	for i, h := range built {
 		// A direct map write instead of Set: that one canonicalises the name and
 		// would erase the case the profile set.
-		req.Header[h.Key] = []string{h.Value}
+		vals[i] = h.Value
+		req.Header[h.Key] = vals[i : i+1 : i+1]
 	}
 	suppressDefaultUA(req.Header, built, h1)
 	// fhttp looks the position up by the lowercase name (headerSorter.Less), so
@@ -599,24 +632,28 @@ func caseFor(key string, order []string) string {
 // The anchor is needed because the browser appends its service tail
 // (accept-encoding, cookie, priority) last: a custom header after it stands out.
 func reorder(have []headerKV, want []string, anchor string) []headerKV {
-	index := make(map[string]int, len(have))
-	for i, h := range have {
-		index[strings.ToLower(h.Key)] = i
+	// The usual case costs one pass: the set was assembled in the order it is
+	// wanted in, and nothing outside that order was added.
+	if inOrder(have, want) {
+		return have
 	}
-
+	// have holds each name once (buildHeaders merges case variants), so a
+	// name in want matches at most one entry.
+	used := make([]bool, len(have))
 	ordered := make([]headerKV, 0, len(have))
-	used := make(map[string]bool, len(have))
 	for _, w := range want {
-		lw := strings.ToLower(w)
-		if i, ok := index[lw]; ok && !used[lw] {
-			ordered = append(ordered, have[i])
-			used[lw] = true
+		for i, h := range have {
+			if !used[i] && strings.EqualFold(h.Key, w) {
+				ordered = append(ordered, h)
+				used[i] = true
+				break
+			}
 		}
 	}
 
-	rest := make([]headerKV, 0, len(have))
-	for _, h := range have {
-		if !used[strings.ToLower(h.Key)] {
+	var rest []headerKV
+	for i, h := range have {
+		if !used[i] {
 			rest = append(rest, h)
 		}
 	}
@@ -626,14 +663,20 @@ func reorder(have []headerKV, want []string, anchor string) []headerKV {
 
 	at := len(ordered)
 	if anchor != "" {
-		lowered := make([]string, len(ordered))
-		for i, h := range ordered {
-			lowered[i] = strings.ToLower(h.Key)
-		}
-		la := strings.ToLower(pickAnchor(anchor, lowered))
-		for i, n := range lowered {
-			if la != "" && n == la {
-				at = i
+		for _, a := range strings.Split(anchor, ",") {
+			a = strings.TrimSpace(a)
+			if a == "" {
+				continue
+			}
+			found := -1
+			for i, h := range ordered {
+				if strings.EqualFold(h.Key, a) {
+					found = i
+					break
+				}
+			}
+			if found >= 0 {
+				at = found
 				break
 			}
 		}
@@ -642,6 +685,22 @@ func reorder(have []headerKV, want []string, anchor string) []headerKV {
 	out = append(out, ordered[:at]...)
 	out = append(out, rest...)
 	return append(out, ordered[at:]...)
+}
+
+// inOrder reports whether every header of have appears in want, in want's
+// order: then reorder has nothing to do.
+func inOrder(have []headerKV, want []string) bool {
+	j := 0
+	for _, h := range have {
+		for j < len(want) && !strings.EqualFold(want[j], h.Key) {
+			j++
+		}
+		if j == len(want) {
+			return false
+		}
+		j++
+	}
+	return true
 }
 
 func firstNonEmpty(lists ...[]string) []string {

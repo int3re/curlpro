@@ -1009,6 +1009,23 @@ captured — Chrome 154, Edge 154, Opera 136, Safari 27 — are derived on
 captured twins and marked `derived`: each waits for its browser on the stand.
 The details are in [STAGE20](docs/STAGE20-RESULTS.md).
 
+## Stage 38 — resources, connections, free threading ✅ done 2026-09-26
+
+Four items the owner picked: requests for a page's resources and a page load
+on top of them, connections spent as a browser spends them, Python without
+the GIL, and the three optimisations the review left open. The stand learned
+a subresource page and HTTP/1.1 first: seventeen resource kinds, each with its
+own `Accept`, `sec-fetch-dest`, `priority` and order, measured on Chrome 153
+and Firefox 156 and written into the profiles by a generator; `resource=`,
+`crossorigin=` and `load_page()` on top, checked by replaying every captured
+request. The connection item's premise was wrong — neither browser makes one
+handshake per burst; Chrome races four, Firefox six — and the pool now does
+what each does, with Chromium's pooling by address and its partitions. The
+fetch sets gained `sec-fetch-storage-access`, which both browsers send on a
+credentialed cross-site request. The free-threaded audit found a start-up
+race that failed seven sessions of eight even with the GIL. Header assembly
+is three times cheaper. The details are in [STAGE21](docs/STAGE21-RESULTS.md).
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:
@@ -1051,6 +1068,10 @@ that is not at hand.
 | ~~"A new Python with an old DLL" silently ignores options~~ ✅ closed 2026-09-02 | `curlpro_version` = `0.2.0`, and `_ffi.py` checks `REQUIRED_VERSION` at load. The problem is not theoretical: an hour of runs of the wrong code was lost to it — see STAGE13 |
 | ~~QPACK: we announce a table capacity we do not support~~ ✅ closed 2026-09-03 | a decoder of our own, `internal/qpack`, with a dynamic table and blocked streams, checked against the appendix B examples of RFC 9204. `fp.impersonate.pro` now answers 5 times out of 5, where it was 1 out of 5 |
 | ~~HTTP/2 receive window runs away under a large `INITIAL_WINDOW_SIZE`~~ ✅ closed 2026-09-11 | found by the okhttp profile (16 MiB window): a 45 MB body died with `FLOW_CONTROL_ERROR` where the real okhttp took 1.9 s. fhttp's `flow.available()` returns the smaller of the stream and connection windows while `add()` raises the stream only, so once the connection is the minimum every read re-credits the same bytes — 1250 WINDOW_UPDATEs, 3.2 GB of credit after 5 MB, RST at 2^31−1. Chrome profiles survived by arithmetic (6 MiB < half the connection window) and a control run shows them crediting 1.8 GB for a 24 MiB body — every profile was exposed. Four edits carried on the vendored fhttp, re-applied by `scripts/patch-fhttp.py`, guarded by `TestH2ReceiveWindowCreditIsNotRunaway`; upstream v0.6.9 does not fix it. Details in [docs/FHTTP-PATCH.md](docs/FHTTP-PATCH.md) |
+| Firefox's partitioned cookies are not modelled | Firefox keeps a cookie a cross-site response sets for that top-level site and sends it back from there (the `-subres` stand's `d.localhost` cookie). The jar has no partitions, and the Firefox policy sends no cookie across sites at all. Closes with a partition key on the jar |
+| Firefox's HTTP/2 coalescing across names is not measured | the stand's certificate is trusted in Firefox through an override, and an overridden certificate switches coalescing off. Closes with a CA the throwaway profile trusts outright |
+| Chrome's per-host queue on HTTP/1.1 is not reproduced | Chrome holds a seventh request to a host until one of six sockets frees; the pool opens a connection for it that lives one request. Queuing inside the library would stall a caller holding six streams open |
+| Firefox's HTTP/1.1 navigation order depends on the kind of navigation | a Firefox 156 navigation started by script wrote `Connection, Referer, Cookie, Upgrade-Insecure-Requests`; the profile, from a Firefox 154 capture with form posts, has `Referer, Connection` and `Cookie` after `Sec-Fetch-User`. Closes with a typed, a clicked and a posted navigation on the `-h1` stand |
 | okhttp over HTTP/1.1 is not measured | the profiles carry the HTTP/2 header set; okhttp on a server that offers only http/1.1 sends its own order and `Connection: Keep-Alive`, which the code approximates. Closes with one run of the probe against a stand offering `http/1.1` only |
 | okhttp on a real Android device is not verified | Conscrypt on the JVM is the library Android ships, but the version differs and the platform may configure it. Closes with a capture from a device or an emulator |
 | ~~A race in `fhttp` when closing HTTP/2 under load~~ ✅ closed 2026-09-11 | fixed on the vendored copy, edit (f) in [docs/FHTTP-PATCH.md](docs/FHTTP-PATCH.md): `handleResponse` replaced the response pipe wholesale — mutex and all — while `closeForError` was closing it; the buffer now goes in through `pipe.setBuffer`, ported from x/net, which refuses a pipe already closed. Proven under `-race` both ways: stashed, the test reports a DATA RACE on the first run; applied, 10 of 10 pass. The subtest that was skipped for this now runs in CI as the guard. The original entry, kept for the record: found on 2026-09-05 by the test `TestConcurrentCloseDuringRequests` under `-race`: `handleResponse` assigns `cs.bufPipe = pipe{…}` without the connection mutex (`fhttp@v0.6.8/http2/transport.go:2361`) while `closeForError` closes that same pipe under it (`:1096` → `http2/pipe.go:105`). Closing the session while an HTTP/2 response is arriving writes the struct from two goroutines; a lost close means a reader that will only be released by the request timeout. There is nothing on our side to synchronise it with — either patch the dependency or wait for the requests in flight on `Close`, which changes what "close now" means. The subtest is skipped under the detector and the behaviour without it was checked over five runs |

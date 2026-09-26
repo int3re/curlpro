@@ -131,6 +131,23 @@ jobs:
               assert s.impersonate == 'chrome-151-windows'
           print('profiles:', len(names))
           "
+      # The same wheel on a free-threaded interpreter: py3-none installs
+      # there as it is, and importing it must leave the GIL off.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14t"
+      - name: the wheel on free-threaded Python
+        shell: bash
+        run: |
+          python -m pip install python/dist/*.whl
+          python -c "
+          import sys, pathlib, curlpro
+          assert not sys._is_gil_enabled(), 'importing curlpro switched the GIL on'
+          curlpro.load_profiles(pathlib.Path(curlpro.__file__).parent / 'profiles')
+          with curlpro.Session('chrome-151-windows') as s:
+              assert s.impersonate == 'chrome-151-windows'
+          print(sys.version)
+          "
       - name: ask the oracle (informational)
         shell: bash
         continue-on-error: true

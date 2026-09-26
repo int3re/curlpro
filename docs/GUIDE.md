@@ -4,8 +4,8 @@
 
 This is the whole library in one document, written for two readers: a person
 integrating it, and an AI assistant researching it before touching code. Every
-number and every behaviour here was checked against the code on 2026-09-22, at
-version 0.12.0. Where the README says less, this document says more; where the
+number and every behaviour here was checked against the code on 2026-09-26, at
+version 0.13.0. Where the README says less, this document says more; where the
 two disagree, this one is wrong and should be fixed — say so.
 
 An assistant reading this: the library already does most of what a scraper
@@ -161,6 +161,8 @@ the same way.
 | `page` | the page this request is made from, overriding the session's; `False` sends it with no initiator at all |
 | `credentials` | `"same-origin"`, `"include"` or `"omit"` for this fetch-mode request (section 10) |
 | `preflight` | `False` sends this cross-origin fetch without the OPTIONS a browser sends first; `True` sends it when the Fetch standard requires one (section 7) |
+| `resource` | load the URL as a page loads one of its resources: `"image"`, `"script"`, `"style"`, `"font"`, `"iframe"` and the rest of `capabilities(name)["resources"]` — that kind's own set (section 7) |
+| `crossorigin` | the element's `crossorigin` attribute, `"anonymous"` or `"use-credentials"`: the resource becomes CORS, with `Origin` and the credentials the attribute gives |
 | `expect` | an `Expect(...)`; a mismatch raises `ExpectationFailed` (section 8) |
 | `rollback_cookies` | `True` restores the jar to its state before the request if the request fails, a failed expectation included |
 
@@ -317,6 +319,60 @@ browser's, which is a bug to report. `r.preflight` shows what went out;
 request sends straight out. A hand-made `s.options(url, headers={...})` stays
 what it says — an OPTIONS carrying those headers, which a browser's preflight
 never does.
+
+**Resources and page loads.** Navigation and fetch are two of the requests a
+page makes; the rest are its resources, and each kind has a set of its own:
+its `Accept`, `sec-fetch-dest`, `sec-fetch-mode`, `priority` — or none — and,
+in Chrome, its own order, `Origin` first on anything CORS. An anti-bot that
+watches how a page loads sees all of it, and a document fetched with nothing
+after it is something no browser does. Since 0.13 a request names its kind
+with `resource=`, and `load_page` loads a document the way a browser does:
+
+```python
+page = s.load_page("https://example.com/")          # the document, then what it names
+[(r.kind, r.url, r.status) for r in page.resources]
+s.get("https://cdn.example.net/a.png", resource="image", page=page.url)
+s.get("https://fonts.example.net/f.woff2", resource="font", page=page.url)
+s.get(url, resource="image", crossorigin="use-credentials", page=page.url)
+```
+
+The kinds, measured on `cmd/hcapture -subres` (Chrome 153 and Firefox 156,
+over HTTP/2 and HTTP/1.1; `docs/STAGE21-RESULTS.md`), are in the profile's
+`resources` section; the library replays every request of the stand's capture
+and must produce the browser's set, name by name, value by value:
+
+| Kind | What in the page | Chrome 153 `priority` | Firefox 156 `priority` |
+|---|---|---|---|
+| `style`, `style-preload` | `<link rel=stylesheet>`, `<link rel=preload as=style>` | `u=0` | `u=2`, `u=0` |
+| `script`, `script-body` | a blocking `<script src>` in `<head>`, in `<body>` | `u=1`, `u=2` | `u=2`, none |
+| `script-async`, `script-defer` | `async`, `defer`, a script a script inserted | none | none |
+| `script-preload`, `module`, `module-preload` | `<link rel=preload as=script>`, `<script type=module>`, `<link rel=modulepreload>` | `u=1` | `u=1`, none, `u=1` |
+| `image`, `image-css`, `icon` | `<img>`, a CSS background, the icon | `i`, `i`, `u=1, i` | `u=5, i`, `u=4, i`, `u=6` |
+| `font`, `font-preload` | a font a stylesheet declares, `<link rel=preload as=font>` | `u=0`, `u=1` | none, `u=2` |
+| `iframe` | a frame's document: the navigation set without `sec-fetch-user` | `u=0, i` | `u=4` |
+| `prefetch`, `beacon` | `<link rel=prefetch>` (`sec-purpose: prefetch`), `navigator.sendBeacon` | `u=4, i` | `u=6` |
+
+What the kind decides beyond its headers: a no-cors resource carries
+credentials always, a CORS one (a font, a module, anything `crossorigin`) only
+to its own origin unless `crossorigin="use-credentials"`; Chrome sends `Origin`
+on every CORS resource, its own origin included, Firefox only across origins;
+Firefox asks for a stylesheet's font with `Accept-Encoding: identity`. Both
+browsers send `sec-fetch-storage-access` on a cross-site request that carries
+credentials — a no-cors resource, a credentialed fetch, a frame — `active` in
+Chrome, `none` in Firefox, never on a top-level navigation; fetch from those
+profiles carries it too. Profiles without the section refuse `resource=` with
+the reason (`ProfileCapabilityError`), as `mode="fetch"` is refused without a
+fetch set.
+
+`load_page(url, page=False, css=False, favicon=True, frames=True,
+max_resources=100, timeout=None, **kw)` sends the document as a navigation,
+then every stylesheet, preload, script, image and frame its markup names — at
+once, in the markup's order, each as its kind, from the document — and the
+icon and prefetches after them. `css=True` adds the fonts the stylesheets
+declare, with the stylesheet as the referrer, as both browsers send them. A
+resource that fails does not fail the page. It runs no script and lays nothing
+out, so what a script would load, lazy images and background images are not
+guessed; `curlpro.page.discover(html, base)` shows what it would ask for.
 
 ## 8. Expectations and cookie rollback
 
@@ -692,6 +748,24 @@ reason="")`, and `for message in ws` reads until the server closes
 the connection stays usable); `max_message_size` raises `ws_too_big`. Cleartext
 `ws://` works too.
 
+**How connections are spent.** A CDN sees connections before it sees a
+header: how many TLS handshakes a page costs, which names share one, what is
+kept apart. Since 0.13 the pool spends them as the profile's family does,
+measured on the `-subres` stand:
+
+| | Chromium (Chrome, Edge, Opera, Yandex…) | Firefox, Tor | Others |
+|---|---|---|---|
+| a burst of n first requests to a host | min(n, 4) handshakes race; the first HTTP/2 connection carries every request, the rest close before the preface | min(n, 6); the rest close after it, with GOAWAY | one per request, as before |
+| another name on the same address | rides an HTTP/2 connection whose verified certificate covers it; a wildcard over a registry-controlled name (`*.com`, `*.localhost`) does not count | a connection of its own | a connection of its own |
+| requests without credentials | connections of their own (privacy mode) | shared | shared |
+| requests from pages of different sites | connections of their own, and a cross-site frame's document too | shared | shared |
+
+An HTTP/1.1 server still gets parallel connections: the first handshake says
+what the server speaks, and the requests waiting on it open their own. A
+failure reaches every request waiting on the burst at once; each keeps its own
+`connect_timeout`. The partition keys come from `page` and `credentials`, so a
+session that names neither keeps one pool per host, as before.
+
 ## 13. Streaming, uploads, async
 
 ```python
@@ -716,6 +790,18 @@ async for chunk in r.iter_content()`, `async with s.websocket(url) as ws`. A
 request is a goroutine on the native side; the process keeps one thread and the
 event loop never blocks. A cancelled task cancels the request natively.
 `s.cookies`, `s.headers` and the hooks are the sync session's.
+`await s.load_page(url)` is section 7's page load, its resources as tasks
+started in the markup's order.
+
+Threads work on any build: every native call releases the GIL. On a
+free-threaded interpreter (3.14t) the package — ctypes and pure Python, no
+extension module — leaves the GIL off, so parsing responses in threads runs in
+parallel too and scales over the cores without processes;
+`python scripts/ft-scaling.py` prints how far on your machine (x4.2 over
+eight threads on 3.14t where 3.14 gives x1.0, on a sixteen-core desktop). CI runs the
+suite on 3.14t with the GIL off, and a first start from many threads at once
+loads the bundled profiles once (before 0.13 the losers of that race opened
+their sessions against an empty registry, GIL or not).
 
 ## 14. Fingerprint, audit and personas
 
@@ -917,6 +1003,9 @@ Facts that are easy to doubt and are true:
 | `list_profiles(measured=None)` | function | every profile; `True` the captured ones only, `False` the transcribed ones |
 | `s.headers_for(method, url, ...)` | method | the headers a request would carry, without sending it |
 | `s.preflight_for(method, url, ...)` | method | the CORS preflight a request would be preceded by, or `None` |
+| `s.load_page(url, ...)` | method | a document and the resources its markup names, as a browser loads them (section 7) |
+| `Page`, `PageResource` | class | a loaded page: `document`, `resources`, `failed`; one resource with `kind`, `response`, `error` |
+| `page` | module | `discover(html, base)`: what a page load would ask for, without asking |
 | `request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options` | function | one request in its own session; `impersonate=` picks the profile |
 | `CurlProError`, `Timeout`, `HTTPError`, `WebSocketClosed` | exception | the hierarchy; `.code` on all; declared in the public `errors` module |
 | `errors` | module | the exception classes, importable from here or from `curlpro` |
@@ -938,13 +1027,14 @@ For research in the repository:
 | `python/curlpro/cookies.py`, `persona.py`, `headers.py` | the jar, personas, the session header mapping |
 | `python/curlpro/fingerprint.py`, `audit.py`, `expect.py`, `encoding.py` | fingerprint, audit checks, expectations, charset detection |
 | `python/curlpro/requests.py`, `proxies.py`, `timeouts.py`, `profiles.py`, `_ffi.py` | the compat layer, environment proxies, timeout parsing, profile loading, the native binding and ABI check |
+| `python/curlpro/page.py` | the page load: what the markup names, the fonts a stylesheet declares |
 | `python/curlpro/errors.py`, `_headers.py`, `_kwargs.py` | the exceptions, the response header mapping, the typed keyword arguments |
 | `scripts/derive-current.py`, `chromium_brands.py`, `check-typing.py` | the derived presets, Chromium's brand algorithm, the mypy check of the typed verbs |
-| `internal/client/` | the Go client: header assembly (`headers.go`, `mode.go`), dialling and TLS (`client.go`, `conn.go`), HTTP/3 (`http3.go`), cookies, redirects, retries, WebSocket, fingerprint |
+| `internal/client/` | the Go client: header assembly (`headers.go`, `mode.go`, `resource.go`), dialling and TLS (`client.go`, `conn.go`), the pool and its bursts (`pool.go`), HTTP/3 (`http3.go`), cookies, redirects, retries, WebSocket, fingerprint |
 | `internal/profile/` | the profile schema, inheritance and validation |
 | `internal/fingerprint/` | JA3, JA4, JA4H, Akamai |
 | `lib/` | the cgo exports the Python side calls |
-| `profiles/` | the 56 profiles; `scripts/gen-devices.py` owns the phone pool |
+| `profiles/` | the 56 profiles; `scripts/gen-devices.py` owns the phone pool, `scripts/gen-resources.py` the resources sections from `capture/subres/` |
 | `cmd/curlpro/` | capture, validate, diff, collapse, list |
 | `docs/` | schema, capture method, fingerprint spec, research, the stage-by-stage record |
 | `python/tests/` | the behaviour, one file per feature; `rawserver.py` is the raw-header stand |

@@ -67,19 +67,20 @@ func (s *Session) cookiesFor(r *Request, u *url.URL) []*http.Cookie {
 		return nil
 	}
 	page := s.pageURL(r)
-	fetch := s.modeFor(r) == ModeFetch
+	// A fetch, a resource and a frame all go by the subresource rules of
+	// SameSite; only a top-level navigation is lax-eligible.
+	fetch := s.modeFor(r) != ModeNavigate
 
-	// fetch() decides first, and without looking at any cookie: omit sends
-	// none, the default same-origin sends none to another origin — even one
-	// of the same site — and include leaves the decision to SameSite.
-	if fetch {
-		switch s.credentialsFor(r) {
-		case CredentialsOmit:
+	// The credentials mode decides first, and without looking at any
+	// cookie: omit sends none, same-origin (fetch's default, and a CORS
+	// resource's) sends none to another origin — even one of the same site
+	// — and include leaves the decision to SameSite.
+	switch s.requestCredentials(r) {
+	case CredentialsOmit:
+		return nil
+	case CredentialsSameOrigin:
+		if page != nil && !sameOriginURL(page, u) {
 			return nil
-		case CredentialsSameOrigin:
-			if page != nil && !sameOrigin(page.String(), u.String()) {
-				return nil
-			}
 		}
 	}
 
@@ -226,15 +227,12 @@ func pathMatches(reqPath, cookiePath string) bool {
 // carry a pair the browser never sends (the third field report). A
 // navigation always includes them.
 func (s *Session) includesCredentials(r *Request, u *url.URL) bool {
-	if s.modeFor(r) != ModeFetch {
-		return true
-	}
-	switch s.credentialsFor(r) {
+	switch s.requestCredentials(r) {
 	case CredentialsOmit:
 		return false
 	case CredentialsSameOrigin:
 		page := s.pageURL(r)
-		return page == nil || sameOrigin(page.String(), u.String())
+		return page == nil || sameOriginURL(page, u)
 	}
 	return true
 }

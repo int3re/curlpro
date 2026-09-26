@@ -443,6 +443,17 @@ to any non-browser client:
   preflight carries ([STAGE18](STAGE18-RESULTS.md)); pass `-timeout 170s`,
   and run the stand from the repository root so it finds `capture/certs`.
   HTTP/2 splits `Cookie` into one field per cookie — join them when reading.
+  `cmd/hcapture -subres -certs capture/certs-multi` serves a page that loads
+  every kind of resource and then fires bursts of parallel first fetches to
+  fresh hosts; every record carries the connection it came on (`conn`) and
+  when it arrived (`at_ms`), and each connection's life — its SNI, how long,
+  who ended it — goes to stderr. `-h1` offers `http/1.1` alone and records
+  HTTP/1.1 requests by hand, case and order intact. The certificate must cover
+  `*.localhost` and `*.a.localhost`; Firefox trusts it through
+  `cert_override.txt` and resolves the names through
+  `network.dns.localDomains`, which also switches its HTTP/2 coalescing off.
+  `scripts/gen-resources.py PROFILE H2.json H1.json` turns the two captures
+  into the profile's `resources` section ([STAGE21](STAGE21-RESULTS.md)).
 
 The provider decides the ClientHello. On Android that is Conscrypt; on the JVM,
 SunJSSE unless Conscrypt is installed as a provider. Both were captured, and the

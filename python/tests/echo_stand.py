@@ -7,7 +7,7 @@ about which headers go out, and the rules do not depend on the transport.
 from __future__ import annotations
 
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class EchoStand:
@@ -70,8 +70,16 @@ class EchoStand:
             def log_message(self, *a) -> None:  # noqa: ANN002
                 pass
 
-        HTTPServer.allow_reuse_address = True
-        self._srv = HTTPServer(("127.0.0.1", 0), Handler)
+        # Threaded: a browser — and the session, whose pool is partitioned
+        # like Chromium's by credentials and by the page's site — opens
+        # more than one connection, and a server that serves one at a time
+        # leaves the second waiting behind the first kept-alive socket.
+        ThreadingHTTPServer.allow_reuse_address = True
+        ThreadingHTTPServer.daemon_threads = True
+        # The default backlog of five refuses a burst of parallel connections
+        # outright, which is the stand failing, not the client.
+        ThreadingHTTPServer.request_queue_size = 128
+        self._srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.port = self._srv.server_address[1]
         self.url = f"http://127.0.0.1:{self.port}"
         self._thread = threading.Thread(target=self._srv.serve_forever, daemon=True)
