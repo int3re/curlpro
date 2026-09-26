@@ -16,7 +16,6 @@ import (
 	"net"
 	stdhttp "net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -224,8 +223,11 @@ func TestTimeoutOnReusedConnectionIsNotResent(t *testing.T) {
 	slow.Store(true)
 	limit := 200 * time.Millisecond
 	_, err := s.Do(&Request{Method: "POST", URL: auditURL(srv, "/two"), Body: []byte("x"), Timeout: &limit})
-	if err == nil || !(strings.Contains(err.Error(), "deadline") || strings.Contains(err.Error(), "timed out")) {
-		t.Fatalf("expected a timeout, got %v", err)
+	// By the code, not the words: which deadline fires first — the request's
+	// context ("deadline exceeded") or the socket's ("i/o timeout") — is a
+	// race, and the text check failed six runs in thirty on either side of 0.13.
+	if Code(err) != CodeTimeout {
+		t.Fatalf("expected a timeout, got %v (code %q)", err, Code(err))
 	}
 	time.Sleep(800 * time.Millisecond)
 	if got := hitsTwo.Load(); got != 1 {
