@@ -2,6 +2,7 @@ package client
 
 import (
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -59,17 +60,10 @@ func (s *Session) cookiePolicy() *profile.CookiePolicy {
 	return profile.CookiePolicyFor(s.profile.Family())
 }
 
-// cookiesFor returns the cookies a request carries: the jar's matches for
+// cookiesFor returns the cookies a request carries: the jars' matches for
 // the URL, filtered the way the browser would filter them.
 func (s *Session) cookiesFor(r *Request, u *url.URL) []*http.Cookie {
-	all := s.cookieJar().Cookies(u)
-	if len(all) == 0 {
-		return nil
-	}
 	page := s.pageURL(r)
-	// A fetch, a resource and a frame all go by the subresource rules of
-	// SameSite; only a top-level navigation is lax-eligible.
-	fetch := s.modeFor(r) != ModeNavigate
 
 	// The credentials mode decides first, and without looking at any
 	// cookie: omit sends none, same-origin (fetch's default, and a CORS
@@ -85,30 +79,85 @@ func (s *Session) cookiesFor(r *Request, u *url.URL) []*http.Cookie {
 	}
 
 	policy := s.cookiePolicy()
-	if page == nil || policy == nil || sameSiteFor(policy, page, u) {
-		return all
+	plain := s.cookieJar().Cookies(u)
+	if policy == nil {
+		return plain
+	}
+	// Nothing in the jar for the URL and no partitions at all is the common
+	// case, and it needs none of the site comparisons below.
+	parts := policy.Partitioning != "" && s.hasPartitions()
+	if len(plain) == 0 && !parts {
+		return nil
 	}
 
-	// Cross-site: each cookie by its attribute, or by the family's default
-	// when it has none.
-	now := time.Now()
-	keep := make([]*http.Cookie, 0, len(all))
-	for _, c := range all {
-		var sameSite string
-		var created int64
-		if rec, ok := s.cookieRecord(c.Name, u); ok {
-			sameSite, created = rec.SameSite, rec.Created
-		}
-		if crossSiteAllows(policy, sameSite, created, fetch, r.Method, now) {
-			keep = append(keep, c)
+	// The ordinary jar, unless the family keeps a third party out of it;
+	// and the partition of the top-level site the request is made under.
+	top, nav := s.topLevel(r, u)
+	third := s.thirdParty(policy, r, u, top, nav)
+	if third && !policy.ThirdParty {
+		plain = nil
+	}
+	var parted []*http.Cookie
+	partition := ""
+	if parts {
+		partition = schemefulSite(top)
+		if jar := s.jarFor(partition, false); jar != nil {
+			parted = jar.Cookies(u)
 		}
 	}
-	return keep
+	if len(plain)+len(parted) == 0 {
+		return nil
+	}
+	// Cross-site for SameSite: the URL is another site than the page, or
+	// than the top level (a frame's request is judged by the whole chain).
+	crossSite := third || (page != nil && !sameSiteFor(policy, page, u))
+	if !crossSite && len(parted) == 0 {
+		return plain
+	}
+
+	// Each cookie by its attribute, or by the family's default when it has
+	// none. A fetch, a resource and a frame all go by the subresource rules
+	// of SameSite; only a top-level navigation is lax-eligible.
+	fetch := !nav
+	now := time.Now()
+	type ranked struct {
+		c   *http.Cookie
+		seq uint64
+	}
+	keep := make([]ranked, 0, len(plain)+len(parted))
+	add := func(cs []*http.Cookie, partition string) {
+		for _, c := range cs {
+			rec, _ := s.cookieRecord(partition, c, u)
+			if crossSite && !crossSiteAllows(policy, rec.SameSite, rec.Created, fetch, r.Method, now) {
+				continue
+			}
+			keep = append(keep, ranked{c, rec.seq})
+		}
+	}
+	add(plain, "")
+	add(parted, partition)
+	// Two jars make one header in the jar's own order — longer paths
+	// first, then older cookies (RFC 6265 5.4): Chrome 154 wrote u, p, f
+	// for a plain, a Partitioned and another plain cookie set in turn.
+	if len(plain) > 0 && len(parted) > 0 {
+		sort.SliceStable(keep, func(i, j int) bool {
+			if li, lj := len(keep[i].c.Path), len(keep[j].c.Path); li != lj {
+				return li > lj
+			}
+			return keep[i].seq < keep[j].seq
+		})
+	}
+	out := make([]*http.Cookie, len(keep))
+	for i, k := range keep {
+		out[i] = k.c
+	}
+	return out
 }
 
 // crossSiteAllows applies the SameSite rules to one cookie on a cross-site
 // request. fetch says the request is a fetch/XHR/subresource rather than a
-// top-level navigation.
+// top-level navigation. Which jar a third party may read at all is
+// decided before, by cookiesFor.
 //
 // Measured on Chrome 153 (five cookies on another site, then each kind of
 // request from a page): a fetch with include carries none=1 only; a
@@ -118,9 +167,6 @@ func (s *Session) cookiesFor(r *Request, u *url.URL) []*http.Cookie {
 // strict goes nowhere; SameSite=None without Secure was never stored.
 func crossSiteAllows(p *profile.CookiePolicy, sameSite string, created int64,
 	fetch bool, method string, now time.Time) bool {
-	if fetch && !p.ThirdParty {
-		return false
-	}
 	switch strings.ToLower(sameSite) {
 	case "strict":
 		return false
@@ -157,7 +203,7 @@ func safeMethod(method string) bool {
 // with the scheme (Chromium) or by registrable domain alone.
 func sameSiteFor(p *profile.CookiePolicy, page, u *url.URL) bool {
 	if p.Schemeful {
-		return sameSite(page.String(), u.String())
+		return sameSiteURL(page, u)
 	}
 	return registrableDomain(page.Hostname()) == registrableDomain(u.Hostname())
 }
@@ -175,22 +221,28 @@ func (s *Session) pageURL(r *Request) *url.URL {
 	return u
 }
 
-// cookieRecord finds the record behind a cookie the jar matched: the same
-// name, a domain that covers the host, a path that covers the URL's. When
-// several fit, the most specific — longest path, then longest domain — is
-// the one the jar itself preferred.
-func (s *Session) cookieRecord(name string, u *url.URL) (Cookie, bool) {
+// cookieRecord finds the record behind a cookie a partition's jar matched
+// for u: by the domain and path the jar gives back, else the same name, a
+// domain that covers the host, a path that covers the URL's — and when
+// several fit, the most specific (longest path, then longest domain), the
+// one the jar itself preferred.
+func (s *Session) cookieRecord(partition string, jc *http.Cookie, u *url.URL) (Cookie, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if jc.Domain != "" && jc.Path != "" {
+		if c, ok := s.cookies[cookieKey(partition, jc.Domain, jc.Path, jc.Name)]; ok {
+			return c, true
+		}
+	}
 	host := strings.ToLower(u.Hostname())
 	path := u.Path
 	if path == "" {
 		path = "/"
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	var best Cookie
 	found := false
 	for _, c := range s.cookies {
-		if c.Name != name || !domainMatches(host, c.Domain) || !pathMatches(path, c.Path) {
+		if c.Name != jc.Name || c.Partition != partition || !domainMatches(host, c.Domain) || !pathMatches(path, c.Path) {
 			continue
 		}
 		if !found || len(c.Path) > len(best.Path) ||

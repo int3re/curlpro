@@ -24,7 +24,8 @@ from ._ffi import _call, call_with_frame, encode
 from ._headers import Headers
 from .errors import WebSocketClosed
 from .page import Page, PageResource, css_fonts, discover, is_html, ordered, request_args
-from .session import DEFAULT_PROFILE, Redirect, Response, Session, _preflights, _request_meta
+from .session import (DEFAULT_PROFILE, CacheInfo, Redirect, Response, Session, _preflights,
+                      _reload_kw, _request_meta)
 from .timeouts import split_timeout as _split_timeout
 from .stream import DEFAULT_CHUNK, lines_from, too_large
 from .websocket import _proxy_field
@@ -99,7 +100,7 @@ class AsyncStreamResponse:
     """
 
     __slots__ = ("status", "proto", "headers", "url", "history", "preflights",
-                 "_id", "_closed", "_max_size", "_pending", "_finalizer", "__weakref__")
+                 "cache", "_id", "_closed", "_max_size", "_pending", "_finalizer", "__weakref__")
 
     def __init__(self, payload: dict, max_size: int = 0):
         self._pending: asyncio.Task | None = None
@@ -113,6 +114,8 @@ class AsyncStreamResponse:
                         for h in payload.get("history") or []]
         #: The CORS preflights sent before the request, in order.
         self.preflights = _preflights(payload.get("preflights"))
+        #: How the session's cache served it, as :attr:`curlpro.Response.cache`.
+        self.cache: str | None = payload.get("cache") or None
         self._id: int = payload["stream"]
         self._closed = False
         # See StreamResponse: the limit binds read(), not iter_content().
@@ -124,6 +127,11 @@ class AsyncStreamResponse:
     @property
     def ok(self) -> bool:
         return 200 <= self.status < 400
+
+    @property
+    def from_cache(self) -> bool:
+        """The body comes out of the cache: a hit, or a 304 that confirmed it."""
+        return self.cache in ("hit", "revalidated")
 
     def header(self, name: str) -> str | None:
         lowered = name.lower()
@@ -328,12 +336,32 @@ class AsyncSession:
         self._session.page = url
 
     @property
+    def top_level(self) -> str | None:
+        """The address bar's page while :attr:`page` is a frame's document.
+        See :attr:`curlpro.Session.top_level`."""
+        return self._session.top_level
+
+    @top_level.setter
+    def top_level(self, url: str | None) -> None:
+        self._session.top_level = url
+
+    @property
     def hooks(self) -> dict[str, list[Any]]:
         return self._session.hooks
 
     def fingerprint(self, url: str = "https://example.com/"):  # noqa: ANN201
         """What a server would see. Offline, like the sync session's."""
         return self._session.fingerprint(url)
+
+    def cache_info(self) -> CacheInfo:
+        """What the session's cache holds and how it has served. A counter
+        read, not a network call, so it is not a coroutine — as the cookies
+        are not."""
+        return self._session.cache_info()
+
+    def clear_cache(self) -> None:
+        """Empties the session's cache, its files on disk too."""
+        self._session.clear_cache()
 
     def audit(self, mode: str | None = None) -> list:
         """Contradictions in what this session would send."""
@@ -361,6 +389,7 @@ class AsyncSession:
         url: str,
         *,
         page: str | bool | None = False,
+        reload: bool = False,
         css: bool = False,
         favicon: bool = True,
         frames: bool = True,
@@ -390,6 +419,9 @@ class AsyncSession:
         and what only a rendered page asks for (lazy images, background
         images) are not guessed. See :mod:`curlpro.page`.
 
+        :param reload: load it the way the reload button does: the document
+            is revalidated with ``cache="no-cache"``, and the resources go by
+            their own freshness. See :meth:`curlpro.Session.load_page`
         :param frames: load the documents of the page's ``<iframe>``s
         :param favicon: ask for the icon (``/favicon.ico`` without a
             ``<link rel=icon>``), as both browsers do
@@ -397,7 +429,8 @@ class AsyncSession:
         :param timeout: the limit for each request, the document's included
         :param kw: the document request's other arguments
         """
-        doc = await self.request("GET", url, page=page, mode="navigate", timeout=timeout, **kw)
+        doc = await self.request("GET", url, page=page, mode="navigate", timeout=timeout,
+                                 **_reload_kw(reload, kw))
         result = Page(doc)
         if not is_html(doc):
             return result
@@ -490,6 +523,7 @@ class AsyncSession:
                 history=[Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
                          for h in payload.get("history") or []],
                 preflights=_preflights(payload.get("preflights")),
+                cache=payload.get("cache"),
             ), expect)
         except BaseException as exc:
             # A failed expectation is a request failure too: the caller was

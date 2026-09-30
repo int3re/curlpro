@@ -35,7 +35,14 @@ func fromStdResponse(r *nethttp.Response) *http.Response {
 func toFhttpCookies(in []*nethttp.Cookie) []*http.Cookie {
 	out := make([]*http.Cookie, 0, len(in))
 	for _, c := range in {
+		// fhttp has no field for it and keeps the attribute unparsed,
+		// where isPartitioned looks for it.
+		var unparsed []string
+		if c.Partitioned {
+			unparsed = []string{"Partitioned"}
+		}
 		out = append(out, &http.Cookie{
+			Unparsed: unparsed,
 			Name:     c.Name,
 			Value:    c.Value,
 			Path:     c.Path,

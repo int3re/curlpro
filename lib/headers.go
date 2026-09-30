@@ -88,6 +88,21 @@ func curlpro_session_set_page(id C.longlong, page *C.char) (out *C.char) {
 	return respond(map[string]any{"page": s.Page()}, nil)
 }
 
+//export curlpro_session_set_top_level
+func curlpro_session_set_top_level(id C.longlong, top *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	// The address bar's page while the session's page is a frame's
+	// document. An empty string takes the page for it again.
+	if err := s.SetTopLevel(C.GoString(top)); err != nil {
+		return respond(nil, err)
+	}
+	return respond(map[string]any{"top_level": s.TopLevel()}, nil)
+}
+
 //export curlpro_session_reset_headers
 func curlpro_session_reset_headers(id C.longlong) (out *C.char) {
 	defer recoverInto(&out)

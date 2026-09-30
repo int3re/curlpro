@@ -242,6 +242,12 @@ func (s *Session) PreviewHeaders(r *Request) ([]string, []fingerprint.HeaderKV, 
 	if err != nil {
 		return nil, nil, configErr("parsing %q: %v", req.URL, err)
 	}
+	// A reload's header is the request's own; a stored response's
+	// validators are not previewed — they depend on what the cache holds
+	// when the request goes.
+	if req.cacheMode() == CacheNoCache {
+		req.reloadCacheControl = "max-age=0"
+	}
 	// http1 when the caller asked for it, the session forces it, or the URL
 	// is cleartext — there is no ALPN over http:// and h2c is refused, so
 	// that transport is known, not guessed. A session that lets the server

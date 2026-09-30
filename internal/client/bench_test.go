@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -63,13 +64,19 @@ func BenchmarkApplyHeaders(b *testing.B) {
 		{"post-fetch", &Request{Method: "POST", URL: u.String(), Mode: ModeFetch,
 			Headers: map[string]string{"content-type": "application/json", "x-api-key": "k"}}},
 	} {
-		b.Run(tc.name, func(b *testing.B) {
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				req, _ := http.NewRequest(tc.r.Method, u.String(), nil)
-				s.applyHeaders(req, tc.r, u, false)
+		for _, h1 := range []bool{false, true} {
+			name := tc.name
+			if h1 {
+				name += "-h1"
 			}
-		})
+			b.Run(name, func(b *testing.B) {
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					req, _ := http.NewRequest(tc.r.Method, u.String(), nil)
+					s.applyHeaders(req, tc.r, u, h1)
+				}
+			})
+		}
 	}
 }
 
@@ -91,6 +98,8 @@ func BenchmarkDo(b *testing.B) {
 			w.Header().Set("Content-Encoding", "zstd")
 			w.Write(zs.Bytes())
 		default:
+			// A static resource says its size, as most do.
+			w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
 			w.Write(payload)
 		}
 	})

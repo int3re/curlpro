@@ -11,6 +11,8 @@ import (
 
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/bogdanfinn/fhttp/cookiejar"
+
+	"github.com/curlpro/curlpro/internal/profile"
 )
 
 // Cookie bookkeeping for export and import.
@@ -43,10 +45,18 @@ type Cookie struct {
 	// The export used to drop it, and a saved and reloaded jar sent such a
 	// cookie to every subdomain — a different jar from the one saved.
 	HostOnly bool `json:"host_only,omitempty"`
+	// Partition is the top-level site a partitioned cookie is kept under,
+	// as "https://example.com": it goes only on requests made under that
+	// site (storeCookies). Empty for a cookie of the ordinary jar.
+	Partition string `json:"partition,omitempty"`
+
+	// seq orders the records by creation. Replacing a cookie keeps it, as
+	// the jar keeps the replaced one's creation time.
+	seq uint64
 }
 
-func cookieKey(domain, path, name string) string {
-	return strings.ToLower(domain) + "\x00" + path + "\x00" + name
+func cookieKey(partition, domain, path, name string) string {
+	return partition + "\x00" + strings.ToLower(domain) + "\x00" + path + "\x00" + name
 }
 
 // CookieChange is one record a request changed: its key, whether the new
@@ -54,11 +64,12 @@ func cookieKey(domain, path, name string) string {
 // Undone in reverse order, a request's changes put the jar back exactly,
 // touching nothing another request wrote meanwhile.
 type CookieChange struct {
-	Domain   string  `json:"domain"`
-	Path     string  `json:"path"`
-	Name     string  `json:"name"`
-	HostOnly bool    `json:"host_only,omitempty"`
-	Before   *Cookie `json:"before"`
+	Domain    string  `json:"domain"`
+	Path      string  `json:"path"`
+	Name      string  `json:"name"`
+	HostOnly  bool    `json:"host_only,omitempty"`
+	Partition string  `json:"partition,omitempty"`
+	Before    *Cookie `json:"before"`
 }
 
 // cookieLog collects one request's changes across its hops, preflights and
@@ -103,26 +114,126 @@ func (s *Session) UndoCookies(changes []CookieChange) error {
 		// The record did not exist: remove what the request set. The jar
 		// keys a host-only cookie apart from a domain one, so the deletion
 		// takes the same form the cookie was set in.
-		u := &url.URL{Scheme: "https", Host: ch.Domain, Path: ch.Path}
-		gone := &http.Cookie{Name: ch.Name, Path: ch.Path, MaxAge: -1}
-		if !ch.HostOnly {
-			gone.Domain = ch.Domain
+		if jar := s.jarFor(ch.Partition, false); jar != nil {
+			u := &url.URL{Scheme: "https", Host: ch.Domain, Path: ch.Path}
+			gone := &http.Cookie{Name: ch.Name, Path: ch.Path, MaxAge: -1}
+			if !ch.HostOnly {
+				gone.Domain = ch.Domain
+			}
+			jar.SetCookies(u, []*http.Cookie{gone})
+			u.Scheme = "http"
+			jar.SetCookies(u, []*http.Cookie{gone})
 		}
-		jar.SetCookies(u, []*http.Cookie{gone})
-		u.Scheme = "http"
-		jar.SetCookies(u, []*http.Cookie{gone})
 		s.mu.Lock()
-		delete(s.cookies, cookieKey(ch.Domain, ch.Path, ch.Name))
+		delete(s.cookies, cookieKey(ch.Partition, ch.Domain, ch.Path, ch.Name))
 		s.mu.Unlock()
 	}
 	return nil
 }
 
-// recordCookies remembers the cookies from a response.
+// storeCookies keeps the cookies a response to r set, each in the jar the
+// browser family keeps it in: the ordinary one, the partition of the
+// top-level site the request was made under, or none.
+//
+// Measured with cmd/hcapture -chips: a frame of b under a set u (plain) and
+// p (Partitioned). Chrome 154 sent u wherever b was asked for — at b's top
+// level and framed under c — and p only under a. Firefox 156 kept both for b
+// under a alone, and b's own cookie set at its top level went to no frame of
+// b. Safari (not measured; WebKit's documented ITP) keeps nothing a third
+// party sets. A Partitioned cookie without Secure is ignored whole, as the
+// CHIPS draft requires. Partitions are keyed by the top-level site only:
+// the ancestor-chain bit Chromium documents for a frame chain that leaves
+// the site and comes back (a under b under a) is not kept, nor measured.
+func (s *Session) storeCookies(r *Request, u *url.URL, cookies []*http.Cookie) {
+	if len(cookies) == 0 {
+		return
+	}
+	policy := s.cookiePolicy()
+	if policy == nil || (policy.ThirdParty && policy.Partitioning == "") {
+		s.cookieJar().SetCookies(u, cookies)
+		s.recordCookies(u, cookies, "", r.cookieLog)
+		return
+	}
+	top, nav := s.topLevel(r, u)
+	third := s.thirdParty(policy, r, u, top, nav)
+	var plain, parted []*http.Cookie
+	for _, c := range cookies {
+		attr := policy.Partitioning != "" && isPartitioned(c)
+		switch {
+		case attr && !c.Secure:
+			continue
+		case attr, third && policy.Partitioning == profile.PartitionThirdParty:
+			parted = append(parted, c)
+		case third && !policy.ThirdParty:
+			continue
+		default:
+			plain = append(plain, c)
+		}
+	}
+	if len(plain) > 0 {
+		s.cookieJar().SetCookies(u, plain)
+		s.recordCookies(u, plain, "", r.cookieLog)
+	}
+	if len(parted) > 0 {
+		partition := schemefulSite(top)
+		s.jarFor(partition, true).SetCookies(u, parted)
+		s.recordCookies(u, parted, partition, r.cookieLog)
+	}
+}
+
+// isPartitioned reports a Set-Cookie with the Partitioned attribute, which
+// fhttp keeps among the attributes it does not know.
+func isPartitioned(c *http.Cookie) bool {
+	for _, a := range c.Unparsed {
+		if strings.EqualFold(strings.TrimSpace(a), "partitioned") {
+			return true
+		}
+	}
+	return false
+}
+
+// jarFor is the jar of a partition, "" being the ordinary one; with create
+// a partition's jar is made on first use, else nil means it has none.
+func (s *Session) jarFor(partition string, create bool) *cookiejar.Jar {
+	if partition == "" {
+		return s.cookieJar()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	jar := s.parts[partition]
+	if jar == nil && create {
+		jar, _ = newCookieJar() // fails only on options, and there are none
+		if s.parts == nil {
+			s.parts = make(map[string]*cookiejar.Jar)
+		}
+		s.parts[partition] = jar
+		s.partsUsed.Store(true)
+	}
+	return jar
+}
+
+// hasPartitions reports whether any partition holds a jar. Asked on every
+// request that sends cookies, so it reads a flag rather than take the
+// session's mutex, which the pool contends for.
+func (s *Session) hasPartitions() bool {
+	return s.partsUsed.Load()
+}
+
+// normalizePartition turns a partition as a caller writes it — a site or
+// any URL on it — into the key the jars are kept by.
+func normalizePartition(p string) (string, error) {
+	u, err := url.Parse(p)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return "", fmt.Errorf("cookie partition must be a site such as \"https://example.com\", got %q", p)
+	}
+	return schemefulSite(u), nil
+}
+
+// recordCookies remembers the cookies from a response, kept in partition.
 //
 // The domain and path come from the cookie itself; when it has none they are
 // derived from the request URL per RFC 6265: bare domain, directory as path.
-func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie, log *cookieLog) {
+func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie, partition string, log *cookieLog) {
 	if len(cs) == 0 {
 		return
 	}
@@ -150,12 +261,14 @@ func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie, log *cookieLog) {
 		if path == "" {
 			path = defaultCookiePath(u.Path)
 		}
-		key := cookieKey(domain, path, c.Name)
+		key := cookieKey(partition, domain, path, c.Name)
+		prev, had := s.cookies[key]
 		if log != nil {
-			ch := CookieChange{Domain: domain, Path: path, Name: c.Name, HostOnly: c.Domain == ""}
-			if prev, ok := s.cookies[key]; ok {
-				prev := prev
-				ch.Before = &prev
+			ch := CookieChange{Domain: domain, Path: path, Name: c.Name, HostOnly: c.Domain == "",
+				Partition: partition}
+			if had {
+				before := prev
+				ch.Before = &before
 			}
 			log.add(ch)
 		}
@@ -173,17 +286,24 @@ func (s *Session) recordCookies(u *url.URL, cs []*http.Cookie, log *cookieLog) {
 		case !c.Expires.IsZero():
 			expires = c.Expires.Unix()
 		}
+		seq := prev.seq
+		if !had {
+			s.cookieSeq++
+			seq = s.cookieSeq
+		}
 		s.cookies[key] = Cookie{
-			Name:     c.Name,
-			Value:    c.Value,
-			Domain:   domain,
-			Path:     path,
-			Expires:  expires,
-			Secure:   c.Secure,
-			HTTPOnly: c.HttpOnly,
-			SameSite: sameSiteName(c.SameSite),
-			Created:  now.Unix(),
-			HostOnly: c.Domain == "",
+			Name:      c.Name,
+			Value:     c.Value,
+			Domain:    domain,
+			Path:      path,
+			Expires:   expires,
+			Secure:    c.Secure,
+			HTTPOnly:  c.HttpOnly,
+			SameSite:  sameSiteName(c.SameSite),
+			Created:   now.Unix(),
+			HostOnly:  c.Domain == "",
+			Partition: partition,
+			seq:       seq,
 		}
 	}
 }
@@ -228,8 +348,8 @@ func sameSiteValue(name string) http.SameSite {
 
 // Cookies returns the session cookies; expired ones are skipped.
 //
-// The order is stable — domain, path, name — so an export is reproducible
-// and can be kept under version control.
+// The order is stable — partition (the ordinary jar first), domain, path,
+// name — so an export is reproducible and can be kept under version control.
 func (s *Session) Cookies() []Cookie {
 	now := time.Now().Unix()
 	s.mu.Lock()
@@ -243,6 +363,9 @@ func (s *Session) Cookies() []Cookie {
 	s.mu.Unlock()
 
 	sort.Slice(out, func(i, j int) bool {
+		if out[i].Partition != out[j].Partition {
+			return out[i].Partition < out[j].Partition
+		}
 		if out[i].Domain != out[j].Domain {
 			return out[i].Domain < out[j].Domain
 		}
@@ -257,7 +380,8 @@ func (s *Session) Cookies() []Cookie {
 // SetCookies loads cookies into the session.
 //
 // They go both into the jar and into the record: the jar handles sending, the
-// record the next export. The domain is required: without it there is nobody to send to.
+// record the next export. The domain is required: without it there is nobody
+// to send to. A cookie with a Partition goes into that site's partition.
 func (s *Session) SetCookies(cs []Cookie) error {
 	if s.cookieJar() == nil {
 		return fmt.Errorf("cookie jar is disabled for this session")
@@ -265,6 +389,14 @@ func (s *Session) SetCookies(cs []Cookie) error {
 	for _, c := range cs {
 		if c.Name == "" || c.Domain == "" {
 			return fmt.Errorf("cookie needs both a name and a domain: %+v", c)
+		}
+		partition := ""
+		if c.Partition != "" {
+			p, err := normalizePartition(c.Partition)
+			if err != nil {
+				return err
+			}
+			partition = p
 		}
 		path := c.Path
 		if path == "" {
@@ -295,7 +427,7 @@ func (s *Session) SetCookies(cs []Cookie) error {
 		if c.Expires != 0 {
 			hc.Expires = time.Unix(c.Expires, 0)
 		}
-		s.cookieJar().SetCookies(u, []*http.Cookie{hc})
+		s.jarFor(partition, true).SetCookies(u, []*http.Cookie{hc})
 
 		s.mu.Lock()
 		if s.cookies == nil {
@@ -304,7 +436,15 @@ func (s *Session) SetCookies(cs []Cookie) error {
 		norm := c
 		norm.Domain = strings.TrimPrefix(strings.ToLower(c.Domain), ".")
 		norm.Path = path
-		s.cookies[cookieKey(norm.Domain, path, c.Name)] = norm
+		norm.Partition = partition
+		key := cookieKey(partition, norm.Domain, path, c.Name)
+		if prev, ok := s.cookies[key]; ok {
+			norm.seq = prev.seq
+		} else {
+			s.cookieSeq++
+			norm.seq = s.cookieSeq
+		}
+		s.cookies[key] = norm
 		s.mu.Unlock()
 	}
 	return nil
@@ -325,6 +465,8 @@ func (s *Session) ClearCookies() error {
 	s.mu.Lock()
 	s.jar.Store(jar)
 	s.cookies = nil
+	s.parts = nil
+	s.partsUsed.Store(false)
 	s.mu.Unlock()
 	return nil
 }

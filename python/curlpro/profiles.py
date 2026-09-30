@@ -106,6 +106,7 @@ def capabilities(name: str) -> dict[str, Any]:
     | ``user_agent``, ``user_agent_varies`` | the string without a device, and whether a device changes it |
     | ``derived_fetch`` | the fetch set was worked out rather than captured (see the guide) |
     | ``resources`` | the resource kinds a request can name with ``resource=``, empty without a ``resources`` section |
+    | ``cookies`` | the family's cookie policy, absent for a non-browser: ``lax_by_default``, ``third_party``, ``schemeful``, ... and ``partitioning`` — ``"partitioned"`` (Chromium keeps ``Partitioned`` cookies per top-level site), ``"third-party"`` (Firefox keeps every cookie a third party sets that way), absent for one jar |
     | ``name``, ``based_on``, ``family`` | identity, after inheritance is resolved |
 
     This exists because the only way to learn any of it used to be to try: a

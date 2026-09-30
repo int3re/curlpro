@@ -91,6 +91,10 @@
     },
     "order": [
       {
+        "key": "cache-control",
+        "value": ""
+      },
+      {
         "key": "sec-ch-ua",
         "value": ""
       },
@@ -176,6 +180,14 @@
       },
       {
         "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
         "value": ""
       },
       {
@@ -274,6 +286,14 @@
       },
       {
         "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
         "value": ""
       },
       {

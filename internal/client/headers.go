@@ -107,7 +107,7 @@ func (s *Session) buildHeadersWith(r *Request, u *url.URL, host string, h1Order 
 	// small costs less than the map it replaced.
 	add := func(key, value string) {
 		for i := range out {
-			if strings.EqualFold(out[i].Key, key) {
+			if sameName(out[i].Key, key) {
 				// The value is rewritten in place: overriding a profile header that
 				// way keeps its position in the fingerprint.
 				out[i].Value = value
@@ -127,6 +127,7 @@ func (s *Session) buildHeadersWith(r *Request, u *url.URL, host string, h1Order 
 		if s.useCookies(r) {
 			cookie = s.cookieHeader(r, u)
 		}
+		placedETag, placedLM := false, false
 		// On HTTP/1.1 the profile's http1.order defines not only the order but the
 		// set as well: Chrome does not send priority over HTTP/1.1, Firefox does
 		// not send TE (measured on Chrome 152 and Firefox 154), though HTTP/2 has both.
@@ -139,8 +140,12 @@ func (s *Session) buildHeadersWith(r *Request, u *url.URL, host string, h1Order 
 				// With an initiator the relation is computed rather than taken
 				// from the profile, whose value describes a request with none:
 				// a typed navigation (none) or a fetch to the page's own origin.
-				if page != nil && strings.EqualFold(h.Key, "sec-fetch-site") {
+				if page != nil && sameName(h.Key, "sec-fetch-site") {
 					v = siteRelationURL(page, u)
+				}
+				if tpl.revalidatePriority != "" && (r.condETag != "" || r.condLastModified != "") &&
+					sameName(h.Key, "priority") {
+					v = tpl.revalidatePriority
 				}
 				add(caseFor(h.Key, h1Order), v)
 				continue
@@ -190,6 +195,24 @@ func (s *Session) buildHeadersWith(r *Request, u *url.URL, host string, h1Order 
 					}
 					add(caseFor(h.Key, h1Order), origin)
 				}
+			case "if-none-match":
+				// The cache's validators and a reload's cache-control, where
+				// the browser puts them (the -cache stand: after accept on a
+				// subresource and after cookie on a document in Chrome, after
+				// sec-fetch-site in Firefox, and the pair in either order).
+				if r.condETag != "" {
+					add(caseFor(h.Key, h1Order), r.condETag)
+					placedETag = true
+				}
+			case "if-modified-since":
+				if r.condLastModified != "" {
+					add(caseFor(h.Key, h1Order), r.condLastModified)
+					placedLM = true
+				}
+			case "cache-control":
+				if r.reloadCacheControl != "" {
+					add(caseFor(h.Key, h1Order), r.reloadCacheControl)
+				}
 			case "sec-fetch-storage-access":
 				// Both browsers send it on a cross-site request that carries
 				// credentials, and never on a top-level navigation: a no-cors
@@ -215,6 +238,15 @@ func (s *Session) buildHeadersWith(r *Request, u *url.URL, host string, h1Order 
 		// The profile declared no slot — add it as before, ahead of the user's.
 		if cookie != "" {
 			add(caseFor("cookie", h1Order), cookie)
+		}
+		// A profile measured before the cache has no slots for its validators:
+		// they still go out, with the custom headers. A reload's cache-control
+		// goes only where the profile says the browser sends one.
+		if r.condETag != "" && !placedETag {
+			add(caseFor("If-None-Match", h1Order), r.condETag)
+		}
+		if r.condLastModified != "" && !placedLM {
+			add(caseFor("If-Modified-Since", h1Order), r.condLastModified)
 		}
 	}
 
@@ -273,7 +305,7 @@ func (s *Session) buildHeadersWith(r *Request, u *url.URL, host string, h1Order 
 // withoutHeader removes a header by name, case-insensitively.
 func withoutHeader(have []headerKV, name string) []headerKV {
 	for i, h := range have {
-		if strings.EqualFold(h.Key, name) {
+		if sameName(h.Key, name) {
 			return append(have[:i], have[i+1:]...)
 		}
 	}
@@ -435,11 +467,18 @@ func redirectHopOrder(want []string) []string {
 
 func nameIn(name string, list []string) bool {
 	for _, n := range list {
-		if strings.EqualFold(n, name) {
+		if sameName(n, name) {
 			return true
 		}
 	}
 	return false
+}
+
+// sameName compares two header names case-insensitively. A header name is
+// ASCII (RFC 9110 5.1), so names of different lengths differ, and most
+// comparisons of a header set end on the length.
+func sameName(a, b string) bool {
+	return len(a) == len(b) && strings.EqualFold(a, b)
 }
 
 // pickAnchor picks the first anchor from the list that is present among the names.
@@ -448,9 +487,10 @@ func nameIn(name string, list []string) bool {
 // in Firefox custom headers go before Connection, which HTTP/2 does not have —
 // there they stand before Upgrade-Insecure-Requests.
 func pickAnchor(anchors string, names []string) string {
-	for _, a := range strings.Split(anchors, ",") {
-		a = strings.TrimSpace(a)
-		if a != "" && nameIn(a, names) {
+	for rest := anchors; rest != ""; {
+		var a string
+		a, rest, _ = strings.Cut(rest, ",")
+		if a = strings.TrimSpace(a); a != "" && nameIn(a, names) {
 			return a
 		}
 	}
@@ -498,7 +538,7 @@ func refererFor(page, u *url.URL) string {
 //
 // Custom names (those the profile does not list) are inserted before the anchor,
 // exactly where reorder placed them.
-func wireOrder(built []headerKV, want []string, anchor string) []string {
+func wireOrder(built []headerKV, want, wantLower []string, anchor string) []string {
 	out := make([]string, 0, len(built)+len(want))
 	if len(want) == 0 {
 		for _, h := range built {
@@ -514,7 +554,7 @@ func wireOrder(built []headerKV, want []string, anchor string) []string {
 	j := 0
 	for _, h := range built {
 		k := j
-		for k < len(want) && !strings.EqualFold(want[k], h.Key) {
+		for k < len(want) && !sameName(want[k], h.Key) {
 			k++
 		}
 		if k == len(want) {
@@ -525,12 +565,16 @@ func wireOrder(built []headerKV, want []string, anchor string) []string {
 	}
 
 	anchored := pickAnchor(anchor, want)
-	for _, w := range want {
-		if custom != nil && anchored != "" && strings.EqualFold(w, anchored) {
+	for i, w := range want {
+		if custom != nil && anchored != "" && sameName(w, anchored) {
 			out = append(out, custom...)
 			custom = nil
 		}
-		out = append(out, strings.ToLower(w))
+		if wantLower != nil {
+			out = append(out, wantLower[i])
+		} else {
+			out = append(out, strings.ToLower(w))
+		}
 	}
 	// The anchor was not in the order — the rest goes to the end.
 	return append(out, custom...)
@@ -564,7 +608,8 @@ func (s *Session) applyHeaders(req *http.Request, r *Request, u *url.URL, h1 boo
 	// fhttp looks the position up by the lowercase name (headerSorter.Less), so
 	// the order is passed lowercase. The case that reaches the wire comes from the
 	// map keys themselves and plays no part here.
-	req.Header[http.HeaderOrderKey] = wireOrder(built, s.wantOrder(r, h1Order, tpl), tpl.anchor)
+	want := s.wantOrder(r, h1Order, tpl)
+	req.Header[http.HeaderOrderKey] = wireOrder(built, want, tpl.lowerOf(want), tpl.anchor)
 	if len(s.profile.HTTP2.PseudoOrder) > 0 {
 		req.Header[http.PHeaderOrderKey] = s.profile.HTTP2.PseudoOrder
 	}
@@ -583,7 +628,7 @@ func (s *Session) applyHeaders(req *http.Request, r *Request, u *url.URL, h1 boo
 // default anyway — there an empty string is needed, which they read as "do not send".
 func suppressDefaultUA(h map[string][]string, built []headerKV, h1 bool) {
 	for _, kv := range built {
-		if strings.EqualFold(kv.Key, "user-agent") {
+		if sameName(kv.Key, "user-agent") {
 			return
 		}
 	}
@@ -600,10 +645,10 @@ func suppressDefaultUA(h map[string][]string, built []headerKV, h1 bool) {
 // explicitly by the browser even though keep-alive is implied in HTTP/1.1.
 func (s *Session) addHTTP1Headers(add func(k, v string), host string, order []string) {
 	for _, name := range order {
-		switch strings.ToLower(name) {
-		case "host":
+		switch {
+		case sameName(name, "host"):
 			add(name, host)
-		case "connection":
+		case sameName(name, "connection"):
 			if v := s.profile.HTTP1.Connection; v != "" {
 				add(name, v)
 			}
@@ -614,9 +659,8 @@ func (s *Session) addHTTP1Headers(add func(k, v string), host string, order []st
 // caseFor returns a header name in the case the profile sets.
 // When the profile does not know it, the original case is kept.
 func caseFor(key string, order []string) string {
-	lk := strings.ToLower(key)
 	for _, name := range order {
-		if strings.ToLower(name) == lk {
+		if sameName(name, key) {
 			return name
 		}
 	}
@@ -643,7 +687,7 @@ func reorder(have []headerKV, want []string, anchor string) []headerKV {
 	ordered := make([]headerKV, 0, len(have))
 	for _, w := range want {
 		for i, h := range have {
-			if !used[i] && strings.EqualFold(h.Key, w) {
+			if !used[i] && sameName(h.Key, w) {
 				ordered = append(ordered, h)
 				used[i] = true
 				break
@@ -692,7 +736,7 @@ func reorder(have []headerKV, want []string, anchor string) []headerKV {
 func inOrder(have []headerKV, want []string) bool {
 	j := 0
 	for _, h := range have {
-		for j < len(want) && !strings.EqualFold(want[j], h.Key) {
+		for j < len(want) && !sameName(want[j], h.Key) {
 			j++
 		}
 		if j == len(want) {

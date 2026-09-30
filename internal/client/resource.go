@@ -126,6 +126,8 @@ func (s *Session) resourceTemplate(r *Request) headerTemplate {
 		cors:       cors,
 		frame:      k.Navigates(),
 		corsAlways: s.profile.Resources.CORSOrigin == "always",
+		// Where the browser revalidates the kind with another priority.
+		revalidatePriority: k.RevalidatePriority,
 	}.withOrder()
 	if t.kinds == nil {
 		t.kinds = make(map[string]headerTemplate)

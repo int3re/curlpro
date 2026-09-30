@@ -18,7 +18,29 @@
     ],
     "permute_extensions": false
   },
-  "http1": {},
+  "http1": {
+    "order": [
+      "Host",
+      "User-Agent",
+      "Accept",
+      "Accept-Language",
+      "Accept-Encoding",
+      "Content-Type",
+      "Content-Length",
+      "Origin",
+      "Connection",
+      "Referer",
+      "Cookie",
+      "Upgrade-Insecure-Requests",
+      "Sec-Fetch-Dest",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Site",
+      "If-Modified-Since",
+      "If-None-Match",
+      "Sec-Fetch-User",
+      "Priority"
+    ]
+  },
   "http2": {},
   "http3": {},
   "quic": {},
@@ -76,6 +98,14 @@
       {
         "key": "sec-fetch-site",
         "value": "none"
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
       },
       {
         "key": "sec-fetch-user",
@@ -149,6 +179,14 @@
         "value": "same-origin"
       },
       {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": "u=4"
       },
@@ -173,6 +211,8 @@
       "Sec-Fetch-Dest",
       "Sec-Fetch-Mode",
       "Sec-Fetch-Site",
+      "If-Modified-Since",
+      "If-None-Match",
       "Priority"
     ]
   },
@@ -190,6 +230,8 @@
         "sec-fetch-dest",
         "sec-fetch-mode",
         "sec-fetch-site",
+        "if-modified-since",
+        "if-none-match",
         "priority",
         "te"
       ],
@@ -205,6 +247,8 @@
         "sec-fetch-dest",
         "sec-fetch-mode",
         "sec-fetch-site",
+        "if-modified-since",
+        "if-none-match",
         "priority",
         "te"
       ],
@@ -223,6 +267,8 @@
         "sec-fetch-dest",
         "sec-fetch-mode",
         "sec-fetch-site",
+        "if-modified-since",
+        "if-none-match",
         "priority",
         "te"
       ]
@@ -242,6 +288,8 @@
         "Sec-Fetch-Dest",
         "Sec-Fetch-Mode",
         "Sec-Fetch-Site",
+        "If-Modified-Since",
+        "If-None-Match",
         "Priority"
       ],
       "font-preload": [
@@ -256,6 +304,8 @@
         "Sec-Fetch-Dest",
         "Sec-Fetch-Mode",
         "Sec-Fetch-Site",
+        "If-Modified-Since",
+        "If-None-Match",
         "Priority"
       ],
       "navigate": [
@@ -272,6 +322,8 @@
         "Sec-Fetch-Dest",
         "Sec-Fetch-Mode",
         "Sec-Fetch-Site",
+        "If-Modified-Since",
+        "If-None-Match",
         "Priority"
       ],
       "no-cors": [
@@ -291,6 +343,8 @@
         "Sec-Fetch-Dest",
         "Sec-Fetch-Mode",
         "Sec-Fetch-Site",
+        "If-Modified-Since",
+        "If-None-Match",
         "Priority"
       ]
     },
@@ -326,7 +380,8 @@
       "image": {
         "dest": "image",
         "accept": "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5",
-        "priority": "u=5, i"
+        "priority": "u=5, i",
+        "revalidate_priority": "u=5"
       },
       "image-css": {
         "dest": "image",

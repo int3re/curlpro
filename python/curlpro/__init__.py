@@ -41,6 +41,7 @@ from .aio import AsyncSession, AsyncStreamResponse, AsyncWebSocket
 from .cookies import Cookie, Cookies
 from .session import (
     DEFAULT_MAX_RESPONSE_SIZE,
+    CacheInfo,
     Preflight,
     Redirect,
     Response,
@@ -72,6 +73,7 @@ __all__ = [
     "AsyncSession",
     "AsyncStreamResponse",
     "AsyncWebSocket",
+    "CacheInfo",
     "Cookie",
     "Cookies",
     "ConfigurationError",
@@ -121,7 +123,7 @@ __all__ = [
     "request",
 ]
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"
 
 try:  # an installed distribution is the authority; a source checkout has none
     from importlib.metadata import version as _dist_version

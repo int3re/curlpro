@@ -39,6 +39,8 @@ type Stream struct {
 	Preflights []Preflight
 	// CookieChanges are the jar records the request changed (TrackCookies).
 	CookieChanges []CookieChange
+	// Cache is how the session's cache served the response (Response.Cache).
+	Cache string
 
 	body io.ReadCloser
 
@@ -285,7 +287,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 			}
 		}
 
-		resp, cancel, used, err := s.send(&current, deadline)
+		resp, cancel, used, err := s.sendCached(&current, deadline)
 		if err != nil {
 			// A network error: send() has already thrown the connection out of the
 			// pool, so the retry will raise TLS anew.
@@ -349,6 +351,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 				URL:        current.URL,
 				History:    history,
 				Preflights: preflights,
+				Cache:      cacheOutcome(resp.Body),
 				body:       resp.Body,
 				cancel:     cancel,
 				conn:       used,

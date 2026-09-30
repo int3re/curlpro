@@ -248,6 +248,7 @@ func okFrame(resp *client.Response) []byte {
 		History:       resp.History,
 		Preflights:    resp.Preflights,
 		CookieChanges: resp.CookieChanges,
+		Cache:         resp.Cache,
 	}, resp.Body, nil)
 }
 

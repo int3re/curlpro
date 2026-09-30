@@ -43,8 +43,22 @@ class Cookie(dict):
         """Expiry in epoch seconds; 0 means a session cookie."""
         return int(self.get("expires", 0) or 0)
 
+    @property
+    def partition(self) -> str | None:
+        """The top-level site a partitioned cookie is kept under, as
+        ``"https://example.com"``; None for a cookie of the ordinary jar.
+
+        A partitioned cookie goes only on requests made under that site —
+        Chromium's ``Partitioned`` cookies (CHIPS), and in Firefox every
+        cookie a third party sets (Total Cookie Protection). The same name,
+        domain and path can therefore be in the jar more than once, one per
+        partition.
+        """
+        return self.get("partition") or None
+
     def __repr__(self) -> str:
-        return f"<Cookie {self.name}={self.value!r} for {self.domain}{self.path}>"
+        under = f" under {self.partition}" if self.partition else ""
+        return f"<Cookie {self.name}={self.value!r} for {self.domain}{self.path}{under}>"
 
 
 class Cookies(Mapping[str, str]):
@@ -134,12 +148,21 @@ class Cookies(Mapping[str, str]):
 
     def set(self, name: str, value: str, *, domain: str, path: str = "/",
             expires: int = 0, secure: bool = False, http_only: bool = False,
-            same_site: str = "") -> None:
-        """Adds a cookie. The domain is required: without it there is nobody to send it to."""
+            same_site: str = "", partition: str | None = None) -> None:
+        """Adds a cookie. The domain is required: without it there is nobody to send it to.
+
+        ``partition`` keeps it apart for one top-level site, the way a frame's
+        partitioned cookie is kept: any http(s) URL on that site will do, and
+        it is stored as the site itself (``"https://www.shop.example/cart"``
+        becomes ``"https://shop.example"``). It then goes only on requests
+        made under that site — see :attr:`curlpro.Session.top_level`. A
+        malformed one is refused rather than the cookie landing in the
+        ordinary jar, where it would go under every site.
+        """
         self.load([{
             "name": name, "value": value, "domain": domain, "path": path,
             "expires": expires, "secure": secure, "http_only": http_only,
-            "same_site": same_site,
+            "same_site": same_site, "partition": partition or "",
         }])
 
     def load(self, cookies: list[Mapping[str, Any]]) -> None:
@@ -231,7 +254,10 @@ class Cookies(Mapping[str, str]):
 
         The format is poorer than our JSON: it has no SameSite. But curl,
         wget, yt-dlp and browser extensions all read it, and for carrying a
-        session into another tool that loss is usually worth it.
+        session into another tool that loss is usually worth it. It has no
+        partition either, and there a loss would be a different jar:
+        partitioned cookies are left out (see :func:`format_netscape`); keep
+        them with :meth:`save`.
         """
         Path(path).write_text(self.to_netscape(), encoding="utf-8")
 
@@ -270,11 +296,21 @@ _HTTP_ONLY_PREFIX = "#HttpOnly_"
 
 
 def format_netscape(cookies: list[dict[str, Any]]) -> str:
-    """Builds ``cookies.txt`` text out of full records."""
+    """Builds ``cookies.txt`` text out of full records.
+
+    Partitioned cookies are left out. The format has no column for the
+    partition, and no tool has a convention for one the way curl has
+    ``#HttpOnly_``. Written as an ordinary line, a cookie a frame received
+    under one top-level site would go to that host under every site — and
+    beside the ordinary cookie of the same name, which is a jar no browser
+    has. An eighth field would make curl drop the line and Python's
+    ``http.cookiejar.MozillaCookieJar`` refuse the whole file. Dropping them
+    costs the frame's state under that one site, which it rebuilds.
+    """
     lines = [NETSCAPE_HEADER]
     for c in cookies:
         domain = str(c.get("domain", ""))
-        if not domain:
+        if not domain or c.get("partition"):
             continue
         # A leading dot and TRUE mean "subdomains too"; a host-only cookie
         # (set without a Domain attribute) is written bare with FALSE. Every

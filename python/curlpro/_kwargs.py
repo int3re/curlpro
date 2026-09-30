@@ -48,10 +48,12 @@ class _Common(TypedDict, total=False):
     respect_retry_after: bool
     mode: str | None
     page: str | bool | None
+    top_level: str | bool | None
     credentials: str | None
     preflight: bool | None
     resource: str | None
     crossorigin: str | None
+    cache: str | None
 
 
 class StreamKwargs(_Common, total=False):

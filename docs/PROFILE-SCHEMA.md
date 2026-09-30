@@ -82,6 +82,13 @@ filled by the library:
   2026-09-19 on `cmd/hcapture -origins`);
 - `content-length` — added by the transport after the assembly; the slot only
   fixes the position;
+- `if-none-match`, `if-modified-since` — the validators of a stored response
+  when the session's cache revalidates it, and `cache-control` — `max-age=0`
+  on a reload (`cache="no-cache"`), in the profiles of the browsers that send
+  it (Chromium). Where Chrome 154 and Firefox 156 put them (`cmd/hcapture
+  -cache`, [STAGE22](STAGE22-RESULTS.md)) is written into the orders by
+  `scripts/gen-resources.py` and `scripts/gen-identities.py`; a profile
+  without the slots gets the validators at the end;
 - `content-type` and any other name — the value from the session or request
   headers; without one the slot drops out.
 
@@ -168,7 +175,7 @@ inherited down their chains.
 |---|---|
 | `orders` | header orders by name — `no-cors`, `cors`, `navigate` (a frame's document) — as lists of names, no values |
 | `http1_orders` | the same over HTTP/1.1, in the browser's case, `Host` and `Connection` included; a kind may have one of its own |
-| `kinds` | by name: `dest`, `mode` (`no-cors` by default, `cors` for what is always CORS, `navigate` for a frame), `accept` (empty: the navigation set's), `accept_encoding` (only where it differs), `priority` (empty: none sent), `purpose` (`sec-purpose`), `order` and `http1_order` (only where the kind needs its own) |
+| `kinds` | by name: `dest`, `mode` (`no-cors` by default, `cors` for what is always CORS, `navigate` for a frame), `accept` (empty: the navigation set's), `accept_encoding` (only where it differs), `priority` (empty: none sent), `revalidate_priority` (the priority of the kind's conditional request where it differs: Firefox 156 revalidated an image with `u=5`, first asked with `u=5, i`; since 0.14), `purpose` (`sec-purpose`), `order` and `http1_order` (only where the kind needs its own) |
 | `storage_access` | the value of `sec-fetch-storage-access` on a cross-site credentialed request: `active` for Chrome 153, `none` for Firefox 156 |
 | `cors_origin` | `always` (Chrome: `Origin` on every CORS resource) or `cross-origin` (Firefox) |
 

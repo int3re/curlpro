@@ -89,22 +89,19 @@ func (s *Session) newDialSpec(u *url.URL, proxy string, forceHTTP1 bool) dialSpe
 }
 
 // partition fills the pool key's partition for a request: whether it
-// carries credentials, and the site of the page it is made from.
+// carries credentials, and the top-level site it is made under.
 func (s *Session) partition(spec dialSpec, r *Request, u *url.URL) dialSpec {
 	p := s.connPolicy
 	if p.SplitCredentials {
 		spec.anon = !s.includesCredentials(r, u)
 	}
 	if p.PartitionBySite {
-		top := u
-		if page := s.pageURL(r); page != nil {
-			top = page
-		}
+		top, nav := s.topLevel(r, u)
 		spec.site = schemefulSite(top)
-		// A frame's own document is keyed apart when it is cross-site to
-		// the page: Chrome's key carries that bit, and the stand's iframe
-		// went on a connection of its own.
-		if k, ok := s.resourceKind(r); ok && k.Navigates() && spec.site != schemefulSite(u) {
+		// A cross-site frame's document and the frame's own requests are
+		// keyed apart from the top-level page's: Chrome's key carries
+		// that bit, and the stand's frame went on a connection of its own.
+		if p.FramePartition && s.crossSiteFrame(r, u, top, nav) {
 			spec.site += "|frame"
 		}
 	}

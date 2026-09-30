@@ -55,7 +55,7 @@ class StreamResponse:
     """
 
     __slots__ = ("status", "proto", "headers", "url", "history", "preflights",
-                 "_id", "_closed", "_max_size")
+                 "cache", "_id", "_closed", "_max_size")
 
     def __init__(self, payload: dict, max_size: int = 0):
         self.status: int = payload["status"]
@@ -70,6 +70,10 @@ class StreamResponse:
                         for h in payload.get("history") or []]
         #: The CORS preflights sent before the request, in order.
         self.preflights = _preflights(payload.get("preflights"))
+        #: How the session's cache served it, as :attr:`Response.cache`. A
+        #: miss is stored as the body is read, and only when it is read to
+        #: the end: a stream closed early leaves nothing half in the cache.
+        self.cache: str | None = payload.get("cache") or None
         self._id: int = payload["stream"]
         self._closed = False
         # The session's max_response_size. It binds read() and not
@@ -80,6 +84,11 @@ class StreamResponse:
     @property
     def ok(self) -> bool:
         return 200 <= self.status < 400
+
+    @property
+    def from_cache(self) -> bool:
+        """The body comes out of the cache: a hit, or a 304 that confirmed it."""
+        return self.cache in ("hit", "revalidated")
 
     def iter_lines(self, chunk_size: int = DEFAULT_CHUNK,
                    keepends: bool = False) -> Iterator[bytes]:

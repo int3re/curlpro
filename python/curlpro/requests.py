@@ -184,6 +184,18 @@ class Response:
         return self._r.preflight
 
     @property
+    def cache(self) -> str | None:
+        """How the session's cache served it: "hit", "revalidated", "miss" or None."""
+        return self._r.cache
+
+    @property
+    def from_cache(self) -> bool:
+        """The name requests-cache gives it: True when the body came out of
+        the cache, a hit or a 304 that confirmed it. Code written against
+        that library reads the same attribute here."""
+        return self._r.from_cache
+
+    @property
     def reason(self) -> str:
         """The reason phrase.
 

@@ -13,6 +13,8 @@
 //	go run ./cmd/hcapture -h3                 # no browser: open the address yourself
 //	go run ./cmd/hcapture -auto -subres -certs capture/certs-multi       # a page's resources, connections
 //	go run ./cmd/hcapture -auto -subres -h1 -certs capture/certs-multi   # the same over HTTP/1.1
+//	go run ./cmd/hcapture -auto -cache -certs capture/certs-multi        # the HTTP cache of a returning visitor
+//	go run ./cmd/hcapture -auto -chips -certs capture/certs-multi        # a cross-site frame's cookies
 //
 // The page itself performs a fetch, an XHR and a link navigation, so one run
 // captures both header sets — the navigational one and the fetch one.
@@ -64,6 +66,8 @@ func main() {
 	certs := flag.String("certs", "capture/certs", "directory holding tls.crt and tls.key")
 	flag.BoolVar(&origins, "origins", false, "serve the three-origin page: what a page sends to its own origin, its site and another site")
 	flag.BoolVar(&subres, "subres", false, "serve the subresource page: stylesheets, scripts, images, fonts, an iframe, and bursts of parallel fetches to fresh hosts")
+	flag.BoolVar(&cacheMode, "cache", false, "serve the cache page: a first visit, a navigation, a reload, and a shared resource from another site")
+	flag.BoolVar(&chipsMode, "chips", false, "serve the partitioned-cookie page: a cross-site frame's cookies, and where they come back")
 	flag.BoolVar(&h1Only, "h1", false, "offer only http/1.1 in ALPN and record HTTP/1.1 requests with their case and order")
 	flag.BoolVar(&closeAfter, "close", false, "close every connection after its first response, so later requests resume TLS on new ones")
 	flag.Parse()
@@ -463,6 +467,11 @@ func route(path, host string) reply {
 			return rep
 		}
 	}
+	if chipsMode {
+		if rep, ok := chipsRoute(path); ok {
+			return rep
+		}
+	}
 	if origins {
 		other := "https://" + originsOther + ":" + listenPort
 		site := "https://" + originsSite + ":" + listenPort
@@ -815,6 +824,11 @@ func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte, connID int) {
 // the status. One list for both transports, so an HTTP/1.1 run is answered
 // exactly as an HTTP/2 one.
 func answer(r record) (reply, [][2]string) {
+	if cacheMode {
+		if rep, h, ok := cacheAnswer(r); ok {
+			return rep, h
+		}
+	}
 	rep := route(r.Path, r.Host)
 	var h [][2]string
 	add := func(k, v string) { h = append(h, [2]string{k, v}) }
@@ -827,7 +841,7 @@ func answer(r record) (reply, [][2]string) {
 	add("content-length", fmt.Sprint(len(rep.body)))
 	add("cache-control", "no-store")
 	// The subresource page measures an ordinary site, which asks for no hints.
-	if !subres {
+	if !subres && !chipsMode && !cacheMode {
 		add("accept-ch", acceptCH)
 		add("critical-ch", acceptCH)
 	}
@@ -1271,7 +1285,7 @@ func launch(browser, origin string, h3 bool) func() {
 		"--no-default-browser-check",
 		"--ignore-certificate-errors",
 	}
-	if origins || subres {
+	if origins || subres || cacheMode || chipsMode {
 		// Chromium resolves *.localhost to loopback on its own; the rule makes
 		// that explicit rather than relied upon. The page is on www.a.localhost.
 		args = append(args, "--host-resolver-rules=MAP *.localhost 127.0.0.1")
@@ -1297,6 +1311,12 @@ func launch(browser, origin string, h3 bool) func() {
 	}
 	if subres {
 		start = "https://" + origin + subresStart
+	}
+	if cacheMode {
+		start = "https://" + origin + cacheStart
+	}
+	if chipsMode {
+		start = "https://" + origin + chipsStart
 	}
 	args = append(args, start)
 	cmd := exec.Command(browser, args...)

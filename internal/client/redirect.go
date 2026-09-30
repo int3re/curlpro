@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	http "github.com/bogdanfinn/fhttp"
 	"golang.org/x/net/publicsuffix"
@@ -264,7 +266,32 @@ func sameSiteURL(a, b *url.URL) bool {
 	return registrableDomain(a.Hostname()) == registrableDomain(b.Hostname())
 }
 
+// siteCache remembers registrable domains by host. A session asks about the
+// same few hosts on every request — a page, its API, its CDN — and the
+// public suffix lookup was the costliest part of the site comparisons each
+// request makes (Referer, sec-fetch-site, cookies, the pool's partition).
+// Past siteCacheMax hosts it starts over rather than grow without bound.
+var (
+	siteCache  sync.Map // host → registrable domain
+	siteCached atomic.Int32
+)
+
+const siteCacheMax = 4096
+
 func registrableDomain(host string) string {
+	if d, ok := siteCache.Load(host); ok {
+		return d.(string)
+	}
+	d := lookupRegistrableDomain(host)
+	if siteCached.Add(1) > siteCacheMax {
+		siteCache.Clear()
+		siteCached.Store(1)
+	}
+	siteCache.Store(host, d)
+	return d
+}
+
+func lookupRegistrableDomain(host string) string {
 	host = strings.ToLower(host)
 	if net.ParseIP(host) != nil {
 		return host

@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -171,6 +172,11 @@ type Options struct {
 	// Retry configures retries. nil means no retries.
 	Retry *RetryPolicy
 
+	// Cache switches the HTTP cache on (cache.go): fresh responses come back
+	// without a request, stale ones are revalidated the way the browser
+	// revalidates them. nil — the default — keeps every request on the network.
+	Cache *CacheOptions
+
 	// Mode selects the header set: "navigate" for a page load, "fetch" for
 	// fetch/XHR, "" or "auto" to decide from the request (see modeFor).
 	Mode string
@@ -187,6 +193,14 @@ type Options struct {
 	// navigation typed into the bar (sec-fetch-site: none, no Referer) and a
 	// fetch from the request's own origin.
 	Page string
+
+	// TopLevel is the URL of the page in the address bar when Page is a
+	// frame's document: a captcha's or a widget's frame, whose requests
+	// are made from the frame and under the page that embeds it. The
+	// cache, the connections and the partitioned cookies are keyed by its
+	// site (partition.go). Empty takes the Page itself for the top level;
+	// a top-level navigation is always under its own URL.
+	TopLevel string
 
 	// Credentials is the credentials mode of fetch-mode requests, in the
 	// words of fetch(): "same-origin" — cookies only to the page's own
@@ -312,6 +326,17 @@ type Request struct {
 	// Page overrides the session's page for a single request: nil takes the
 	// session's, an empty string means no page — a request with no initiator.
 	Page *string
+	// TopLevel overrides the session's TopLevel for a single request: nil
+	// takes the session's, an empty string takes the page for the top level.
+	TopLevel *string
+
+	// CacheMode is how the request uses the session's cache, as fetch()'s
+	// cache option: "default", "no-store", "no-cache" (revalidate whatever is
+	// stored — a reload), "force-cache", "only-if-cached". Empty is "default".
+	CacheMode string
+	// condETag, condLastModified and reloadCacheControl are what the cache
+	// puts into a conditional request, each into the profile's slot for it.
+	condETag, condLastModified, reloadCacheControl string
 
 	// Resource names the kind of resource the request loads — "image",
 	// "script", "style", "font", "iframe" and the rest the profile's
@@ -499,6 +524,35 @@ func validatePage(page string) error {
 	return nil
 }
 
+// validateTopLevel refuses a top level that is not an absolute http(s) URL.
+func validateTopLevel(top string) error {
+	if validatePage(top) != nil {
+		return configErr("top_level must be an absolute http(s) URL, got %q", top)
+	}
+	return nil
+}
+
+// SetTopLevel changes the session's top-level page; an empty string takes
+// the page for it.
+func (s *Session) SetTopLevel(top string) error {
+	if top != "" {
+		if err := validateTopLevel(top); err != nil {
+			return err
+		}
+	}
+	s.pageMu.Lock()
+	s.opts.TopLevel = top
+	s.pageMu.Unlock()
+	return nil
+}
+
+// TopLevel returns the session's top-level page.
+func (s *Session) TopLevel() string {
+	s.pageMu.RLock()
+	defer s.pageMu.RUnlock()
+	return s.opts.TopLevel
+}
+
 // proxyFor returns the proxy address for a request.
 func (s *Session) proxyFor(r *Request) string {
 	if r != nil && r.Proxy != nil {
@@ -604,7 +658,15 @@ func (r *Request) validate(hasJar bool) error {
 			return err
 		}
 	}
+	if r.TopLevel != nil && *r.TopLevel != "" {
+		if err := validateTopLevel(*r.TopLevel); err != nil {
+			return err
+		}
+	}
 	if err := validateCredentials(r.Credentials); err != nil {
+		return err
+	}
+	if err := validateCacheMode(r.CacheMode); err != nil {
 		return err
 	}
 	switch r.Protocol {
@@ -651,6 +713,10 @@ type Response struct {
 	// CookieChanges are the jar records the request changed, when it was
 	// asked to track them (Request.TrackCookies).
 	CookieChanges []CookieChange
+	// Cache is how the session's cache served the final response: "hit",
+	// "revalidated", "miss", or "" without a cache or for a request it
+	// does not take (a POST, a no-store).
+	Cache string
 }
 
 // Session performs requests with a single profile.
@@ -666,8 +732,8 @@ type Session struct {
 	// Nil unless Options.Resume is set.
 	tlsSessions utls.ClientSessionCache
 
-	// pageMu guards opts.Page: a scraper moves the page between requests
-	// while async requests may be in flight.
+	// pageMu guards opts.Page and opts.TopLevel: a scraper moves the page
+	// between requests while async requests may be in flight.
 	pageMu sync.RWMutex
 
 	mu    sync.Mutex
@@ -706,6 +772,13 @@ type Session struct {
 	// cookies is our own cookie record for export: the jar yields only the
 	// name-value pair for an address, and that is not enough to save a session.
 	cookies map[string]Cookie
+	// cookieSeq numbers the records in the order they were created, which
+	// is how cookies of two jars interleave in one header.
+	cookieSeq uint64
+	// parts are the partitioned jars, by top-level site (cookies.go).
+	// Under mu; partsUsed says there is one, without the mutex.
+	parts     map[string]*cookiejar.Jar
+	partsUsed atomic.Bool
 
 	// modesUsed are the header sets requests actually went out with. The
 	// audit judges what was sent, not what the constructor was told: a
@@ -722,6 +795,9 @@ type Session struct {
 
 	// tpl holds the header sets resolved once from the profile.
 	tpl templates
+
+	// cache is the HTTP cache, nil when the session has none.
+	cache *httpCache
 
 	// roots and clientCerts are prepared once when the session is created:
 	// reading files per connection is wasted I/O on the hot path.
@@ -757,6 +833,11 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	}
 	if opts.Page != "" {
 		if err := validatePage(opts.Page); err != nil {
+			return nil, err
+		}
+	}
+	if opts.TopLevel != "" {
+		if err := validateTopLevel(opts.TopLevel); err != nil {
 			return nil, err
 		}
 	}
@@ -832,6 +913,13 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 		return nil, err
 	}
 	s.roots, s.clientCerts = roots, certs
+	if opts.Cache != nil {
+		c, err := newHTTPCache(opts.Cache)
+		if err != nil {
+			return nil, err
+		}
+		s.cache = c
+	}
 
 	if opts.Cookies {
 		jar, err := newCookieJar()
@@ -916,7 +1004,7 @@ func (s *Session) Do(r *Request) (*Response, error) {
 	if limit := s.opts.MaxResponseSize; limit > 0 {
 		reader = io.LimitReader(stream, limit+1)
 	}
-	data, err := io.ReadAll(reader)
+	data, err := readAllSized(reader, bodySizeHint(stream.Headers, s.opts.MaxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
@@ -936,7 +1024,51 @@ func (s *Session) Do(r *Request) (*Response, error) {
 		Proto:         stream.Proto,
 		URL:           stream.URL,
 		CookieChanges: stream.CookieChanges,
+		Cache:         stream.Cache,
 	}, nil
+}
+
+// bodySizeHint is the size to read a body into at first: its Content-Length
+// — exact for an identity body, a floor for a compressed one — within the
+// response limit and never past 8 MiB, since the header is the server's word
+// and a false one must not reserve memory. 0 when there is none.
+func bodySizeHint(h map[string][]string, limit int64) int64 {
+	vs := h["Content-Length"]
+	if len(vs) == 0 {
+		return 0
+	}
+	n, err := strconv.ParseInt(vs[0], 10, 64)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	if limit > 0 && n > limit {
+		n = limit
+	}
+	return min(n, 8<<20)
+}
+
+// readAllSized is io.ReadAll starting from a buffer of the size expected.
+// io.ReadAll starts at 512 bytes and doubles, which for a 5 KB page made
+// nine allocations and copies of the body on every request.
+func readAllSized(r io.Reader, hint int64) ([]byte, error) {
+	if hint <= 0 {
+		return io.ReadAll(r)
+	}
+	// One byte more: the read that finds EOF must not need a larger buffer.
+	b := make([]byte, 0, hint+1)
+	for {
+		n, err := r.Read(b[len(b):cap(b)])
+		b = b[:len(b)+n]
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return b, err
+		}
+		if len(b) == cap(b) {
+			b = append(b, 0)[:len(b)]
+		}
+	}
 }
 
 // prepare expands a multipart form into the request body.
@@ -1262,10 +1394,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	}
 
 	if s.useCookies(r) && s.includesCredentials(r, u) {
-		if cookies := s.acceptCookies(resp.Cookies()); len(cookies) > 0 {
-			s.cookieJar().SetCookies(u, cookies)
-			s.recordCookies(u, cookies, r.cookieLog)
-		}
+		s.storeCookies(r, u, s.acceptCookies(resp.Cookies()))
 	}
 	return resp, cancel, c, nil
 }

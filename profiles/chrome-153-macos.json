@@ -5,6 +5,10 @@
     "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
     "order": [
       {
+        "key": "cache-control",
+        "value": ""
+      },
+      {
         "key": "content-length",
         "value": ""
       },
@@ -73,6 +77,14 @@
         "value": ""
       },
       {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": "u=0, i"
       }
@@ -90,6 +102,10 @@
       "sec-ch-ua-full-version-list": "\"Google Chrome\";v=\"153.0.8010.12\", \"Not_A Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"153.0.8010.12\""
     },
     "order": [
+      {
+        "key": "cache-control",
+        "value": ""
+      },
       {
         "key": "sec-ch-ua",
         "value": ""
@@ -176,6 +192,14 @@
       },
       {
         "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
         "value": ""
       },
       {
@@ -274,6 +298,14 @@
       },
       {
         "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
         "value": ""
       },
       {

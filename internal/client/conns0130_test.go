@@ -254,18 +254,25 @@ func TestBurstFirefoxRacesSixAttempts(t *testing.T) {
 // first handshake says what the server speaks, and the rest open their own.
 func TestBurstHTTP1StaysParallel(t *testing.T) {
 	caPath, cert := testPKI(t, "www.pool.test")
+	// How many requests the server held at once, not how long the burst
+	// took: under the race detector on a loaded machine six parallel
+	// requests once took as long as six serial ones would.
+	var inflight, most atomic.Int32
 	slow := func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		n := inflight.Add(1)
+		for m := most.Load(); n > m && !most.CompareAndSwap(m, n); m = most.Load() {
+		}
 		time.Sleep(150 * time.Millisecond)
+		inflight.Add(-1)
 		io.WriteString(w, "ok")
 	}
 	st := newConnStand(t, cert, []string{"http/1.1"}, slow)
 	s := connSession(t, "chrome-153-windows", caPath, st, "www.pool.test")
-	start := time.Now()
 	burst(t, s, 6, func(i int) *Request {
 		return &Request{Method: "GET", URL: "https://www.pool.test/" + string(rune('a'+i))}
 	})
-	if took := time.Since(start); took > 700*time.Millisecond {
-		t.Errorf("six requests took %v over HTTP/1.1: they were serialised", took)
+	if got := most.Load(); got < 2 {
+		t.Errorf("the server held at most %d request(s) at once over HTTP/1.1: they were serialised", got)
 	}
 	if got := st.carriers(); got < 2 {
 		t.Errorf("HTTP/1.1 requests shared %d connection(s); they need their own", got)
@@ -351,13 +358,17 @@ func TestPoolingByAddress(t *testing.T) {
 }
 
 // Chrome keeps requests without credentials on connections of their own
-// (privacy mode) and keys connections by the page's top-level site; Firefox
-// did neither on the stand.
+// (privacy mode); both browsers key connections by the top-level site, and
+// Chrome by a cross-site frame as well.
 func TestPoolPartitions(t *testing.T) {
 	caPath, cert := testPKI(t, "api.pool.test")
 	fetch := func(page, creds string) *Request {
 		return &Request{Method: "GET", URL: "https://api.pool.test/x", Mode: ModeFetch,
 			Page: strPtr(page), Credentials: creds}
+	}
+	framed := func(r *Request, top string) *Request {
+		r.TopLevel = strPtr(top)
+		return r
 	}
 	for _, tc := range []struct {
 		name, profile string
@@ -375,6 +386,24 @@ func TestPoolPartitions(t *testing.T) {
 			fetch("https://www.pool.test/", CredentialsInclude),
 			fetch("https://shop.example/", CredentialsInclude),
 			fetch("https://www.pool.test/", CredentialsInclude)}, 2},
+		// Firefox keys by the top-level site too (cmd/hcapture -chips).
+		{"firefox sites", "firefox-156-windows", []*Request{
+			fetch("https://www.pool.test/", CredentialsInclude),
+			fetch("https://shop.example/", CredentialsInclude),
+			fetch("https://www.pool.test/", CredentialsInclude)}, 2},
+		// The page's own image and a cross-site frame's fetch under the
+		// same page: Chrome keys the frame apart, Firefox does not.
+		{"chrome frame", "chrome-154-windows", []*Request{
+			{Method: "GET", URL: "https://api.pool.test/i.png", Resource: "image", Page: strPtr("https://www.pool.test/")},
+			framed(fetch("https://frame.example/f", CredentialsInclude), "https://www.pool.test/")}, 2},
+		{"firefox frame", "firefox-156-windows", []*Request{
+			{Method: "GET", URL: "https://api.pool.test/i.png", Resource: "image", Page: strPtr("https://www.pool.test/")},
+			framed(fetch("https://frame.example/f", CredentialsInclude), "https://www.pool.test/")}, 1},
+		// A navigation is under its own site: a link from shop.example
+		// and the page's fetch share the connection.
+		{"navigation", "firefox-156-windows", []*Request{
+			{Method: "GET", URL: "https://api.pool.test/", Mode: ModeNavigate, Page: strPtr("https://shop.example/")},
+			fetch("https://api.pool.test/", CredentialsInclude)}, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			st := newConnStand(t, cert, []string{"h2", "http/1.1"}, standOK)

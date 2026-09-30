@@ -12,6 +12,10 @@
     "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
     "order": [
       {
+        "key": "cache-control",
+        "value": ""
+      },
+      {
         "key": "content-length",
         "value": ""
       },
@@ -80,6 +84,14 @@
         "value": ""
       },
       {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": "u=0, i"
       }
@@ -97,6 +109,10 @@
       "sec-ch-ua-full-version-list": "\"Chromium\";v=\"154.0.8037.17\", \"Google Chrome\";v=\"154.0.8037.17\", \"Not A(Brand\";v=\"99.0.0.0\""
     },
     "order": [
+      {
+        "key": "cache-control",
+        "value": ""
+      },
       {
         "key": "sec-ch-ua",
         "value": ""
@@ -183,6 +199,14 @@
       },
       {
         "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
         "value": ""
       },
       {
@@ -281,6 +305,14 @@
       },
       {
         "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
         "value": ""
       },
       {

@@ -5,10 +5,11 @@ from __future__ import annotations
 import math
 import base64
 import json
+import os
 import sys
 import time
 import traceback
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, TypedDict
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from ._ffi import _call, call_framed, encode
@@ -66,7 +67,7 @@ if TYPE_CHECKING:
 DEFAULT_MAX_RESPONSE_SIZE = 100 * 1024 * 1024
 
 
-def _size(value: Any) -> int:
+def _size(value: Any, name: str = "max_response_size") -> int:
     """A byte limit: 0 means none, and the native side reads a signed 64-bit.
 
     A negative limit used to slip through as "no limit"; 2**63 came back as a
@@ -74,11 +75,11 @@ def _size(value: Any) -> int:
     and are named as such, here.
     """
     if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"max_response_size must be an int of bytes, got {value!r}")
+        raise TypeError(f"{name} must be an int of bytes, got {value!r}")
     if value < 0:
-        raise ValueError(f"max_response_size cannot be negative, got {value}")
+        raise ValueError(f"{name} cannot be negative, got {value}")
     if value > 2**63 - 1:
-        raise ValueError(f"max_response_size is too large, got {value}")
+        raise ValueError(f"{name} is too large, got {value}")
     return value
 
 
@@ -128,6 +129,95 @@ def _page_override(page: str | bool | None) -> str | None:
     if not isinstance(page, str):
         raise TypeError(f"page must be a URL, None or False, got {type(page).__name__}")
     return page
+
+
+def _top_level_override(top_level: str | bool | None) -> str | None:
+    """The top_level argument as the native side expects it: ``None`` inherits
+    the session's, ``False`` takes the page for the top level, a string names
+    the address bar's page. The URL itself is checked natively, where the
+    session's is, so both refuse it in the same words."""
+    if top_level is None:
+        return None
+    if top_level is False:
+        return ""
+    if top_level is True:
+        raise ValueError("top_level=True is meaningless: pass the address bar's URL, "
+                         "or False to take the page for the top level")
+    if not isinstance(top_level, str):
+        raise TypeError(f"top_level must be a URL, None or False, got {type(top_level).__name__}")
+    return top_level
+
+
+#: fetch()'s cache modes, the names a request's ``cache=`` takes. The native
+#: side checks them; here they only stop a mode passed where the session
+#: expects its cache's switch.
+_CACHE_MODES = ("default", "no-store", "no-cache", "force-cache", "only-if-cached")
+
+
+def _cache_mode(cache: str | None) -> str:
+    """A request's cache mode as it travels: "" is "default".
+
+    The names are checked natively, with ``mode`` and ``credentials``. A bool
+    is refused here: it is the session's switch passed to a request, and as a
+    JSON ``true`` it would come back as an unmarshal error naming a Go field.
+    """
+    if cache is None:
+        return ""
+    if not isinstance(cache, str):
+        raise TypeError(
+            f"a request's cache is a mode ({', '.join(_CACHE_MODES)}), got "
+            f"{type(cache).__name__}; the cache itself is switched on for the "
+            f"session: Session(cache=True)")
+    return cache
+
+
+def _cache_config(cache: bool | str | os.PathLike[str], size: int | None) -> dict[str, Any] | None:
+    """The session's cache as the native side takes it: None keeps it off.
+
+    ``True`` keeps it in memory, a path on disk. A size without a cache has
+    nowhere to go, and dropping it in silence would leave the caller believing
+    in a cache that is not there; it is refused instead.
+    """
+    if cache is False or cache is None:
+        if size is not None:
+            raise ValueError("cache_size needs the cache on: pass cache=True for one in "
+                             "memory, or a directory to keep it on disk")
+        return None
+    if cache is True:
+        directory = ""
+    elif isinstance(cache, (str, os.PathLike)):
+        directory = os.fspath(cache)
+        if not isinstance(directory, str):
+            raise TypeError(f"cache must be True or a directory path, got {cache!r}")
+        if not directory:
+            raise ValueError("cache='' names no directory: pass True for a cache in memory")
+        if isinstance(cache, str) and cache in _CACHE_MODES:
+            # A request's mode given to the session would make a directory of
+            # that name in the working directory and cache into it, quietly.
+            raise ValueError(
+                f"cache={cache!r} is a request's cache mode; the session's cache is True "
+                f"(in memory) or a directory — pass './{cache}' for a directory of that name")
+    else:
+        raise TypeError(f"cache must be True, False or a directory path, got {type(cache).__name__}")
+    max_bytes = 0
+    if size is not None:
+        max_bytes = _size(size, "cache_size")
+        if max_bytes == 0:
+            raise ValueError("cache_size must be a positive number of bytes, got 0; leave it "
+                             "out for the default (64 MiB in memory, 256 MiB on disk)")
+    return {"max_bytes": max_bytes, "dir": directory}
+
+
+def _reload_kw(reload: bool, kw: dict[str, Any]) -> dict[str, Any]:
+    """The document request's arguments for load_page: a reload is the
+    document sent with ``cache="no-cache"``. Shared by the sync and async
+    loaders, so that a reload means the same on both."""
+    if not reload:
+        return kw
+    if kw.get("cache") not in (None, "no-cache"):
+        raise ValueError(f"reload=True sends the document with cache='no-cache'; "
+                         f"cache={kw['cache']!r} contradicts it — pass one or the other")
+    return {**kw, "cache": "no-cache"}
 
 
 def _proxy_override(proxy: str | bool | None) -> str | None:
@@ -369,10 +459,12 @@ def _request_meta(
     proxy: str | bool | None = None,
     mode: str | None = None,
     page: str | bool | None = None,
+    top_level: str | bool | None = None,
     credentials: str | None = None,
     preflight: bool | None = None,
     resource: str | None = None,
     crossorigin: str | None = None,
+    cache: str | None = None,
 ) -> tuple[dict[str, Any], bytes]:
     # params and auth are the familiar requests arguments; here they turn
     # into a URL with a query string and an ordinary header, nothing special.
@@ -446,6 +538,9 @@ def _request_meta(
         # None takes the session's page, False means no initiator for this
         # request, a URL names the page it is made from.
         "page": _page_override(page),
+        # None takes the session's top level, False takes the page for it, a
+        # URL names the address bar's page when the page is a frame's.
+        "top_level": _top_level_override(top_level),
         # None takes the session's credentials mode; "same-origin", "include"
         # or "omit" set it for this fetch-mode request.
         "credentials": credentials or "",
@@ -456,6 +551,9 @@ def _request_meta(
         # takes that kind's set; crossorigin is the element's attribute.
         "resource": resource or "",
         "crossorigin": crossorigin or "",
+        # fetch()'s cache option; "" is "default". Without a session cache
+        # only "no-cache" changes anything: a reload's header.
+        "cache_mode": _cache_mode(cache),
     }
     return meta, data or b""
 
@@ -499,15 +597,37 @@ class Redirect:
         return f"<Redirect {self.status} {self.url} → {self.location}>"
 
 
+class CacheInfo(TypedDict):
+    """What :meth:`Session.cache_info` reports.
+
+    ``enabled`` is False for a session without a cache, and the rest zero.
+    ``dir`` is where the cache lives, ``""`` in memory; ``entries`` and
+    ``bytes`` are what it holds now and ``max_bytes`` its limit. The counters
+    are this session's: ``hits`` answered with no request, ``revalidated``
+    answered by a 304, ``misses`` fetched whole, ``stored`` kept.
+    """
+
+    enabled: bool
+    dir: str
+    entries: int
+    bytes: int
+    max_bytes: int
+    hits: int
+    revalidated: int
+    misses: int
+    stored: int
+
+
 class Response:
     """A server response."""
 
     __slots__ = ("status", "proto", "headers", "content", "url", "elapsed",
-                 "history", "preflights", "_encoding")
+                 "history", "preflights", "cache", "_encoding")
 
     def __init__(self, status: int, proto: str, headers: dict[str, list[str]],
                  content: bytes, url: str = "", elapsed: float = 0.0,
-                 history: list | None = None, preflights: list | None = None):
+                 history: list | None = None, preflights: list | None = None,
+                 cache: str | None = None):
         self.status = status
         self.proto = proto
         #: Every header of the response; lookups ignore case (see Headers).
@@ -521,12 +641,22 @@ class Response:
         #: The CORS preflights sent before the request and its hops, in
         #: order; empty when a browser would have sent none.
         self.preflights: list[Preflight] = preflights or []
+        #: How the session's cache served it: ``"hit"`` (no request went
+        #: out), ``"revalidated"`` (a conditional request, answered 304, and
+        #: the stored body), ``"miss"`` (fetched whole) — or None when the
+        #: cache took no part: none on the session, a POST, ``cache="no-store"``.
+        self.cache: str | None = cache or None
         self._encoding: str | None = None
 
     @property
     def preflight(self) -> "Preflight | None":
         """The CORS preflight that preceded this request, or None."""
         return self.preflights[0] if self.preflights else None
+
+    @property
+    def from_cache(self) -> bool:
+        """The body came out of the cache: a hit, or a 304 that confirmed it."""
+        return self.cache in ("hit", "revalidated")
 
     @property
     def cookies(self) -> dict[str, str]:
@@ -725,11 +855,38 @@ class Session:
         ``Referer``, ``Origin`` and ``sec-fetch-site`` the way a browser does
         for a request from that page; see :attr:`page`. Must be an absolute
         http(s) URL
+    :param top_level: the address bar's page when ``page`` is a frame's
+        document — a captcha's or a widget's iframe, whose requests are made
+        from the frame and under the page that embeds it. Both browsers key
+        three things by the top-level site rather than by the page: the
+        cache, the connections and the partitioned cookies, so a frame of b
+        under a and the same frame under c share none of them. Not given,
+        the page is its own top level; a top-level navigation is always
+        under its own URL. See :attr:`top_level`
     :param mode: which header set to use: ``"navigate"`` for a page load,
         ``"fetch"`` for a fetch/XHR request from a page, ``"auto"`` to decide
         from the request itself (a method other than GET/HEAD/POST, a
         non-form body or a custom header mean fetch). The profile needs a
         ``fetch`` section
+    :param cache: keep an HTTP cache, as a browser does. ``True`` keeps it in
+        memory; a directory keeps it on disk, and the next session opened on
+        that directory starts as a returning visitor, with the last run's
+        stylesheets and scripts already in hand. A fresh response comes back
+        with no request at all; a stale one, or one the server marked
+        ``no-cache``, goes out as a conditional request — ``If-None-Match``
+        and ``If-Modified-Since``, in the positions the browser puts them —
+        and a 304 hands back the stored body. Partitioned by the top-level
+        site, as both browsers partition it (measured on Chrome 154 and
+        Firefox 156): a resource cached under one site is fetched anew under
+        another. Off by default, because a cache that answers without the
+        network is a change of behaviour the caller should choose; a client
+        that downloads every resource on every page load, though, looks like
+        no browser. See :attr:`Response.cache`, a request's ``cache=`` and
+        :meth:`cache_info`
+    :param cache_size: the cache's limit in bytes; the entries used longest
+        ago go first. Not given: 64 MiB in memory, 256 MiB on disk. One entry
+        takes at most an eighth of it and never more than 32 MiB — a video
+        is not what the cache is for. Needs ``cache``
     """
 
     def __init__(
@@ -770,9 +927,12 @@ class Session:
         respect_retry_after: bool = True,
         mode: str = "auto",
         page: str | None = None,
+        top_level: str | None = None,
         credentials: str = "same-origin",
         samesite: bool = True,
         preflight: bool = True,
+        cache: bool | str | os.PathLike[str] = False,
+        cache_size: int | None = None,
     ):
         # The bundled profiles are loaded on first use: after pip install
         # the library has to work without any extra steps.
@@ -824,9 +984,12 @@ class Session:
                     ),
                     "mode": "" if mode == "auto" else mode,
                     "page": page or "",
+                    "top_level": top_level or "",
                     "credentials": credentials,
                     "samesite": samesite,
                     "preflight": preflight,
+                    # None keeps the cache off; True is memory, a path disk.
+                    "cache": _cache_config(cache, cache_size),
                 }
             ),
         )["session"]
@@ -844,6 +1007,8 @@ class Session:
         self.headers = SessionHeaders(self._id)
         #: The page the requests are made from; see :attr:`page`.
         self._page = page or ""
+        #: The address bar's page when that one is a frame's; see :attr:`top_level`.
+        self._top_level = top_level or ""
         #: Session cookies: reading, editing, saving and loading from a file.
         self.cookies = Cookies(self._id)
         #: Hooks: "request" runs before sending and receives the request
@@ -892,10 +1057,12 @@ class Session:
         proxy: str | bool | None = None,
         mode: str | None = None,
         page: str | bool | None = None,
+        top_level: str | bool | None = None,
         credentials: str | None = None,
         preflight: bool | None = None,
         resource: str | None = None,
         crossorigin: str | None = None,
+        cache: str | None = None,
         expect: "Expect | None" = None,
         rollback_cookies: bool = False,
     ) -> Response:
@@ -914,6 +1081,20 @@ class Session:
             :class:`Session` for the rules
         :param page: the page this request is made from, overriding the
             session's; ``False`` sends it with no initiator at all
+        :param top_level: the address bar's page for this request, when
+            ``page`` is a frame's document, overriding the session's;
+            ``False`` takes the page for the top level. See :attr:`top_level`
+        :param cache: how this request uses the session's cache, in the words
+            of fetch()'s ``cache`` option: ``"default"`` — a fresh entry
+            answers, a stale one is revalidated; ``"no-cache"`` — whatever is
+            stored is revalidated first, which is a reload, with the
+            ``cache-control: max-age=0`` a reload carries where the browser
+            sends one (Chrome does, Firefox does not); ``"no-store"`` — the
+            cache is neither read nor written; ``"force-cache"`` — anything
+            stored answers, stale or not, and only what is not goes to the
+            network; ``"only-if-cached"`` — the same, but nothing stored is a
+            504, with no request at all. Without a session cache only
+            ``"no-cache"`` changes anything
         :param cookies: use the session jar for this request. ``False`` isolates
             the request in both directions: stored cookies are not sent and
             ``Set-Cookie`` from the response is not remembered
@@ -956,8 +1137,9 @@ class Session:
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
-            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page, credentials=credentials,
-            preflight=preflight, resource=resource, crossorigin=crossorigin,
+            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page,
+            top_level=top_level, credentials=credentials,
+            preflight=preflight, resource=resource, crossorigin=crossorigin, cache=cache,
         )
         if rollback_cookies:
             # The native side logs what this request changes in the jar and
@@ -985,6 +1167,7 @@ class Session:
                 history=[Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
                          for h in payload.get("history") or []],
                 preflights=_preflights(payload.get("preflights")),
+                cache=payload.get("cache"),
             ), expect)
         except BaseException as exc:
             raise self._failed(exc, changes if rollback_cookies else None) from None
@@ -1091,10 +1274,12 @@ class Session:
         proxy: str | bool | None = None,
         mode: str | None = None,
         page: str | bool | None = None,
+        top_level: str | bool | None = None,
         credentials: str | None = None,
         preflight: bool | None = None,
         resource: str | None = None,
         crossorigin: str | None = None,
+        cache: str | None = None,
     ) -> "StreamResponse":
         """Opens a response for reading in chunks.
 
@@ -1117,8 +1302,9 @@ class Session:
             max_redirects=max_redirects, retries=retries,
             retry_statuses=retry_statuses, retry_methods=retry_methods,
             retry_backoff=retry_backoff, retry_max_backoff=retry_max_backoff,
-            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page, credentials=credentials,
-            preflight=preflight, resource=resource, crossorigin=crossorigin,
+            respect_retry_after=respect_retry_after, proxy=proxy, mode=mode, page=page,
+            top_level=top_level, credentials=credentials,
+            preflight=preflight, resource=resource, crossorigin=crossorigin, cache=cache,
         )
         # The request hooks see a stream's frame too, as they do on the async
         # side: a hook that adds a signature header must not miss downloads.
@@ -1197,6 +1383,7 @@ class Session:
         url: str,
         *,
         page: str | bool | None = False,
+        reload: bool = False,
         css: bool = False,
         favicon: bool = True,
         frames: bool = True,
@@ -1226,6 +1413,14 @@ class Session:
         and what only a rendered page asks for (lazy images, background
         images) are not guessed. See :mod:`curlpro.page`.
 
+        :param reload: load it the way the reload button does. The document
+            goes out with ``cache="no-cache"`` — revalidated even when fresh,
+            with ``cache-control: max-age=0`` where the browser sends one —
+            and the resources then go by their own freshness, so the fresh
+            ones come out of the cache: a reload revalidates the document
+            alone, in both browsers (measured on Chrome 154 and Firefox 156).
+            Without a session ``cache`` there is nothing to revalidate, and
+            the document is fetched again with the reload's header
         :param frames: load the documents of the page's ``<iframe>``s
         :param favicon: ask for the icon (``/favicon.ico`` without a
             ``<link rel=icon>``), as both browsers do
@@ -1235,7 +1430,8 @@ class Session:
         """
         from concurrent.futures import ThreadPoolExecutor
 
-        doc = self.request("GET", url, page=page, mode="navigate", timeout=timeout, **kw)
+        doc = self.request("GET", url, page=page, mode="navigate", timeout=timeout,
+                           **_reload_kw(reload, kw))
         result = Page(doc)
         if not is_html(doc):
             return result
@@ -1338,6 +1534,72 @@ class Session:
         _call("curlpro_session_set_page", self._id, value.encode("utf-8"))
         self._page = value
 
+    @property
+    def top_level(self) -> str | None:
+        """The address bar's page while :attr:`page` is a frame's document.
+
+        A captcha or a widget lives in an iframe: its requests are made from
+        the frame — that is the page, and ``Referer``, ``Origin`` and
+        ``sec-fetch-site`` come from it — but under the page that embeds it.
+        Both browsers key three things by the top-level site rather than by
+        the page: the HTTP cache, the connection pool and the partitioned
+        cookies (Chromium's ``Partitioned`` ones, and in Firefox every cookie
+        a third party sets — Total Cookie Protection). Measured on Chrome 154
+        and Firefox 156 (the hcapture -cache and -chips stands): b under a, b
+        at the top level and b under c went on three connections in both, a
+        resource cached under one site was fetched anew under another, and a
+        partitioned cookie the frame set under a went back under a alone.
+        Only the caller knows that a page is a frame's, so it is said here::
+
+            s.page = "https://captcha.example/frame"        # the frame
+            s.top_level = "https://shop.example/checkout"   # the page it is in
+            s.post("https://captcha.example/api/check", json_body=...)
+
+        ``None`` takes the page for the top level again. A top-level
+        navigation is always under its own URL, whatever is set here; a
+        request's own ``top_level=`` wins for that request.
+        """
+        return self._top_level or None
+
+    @top_level.setter
+    def top_level(self, url: str | None) -> None:
+        if self._closed:
+            raise RuntimeError("session is closed")
+        value = url or ""
+        if not isinstance(value, str):
+            raise TypeError(f"top_level must be a URL or None, got {type(url).__name__}")
+        _call("curlpro_session_set_top_level", self._id, value.encode("utf-8"))
+        self._top_level = value
+
+    def cache_info(self) -> CacheInfo:
+        """What the session's cache holds and how it has served.
+
+            s = curlpro.Session(cache=True)
+            s.get(url); s.get(url)
+            s.cache_info()["hits"]      # 1, when the response was fresh
+
+        ``enabled`` is False for a session made without ``cache``; see
+        :class:`CacheInfo` for the rest.
+        """
+        if self._closed:
+            raise RuntimeError("session is closed")
+        info = _call("curlpro_session_cache_info", self._id)
+        # The native side leaves dir out for a cache in memory; a key that
+        # is sometimes missing is a KeyError waiting for the caller.
+        info.setdefault("dir", "")
+        return info
+
+    def clear_cache(self) -> None:
+        """Empties the session's cache, its files on disk too.
+
+        What a browser's "clear cached images and files" does: the next
+        request of every resource goes out whole. The counters in
+        :meth:`cache_info` are kept — they describe what the session did.
+        """
+        if self._closed:
+            raise RuntimeError("session is closed")
+        _call("curlpro_session_clear_cache", self._id)
+
     def headers_for(
         self,
         method: str = "GET",
@@ -1347,12 +1609,14 @@ class Session:
         header_order: Iterable[Any] | None = None,
         mode: str | None = None,
         page: str | bool | None = None,
+        top_level: str | bool | None = None,
         credentials: str | None = None,
         protocol: str | float | None = None,
         default_headers: bool | None = None,
         session_headers: bool | None = None,
         resource: str | None = None,
         crossorigin: str | None = None,
+        cache: str | None = None,
     ) -> dict[str, str]:
         """The headers this request would carry, without sending it.
 
@@ -1372,6 +1636,11 @@ class Session:
         Refuses what the request would refuse: ``mode="fetch"`` on a profile
         without a fetch set raises :class:`~curlpro.ProfileCapabilityError`
         here too, which makes this the cheap way to ask before committing.
+
+        ``cache="no-cache"`` shows a reload's ``cache-control: max-age=0``
+        where the profile sends one. The validators a stored response would
+        add are not shown: they depend on what the cache holds when the
+        request goes, not on the request.
         """
         if self._closed:
             raise RuntimeError("session is closed")
@@ -1384,12 +1653,14 @@ class Session:
             "header_order": _order(header_order),
             "mode": mode or "",
             "page": _page_override(page),
+            "top_level": _top_level_override(top_level),
             "credentials": credentials or "",
             "protocol": _protocol(protocol),
             "default_headers": default_headers,
             "session_headers": session_headers,
             "resource": resource or "",
             "crossorigin": crossorigin or "",
+            "cache_mode": _cache_mode(cache),
         }))
         return {h["name"]: h["value"] for h in data["headers"]}
 
@@ -1401,6 +1672,7 @@ class Session:
         headers: Mapping[str, str | None] | None = None,
         mode: str | None = None,
         page: str | bool | None = None,
+        top_level: str | bool | None = None,
         credentials: str | None = None,
         protocol: str | float | None = None,
         session_headers: bool | None = None,
@@ -1429,6 +1701,10 @@ class Session:
             "suppress_headers": suppress,
             "mode": mode or "",
             "page": _page_override(page),
+            # Taken for the request's sake: a preflight carries no cookie and
+            # nothing of the top level, but a bad one is refused as the
+            # request would refuse it.
+            "top_level": _top_level_override(top_level),
             "credentials": credentials or "",
             "protocol": _protocol(protocol),
             "session_headers": session_headers,

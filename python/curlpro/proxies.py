@@ -17,8 +17,17 @@ from __future__ import annotations
 import os
 from urllib.parse import urlsplit
 
-_HTTPS_VARS = ("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")
-_HTTP_VARS = ("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy")
+def _names(*names: str) -> tuple[str, ...]:
+    # Windows keeps the environment without regard to case: https_proxy is
+    # HTTPS_PROXY there, and asking twice is a second lookup for nothing.
+    if os.name == "nt":
+        return tuple(dict.fromkeys(n.upper() for n in names))
+    return names
+
+
+_HTTPS_VARS = _names("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")
+_HTTP_VARS = _names("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy")
+_NO_PROXY_VARS = _names("NO_PROXY", "no_proxy")
 
 
 def proxy_for(url: str) -> str | None:
@@ -29,28 +38,36 @@ def proxy_for(url: str) -> str | None:
     request then went out direct while HTTP_PROXY sat in the environment
     saying otherwise — silently, which is the worst way for a proxy setting
     to be wrong.
+
+    The variables are read first: with none set — the usual case — the URL
+    is not parsed and NO_PROXY not consulted, which was most of the time
+    this took on every request.
     """
-    parts = urlsplit(url)
-    host = parts.hostname or ""
-    if not host or no_proxy(host):
-        return None
-    names = _HTTP_VARS if parts.scheme == "http" else _HTTPS_VARS
+    scheme = url.partition(":")[0].lower()
+    names = _HTTP_VARS if scheme == "http" else _HTTPS_VARS
     # httpoxy (CVE-2016-5385): under CGI a client's "Proxy:" header arrives as
     # HTTP_PROXY, so it is not trusted there. REQUEST_METHOD marks a CGI
     # environment. The same guard is in the native side.
     cgi = bool(os.environ.get("REQUEST_METHOD"))
+    proxy = None
     for name in names:
         if cgi and name.upper() == "HTTP_PROXY":
             continue
         value = os.environ.get(name, "").strip()
         if value:
-            return value
-    return None
+            proxy = value
+            break
+    if proxy is None:
+        return None
+    host = urlsplit(url).hostname or ""
+    if not host or no_proxy(host):
+        return None
+    return proxy
 
 
 def no_proxy(host: str) -> bool:
     """Whether NO_PROXY excludes this host from proxying."""
-    rules = os.environ.get("NO_PROXY") or os.environ.get("no_proxy") or ""
+    rules = next((v for v in (os.environ.get(n) for n in _NO_PROXY_VARS) if v), "")
     if not rules:
         return False
     host = host.lower().rstrip(".")

@@ -20,13 +20,42 @@
     "permute_extensions": true,
     "allow_blunt_mimicry": true
   },
-  "http1": {},
+  "http1": {
+    "order": [
+      "Host",
+      "Connection",
+      "Cache-Control",
+      "Content-Length",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "Upgrade-Insecure-Requests",
+      "Content-Type",
+      "User-Agent",
+      "Origin",
+      "Accept",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-User",
+      "Sec-Fetch-Dest",
+      "Referer",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie",
+      "If-None-Match",
+      "If-Modified-Since"
+    ]
+  },
   "http2": {},
   "http3": {},
   "quic": {},
   "headers": {
     "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
     "order": [
+      {
+        "key": "cache-control",
+        "value": ""
+      },
       {
         "key": "content-length",
         "value": ""
@@ -96,6 +125,14 @@
         "value": ""
       },
       {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": "u=0, i"
       }
@@ -114,6 +151,10 @@
       "sec-ch-ua-full-version-list": "\"Google Chrome\";v=\"153.0.8010.52\", \"Not_A Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"153.0.8010.52\""
     },
     "order": [
+      {
+        "key": "cache-control",
+        "value": ""
+      },
       {
         "key": "sec-ch-ua",
         "value": ""
@@ -200,6 +241,14 @@
       },
       {
         "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
         "value": ""
       },
       {
@@ -301,6 +350,14 @@
         "value": ""
       },
       {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": ""
       }
@@ -373,6 +430,14 @@
         "value": ""
       },
       {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
         "key": "priority",
         "value": "u=1, i"
       }
@@ -395,7 +460,9 @@
       "Referer",
       "Accept-Encoding",
       "Accept-Language",
-      "Cookie"
+      "Cookie",
+      "If-None-Match",
+      "If-Modified-Since"
     ]
   },
   "devices": [
@@ -1058,6 +1125,8 @@
         "sec-ch-ua",
         "sec-ch-ua-mobile",
         "accept",
+        "if-none-match",
+        "if-modified-since",
         "sec-fetch-site",
         "sec-fetch-mode",
         "sec-fetch-dest",
@@ -1069,6 +1138,7 @@
         "priority"
       ],
       "navigate": [
+        "cache-control",
         "sec-ch-ua",
         "sec-ch-ua-mobile",
         "sec-ch-ua-platform",
@@ -1083,6 +1153,8 @@
         "accept-encoding",
         "accept-language",
         "cookie",
+        "if-none-match",
+        "if-modified-since",
         "priority"
       ],
       "no-cors": [
@@ -1094,6 +1166,8 @@
         "sec-purpose",
         "sec-ch-ua-mobile",
         "accept",
+        "if-none-match",
+        "if-modified-since",
         "origin",
         "sec-fetch-site",
         "sec-fetch-mode",
@@ -1116,6 +1190,8 @@
         "sec-ch-ua",
         "sec-ch-ua-mobile",
         "Accept",
+        "If-None-Match",
+        "If-Modified-Since",
         "Sec-Fetch-Site",
         "Sec-Fetch-Mode",
         "Sec-Fetch-Dest",
@@ -1128,6 +1204,7 @@
       "navigate": [
         "Host",
         "Connection",
+        "Cache-Control",
         "sec-ch-ua",
         "sec-ch-ua-mobile",
         "sec-ch-ua-platform",
@@ -1141,7 +1218,9 @@
         "Referer",
         "Accept-Encoding",
         "Accept-Language",
-        "Cookie"
+        "Cookie",
+        "If-None-Match",
+        "If-Modified-Since"
       ],
       "no-cors": [
         "Host",
@@ -1154,6 +1233,8 @@
         "Sec-Purpose",
         "sec-ch-ua-mobile",
         "Accept",
+        "If-None-Match",
+        "If-Modified-Since",
         "Origin",
         "Sec-Fetch-Site",
         "Sec-Fetch-Mode",

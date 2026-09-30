@@ -454,6 +454,14 @@ to any non-browser client:
   `network.dns.localDomains`, which also switches its HTTP/2 coalescing off.
   `scripts/gen-resources.py PROFILE H2.json H1.json` turns the two captures
   into the profile's `resources` section ([STAGE21](STAGE21-RESULTS.md)).
+  `-cache` serves pages whose resources answer with every caching rule — a
+  lifetime, `no-cache` with an ETag, `no-store`, a `Last-Modified` alone, a
+  stale one, `immutable` — answers a matching validator with 304, reloads a
+  page and ends under another top-level site; `scripts/gen-resources.py`
+  reads `capture/cache/` for where the validators and a reload's
+  `cache-control` go. `-chips` frames `b.localhost` under three top-level
+  sites after it set a plain and a `Partitioned` cookie, for which cookies and
+  connections each browser keeps per site ([STAGE22](STAGE22-RESULTS.md)).
 
 The provider decides the ClientHello. On Android that is Conscrypt; on the JVM,
 SunJSSE unless Conscrypt is installed as a provider. Both were captured, and the

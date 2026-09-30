@@ -40,11 +40,18 @@ type ConnPolicy struct {
 	// connections, as did fetch with credentials "omit" and "include".
 	// Firefox put both on one.
 	SplitCredentials bool
-	// PartitionBySite keys connections by the top-level site of the page a
-	// request is made from, and by whether the request is a cross-site
-	// frame (Chrome's NetworkAnonymizationKey): an <iframe> to a host
-	// already connected went on a new connection.
+	// PartitionBySite keys connections by the top-level site a request is
+	// made under — the address bar's, for a top-level navigation the
+	// destination's own. Chrome's NetworkAnonymizationKey and Firefox's
+	// partition key both do: b under a, b at the top level and b under c
+	// went on three connections in both (cmd/hcapture -chips).
 	PartitionBySite bool
+	// FramePartition adds whether the request comes from — or, for a
+	// frame's document, is — a frame cross-site to the top level (the
+	// NetworkAnonymizationKey's bit): Chrome put a's image of b on one
+	// connection, the frame of b under a and its fetch on another. Firefox
+	// put all three on one.
+	FramePartition bool
 }
 
 // ConnPolicyFor returns the family's connection policy.
@@ -52,9 +59,10 @@ func ConnPolicyFor(family string) ConnPolicy {
 	switch family {
 	case "chrome", "chromium", "edge", "yandex", "opera", "brave", "samsung":
 		return ConnPolicy{Attempts: 4, SpareBeforePreface: true, IPPooling: true,
-			SplitCredentials: true, PartitionBySite: true}
+			SplitCredentials: true, PartitionBySite: true, FramePartition: true}
 	case "firefox", "tor":
-		return ConnPolicy{Attempts: 6}
+		// Keyed by site since 0.14; 0.13 kept Firefox's pool whole.
+		return ConnPolicy{Attempts: 6, PartitionBySite: true}
 	}
 	return ConnPolicy{}
 }

@@ -161,7 +161,12 @@ func curlpro_free(s *C.char) {
 // 0.24.0: resource requests — the profile's resources section (a file
 // carrying it does not load into an older library), resource and
 // crossorigin per request and in the preview, resources in the capabilities.
-const Version = "0.24.0"
+// 0.25.0: the HTTP cache (cache on the session, cache_mode per request and
+// in the preview, cache on the response, curlpro_session_cache_info and
+// curlpro_session_clear_cache), top_level on the session, per request and in
+// the preview (curlpro_session_set_top_level), partition on a cookie, and
+// partitioning in the capabilities' cookie policy.
+const Version = "0.25.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -265,6 +270,11 @@ type sessionConfig struct {
 	Mode string `json:"mode"`
 	// Page is the initiator URL — see client.Options.Page. Empty means none.
 	Page string `json:"page"`
+	// TopLevel is the address bar's page when Page is a frame's document —
+	// see client.Options.TopLevel. Empty takes the page.
+	TopLevel string `json:"top_level"`
+	// Cache switches the HTTP cache on; null keeps it off.
+	Cache *cacheJSON `json:"cache"`
 	// Credentials is the fetch credentials mode — see client.Options.Credentials.
 	Credentials string `json:"credentials"`
 	// SameSite is a pointer because a missing field means "apply the rules":
@@ -276,6 +286,20 @@ type sessionConfig struct {
 	Device string `json:"device"`
 	// Devices overrides the profile's device list.
 	Devices []profile.Device `json:"devices"`
+}
+
+// cacheJSON configures the session's cache: its size (0 is the default for
+// where it lives) and a directory to keep it in ("" keeps it in memory).
+type cacheJSON struct {
+	MaxBytes int64  `json:"max_bytes"`
+	Dir      string `json:"dir"`
+}
+
+func (c *cacheJSON) toOptions() *client.CacheOptions {
+	if c == nil {
+		return nil
+	}
+	return &client.CacheOptions{MaxBytes: c.MaxBytes, Dir: c.Dir}
 }
 
 // retryJSON describes the retry policy.
@@ -353,6 +377,8 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		Retry:              c.Retry.toPolicy(),
 		Mode:               c.Mode,
 		Page:               c.Page,
+		TopLevel:           c.TopLevel,
+		Cache:              c.Cache.toOptions(),
 		Credentials:        c.Credentials,
 		DisableSameSite:    c.SameSite != nil && !*c.SameSite,
 		DisablePreflight:   c.Preflight != nil && !*c.Preflight,
@@ -386,6 +412,32 @@ func curlpro_session_cookies(id C.longlong) (out *C.char) {
 	return respond(map[string]any{"cookies": s.Cookies()}, nil)
 }
 
+// curlpro_session_cache_info reports the session's cache: what it holds and
+// how it has served. enabled is false for a session without one.
+//
+//export curlpro_session_cache_info
+func curlpro_session_cache_info(id C.longlong) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	return respond(s.CacheStats(), nil)
+}
+
+// curlpro_session_clear_cache empties the session's cache, on disk too.
+//
+//export curlpro_session_clear_cache
+func curlpro_session_clear_cache(id C.longlong) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	s.ClearCache()
+	return respond(map[string]any{"cleared": true}, nil)
+}
+
 // curlpro_session_fingerprint reports what a server would see, without sending
 // anything.
 //
@@ -416,7 +468,9 @@ type previewJSON struct {
 	// empty string means no initiator.
 	Mode        string  `json:"mode"`
 	Page        *string `json:"page"`
+	TopLevel    *string `json:"top_level"`
 	Credentials string  `json:"credentials"`
+	CacheMode   string  `json:"cache_mode"`
 	// Resource and CrossOrigin name a resource request's kind and its
 	// crossorigin attribute, as in a real request.
 	Resource    string `json:"resource"`
@@ -457,7 +511,9 @@ func curlpro_session_preview(id C.longlong, spec *C.char) (out *C.char) {
 		Headers:         p.Headers,
 		Mode:            p.Mode,
 		Page:            p.Page,
+		TopLevel:        p.TopLevel,
 		Credentials:     p.Credentials,
+		CacheMode:       p.CacheMode,
 		Resource:        p.Resource,
 		CrossOrigin:     p.CrossOrigin,
 		Protocol:        p.Protocol,
@@ -614,6 +670,11 @@ type requestJSON struct {
 	Mode string `json:"mode"`
 	// Page: null takes the session's, "" means no initiator, a URL names one.
 	Page *string `json:"page"`
+	// TopLevel: null takes the session's, "" takes the page, a URL names
+	// the address bar's page for a request made from a frame.
+	TopLevel *string `json:"top_level"`
+	// CacheMode is fetch()'s cache option for this request; "" is "default".
+	CacheMode string `json:"cache_mode"`
 	// Credentials overrides the session's fetch credentials mode; "" takes it.
 	Credentials string `json:"credentials"`
 	// Resource names the kind of resource the request loads ("image",
@@ -650,6 +711,8 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 	req.Proxy = r.Proxy
 	req.Mode = r.Mode
 	req.Page = r.Page
+	req.TopLevel = r.TopLevel
+	req.CacheMode = r.CacheMode
 	req.Credentials = r.Credentials
 	req.Resource = r.Resource
 	req.CrossOrigin = r.CrossOrigin
@@ -737,6 +800,9 @@ type responseJSON struct {
 	Preflights []client.Preflight `json:"preflights,omitempty"`
 	// CookieChanges is the log a rollback undoes (track_cookies).
 	CookieChanges []client.CookieChange `json:"cookie_changes,omitempty"`
+	// Cache is how the session's cache served the response: "hit",
+	// "revalidated", "miss", or absent when it took no part.
+	Cache string `json:"cache,omitempty"`
 }
 
 // pause turns a millisecond setting into a duration: nil keeps the policy's
@@ -876,6 +942,7 @@ func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int
 			URL:           resp.URL,
 			BodyLen:       len(resp.Body),
 			CookieChanges: resp.CookieChanges,
+			Cache:         resp.Cache,
 			History:       resp.History,
 			Preflights:    resp.Preflights,
 		}, resp.Body, nil)

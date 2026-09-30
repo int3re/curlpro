@@ -31,16 +31,39 @@ type headerTemplate struct {
 	// frame that it is a frame's document, and corsAlways that a CORS
 	// resource carries Origin even to its own origin (Chrome).
 	resource, cors, frame, corsAlways bool
+	// revalidatePriority is the priority of the kind's conditional request,
+	// when the browser sends another than the first time.
+	revalidatePriority string
 	// order is the names of pairs, kept by the templates resolved once so
 	// that each request does not list them again.
 	order []string
+	// h1Lower is h1 lowercased, as the transport's order key wants it: the
+	// HTTP/1.1 names are capitalised, and lowercasing them per request was
+	// most of the allocations of an HTTP/1.1 request's headers.
+	h1Lower []string
 }
 
 // withOrder returns the template with its list of names filled in.
 func (t headerTemplate) withOrder() headerTemplate {
 	t.order = nil
 	t.order = t.names()
+	t.h1Lower = nil
+	if t.h1 != nil {
+		t.h1Lower = make([]string, len(t.h1))
+		for i, n := range t.h1 {
+			t.h1Lower[i] = strings.ToLower(n)
+		}
+	}
 	return t
+}
+
+// lowerOf is the lowercase copy of want when want is the template's own
+// HTTP/1.1 order, nil otherwise.
+func (t headerTemplate) lowerOf(want []string) []string {
+	if len(want) > 0 && len(want) == len(t.h1) && &want[0] == &t.h1[0] {
+		return t.h1Lower
+	}
+	return nil
 }
 
 // templates are the header sets a session's requests are built from. The

@@ -134,6 +134,9 @@ for _name, _args in (
     ("curlpro_session_remove_header", [ctypes.c_longlong, ctypes.c_char_p]),
     ("curlpro_session_suppress_header", [ctypes.c_longlong, ctypes.c_char_p]),
     ("curlpro_session_set_page", [ctypes.c_longlong, ctypes.c_char_p]),
+    ("curlpro_session_set_top_level", [ctypes.c_longlong, ctypes.c_char_p]),
+    ("curlpro_session_cache_info", [ctypes.c_longlong]),
+    ("curlpro_session_clear_cache", [ctypes.c_longlong]),
     ("curlpro_session_reset_headers", [ctypes.c_longlong]),
     ("curlpro_session_headers", [ctypes.c_longlong]),
     ("curlpro_session_cookies", [ctypes.c_longlong]),
@@ -215,7 +218,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Minimum version of the native part: major and minor. Raise it together
 # with lib/curlpro.go whenever Python starts depending on a new export or field.
-REQUIRED_VERSION = (0, 24)
+REQUIRED_VERSION = (0, 25)
 
 
 def _check_version() -> None:
@@ -258,8 +261,19 @@ _HEADER = 4
 _MAX_FRAME = 2**31 - 1
 
 
+#: The request frame's encoder: compact, and fed only the fields that are set.
+#: The native side reads a missing field and a null alike, and half a GET's
+#: fields are None: dropping them and the spaces cut the frame from 492 bytes
+#: to 176, and the time to write it here and to read it on the other side.
+#: Not encode(), which a caller's json_body goes through: that one is the
+#: body on the wire, and its spelling is the caller's to rely on.
+_FRAME_JSON = json.JSONEncoder(ensure_ascii=False, separators=(",", ":"))
+
+
 def _frame(meta: Any, body: bytes = b"") -> bytes:
-    js = encode(meta)
+    if type(meta) is dict:
+        meta = {k: v for k, v in meta.items() if v is not None}
+    js = _FRAME_JSON.encode(meta).encode("utf-8")
     if _HEADER + len(js) + len(body) > _MAX_FRAME:
         # ctypes would truncate the length silently and the native side would
         # read a different body than the one given.

@@ -117,6 +117,8 @@ touch it.
 | `respect_retry_after` | `True` | a `Retry-After` header sets the wait |
 | `mode` | `"auto"` | the header set: `navigate`, `fetch`, or decided per request (section 7) |
 | `page` | `None` | the page the requests are made from — the initiator. Derives `Referer`, `Origin` and `sec-fetch-site` the way a browser does (section 7); `s.page = url` moves it as the scraper moves. Must be an absolute http(s) URL |
+| `top_level` | `None` | the page in the address bar when `page` is a frame's document — a captcha's or a widget's frame. The cache, the connections and the partitioned cookies are keyed by its site, as both browsers key them (sections 7 and 10); `s.top_level = url` moves it. Not given, the page is its own top level; a top-level navigation is always under its own URL |
+| `cache`, `cache_size` | `False`, `None` | an HTTP cache, as a browser keeps one: `True` in memory, a directory on disk — the next session on it starts as a returning visitor. Fresh responses come back with no request, stale ones are revalidated, partitioned by the top-level site (section 7). `cache_size` in bytes: 64 MiB in memory, 256 MiB on disk when not given; one entry takes at most an eighth, never over 32 MiB |
 | `credentials` | `"same-origin"` | the credentials mode of fetch-mode requests, in `fetch()`'s words: `same-origin` sends cookies only to the page's own origin — the default of `fetch()` and of XHR — `include` sends them wherever the SameSite rules allow, `omit` sends none. Measured on Chrome 153 and Firefox 156: a plain `fetch()` to another origin of the *same site* carries no cookie at all (section 10) |
 | `samesite` | `True` | apply the cookies' `SameSite` attribute and the family's third-party rule to requests made from a `page`; `False` sends every cookie the jar matches, as before 0.10 (section 10) |
 | `preflight` | `True` | send the CORS preflight a browser sends before a non-simple cross-origin fetch, check its answer and keep it for its `Access-Control-Max-Age`; a refusal raises `CORSError` and the request is not sent. `False` sends straight out, as before 0.10 (section 7) |
@@ -126,8 +128,10 @@ touch it.
 
 Session attributes worth knowing: `s.headers` (a mapping of the headers you
 added, plus `s.headers.suppressed`), `s.cookies` (section 10), `s.hooks`,
-`s.impersonate`, `s.fingerprint(url="https://example.com/")`, `s.audit(mode=None)`,
-`s.headers_for(...)`, `s.preflight_for(...)`, `s.close()`. A session is a context manager; `__del__` closes it as well.
+`s.impersonate`, `s.page`, `s.top_level`, `s.fingerprint(url="https://example.com/")`,
+`s.audit(mode=None)`, `s.headers_for(...)`, `s.preflight_for(...)`, `s.cache_info()`
+(a `CacheInfo`: `enabled`, `dir`, `entries`, `bytes`, `max_bytes` and the
+`hits`, `revalidated`, `misses`, `stored` counters), `s.clear_cache()`, `s.close()`. A session is a context manager; `__del__` closes it as well.
 
 ## 5. Requests: every parameter and the response
 
@@ -159,6 +163,8 @@ the same way.
 | `allow_redirects`, `max_redirects`, `retries`, `retry_*`, `respect_retry_after` | overrides of the session policy; `retries=0` switches the session's retries off for this request |
 | `mode` | `"navigate"` or `"fetch"`; `fetch` on a profile without a fetch set is refused with the reason |
 | `page` | the page this request is made from, overriding the session's; `False` sends it with no initiator at all |
+| `top_level` | the address bar's page for this request, overriding the session's; `False` takes the page for it |
+| `cache` | how this request uses the session's cache, in `fetch()`'s words: `"default"`, `"no-cache"` (revalidate whatever is stored — a reload, with Chrome's `cache-control: max-age=0`), `"no-store"`, `"force-cache"`, `"only-if-cached"` (a 504 with no request when nothing is stored). Without a session cache only `"no-cache"` changes anything |
 | `credentials` | `"same-origin"`, `"include"` or `"omit"` for this fetch-mode request (section 10) |
 | `preflight` | `False` sends this cross-origin fetch without the OPTIONS a browser sends first; `True` sends it when the Fetch standard requires one (section 7) |
 | `resource` | load the URL as a page loads one of its resources: `"image"`, `"script"`, `"style"`, `"font"`, `"iframe"` and the rest of `capabilities(name)["resources"]` — that kind's own set (section 7) |
@@ -180,6 +186,7 @@ The response:
 | `history` | the redirect chain as `Redirect(status, url, location)` records |
 | `preflight`, `preflights` | the CORS preflight that preceded the request, a `Preflight(url, status, headers, cached)` record or `None`; all of them along a redirect chain. `cached` means no OPTIONS went out: an earlier answer still covered it. A `StreamResponse` and an `AsyncSession` response carry both (and `history`) as well — the second did not until 0.10.1 |
 | `cookies` | the cookies **this** response set, as a mapping |
+| `cache`, `from_cache` | how the session's cache served it: `"hit"` — no request went out; `"revalidated"` — a conditional request was answered 304 and the stored body came back; `"miss"`; `None` when the cache took no part. `from_cache` is true for the first two. Streams carry both |
 | `elapsed` | seconds, measured in Python around the native call |
 | `raise_for_status()` | raises `HTTPError` (with `.status` and `.response`) on 4xx/5xx; returns the response otherwise |
 
@@ -364,7 +371,7 @@ profiles carries it too. Profiles without the section refuse `resource=` with
 the reason (`ProfileCapabilityError`), as `mode="fetch"` is refused without a
 fetch set.
 
-`load_page(url, page=False, css=False, favicon=True, frames=True,
+`load_page(url, page=False, reload=False, css=False, favicon=True, frames=True,
 max_resources=100, timeout=None, **kw)` sends the document as a navigation,
 then every stylesheet, preload, script, image and frame its markup names — at
 once, in the markup's order, each as its kind, from the document — and the
@@ -373,6 +380,60 @@ declare, with the stylesheet as the referrer, as both browsers send them. A
 resource that fails does not fail the page. It runs no script and lays nothing
 out, so what a script would load, lazy images and background images are not
 guessed; `curlpro.page.discover(html, base)` shows what it would ask for.
+`reload=True` sends the document as a reload (`cache="no-cache"`, below).
+
+**The cache.** A browser does not fetch a page's stylesheets and scripts anew
+on every visit, and a client that does looks like none. `Session(cache=True)`
+keeps one in memory, `Session(cache="dir")` on disk, where the next session
+starts as a returning visitor:
+
+```python
+s = curlpro.Session("chrome-154-windows", cache="./cache")
+page = s.load_page("https://example.com/")               # everything from the network
+page = s.load_page("https://example.com/")               # fresh resources: no request at all
+[(r.kind, r.response.cache) for r in page.resources]     # ('style', 'hit'), ('script', 'revalidated'), ...
+s.load_page("https://example.com/", reload=True)         # the document revalidated, as F5 does
+s.get(api_url, cache="no-store")                         # fetch()'s cache modes, per request
+s.cache_info()                                           # entries, bytes, hits, revalidated, misses
+```
+
+Freshness is RFC 9111's: `max-age`, then `Expires` against `Date`, then a tenth
+of the time since `Last-Modified` — the heuristic both browsers use; `no-cache`
+revalidates every time, `no-store` is neither kept nor read, `Vary` is honoured
+and `Vary: *` not kept; a 200 or 203 to a GET with a lifetime or a validator is
+stored. A stale entry goes out as a conditional request whose `If-None-Match`
+and `If-Modified-Since` take the places the browser gives them — after
+`accept` on a Chrome resource, after `cookie` on its document and its fetch,
+after `sec-fetch-site` everywhere in Firefox — and a 304 hands back the stored
+body under the merged headers. A reload revalidates the document with
+`cache-control: max-age=0` first in Chrome and without it in Firefox; its
+resources go by their own freshness, and the fresh ones stay in the cache.
+Firefox revalidates an image with `priority: u=5` where it first asked with
+`u=5, i`. The cache is keyed by the top-level site: a stylesheet cached under
+one site is fetched anew under another, as both browsers fetched it. Measured
+on `cmd/hcapture -cache` with Chrome 154 and Firefox 156
+(`docs/STAGE22-RESULTS.md`); the library replays every conditional request of
+both captures but Firefox's reload over HTTP/1.1, which writes `Referer` before
+`Connection` where its link navigations write it after. A request with its own validators or a `Range` goes past the
+cache, and so does anything but a GET.
+
+**The top level.** The cache, the connections and the partitioned cookies
+(section 10) are keyed by the site in the address bar — for a top-level
+navigation the destination itself, for anything else the page's. A frame's
+requests are made from the frame and under the page that embeds it, and only
+the caller knows that page: `top_level=` names it.
+
+```python
+s.page, s.top_level = captcha_frame_url, shop_url   # requests from the frame, under the shop
+s.post(captcha_api, json_body=answer)               # the frame's cookies as the browser keeps them
+```
+
+Chrome keys connections by the top-level site and a bit for a cross-site
+frame, so a page's image of `b` and a frame of `b` ride two connections;
+Firefox keys by the site alone and put both on one (`cmd/hcapture -chips`).
+Until 0.14 a navigation was keyed by the page it came from — a link from `a`
+to `b` kept `b`'s document and connection under `a` — and the Firefox pool
+was not keyed at all.
 
 ## 8. Expectations and cookie rollback
 
@@ -501,11 +562,11 @@ Three hooks, each a list of callables on `s.hooks[...]`, also addable with
 | Call | Does |
 |---|---|
 | `s.cookies["sid"]`, `.get`, `.keys`, `.items`, `.values` | the values |
-| `.all()` | the full records as `Cookie` dicts: name, value, domain, path, expires (epoch seconds, 0 for a session cookie), flags |
-| `.set(name, value, *, domain, path="/", expires=0, secure=False, http_only=False, same_site="")` | adds one; the domain is required |
+| `.all()` | the full records as `Cookie` dicts: name, value, domain, path, expires (epoch seconds, 0 for a session cookie), flags, and `partition` for a partitioned cookie |
+| `.set(name, value, *, domain, path="/", expires=0, secure=False, http_only=False, same_site="", partition=None)` | adds one; the domain is required; `partition="https://site"` puts it into that top-level site's partition |
 | `.load(list)`, `.export()` | plain records in and out |
 | `.save(path)`, `.load_file(path)` | JSON; `load_file` also reads Netscape `cookies.txt`, recognised by content, and treats a missing file as an empty first run |
-| `.save_netscape(path)`, `.load_netscape(path)`, `.to_netscape()` | the `cookies.txt` that curl, wget, yt-dlp and browser extensions use |
+| `.save_netscape(path)`, `.load_netscape(path)`, `.to_netscape()` | the `cookies.txt` that curl, wget, yt-dlp and browser extensions use; partitioned cookies stay out — the format has no column for the partition, and a plain line would send them under every site |
 | `.snapshot()`, `.restore(snapshot)`, `.transaction()` | the rollback machinery |
 | `.clear()` | forget everything |
 
@@ -532,9 +593,10 @@ before):
 The family part is data, `capabilities(name)["cookies"]`: Chromium treats an
 unattributed cookie as Lax, refuses `SameSite=None` without `Secure` at set
 time, allows third-party cookies and compares sites with the scheme; Firefox
-has no Lax-by-default, refuses `None` without `Secure` too, and sends no
-cookies at all on a cross-site fetch or subresource (Total Cookie Protection),
-`include` or not; Safari's row is WebKit's documented ITP, not a capture; a
+has no Lax-by-default, refuses `None` without `Secure` too, and never sends a
+site's own cookies to it as a third party — a cross-site fetch, subresource or
+frame gets only what that site set under the same top-level site (Total Cookie
+Protection, below), `include` or not; Safari's row is WebKit's documented ITP, not a capture; a
 library profile (okhttp) has no policy and sends whatever matches. Measured on
 Chrome 153 and Firefox 156 with five cookies on each of three sites and every
 kind of request between them (`docs/STAGE18-RESULTS.md`). `samesite=False` on
@@ -554,6 +616,24 @@ preflight never does, so its `Set-Cookie` was already ignored. And an imported
 cookie whose domain is an IP address (`domain="127.0.0.1"`) is stored as the
 host-only cookie it is — until 0.10.1 the jar refused the attribute and the
 cookie was recorded but never sent.
+
+**Partitioned cookies.** A browser keeps some cookies per top-level site — the
+site in the address bar (section 7, `top_level`). Chromium keeps there a cookie
+set with the `Partitioned` attribute (CHIPS) and sends it only under the site it
+was set under; its other cookies, third-party ones included, go everywhere as
+before. Firefox keeps there every cookie a third party sets, `Partitioned` or
+not, and a third party reads only that partition, never its first-party
+cookies. Measured on Chrome 154 and Firefox 156 (`cmd/hcapture -chips`): a
+frame of `b` under `a` set a plain and a `Partitioned` cookie; Chrome sent the
+plain one to `b` everywhere and the partitioned one only under `a`, Firefox both
+only under `a` — neither at `b`'s own top level nor under `c`. A header carries
+both jars in one order, longer path first and then older, as Chrome wrote it. A
+`Partitioned` cookie without `Secure` is refused. Safari's row — not measured,
+WebKit's documented ITP — keeps nothing a third party sets. The capability says
+which: `capabilities(name)["cookies"]["partitioning"]`, `"partitioned"` or
+`"third-party"`. A partitioned record carries `partition` (`"https://a.com"`),
+kept by export, import, snapshots and rollback; until 0.14 the jar had no
+partitions, and a Firefox profile sent a captcha's frame no cookies at all.
 
 ## 11. Profiles, devices and mobile
 
@@ -1004,6 +1084,8 @@ Facts that are easy to doubt and are true:
 | `s.headers_for(method, url, ...)` | method | the headers a request would carry, without sending it |
 | `s.preflight_for(method, url, ...)` | method | the CORS preflight a request would be preceded by, or `None` |
 | `s.load_page(url, ...)` | method | a document and the resources its markup names, as a browser loads them (section 7) |
+| `s.cache_info()`, `s.clear_cache()` | method | what the session's cache holds and how it served; empty it, on disk too (section 7) |
+| `CacheInfo` | type | what `cache_info()` returns: `enabled`, `dir`, `entries`, `bytes`, `max_bytes`, `hits`, `revalidated`, `misses`, `stored` |
 | `Page`, `PageResource` | class | a loaded page: `document`, `resources`, `failed`; one resource with `kind`, `response`, `error` |
 | `page` | module | `discover(html, base)`: what a page load would ask for, without asking |
 | `request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options` | function | one request in its own session; `impersonate=` picks the profile |

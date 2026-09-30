@@ -66,6 +66,10 @@ type ResourceKind struct {
 	Priority string `json:"priority,omitempty"`
 	// Purpose is sec-purpose (a prefetch).
 	Purpose string `json:"purpose,omitempty"`
+	// RevalidatePriority replaces Priority on a conditional request, where
+	// the browser sends another: Firefox 156 revalidated an image with
+	// "u=5" where it first asked for it with "u=5, i".
+	RevalidatePriority string `json:"revalidate_priority,omitempty"`
 	// AcceptEncoding replaces the navigation set's Accept-Encoding where the
 	// kind asks for something else: Firefox 156 loads a font named by
 	// @font-face with "identity" (six runs of six), a preloaded one with

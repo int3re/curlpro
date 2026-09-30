@@ -60,13 +60,18 @@ MACHINE = {
     "sec-ch-ua-wow64": "?1",
     "sec-ch-ua-form-factors": '"Desktop"',
 }
+# The cache's slots are where capture/cache saw Chrome 154 put them (and
+# gen-resources.py puts them into the ordinary orders): a reload's
+# cache-control first, the validators between cookie and priority.
 NAV_ORDER = [
+    "cache-control",
     "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-full-version", "sec-ch-ua-arch",
     "sec-ch-ua-platform", "sec-ch-ua-platform-version", "sec-ch-ua-model",
     "sec-ch-ua-bitness", "sec-ch-ua-wow64", "sec-ch-ua-full-version-list",
     "sec-ch-ua-form-factors", "upgrade-insecure-requests", "user-agent", "accept",
     "sec-fetch-site", "sec-fetch-mode", "sec-fetch-user", "sec-fetch-dest",
-    "referer", "accept-encoding", "accept-language", "cookie", "priority",
+    "referer", "accept-encoding", "accept-language", "cookie",
+    "if-none-match", "if-modified-since", "priority",
 ]
 FETCH_ORDER = [
     "content-length", "sec-ch-ua-full-version-list", "sec-ch-ua-platform", "sec-ch-ua",
@@ -74,7 +79,7 @@ FETCH_ORDER = [
     "sec-ch-ua-wow64", "sec-ch-ua-arch", "sec-ch-ua-full-version", "user-agent",
     "content-type", "sec-ch-ua-platform-version", "accept", "origin", "sec-fetch-site",
     "sec-fetch-mode", "sec-fetch-dest", "referer", "accept-encoding", "accept-language",
-    "cookie", "priority",
+    "cookie", "if-none-match", "if-modified-since", "priority",
 ]
 
 # Which desktop Chromium profiles carry a pool: (profile, os, chrome major).

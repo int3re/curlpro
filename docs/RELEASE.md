@@ -6,7 +6,21 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.13.0** — a minor, because what goes on the wire changed without anyone
+**0.14.0** — a minor, because what goes on the wire changed without anyone
+asking: a navigation is keyed by its own site, so a link from one site to
+another no longer rides a connection opened under the first; the Firefox
+profiles key connections by the top-level site, where 0.13 kept one pool, and
+send a third party the cookies it set under the same top-level site
+(Total Cookie Protection), where they sent it none; a Chromium profile keeps a
+`Partitioned` cookie for the top-level site it was set under; a Safari profile
+keeps nothing a third party sets. Beside them: an HTTP cache off by default —
+`cache=` on the session, fetch()'s cache modes per request, the validators
+where Chrome 154 and Firefox 156 put them — `top_level=` for a request made from
+a frame, a cookie's `partition` in export and import, and the per-request costs
+cut: HTTP/1.1 header assembly almost three times cheaper, the Python side of a
+request four times with a response of 26 headers (docs/STAGE22-RESULTS.md).
+ABI 0.25.0: the cache and the top level are configuration an older library
+would ignore. Before it, **0.13.0** — a minor, because what goes on the wire changed without anyone
 asking: the pool spends connections as the profile's family does (a burst of
 first requests races four handshakes in Chromium and six in Firefox and rides
 one HTTP/2 connection; Chromium pools names by address and keeps

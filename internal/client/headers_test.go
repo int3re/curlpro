@@ -205,7 +205,7 @@ func TestWireOrderKeepsSlotForAbsentHeader(t *testing.T) {
 		{Key: "Connection", Value: "keep-alive"}, {Key: "Accept", Value: "*/*"}}
 	want := []string{"Host", "Connection", "Content-Length", "Accept"}
 
-	got := wireOrder(built, want, "accept-encoding")
+	got := wireOrder(built, want, nil, "accept-encoding")
 
 	if indexOf(got, "content-length") != 2 {
 		t.Errorf("the place for Content-Length was not reserved: %v", got)
@@ -217,7 +217,7 @@ func TestWireOrderPlacesCustomAtAnchor(t *testing.T) {
 		{Key: "X-Api-Key", Value: "secret"}, {Key: "Accept-Encoding", Value: "gzip"}}
 	want := []string{"accept", "accept-encoding", "priority"}
 
-	got := wireOrder(built, want, "accept-encoding")
+	got := wireOrder(built, want, nil, "accept-encoding")
 
 	if indexOf(got, "x-api-key") != indexOf(got, "accept-encoding")-1 {
 		t.Errorf("the custom header did not land before the anchor: %v", got)

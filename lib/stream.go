@@ -98,6 +98,7 @@ func streamMeta(sid int64, st *client.Stream) map[string]any {
 		"url":        st.URL,
 		"history":    st.History,
 		"preflights": st.Preflights,
+		"cache":      st.Cache,
 	}
 }
 

@@ -23,17 +23,33 @@ type CookiePolicy struct {
 	// NoneRequiresSecure rejects SameSite=None without Secure when the
 	// cookie is set: the browser never has it, so it is never sent.
 	NoneRequiresSecure bool `json:"none_requires_secure"`
-	// ThirdParty says a cross-site fetch, XHR or subresource carries the
-	// target's cookies at all — those SameSite=None allows. False where the
-	// browser partitions or blocks third-party cookies outright: Firefox's
-	// Total Cookie Protection (default since 103) and Safari's ITP (since
-	// 13.1). A top-level navigation is first-party and unaffected.
+	// ThirdParty says a request to another site than the top-level one
+	// carries the target's own cookies at all — those SameSite=None allows
+	// — and may set them. False where the browser partitions or blocks
+	// third-party cookies outright: Firefox's Total Cookie Protection
+	// (default since 103) and Safari's ITP (since 13.1). A top-level
+	// navigation is first-party and unaffected.
 	ThirdParty bool `json:"third_party"`
+	// Partitioning is which cookies are kept apart per top-level site,
+	// in a jar of their own that goes only under that site:
+	// PartitionOptIn — those set with the Partitioned attribute (CHIPS,
+	// Chromium); PartitionThirdParty — those as well, and every cookie a
+	// third-party response sets (Firefox's Total Cookie Protection). Empty
+	// keeps one jar. Measured on Chrome 154 and Firefox 156 (cmd/hcapture
+	// -chips: a frame of b under a set a plain and a Partitioned cookie,
+	// then b was visited at the top level and framed under c and a again).
+	Partitioning string `json:"partitioning,omitempty"`
 	// Schemeful makes http:// and https:// of one domain different sites
 	// for cookies — Chromium since 89. Fetch Metadata's sec-fetch-site is
 	// schemeful everywhere by specification; the cookie comparison is not.
 	Schemeful bool `json:"schemeful"`
 }
+
+// Cookie partitioning, CookiePolicy.Partitioning.
+const (
+	PartitionOptIn      = "partitioned"
+	PartitionThirdParty = "third-party"
+)
 
 // LaxPostWindow is LaxPostSeconds as a duration; zero when there is none.
 func (p *CookiePolicy) LaxPostWindow() time.Duration {
@@ -49,8 +65,12 @@ func (p *CookiePolicy) LaxPostWindow() time.Duration {
 func CookiePolicyFor(family string) *CookiePolicy {
 	switch family {
 	case "chrome", "chromium", "edge", "yandex", "opera", "brave", "samsung":
+		// Chrome 154: a plain cookie a frame set went everywhere b was
+		// asked for, a Partitioned one only under the top-level site it
+		// was set under — and both kinds interleaved by age in one header.
 		return &CookiePolicy{LaxByDefault: true, LaxPostSeconds: 120,
-			NoneRequiresSecure: true, ThirdParty: true, Schemeful: true}
+			NoneRequiresSecure: true, ThirdParty: true, Schemeful: true,
+			Partitioning: PartitionOptIn}
 	case "firefox", "tor":
 		// Firefox 156 measured: no Lax-by-default (a cookie without the
 		// attribute went on a cross-site POST at 15 s and at 140 s alike),
@@ -61,8 +81,12 @@ func CookiePolicyFor(family string) *CookiePolicy {
 		// comparison was not measured — the stand is TLS only — and is
 		// left off, as network.cookie.sameSite.schemeful defaults. The Tor
 		// Browser is Firefox ESR with first-party isolation on top, which
-		// is the same answer.
-		return &CookiePolicy{NoneRequiresSecure: true, ThirdParty: false}
+		// is the same answer. Firefox 156 kept both cookies a frame of b
+		// set under a — plain and Partitioned — for b under a alone: not at
+		// b's top level, not framed under c; and a cookie b set at the top
+		// level went to no frame of b.
+		return &CookiePolicy{NoneRequiresSecure: true, ThirdParty: false,
+			Partitioning: PartitionThirdParty}
 	case "safari":
 		// Not measured: WebKit's documented ITP blocks third-party cookies
 		// outright, and WebKit adopted neither Lax-by-default nor the

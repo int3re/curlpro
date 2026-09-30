@@ -292,10 +292,7 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL) (*nethttp.
 	// credentials sets nothing (0.10.1), and the family's SameSite rules
 	// decide what is kept. After an Alt-Svc upgrade that fix used to be lost.
 	if s.useCookies(r) && s.includesCredentials(r, u) {
-		if cookies := s.acceptCookies(toFhttpCookies(resp.Cookies())); len(cookies) > 0 {
-			s.cookieJar().SetCookies(u, cookies)
-			s.recordCookies(u, cookies, r.cookieLog)
-		}
+		s.storeCookies(r, u, s.acceptCookies(toFhttpCookies(resp.Cookies())))
 	}
 
 	// Unlike fhttp, net/http decompresses gzip only, and only when it set
@@ -331,7 +328,7 @@ func (s *Session) applyH3Headers(req *nethttp.Request, r *Request, u *url.URL) {
 		req.Header[h.Key] = []string{h.Value}
 	}
 	suppressDefaultUA(req.Header, built, false)
-	req.Header[h3.HeaderOrderKey] = wireOrder(built, s.wantOrder(r, nil, tpl), tpl.anchor)
+	req.Header[h3.HeaderOrderKey] = wireOrder(built, s.wantOrder(r, nil, tpl), nil, tpl.anchor)
 
 	pseudo := s.profile.HTTP3.PseudoOrder
 	if len(pseudo) == 0 {

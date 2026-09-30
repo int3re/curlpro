@@ -69,6 +69,13 @@ curlpro.register_profile({
 - **Connections as a browser spends them**: a burst races as many handshakes as
   the browser does and rides one HTTP/2 connection, Chromium pools names by
   address and keeps credentialed and uncredentialed requests apart.
+- **A browser's cache**: fresh responses come back with no request, stale ones
+  are revalidated with the validators where the browser puts them, a reload
+  carries Chrome's `max-age=0` — partitioned by the site in the address bar, in
+  memory or on disk for a returning visitor.
+- **Cookies per top-level site**: Chromium's `Partitioned` cookies and
+  Firefox's Total Cookie Protection, so a captcha's frame gets the cookies it
+  would get in the browser; `top_level=` names the page a frame is in.
 - **WebSocket** with a profile-driven handshake and `permessage-deflate`.
 - **Streaming reads and uploads**, multipart, `gzip`/`deflate`/`br`/`zstd` decoding.
 - **requests-compatible**: `params`, `auth`, `r.json()`, `r.history`, `r.elapsed`,
@@ -95,7 +102,8 @@ What exactly is reproduced:
 | HTTP/3 | SETTINGS, the GREASE frame, `PRIORITY_UPDATE`, QUIC transport parameters, header order |
 | HTTP/1.1 | name order **and case**, `Host` and `Connection` — a set of its own, unlike HTTP/2 |
 | Headers | the navigation set, the `fetch` set and a set per resource kind, slot positions, the anchor for custom headers |
-| Connections | handshakes per burst, HTTP/2 pooling across names, the privacy-mode and site partitions |
+| Connections | handshakes per burst, HTTP/2 pooling across names, the privacy-mode and top-level-site partitions |
+| Cache and cookies | what is revalidated and with which validators where, the reload header, partitions by top-level site |
 | WebSocket | the handshake header set and order, `permessage-deflate` |
 | Forms | the multipart boundary style: `----WebKitFormBoundary` in Chrome, dashes in Firefox |
 
@@ -263,6 +271,8 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 | `post_quantum` | `False` drops the X25519MLKEM768 group and its 1216-byte key share — the hello of a browser with post-quantum key agreement off by policy. JA4 stays, JA3 and the size move: ~1.9 KB over two TCP segments becomes one that fits in one |
 | `resume` | TLS session resumption, on by default: the second connection to a host carries the ticket, the way a browser's does. The resuming hello was measured on Chrome 153 and Firefox 156 and is reproduced, Firefox's dropped `session_ticket` included; the first hello is untouched |
 | `page` | the page the requests are made from: `Referer`, `Origin` and `sec-fetch-site` are derived from it as a browser derives them (see below); `s.page = url` moves it |
+| `top_level` | the page in the address bar when `page` is a frame's document — a captcha's frame: the cache, the connections and the partitioned cookies are keyed by its site |
+| `cache`, `cache_size` | an HTTP cache: `True` in memory, a directory on disk; fresh responses come back with no request, stale ones are revalidated as the browser does (see below) |
 | `credentials`, `samesite` | which cookies a request from a page carries: `fetch()`'s credentials mode (`same-origin` by default — none to another origin, even of the same site; `include`; `omit`) and the `SameSite` rules of the browser family, measured on Chrome 153 and Firefox 156; `samesite=False` sends every match, as before 0.10 |
 | `preflight` | the CORS preflight before a non-simple cross-origin fetch from a page — sent, checked, cached for its `Access-Control-Max-Age`; a refusal is `CORSError` and the request is not sent. `False` sends straight out |
 | `keep_alive`, `max_idle_conns`, `idle_conn_timeout` | connection reuse and pool size |
@@ -293,6 +303,8 @@ s.get(url, timeout=(3, 30), protocol="h2", cookies=False, retries=0)
 | `default_headers` | `True`/`False` — the profile headers, either way |
 | `mode` | `navigate` or `fetch` — which header set to use; `fetch` on a profile without a fetch set is refused with the reason, not sent as a navigation |
 | `page` | the page this request is made from, overriding the session's; `False` sends it with no initiator |
+| `top_level` | the address bar's page for this request; `False` takes the page for it |
+| `cache` | fetch()'s cache mode: `default`, `no-cache` (a reload), `no-store`, `force-cache`, `only-if-cached` |
 | `allow_redirects`, `max_redirects`, `retries`, … | overrides of the session policies |
 | `expect` | a response expectation (see below) |
 | `rollback_cookies` | undo what this request wrote into the jar if it fails |
@@ -304,6 +316,7 @@ r.status, r.ok, r.proto            # 200, True, "HTTP/2.0"
 r.text, r.content, r.json()        # charset from Content-Type, the BOM or <meta charset>
 r.headers, r.header("server")      # all values, and the first one case-insensitively
 r.cookies, r.history, r.elapsed    # response cookies, the redirect chain, timing
+r.cache, r.from_cache              # "hit", "revalidated", "miss" or None; True for the first two
 r.raise_for_status()               # HTTPError carrying the status and the response
 ```
 
@@ -718,6 +731,13 @@ s.cookies.load_file("cookies.txt")        # curl, wget, a browser extension
 s.cookies.save_netscape("cookies.txt")    # and back, for another tool
 ```
 
+The jar keeps cookies per top-level site where the browser does: Chromium's
+`Partitioned` cookies (CHIPS) go only under the site they were set under, and a
+Firefox profile keeps everything a third party sets for the top-level site it
+was set under (Total Cookie Protection) — so a captcha's frame gets the cookies
+it would get in the browser. Name the page a frame is in with `top_level=`;
+a partitioned record carries `partition` through `save` and `load_file`.
+
 ## Mobile profiles and client hints
 
 Since version 110 Chrome cut both the model and the OS version out of the
@@ -837,6 +857,20 @@ handshakes in Chromium and six in Firefox and rides the first HTTP/2 connection;
 Chromium lets an HTTP/2 connection serve another name on its address its
 certificate covers, and keeps requests without credentials, and requests from
 pages of other sites, on connections of their own.
+
+A browser does not download a page twice. With `cache=` the session keeps what
+it fetched, as the browser does — measured on Chrome 154 and Firefox 156
+(`docs/STAGE22-RESULTS.md`):
+
+```python
+s = curlpro.Session("chrome-154-windows", cache="./cache")  # on disk: a returning visitor next run
+s.load_page(url)                    # everything from the network
+page = s.load_page(url)             # fresh resources: no request; stale ones: If-None-Match → 304
+s.load_page(url, reload=True)       # the document revalidated, with Chrome's cache-control: max-age=0
+```
+
+The validators go where each browser puts them, and the cache, like the
+connections, is keyed by the site in the address bar.
 
 ## Profiles as data
 
