@@ -152,3 +152,21 @@ class CORSError(CurlProError):
         self.reason = reason
         self.status = status
         self.headers = Headers(headers)
+
+
+class ChallengeError(CurlProError):
+    """An anti-bot's challenge stood in front of the response, and the
+    session's solver did not get past it — or there was no solver, and the
+    caller asked for the error (:meth:`Response.raise_for_challenge`).
+
+    ``challenge`` is the :class:`~curlpro.challenge.Challenge` (vendor, kind,
+    Cloudflare's ray id), ``response`` the last response, the challenge page
+    itself. A block (``challenge.kind == "block"``) is not one a browser
+    passes: another address or another request is the answer, not another
+    try. ``code == "challenge"``; a Python-side code, like ``expectation``.
+    """
+
+    def __init__(self, message: str, challenge=None, response=None):  # noqa: ANN001
+        super().__init__(message, "challenge")
+        self.challenge = challenge
+        self.response = response

@@ -76,6 +76,16 @@ curlpro.register_profile({
 - **Cookies per top-level site**: Chromium's `Partitioned` cookies and
   Firefox's Total Cookie Protection, so a captcha's frame gets the cookies it
   would get in the browser; `top_level=` names the page a frame is in.
+- **Anti-bot challenges, recognised and passed**: `r.challenge` names the
+  vendor and says challenge or block; `solver=BrowserSolver()` passes a
+  challenge in the Chrome installed on the machine — driven without attaching
+  to the page, no `Runtime.enable`, no injected script, `navigator.webdriver`
+  off — and the session goes on with that browser's own fingerprint. No extra
+  install.
+- **One visitor**: `Identity.lookup(proxy)` finds the proxy's country and time
+  zone; the session's `Accept-Language` and its browser's languages and time
+  zone (page and every worker) follow. `s.browser(url)` opens the session in
+  its browser and brings the cookies back.
 - **WebSocket** with a profile-driven handshake and `permessage-deflate`.
 - **Streaming reads and uploads**, multipart, `gzip`/`deflate`/`br`/`zstd` decoding.
 - **requests-compatible**: `params`, `auth`, `r.json()`, `r.history`, `r.elapsed`,

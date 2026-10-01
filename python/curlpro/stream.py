@@ -90,6 +90,14 @@ class StreamResponse:
         """The body comes out of the cache: a hit, or a 304 that confirmed it."""
         return self.cache in ("hit", "revalidated")
 
+    @property
+    def challenge(self):  # noqa: ANN201 — Challenge | None
+        """The anti-bot challenge this response is, by its headers alone: the
+        body is not read yet. Cloudflare's ``cf-mitigated`` is enough for it;
+        a vendor known only by its page is seen by ``Response.challenge``."""
+        from .challenge import detect
+        return detect(self.status, self.headers, b"", self.url)
+
     def iter_lines(self, chunk_size: int = DEFAULT_CHUNK,
                    keepends: bool = False) -> Iterator[bytes]:
         """The body line by line, without collecting it whole.

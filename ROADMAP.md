@@ -1043,6 +1043,77 @@ HTTP/1.1 header assembly almost three times cheaper and the Python side of a req
 four times, with 26 response headers. The details are in
 [STAGE22](docs/STAGE22-RESULTS.md).
 
+## Stage 40 — anti-bot challenges, a browser driven as little as can be ✅ done 2026-10-01
+
+A response says which anti-bot's challenge or block it is (`r.challenge`:
+Cloudflare by its documented `cf-mitigated` header, the others by their
+pages), and a session with a `solver` gets past a challenge: the Chrome
+installed on the machine opens the page, passes the check, and the session
+goes on with its cookies and the same browser's fingerprint. The browser is
+started with the URL on its command line and read from its own DevTools
+endpoint only — no page attached, no `Runtime.enable`, no script in the page —
+and with `navigator.webdriver`, which the DevTools port turns on in Chrome 154,
+turned back off without the infobar that would have shown it. Passed a
+JavaScript check and Cloudflare's real Turnstile widget on the stand, and got
+Cloudflare's clearance on nowsecure.nl in 3 s. No new dependency. The details
+are in [STAGE23](docs/STAGE23-RESULTS.md).
+
+## Stage 41 — the package's own browser driver (in progress)
+
+Done so far: clicking a check that asks for it (step 1, the click alone —
+the tab attached for that moment, DOM read through the inspector, a curved
+mouse path through Input; Cloudflare's always-interactive test key passed in
+7.5 s), one browser kept open between solves (step 2: `keep_open=True`, a
+tab per solve, 1.55 s median against 2.64 s on the stand's gate; a context
+per solve was measured and dropped, its languages are the UI locale's), the
+identity (step 4, its first part: languages and time zone as one visitor with
+the proxy's address, the zone in the page and all three kinds of worker;
+`Identity.lookup`), the session moved into its browser and back (step 5:
+`s.browser()`, cookies both ways, `localStorage`), and the first measured
+light set (step 3: seven flags that left all 22 values of the stand's
+fingerprint page as they were, 30 MB and up to three processes less at start,
+no background downloads; on by default). A window covered by another one no
+longer makes each mouse event of a click wait 5 s: Windows occlusion tracking
+is off, and the fingerprint page reads the same.
+
+The owner's direction: a driver of our own in place of Playwright, as light on
+resources as can be, fit for work where a browser must not be told from a
+person's, with the proxy and the identity set per profile. Stage 40's driver
+is its first brick — it starts the browser, reads it, and leaves no trace in
+the page. In the order it can be built and measured:
+
+1. **Control without a trace.** Navigation, clicks and typing through the
+   DevTools `Page` and `Input` domains (input events arrive as trusted ones),
+   with human timing; reading the page through `DOM` and, where a script is
+   unavoidable, an isolated world made for the one call
+   (`Page.createIsolatedWorld`, then `Runtime.evaluate` in its context —
+   without `Runtime.enable`). Every command is checked on the stand's probes
+   before it is used; a check that wants a click stops waiting for a person.
+2. **One browser, many identities.** `Target.createBrowserContext` per
+   identity: cookies, cache, storage and proxy of its own (`proxyServer` per
+   context, credentials through the forwarder), many contexts in one browser
+   process — the main saving in memory over a browser per identity. The cost
+   per context and per tab is measured, not promised.
+3. **Light without being told.** Every flag that saves memory or CPU — no
+   component updates, no background networking, fewer processes — is measured
+   on the stand for what a page can see, one flag at a time, because each is a
+   possible mark. Not loading images or fonts saves the most and is also what
+   anti-bots look for, so it is an option per job, not a default. A real
+   headless mode needs the `HeadlessChrome` marks gone from the User-Agent
+   and client hints alike; until that is measured, the driver runs a window
+   (off-screen when wanted).
+4. **The identity, consistent rather than random.** The proxy's country
+   decides the languages and time zone the browser reports; screen, hardware
+   and fonts stay the machine's own. Spoofing those (canvas, WebGL, fonts)
+   convincingly needs a patched engine — the road of Camoufox and CloakBrowser,
+   a Chromium build to rebuild every four weeks. Whether to take it is a
+   decision for later, against what it costs; the light engines that render
+   nothing (Lightpanda) are cheap and told apart by any canvas test.
+5. **One source for both.** The profiles that give curlPro a browser's
+   network fingerprint describe the browser the driver runs, and a session
+   moves between the two with its cookies and cache — the browser where a page
+   must run, curlPro for the requests after it.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

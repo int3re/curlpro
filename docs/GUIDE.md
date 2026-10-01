@@ -118,6 +118,8 @@ touch it.
 | `mode` | `"auto"` | the header set: `navigate`, `fetch`, or decided per request (section 7) |
 | `page` | `None` | the page the requests are made from — the initiator. Derives `Referer`, `Origin` and `sec-fetch-site` the way a browser does (section 7); `s.page = url` moves it as the scraper moves. Must be an absolute http(s) URL |
 | `top_level` | `None` | the page in the address bar when `page` is a frame's document — a captcha's or a widget's frame. The cache, the connections and the partitioned cookies are keyed by its site, as both browsers key them (sections 7 and 10); `s.top_level = url` moves it. Not given, the page is its own top level; a top-level navigation is always under its own URL |
+| `identity` | `None` | the visitor beyond the browser: a `curlpro.Identity` — country, time zone, languages, as `Identity.lookup(proxy)` finds for the proxy's address. The session sends its languages as `Accept-Language`; a browser it opens or solves in keeps them and the time zone (section 9) |
+| `solver` | `None` | what gets past an anti-bot's challenge: `BrowserSolver()` passes it in the Chrome installed here, then the session sends the request again with its cookies (section 9). None returns the challenge page as the response |
 | `cache`, `cache_size` | `False`, `None` | an HTTP cache, as a browser keeps one: `True` in memory, a directory on disk — the next session on it starts as a returning visitor. Fresh responses come back with no request, stale ones are revalidated, partitioned by the top-level site (section 7). `cache_size` in bytes: 64 MiB in memory, 256 MiB on disk when not given; one entry takes at most an eighth, never over 32 MiB |
 | `credentials` | `"same-origin"` | the credentials mode of fetch-mode requests, in `fetch()`'s words: `same-origin` sends cookies only to the page's own origin — the default of `fetch()` and of XHR — `include` sends them wherever the SameSite rules allow, `omit` sends none. Measured on Chrome 153 and Firefox 156: a plain `fetch()` to another origin of the *same site* carries no cookie at all (section 10) |
 | `samesite` | `True` | apply the cookies' `SameSite` attribute and the family's third-party rule to requests made from a `page`; `False` sends every cookie the jar matches, as before 0.10 (section 10) |
@@ -186,6 +188,7 @@ The response:
 | `history` | the redirect chain as `Redirect(status, url, location)` records |
 | `preflight`, `preflights` | the CORS preflight that preceded the request, a `Preflight(url, status, headers, cached)` record or `None`; all of them along a redirect chain. `cached` means no OPTIONS went out: an earlier answer still covered it. A `StreamResponse` and an `AsyncSession` response carry both (and `history`) as well — the second did not until 0.10.1 |
 | `cookies` | the cookies **this** response set, as a mapping |
+| `challenge`, `raise_for_challenge()` | the anti-bot challenge or block the response is — vendor, kind, ray — or `None`; the second raises `ChallengeError` for one (section 9). A stream reads it from the headers alone |
 | `cache`, `from_cache` | how the session's cache served it: `"hit"` — no request went out; `"revalidated"` — a conditional request was answered 304 and the stored body came back; `"miss"`; `None` when the cache took no part. `from_cache` is true for the first two. Streams carry both |
 | `elapsed` | seconds, measured in Python around the native call |
 | `raise_for_status()` | raises `HTTPError` (with `.status` and `.response`) on 4xx/5xx; returns the response otherwise |
@@ -482,6 +485,8 @@ except curlpro.HTTPError as e:           # from raise_for_status(): e.status, e.
     ...
 except curlpro.WebSocketClosed:          # code "ws_closed"
     ...
+except curlpro.ChallengeError as e:      # code "challenge": e.challenge, e.response
+    ...
 except curlpro.CurlProError as e:        # everything else: e.code, str(e)
     ...
 ```
@@ -554,6 +559,115 @@ Three hooks, each a list of callables on `s.hooks[...]`, also addable with
   failed expectation) and may return an exception to raise instead. A hook that
   itself raises does not hide the original failure: the failure is noted on the
   exception and the remaining hooks still run.
+
+**Anti-bot challenges.** A 403 says little; a challenge says more if one
+looks. `r.challenge` is `None` or a `Challenge` — `vendor` (`cloudflare`,
+`datadome`, `akamai`, `human`, `imperva`, `kasada`), `kind` (`challenge` — a
+check a browser runs and passes, `captcha` — one that may ask a person to act,
+`block` — a refusal no browser changes, `rate-limit`), `solvable`, `ray`
+(Cloudflare's request id). Cloudflare is recognised by the `cf-mitigated:
+challenge` header it documents for exactly this, the others by the marks their
+pages carry. `r.raise_for_challenge()` raises `ChallengeError` (`challenge`).
+
+A session with a `solver` gets past a challenge instead of returning it:
+
+```python
+solver = curlpro.BrowserSolver()                      # the Chrome installed here
+s = curlpro.Session(**solver.session_options(), solver=solver)
+r = s.get(url)          # a challenge → the browser passes it → its cookies → the request again
+```
+
+`BrowserSolver` opens the page in the Chrome (or Edge) installed on the
+machine and drives it as little as can be: Chrome starts with the URL on its
+command line, and the only DevTools traffic is the browser's own endpoint —
+its version, its tabs, its cookies. No page is attached to, no `Runtime`
+domain enabled, no script of ours runs in the page, no `--enable-automation`:
+the marks that give Playwright and Puppeteer away are not there. The DevTools
+port switches `navigator.webdriver` on in Chrome 154, and the browser is
+started with it off — checked by the stand, as is the window's chrome, which
+an "unsupported flag" infobar would have grown by 56 px. When the vendor's pass
+cookie appears (`cf_clearance` for Cloudflare's own gate) or the cookies
+change, the session loads them and sends the request again. A check that
+wants a click — Turnstile's checkbox — gets one when it has not passed by
+itself within 2.5 s: the tab is attached for that moment only, the inspector
+finds the check's frame (in a closed shadow root too) and the mouse goes to it
+along a curve at a person's pace through DevTools' Input domain, whose events
+the page receives as trusted — still no `Runtime`, no script of ours; at most
+three clicks, 8 s apart (`click=False` leaves it to a person in the window).
+Cloudflare's test sitekey that always asks for the checkbox passed in 7.5 s,
+and never without the click. Then the session goes on with
+that browser's own TLS and HTTP/2 fingerprint: `session_options()` returns the
+profile of the installed browser's version and the device of its exact build
+(`chrome-154-windows`, `Windows 10 22H2, Chrome 154.0.8037.58`), and a session
+of another version is refused with `ConfigurationError` rather than sent with
+a clearance its fingerprint betrays. The browser uses the session's proxy —
+one with credentials through a local forwarder that adds them and does not
+look inside the tunnel — and the session's languages.
+
+`BrowserSolver(keep_open=True)` keeps the browser between solves — one per
+proxy and languages, both its own from the start — and solves in a new tab of
+it, one solve at a time, the cookies cleared first: five solves of the stand's
+gate took 1.55 s median against 2.64 s with a browser each, 1.2 s of it the
+gate's own wait. Not a context per solve: a page in a context made over
+DevTools asks for the UI locale's default languages, not the profile's — not
+the session's `Accept-Language` (measured). Close it with `solver.close()` or a
+`with` block.
+Requests to one site wait for one solve; an `AsyncSession` solves off the
+event loop. A block is never handed over, and a challenge the solver does not
+pass raises `ChallengeError` with the challenge page as `.response`. Any object
+with `solve(request) -> Solution | None` is a solver: `request` carries the
+challenge, the URL to open, the session's profile, User-Agent, languages and
+proxy, and `verify(cookies)`, which loads cookies and says whether the request
+now goes through. Nothing in the package sends a challenge to a solving
+service. Measured on the stand (a JavaScript check behind `cf-mitigated`, and
+Cloudflare's real Turnstile widget with its always-pass test sitekey): the
+browser passed in 2–4 s; on nowsecure.nl it got Cloudflare's `cf_clearance` in
+3 s. The browser solver needs no extra install: it speaks DevTools over a
+WebSocket of the standard library.
+
+**One visitor: identity and the session's browser.** A browser in Berlin
+behind a German address asks for German first and keeps Berlin's time; the
+same browser reporting another country's time zone and languages through that
+address is a contradiction fingerprinting scripts compare with the IP in a
+line. `curlpro.Identity` holds the three — `country`, `timezone`, `languages`:
+
+```python
+ident = curlpro.Identity.lookup(proxy)              # asks ipinfo.io through the proxy where it comes out
+ident = curlpro.Identity.for_country("DE")          # or offline: de-DE, de, en-US, en; Europe/Berlin
+s = curlpro.Session(**solver.session_options(), proxy=proxy, identity=ident, solver=solver)
+```
+
+The session sends the identity's languages as `Accept-Language`, in the
+profile's place for the header, with Chrome's weights
+(`de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`), and the browser it hands a challenge
+to keeps the same languages and time zone. The languages go into the
+browser's profile, as a person sets them; the time zone is set on the tab
+before its page loads (DevTools' `Emulation.setTimezoneOverride` — the `TZ`
+variable does nothing to Chrome on Windows). Measured on the stand: the page,
+its `Date` offsets, a dedicated, a shared and a service worker all report the
+identity's zone and languages, through navigations. `lookup()` is the one
+network call, made when asked: the service sees the proxy's exit address and
+nothing else; `for_country()` is a convention — the country's language before
+English, its capital's or most populous zone — and takes `timezone=` and
+`languages=` from a caller who knows better.
+
+`s.browser(url)` opens the session in its browser — the same version as its
+profile (refused otherwise), its proxy, identity and cookies, partitioned
+ones in their partitions — and brings what the browser gets back:
+
+```python
+with s.browser("https://example.com/login") as b:
+    b.wait()                                  # a person logs in and closes the window
+    # b.sync() any time; b.local_storage("https://example.com")["token"]
+s.get("https://example.com/api/me")           # with the browser's cookies, under its fingerprint
+```
+
+The cookies go in before the page loads and come back on `b.sync()`, while
+`b.wait()` waits and when the block ends; `b.push()` sends the session's newer
+ones to the browser; `b.local_storage(origin)` reads what a single-page app
+keeps there, through the inspector, without a script in the page. The session
+then goes on with the browser's own TLS and HTTP/2 fingerprint: a site that
+saw the browser sees the same client.
 
 ## 10. Cookies
 
@@ -883,6 +997,15 @@ suite on 3.14t with the GIL off, and a first start from many threads at once
 loads the bundled profiles once (before 0.13 the losers of that race opened
 their sessions against an empty registry, GIL or not).
 
+A thread costs far more on 3.14t, and that is the interpreter's, not the
+package's: 128 plain Python threads, without curlpro, committed 3.8 GB on
+3.14t on Windows and 42 MB on 3.14 — some 30 MB a thread. A thread per
+request is the design to avoid there; an `AsyncSession` runs any number of
+requests on one helper thread. That thread no longer dies of an exception —
+on a machine near its commit limit it met `MemoryError`, and every request
+already waiting on it waited for ever; since 0.15 it keeps going and hands
+each result on.
+
 ## 14. Fingerprint, audit and personas
 
 `s.fingerprint(url="https://example.com/")` computes, without sending anything,
@@ -1085,6 +1208,10 @@ Facts that are easy to doubt and are true:
 | `s.preflight_for(method, url, ...)` | method | the CORS preflight a request would be preceded by, or `None` |
 | `s.load_page(url, ...)` | method | a document and the resources its markup names, as a browser loads them (section 7) |
 | `s.cache_info()`, `s.clear_cache()` | method | what the session's cache holds and how it served; empty it, on disk too (section 7) |
+| `Challenge`, `ChallengeError` | class, exception | an anti-bot's challenge or block as recognised; the failure to get past one (section 9) |
+| `Identity` | class | a visitor's country, time zone and languages; `lookup(proxy)`, `for_country(code)` (section 9) |
+| `s.browser(url, ...)` | method | the session opened in its browser, and the browser's cookies back into it (section 9) |
+| `BrowserSolver`, `Solution`, `SolveRequest`, `solvers` | class, module | the solver in the package and a solver's protocol (section 9) |
 | `CacheInfo` | type | what `cache_info()` returns: `enabled`, `dir`, `entries`, `bytes`, `max_bytes`, `hits`, `revalidated`, `misses`, `stored` |
 | `Page`, `PageResource` | class | a loaded page: `document`, `resources`, `failed`; one resource with `kind`, `response`, `error` |
 | `page` | module | `discover(html, base)`: what a page load would ask for, without asking |

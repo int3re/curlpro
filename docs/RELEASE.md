@@ -6,7 +6,23 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.14.0** — a minor, because what goes on the wire changed without anyone
+**0.15.0** — a minor for what it adds; nothing a session already sent changes.
+A response says which anti-bot's challenge or block it is (`r.challenge`), and a
+session with a `solver` gets past a challenge: `BrowserSolver` passes it in the
+Chrome installed on the machine — started with the URL on its command line,
+read through its own DevTools endpoint, no page attached, no `Runtime.enable`,
+`navigator.webdriver` off without the infobar that would show it, a
+Turnstile checkbox clicked along a person's path — and the session goes on
+with that browser's own fingerprint; a session of another version is refused.
+`Identity` keeps one visitor: the proxy's country, time zone and languages, in
+the session's `Accept-Language` and in its browser's page and every worker.
+`s.browser(url)` opens the session in its browser and brings the cookies back.
+The browser starts light (seven flags measured to change nothing a page reads)
+and can stay open between solves. The collector of async results no longer
+dies of an exception — on free-threaded Python near the commit limit it met
+`MemoryError` and left every waiting request waiting for ever
+(docs/STAGE23-RESULTS.md). Python only: the native library, ABI 0.25.0, is
+0.14.0's. Before it, **0.14.0** — a minor, because what goes on the wire changed without anyone
 asking: a navigation is keyed by its own site, so a link from one site to
 another no longer rides a connection opened under the first; the Firefox
 profiles key connections by the top-level site, where 0.13 kept one pool, and

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from . import errors
 from .errors import (
+    ChallengeError,
     ConfigurationError,
     CORSError,
     CurlProError,
@@ -34,6 +35,10 @@ from .errors import (
 from ._headers import Headers
 from ._kwargs import RequestKwargs
 from .expect import Expect, ExpectationFailed
+from .challenge import Challenge
+from .identity import Identity
+from . import solvers
+from .solvers import BrowserSolver, Solution, SolveRequest
 from .fingerprint import Fingerprint
 from .audit import Finding, audit
 from .persona import Persona, load_all
@@ -73,7 +78,10 @@ __all__ = [
     "AsyncSession",
     "AsyncStreamResponse",
     "AsyncWebSocket",
+    "BrowserSolver",
     "CacheInfo",
+    "Challenge",
+    "ChallengeError",
     "Cookie",
     "Cookies",
     "ConfigurationError",
@@ -92,7 +100,10 @@ __all__ = [
     "ProfileCapabilityError",
     "ProxyAuthError",
     "ProxyError",
+    "Solution",
+    "SolveRequest",
     "HTTPError",
+    "Identity",
     "Headers",
     "Redirect",
     "RequestKwargs",
@@ -121,9 +132,10 @@ __all__ = [
     "put",
     "register_profile",
     "request",
+    "solvers",
 ]
 
-__version__ = "0.14.0"
+__version__ = "0.15.0"
 
 try:  # an installed distribution is the authority; a source checkout has none
     from importlib.metadata import version as _dist_version

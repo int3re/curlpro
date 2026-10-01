@@ -32,3 +32,12 @@ def test_fallback_matches_pyproject():
 
 def test_exported_version_is_readable():
     assert re.fullmatch(r"\d+\.\d+\.\d+.*", curlpro.__version__)
+
+
+def test_every_package_goes_into_the_wheel():
+    # setuptools takes the packages named and no others: curlpro.browser,
+    # left out, would install as nothing, and the solver would fail with
+    # ModuleNotFoundError on every machine but the developer's.
+    listed = set(re.findall(r'"([\w.]+)"', _literal(REPO / "pyproject.toml", r"^packages = \[(.*)\]")))
+    on_disk = {".".join(p.parent.relative_to(REPO).parts) for p in (REPO / "curlpro").rglob("__init__.py")}
+    assert listed == on_disk, f"pyproject packages {sorted(listed)}, on disk {sorted(on_disk)}"

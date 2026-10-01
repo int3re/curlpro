@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from typing import Any
 
 from ._ffi import _call, _lib, call_framed_out
@@ -61,41 +62,70 @@ class Completions:
             self._ready.pop(request_id, None)
 
     def _reap(self) -> None:
+        # Results that could not be handed to their loop yet: a failure in
+        # call_soon_threadsafe leaves the result in the native registry, and
+        # the native queue does not announce it twice.
+        undelivered: list[tuple[asyncio.AbstractEventLoop, asyncio.Future, int]] = []
         while True:
             with self._lock:
-                if self._stop or not (self._waiters or self._ready):
+                if self._stop or not (self._waiters or self._ready or undelivered):
                     self._thread = None
                     return
-            rid = int(_lib.curlpro_result_wait(_WAIT_MS))
-            if rid == 0:
-                continue
-            with self._lock:
-                entry = self._waiters.pop(rid, None)
-                if entry is None:
-                    # No waiter yet. Work is started and registered in two
-                    # steps, and a fast one — reading a chunk of the body —
-                    # can finish in between. The result is set aside for
-                    # register to pick up.
-                    #
-                    # It used to be thrown away here, and such a call hung
-                    # forever: 24 concurrent stream reads lost one of them.
-                    #
-                    # It is taken under the same lock: otherwise register
-                    # slips between the check and the hand-off, and the
-                    # waiter and its ready result never meet again.
-                    #
-                    # A cancelled result never lands here: cancelling removes
-                    # the call from the native registry, leaving nothing to take.
-                    done = _take(rid)
-                    if done is not None:
-                        self._ready[rid] = done
-                    continue
-            loop, future = entry
+            # This thread is the only one that wakes the waiters: if it died,
+            # every request already registered would wait for ever — the
+            # next register restarts it, but there may be no next one. So no
+            # exception ends it. On free-threaded 3.14 every thread commits
+            # some 30 MB (measured: 128 plain threads, 3.8 GB against 42 MB
+            # with the GIL), and a machine near its commit limit raised
+            # MemoryError here and hung a test of 128 requests.
             try:
-                loop.call_soon_threadsafe(_settle, future, rid)
-            except RuntimeError:
-                # The event loop is already closed — nobody to hand it to.
-                _take(rid)
+                while undelivered:
+                    loop, future, rid = undelivered[0]
+                    self._deliver(loop, future, rid)
+                    undelivered.pop(0)
+                self._once(undelivered)
+            except Exception:  # noqa: BLE001 — see above
+                time.sleep(0.05)
+
+    def _deliver(self, loop: asyncio.AbstractEventLoop, future: asyncio.Future, rid: int) -> None:
+        try:
+            loop.call_soon_threadsafe(_settle, future, rid)
+        except RuntimeError:
+            # The event loop is already closed — nobody to hand it to.
+            _take(rid)
+
+    def _once(self, undelivered: list) -> None:
+        """Waits for one finished call and hands it on."""
+        rid = int(_lib.curlpro_result_wait(_WAIT_MS))
+        if rid == 0:
+            return
+        with self._lock:
+            entry = self._waiters.pop(rid, None)
+            if entry is None:
+                # No waiter yet. Work is started and registered in two
+                # steps, and a fast one — reading a chunk of the body —
+                # can finish in between. The result is set aside for
+                # register to pick up.
+                #
+                # It used to be thrown away here, and such a call hung
+                # forever: 24 concurrent stream reads lost one of them.
+                #
+                # It is taken under the same lock: otherwise register
+                # slips between the check and the hand-off, and the
+                # waiter and its ready result never meet again.
+                #
+                # A cancelled result never lands here: cancelling removes
+                # the call from the native registry, leaving nothing to take.
+                done = _take(rid)
+                if done is not None:
+                    self._ready[rid] = done
+                return
+        loop, future = entry
+        # Kept until handed over: if the hand-off fails, the next round
+        # tries it again rather than the waiter waiting for ever.
+        undelivered.append((loop, future, rid))
+        self._deliver(loop, future, rid)
+        undelivered.pop()
 
 
 def _take(request_id: int) -> tuple[Any, bytes] | None:

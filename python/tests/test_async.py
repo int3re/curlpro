@@ -43,6 +43,37 @@ def test_concurrency_is_not_capped_by_threads():
     assert spent < delay * 3, f"{n} requests took {spent:.2f} s — that looks like a queue"
 
 
+def test_the_collector_survives_an_exception(monkeypatch):
+    """The one thread that wakes every waiter must not die of an exception:
+    on free-threaded 3.14 near the machine's commit limit it met MemoryError,
+    and 128 registered requests waited for ever."""
+    import curlpro._completions as comp
+
+    real = comp._lib
+
+    class Flaky:
+        failures = 2
+
+        def __getattr__(self, name):  # noqa: ANN001, ANN204
+            return getattr(real, name)
+
+        def curlpro_result_wait(self, ms):  # noqa: ANN001, ANN201
+            if Flaky.failures:
+                Flaky.failures -= 1
+                raise MemoryError("injected")
+            return real.curlpro_result_wait(ms)
+
+    monkeypatch.setattr(comp, "_lib", Flaky())
+
+    async def run(srv):
+        async with curlpro.AsyncSession(verify=False, force_http1=True, timeout=20) as s:
+            return await asyncio.wait_for(asyncio.gather(*(s.get(srv.url) for _ in range(8))), 30)
+
+    with RawHeaderServer(persistent=True) as srv:
+        rs = asyncio.run(run(srv))
+    assert [r.status for r in rs] == [200] * 8 and Flaky.failures == 0
+
+
 def test_one_helper_thread_regardless_of_load():
     """Only our own threads are counted: the test server also starts a thread
     per connection, and a total count would measure it rather than the client."""

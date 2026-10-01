@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curlpro"
-version = "0.14.0"
+version = "0.15.0"
 description = "HTTP client with a browser's network fingerprint: TLS ClientHello, HTTP/2 and HTTP/3 frames, header order"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -38,7 +38,9 @@ Issues = "https://github.com/int3re/curlpro/issues"
 Changelog = "https://github.com/int3re/curlpro/blob/main/ROADMAP.md"
 
 [tool.setuptools]
-packages = ["curlpro"]
+# Every package by name: a subpackage left out installs as nothing, and the
+# import fails only on the user's machine (tests/test_version.py checks).
+packages = ["curlpro", "curlpro.browser"]
 
 # The wheel carries the native library and the profiles: without the profiles
 # the library is useless, and asking the user to fetch them separately is a step
@@ -58,4 +60,7 @@ markers = [
     # deterministic; these go to a job of their own, where an outage upstream
     # does not colour the build.
     "network: goes to the internet rather than to a local stand",
+    # Tests that start the Chrome installed on the machine: skipped where
+    # there is none, and on CI, where there is no screen for its window.
+    "browser: starts the installed Chrome",
 ]

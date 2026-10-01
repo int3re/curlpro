@@ -133,6 +133,13 @@ class AsyncStreamResponse:
         """The body comes out of the cache: a hit, or a 304 that confirmed it."""
         return self.cache in ("hit", "revalidated")
 
+    @property
+    def challenge(self):  # noqa: ANN201 — Challenge | None
+        """The anti-bot challenge this response is, by its headers alone; see
+        :attr:`curlpro.StreamResponse.challenge`."""
+        from .challenge import detect
+        return detect(self.status, self.headers, b"", self.url)
+
     def header(self, name: str) -> str | None:
         lowered = name.lower()
         for key, values in self.headers.items():
@@ -363,6 +370,13 @@ class AsyncSession:
         """Empties the session's cache, its files on disk too."""
         self._session.clear_cache()
 
+    def browser(self, url: str = "", **kw: Any) -> Any:
+        """The session opened in its browser; see :meth:`Session.browser`.
+        Not a coroutine: the handoff is a person's moment, measured in
+        seconds, and its ``wait()`` blocks — run that in a thread
+        (``await asyncio.to_thread(b.wait)``) to keep the loop going."""
+        return self._session.browser(url, **kw)
+
     def audit(self, mode: str | None = None) -> list:
         """Contradictions in what this session would send."""
         return self._session.audit(mode)
@@ -513,7 +527,7 @@ class AsyncSession:
             # here without history and preflights was the third field report
             # — `r.preflight` was None on every AsyncSession request while the
             # OPTIONS had gone out, and the redirect chain was invisible too.
-            return self._session._after(Response(
+            response = Response(
                 status=payload["status"],
                 proto=payload.get("proto", ""),
                 headers=payload.get("headers") or {},
@@ -524,7 +538,15 @@ class AsyncSession:
                          for h in payload.get("history") or []],
                 preflights=_preflights(payload.get("preflights")),
                 cache=payload.get("cache"),
-            ), expect)
+            )
+            if self._session.solver is not None and response.challenge is not None:
+                # A solve takes seconds and a browser: off the event loop.
+                # Requests to the same site wait on one solve there, as the
+                # synchronous session's do.
+                response = await asyncio.to_thread(
+                    self._session._through_challenge, response, method, url, kw.get("page"),
+                    kw.get("proxy"), meta, body, t0)
+            return self._session._after(response, expect)
         except BaseException as exc:
             # A failed expectation is a request failure too: the caller was
             # promised a response of a certain shape and did not get it.

@@ -7,6 +7,7 @@ import base64
 import json
 import os
 import sys
+import threading
 import time
 import traceback
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, TypedDict
@@ -14,7 +15,8 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from ._ffi import _call, call_framed, encode
 from ._headers import Headers
-from .errors import HTTPError
+from .challenge import Challenge, detect as detect_challenge
+from .errors import ChallengeError, HTTPError
 from .cookies import Cookies
 from .encoding import detect as detect_encoding, without_bom
 from .expect import Expect
@@ -578,6 +580,22 @@ class Preflight:
         return f"<Preflight {self.status} {self.url}{mark}>"
 
 
+def _response(payload: dict, content: bytes, url: str, started: float) -> "Response":
+    """A Response from a native answer; ``started`` is when the request began."""
+    return Response(
+        status=payload["status"],
+        proto=payload.get("proto", ""),
+        headers=payload.get("headers") or {},
+        content=content,
+        url=payload.get("url") or url,
+        elapsed=time.perf_counter() - started,
+        history=[Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
+                 for h in payload.get("history") or []],
+        preflights=_preflights(payload.get("preflights")),
+        cache=payload.get("cache"),
+    )
+
+
 def _preflights(items: Any) -> list[Preflight]:
     return [Preflight(p.get("url", ""), p.get("status", 0), p.get("headers") or {}, bool(p.get("cached")))
             for p in items or []]
@@ -618,11 +636,15 @@ class CacheInfo(TypedDict):
     stored: int
 
 
+#: A response's challenge before it was looked for.
+_UNREAD = object()
+
+
 class Response:
     """A server response."""
 
     __slots__ = ("status", "proto", "headers", "content", "url", "elapsed",
-                 "history", "preflights", "cache", "_encoding")
+                 "history", "preflights", "cache", "_encoding", "_challenge")
 
     def __init__(self, status: int, proto: str, headers: dict[str, list[str]],
                  content: bytes, url: str = "", elapsed: float = 0.0,
@@ -647,6 +669,27 @@ class Response:
         #: cache took no part: none on the session, a POST, ``cache="no-store"``.
         self.cache: str | None = cache or None
         self._encoding: str | None = None
+        self._challenge: Any = _UNREAD
+
+    @property
+    def challenge(self) -> "Challenge | None":
+        """The anti-bot challenge or block this response is, or None.
+
+        Read from the response on first use and remembered: Cloudflare's
+        ``cf-mitigated: challenge``, a vendor's header, cookie or page (see
+        :mod:`curlpro.challenge`). ``.vendor``, ``.kind`` (``challenge``,
+        ``captcha``, ``block``, ``rate-limit``), ``.solvable``, ``.ray``.
+        """
+        if self._challenge is _UNREAD:
+            self._challenge = detect_challenge(self.status, self.headers, self.content, self.url)
+        return self._challenge
+
+    def raise_for_challenge(self) -> "Response":
+        """Raises :class:`ChallengeError` when the response is a challenge or
+        a block; returns the response otherwise."""
+        if self.challenge is not None:
+            raise ChallengeError(f"{self.challenge}", self.challenge, self)
+        return self
 
     @property
     def preflight(self) -> "Preflight | None":
@@ -887,6 +930,22 @@ class Session:
         ago go first. Not given: 64 MiB in memory, 256 MiB on disk. One entry
         takes at most an eighth of it and never more than 32 MiB — a video
         is not what the cache is for. Needs ``cache``
+    :param solver: what to do when a response is an anti-bot's challenge:
+        an object with ``solve(request)`` — :class:`curlpro.solvers.BrowserSolver`
+        passes it in the Chrome installed here — called with the challenge,
+        the page to open and the session's identity. The session loads the
+        cookies it gets and sends the request again; requests to the same
+        site wait for one solve instead of each starting its own. A block is
+        not handed over, and a challenge the solver does not get past raises
+        :class:`ChallengeError`. None — the default — returns the challenge
+        page as the response; :attr:`Response.challenge` says what it is
+    :param identity: the visitor beyond the browser — a
+        :class:`curlpro.Identity` with country, time zone and languages, such
+        as ``Identity.lookup(proxy)`` finds for the proxy's exit address. The
+        session sends its languages as ``Accept-Language`` (in the profile's
+        place for the header), and a browser it opens or hands a challenge to
+        keeps the same languages and time zone: one visitor, as the address
+        says
     """
 
     def __init__(
@@ -933,6 +992,8 @@ class Session:
         preflight: bool = True,
         cache: bool | str | os.PathLike[str] = False,
         cache_size: int | None = None,
+        solver: Any = None,
+        identity: Any = None,
     ):
         # The bundled profiles are loaded on first use: after pip install
         # the library has to work without any extra steps.
@@ -1009,6 +1070,24 @@ class Session:
         self._page = page or ""
         #: The address bar's page when that one is a frame's; see :attr:`top_level`.
         self._top_level = top_level or ""
+        if solver is not None and not callable(getattr(solver, "solve", None)):
+            raise TypeError(f"solver must have a solve(request) method, got {type(solver).__name__}")
+        #: What passes an anti-bot's challenge; see the ``solver`` parameter.
+        self.solver = solver
+        from .identity import Identity
+        if identity is not None and not isinstance(identity, Identity):
+            raise TypeError(f"identity must be a curlpro.Identity, got {type(identity).__name__}")
+        #: The visitor's country, time zone and languages; see the ``identity`` parameter.
+        self.identity = identity
+        if identity is not None and identity.languages:
+            # In place of the profile's value: the header keeps its position.
+            self.headers["Accept-Language"] = identity.accept_language
+        # One solve per site at a time, and when each site was last solved:
+        # a request that met the challenge while another was solving it
+        # tries again with the new cookies before starting a solve of its own.
+        self._solve_guard = threading.Lock()
+        self._solve_locks: dict[str, threading.Lock] = {}
+        self._solved_at: dict[str, float] = {}
         #: Session cookies: reading, editing, saving and loading from a file.
         self.cookies = Cookies(self._id)
         #: Hooks: "request" runs before sending and receives the request
@@ -1156,21 +1235,72 @@ class Session:
         try:
             payload, content = call_framed("curlpro_request", self._id, body=body, meta=meta)
             changes = payload.get("cookie_changes")
-            spent = time.perf_counter() - started
-            return self._after(Response(
-                status=payload["status"],
-                proto=payload.get("proto", ""),
-                headers=payload.get("headers") or {},
-                content=content,
-                url=payload.get("url") or url,
-                elapsed=spent,
-                history=[Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
-                         for h in payload.get("history") or []],
-                preflights=_preflights(payload.get("preflights")),
-                cache=payload.get("cache"),
-            ), expect)
+            response = _response(payload, content, url, started)
+            if self.solver is not None:
+                response = self._through_challenge(response, method, url, page, proxy, meta, body, started)
+            return self._after(response, expect)
         except BaseException as exc:
             raise self._failed(exc, changes if rollback_cookies else None) from None
+
+    def _through_challenge(self, response: "Response", method: str, url: str, page: Any,
+                           proxy: Any, meta: dict, body: bytes, started: float) -> "Response":
+        """The response past an anti-bot's challenge, with the session's
+        solver; the response itself when it is none, or a block."""
+        found = response.challenge
+        if found is None or not found.solvable:
+            return response
+        site = (urlsplit(response.url or url).hostname or "").lower()
+        with self._solve_guard:
+            lock = self._solve_locks.setdefault(site, threading.Lock())
+
+        def again() -> "Response":
+            payload, content = call_framed("curlpro_request", self._id, body=body, meta=meta)
+            return _response(payload, content, url, started)
+
+        with lock:
+            # Solved by another request while this one waited: its cookies
+            # are in the jar already.
+            if self._solved_at.get(site, 0.0) > started:
+                retried = again()
+                if retried.challenge is None:
+                    return retried
+            passed: list = []
+
+            def verify(cookies: list) -> bool:
+                self.cookies.load(cookies)
+                retried = again()
+                if retried.challenge is None:
+                    passed.append(retried)
+                    return True
+                return False
+
+            # Lowercased: over HTTP/1.1 the names come in the wire's case.
+            sent = {k.lower(): v for k, v in self.headers_for(method, url, page=page).items()}
+            # The browser opens what a person would: the URL itself for a
+            # GET, else the page the request is made from, else the site.
+            if method.upper() == "GET":
+                opener = url
+            elif isinstance(page, str) and page:
+                opener = page
+            elif self._page and page is None:
+                opener = self._page
+            else:
+                parts = urlsplit(url)
+                opener = f"{parts.scheme}://{parts.netloc}/"
+            if proxy is None:
+                route = self._proxy
+            else:
+                route = proxy if isinstance(proxy, str) else ""
+            from .solvers import SolveRequest
+            solution = self.solver.solve(SolveRequest(
+                challenge=found, url=opener, impersonate=self.impersonate,
+                user_agent=sent.get("user-agent", ""), accept_language=sent.get("accept-language", ""),
+                proxy=route, verify=verify,
+                timezone=self.identity.timezone if self.identity is not None else ""))
+            if solution is None or not passed:
+                raise ChallengeError(f"{found}: the solver did not get past it", found, response)
+            self._solved_at[site] = time.perf_counter()
+            return passed[-1]
 
     def _failed(self, exc: BaseException, changes: "list[dict[str, Any]] | None") -> BaseException:
         """Handles a failed request: rolls the cookies back and runs the hooks.
@@ -1498,6 +1628,28 @@ class Session:
         if self._closed:
             raise RuntimeError("session is closed")
         return Fingerprint(_call("curlpro_session_fingerprint", self._id, url.encode("utf-8")))
+
+    def browser(self, url: str = "", *, headless: bool = False, executable: str | None = None,
+                profile_dir: str | None = None) -> Any:
+        """Opens the session in the Chrome installed here — the browser of its
+        profile's version, with its proxy, languages, time zone and cookies —
+        and brings what the browser gets back into the session::
+
+            with s.browser("https://example.com/login") as b:
+                b.wait()                       # a person logs in; the window closes
+            s.get("https://example.com/api/me")    # with the browser's cookies
+
+        ``b.sync()`` brings the cookies at any moment, ``b.push()`` sends the
+        session's newer ones to the browser, ``b.local_storage(origin)`` reads
+        what a single-page app keeps there. A session whose profile is not the
+        installed browser's version is refused: the cookies would go on under
+        a fingerprint that betrays them. See :mod:`curlpro.browser.handoff`.
+        """
+        if self._closed:
+            raise RuntimeError("session is closed")
+        from .browser.handoff import Handoff
+
+        return Handoff(self, url, headless=headless, executable=executable, profile_dir=profile_dir)
 
     @property
     def page(self) -> str | None:
