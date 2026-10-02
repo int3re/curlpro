@@ -199,6 +199,20 @@ survives any exception and keeps a result it could not hand over for the next
 round; a test injects two `MemoryError`s into its wait and requires every
 request answered (the old collector failed it by timeout).
 
+## After the release: a build the profile did not know
+
+The morning after 0.15.0, Chrome on the measuring machine had updated itself
+from 154.0.8037.58 to .93, and `session_options()` named the device
+"Windows 10 22H2, Chrome 154.0.8037.93" — which the profile's pool, made when
+.58 was the newest build, did not have. Every solver session failed. Chrome
+ships a patch every week or two, so the pool is always behind some machine.
+0.15.1 gives a build the pool lacks the pool's newest device of the same OS
+release with the browser's own build in it (`device_options`); a test reads
+`sec-ch-ua-full-version` and `-full-version-list` off the wire, and the
+release check passed on the .93 browser. The release check now runs on
+whatever Chrome is installed the day of the release, not the one of the day
+the work was done.
+
 ## Left open
 
 - A puzzle beyond a click (DataDome's slider, HUMAN's press-and-hold) waits

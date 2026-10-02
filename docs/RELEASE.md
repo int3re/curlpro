@@ -6,7 +6,14 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.15.0** — a minor for what it adds; nothing a session already sent changes.
+**0.15.1** — a patch: `BrowserSolver().session_options()` failed once the
+installed Chrome was a build the profile's device list did not have — Chrome
+154.0.8037.93 arrived overnight on a machine whose profile knew builds up to
+.58, and every solver session failed with `ConfigurationError`. A build the
+list lacks now gets the list's newest device of the same OS release with the
+browser's own build in it, so the client hints say what the browser says.
+Python only, ABI 0.25.0. Before it, **0.15.0** — a minor for what it adds;
+nothing a session already sent changes.
 A response says which anti-bot's challenge or block it is (`r.challenge`), and a
 session with a `solver` gets past a challenge: `BrowserSolver` passes it in the
 Chrome installed on the machine — started with the URL on its command line,

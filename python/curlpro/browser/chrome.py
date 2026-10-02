@@ -544,5 +544,28 @@ def profile_for(user_agent: str, product: str) -> tuple[str, str]:
     return f"{family}-{major}-{os_name}", device
 
 
+def device_options(device: str, pool: list[dict]) -> dict:
+    """``device`` (and ``devices`` when needed) for a session that is the
+    browser whose device :func:`profile_for` named; ``pool`` is the profile's.
+
+    The pool lists the builds known when the profile was made, and Chrome
+    ships a patch every week or two: 154.0.8037.93 arrived overnight on a
+    machine whose profile knew .58, and naming a device the pool lacks made
+    every session fail. A build the pool lacks gets the pool's newest device
+    of the same OS release with the browser's own build in it — the hints
+    then say what the browser says."""
+    if not device:
+        return {}
+    if any(d.get("name") == device for d in pool):
+        return {"device": device}
+    release, _, full = device.rpartition(", Chrome ")
+    same = [d for d in pool if d.get("name", "").rpartition(", Chrome ")[0] == release
+            and d.get("full_version")]
+    if not same:
+        return {}
+    newest = max(same, key=lambda d: [int(x) for x in d["full_version"].split(".") if x.isdigit()])
+    return {"device": device, "devices": [{**newest, "name": device, "full_version": full}]}
+
+
 def site_of(url: str) -> str:
     return (urlsplit(url).hostname or "").lower()

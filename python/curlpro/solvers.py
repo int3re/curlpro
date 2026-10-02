@@ -150,7 +150,8 @@ class BrowserSolver:
         the profile of its version and the identity of its build on this
         machine. Starts the browser once to ask it."""
         from .browser import Chrome, profile_for
-        from .profiles import list_profiles
+        from .browser.chrome import device_options
+        from .profiles import get_profile, list_profiles
 
         with Chrome("about:blank", executable=self.executable, headless=self.headless) as chrome:
             v = chrome.version()
@@ -158,7 +159,8 @@ class BrowserSolver:
         if name not in list_profiles():
             raise LookupError(f"this machine's browser is {v['product']} and the package has no "
                               f"profile {name!r} for it; update curlpro, or register one")
-        return {"impersonate": name, **({"device": device} if device else {})}
+        pool = get_profile(name).data.get("devices") or []
+        return {"impersonate": name, **device_options(device, pool)}
 
     def solve(self, request: SolveRequest) -> Optional[Solution]:
         from .browser import Chrome, Forwarder

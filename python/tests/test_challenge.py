@@ -173,6 +173,36 @@ def test_a_devtools_cookie_becomes_a_record():
     assert host["host_only"] and host["expires"] == 0 and "partition" not in host
 
 
+def test_a_build_newer_than_the_profiles_pool_still_gets_a_session():
+    # Chrome 154.0.8037.93 arrived overnight on a machine whose profile knew
+    # builds up to .58, and session_options() named a device the pool lacked:
+    # every session failed. The nearest device of the same release, with the
+    # browser's build in it, and the hints say that build.
+    from curlpro.browser.chrome import device_options
+
+    pool = curlpro.get_profile("chrome-154-windows").data["devices"]
+    assert device_options("Windows 10 22H2, Chrome 154.0.8037.58", pool) == {
+        "device": "Windows 10 22H2, Chrome 154.0.8037.58"}
+    opts = device_options("Windows 10 22H2, Chrome 154.0.8037.93", pool)
+    own = opts["devices"][0]
+    assert opts["device"] == own["name"] == "Windows 10 22H2, Chrome 154.0.8037.93"
+    assert own["full_version"] == "154.0.8037.93" and own["platform_version"] == "10.0.0"
+    assert own["bitness"] == "64" and "32-bit" not in own["name"]
+    assert device_options("Windows 11 24H2, Chrome 154.0.8037.93", pool)["devices"][0]["platform_version"] == \
+        next(d["platform_version"] for d in pool if d["name"].startswith("Windows 11 24H2"))
+    assert device_options("Windows 10 1809, Chrome 154.0.8037.93", pool) == {}
+    assert device_options("", pool) == {}
+    from test_client_hints import ALL_HINTS, HintServer
+
+    with HintServer(ALL_HINTS) as srv:
+        with curlpro.Session("chrome-154-windows", verify=False, force_http1=True, **opts) as s:
+            s.get(srv.url)
+            s.get(srv.url)
+    assert srv.value(1, "sec-ch-ua-full-version") == '"154.0.8037.93"'
+    assert "154.0.8037.93" in srv.value(1, "sec-ch-ua-full-version-list")
+    assert srv.value(1, "sec-ch-ua-platform-version") == '"10.0.0"'
+
+
 def test_feature_lists_are_merged_into_one_switch():
     # Chrome keeps the last of a repeated switch: three lists given, one
     # read, and the occlusion fix gone with the other two.
