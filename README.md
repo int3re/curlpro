@@ -81,7 +81,9 @@ curlpro.register_profile({
   challenge in the Chrome installed on the machine — driven without attaching
   to the page, no `Runtime.enable`, no injected script, `navigator.webdriver`
   off — and the session goes on with that browser's own fingerprint. No extra
-  install.
+  install. Seven vendors recognised (Cloudflare, Qrator, DataDome, HUMAN,
+  Akamai, Imperva, Kasada); every rule, every ready solution and what is and
+  is not verified: [docs/ANTIBOT.md](docs/ANTIBOT.md).
 - **One visitor**: `Identity.lookup(proxy)` finds the proxy's country and time
   zone; the session's `Accept-Language` and its browser's languages and time
   zone (page and every worker) follow. `s.browser(url)` opens the session in

@@ -560,8 +560,10 @@ CORS-preflight (раздел 7) с `.status`, `.headers` и `.reason` ответ
   него. Хук, который сам упал, не прячет исходный сбой: сбой отмечается на
   исключении, а остальные хуки всё равно выполняются.
 
-**Проверки антиботов.** 403 говорит мало; проверка говорит больше, если
-присмотреться. `r.challenge` — `None` или `Challenge`: `vendor` (`cloudflare`,
+**Проверки антиботов.** Целиком — правила каждого вендора, все готовые
+решения, рецепты по ситуациям и что проверено — в
+[ANTIBOT.ru.md](ANTIBOT.ru.md); здесь краткое изложение. 403 говорит мало;
+проверка говорит больше, если присмотреться. `r.challenge` — `None` или `Challenge`: `vendor` (`cloudflare`,
 `qrator`, `datadome`, `akamai`, `human`, `imperva`, `kasada`), `kind`
 (`challenge` — проверка, которую браузер выполняет и проходит, `captcha` — та,
 что может попросить человека, `block` — отказ, который никакой браузер не
@@ -1233,6 +1235,7 @@ curlPro, стоит взять готовое. Каждая строка его 
 | Путь | Содержит |
 |---|---|
 | `python/curlpro/session.py` | `Session`, `Response`, кадр запроса, хуки, модульные функции |
+| `python/curlpro/challenge.py`, `solvers.py`, `identity.py`, `browser/` | распознавание антиботов, контракт решателя и `BrowserSolver`, личность, драйвер Chrome — описаны в `docs/ANTIBOT.ru.md` |
 | `python/curlpro/aio.py`, `stream.py`, `websocket.py` | async, потоки, WebSocket |
 | `python/curlpro/cookies.py`, `persona.py`, `headers.py` | банка, персоны, отображение сессионных заголовков |
 | `python/curlpro/fingerprint.py`, `audit.py`, `expect.py`, `encoding.py` | отпечаток, проверки аудита, ожидания, определение кодировки |

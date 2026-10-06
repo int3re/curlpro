@@ -677,8 +677,10 @@ class Response:
 
         Read from the response on first use and remembered: Cloudflare's
         ``cf-mitigated: challenge``, a vendor's header, cookie or page (see
-        :mod:`curlpro.challenge`). ``.vendor``, ``.kind`` (``challenge``,
-        ``captcha``, ``block``, ``rate-limit``), ``.solvable``, ``.ray``.
+        :mod:`curlpro.challenge`, and ``docs/ANTIBOT.md`` for every rule).
+        ``.vendor``, ``.kind`` (``challenge``, ``captcha``, ``block``,
+        ``rate-limit``, ``no-verdict``), ``.solvable``, ``.ray``,
+        ``.evidence``.
         """
         if self._challenge is _UNREAD:
             self._challenge = detect_challenge(self.status, self.headers, self.content, self.url)

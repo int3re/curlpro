@@ -560,8 +560,10 @@ Three hooks, each a list of callables on `s.hooks[...]`, also addable with
   itself raises does not hide the original failure: the failure is noted on the
   exception and the remaining hooks still run.
 
-**Anti-bot challenges.** A 403 says little; a challenge says more if one
-looks. `r.challenge` is `None` or a `Challenge` — `vendor` (`cloudflare`,
+**Anti-bot challenges.** The whole of it — every vendor's rules, every
+ready-made solution, recipes by situation and what is verified — is in
+[ANTIBOT.md](ANTIBOT.md); this is the summary. A 403 says little; a
+challenge says more if one looks. `r.challenge` is `None` or a `Challenge` — `vendor` (`cloudflare`,
 `qrator`, `datadome`, `akamai`, `human`, `imperva`, `kasada`), `kind`
 (`challenge` — a check a browser runs and passes, `captcha` — one that may ask
 a person to act, `block` — a refusal no browser changes, `rate-limit`,
@@ -1251,6 +1253,7 @@ For research in the repository:
 | `python/curlpro/fingerprint.py`, `audit.py`, `expect.py`, `encoding.py` | fingerprint, audit checks, expectations, charset detection |
 | `python/curlpro/requests.py`, `proxies.py`, `timeouts.py`, `profiles.py`, `_ffi.py` | the compat layer, environment proxies, timeout parsing, profile loading, the native binding and ABI check |
 | `python/curlpro/page.py` | the page load: what the markup names, the fonts a stylesheet declares |
+| `python/curlpro/challenge.py`, `solvers.py`, `identity.py`, `browser/` | anti-bot recognition, the solver contract and `BrowserSolver`, the identity, the Chrome driver — described in `docs/ANTIBOT.md` |
 | `python/curlpro/errors.py`, `_headers.py`, `_kwargs.py` | the exceptions, the response header mapping, the typed keyword arguments |
 | `scripts/derive-current.py`, `chromium_brands.py`, `check-typing.py` | the derived presets, Chromium's brand algorithm, the mypy check of the typed verbs |
 | `internal/client/` | the Go client: header assembly (`headers.go`, `mode.go`, `resource.go`), dialling and TLS (`client.go`, `conn.go`), the pool and its bursts (`pool.go`), HTTP/3 (`http3.go`), cookies, redirects, retries, WebSocket, fingerprint |
