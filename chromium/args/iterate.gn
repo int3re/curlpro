@@ -1,0 +1,43 @@
+# The build to develop a patch against: fast to relink, truthful enough to
+# measure a fingerprint on. Every line is here for a reason stated.
+#
+# What this is NOT: a build whose performance resembles a shipped Chrome.
+# There is no LTO and no PGO here, and Chromium's own BUILDCONFIG.gn warns
+# that "(!is_debug) is *not* sufficient to get satisfying performance".
+# A claim about the patched browser is proven on args/release.gn.
+
+is_debug = false
+
+# Many small DLLs instead of one chrome.dll: the reason a changed Blink .cc
+# costs a minute or two instead of fifteen, and the reason the link fits in
+# 16 GB of RAM. Off by default in a release build, so it must be said.
+is_component_build = true
+
+# On Windows symbol_level defaults to 2 even when is_debug is false, and
+# Blink's templates alone produce about half of Chromium's debug symbols.
+# This is the single largest saving in both disk and link time.
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+
+# Already the default when is_debug is false; said out loud because mixing
+# DCHECKs with PGO profiles is explicitly warned against upstream, and
+# because DCHECKs on can halve the browser's speed.
+dcheck_always_on = false
+
+# No profile is used in this configuration; without this, gn gen stops on a
+# missing PGO profile the moment anything turns is_official_build on.
+chrome_pgo_phase = 0
+
+# A plain Chromium build has no H.264, AAC or MP4: a site with ordinary video
+# would silently fail, which is itself a fingerprint. Licensing for the codecs
+# is the distributor's business, and is noted in chromium/README.md.
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+
+target_cpu = "x64"
+
+# Our patches are not upstream's code and will produce warnings upstream's
+# style does not; a warning must not stop a four-hour build. Turned back on
+# for the release configuration, where the patches are expected to be clean.
+treat_warnings_as_errors = false

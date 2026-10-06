@@ -1,0 +1,19 @@
+# The build to ship and to prove a fingerprint on: as a real Chrome is built.
+#
+# is_official_build pulls in, by itself and without asking: is_debug = false,
+# ThinLTO (use_thin_lto is true for is_official_build on Windows), PGO phase 2,
+# and symbol_level = 2 — "we want the best debug info we can get for
+# in-the-wild crashes", says compiler.gni. Do not fight those; setting them by
+# hand only produces a configuration no shipped browser has.
+#
+# It costs 2–3× the wall clock of args/iterate.gn and tens of minutes per
+# incremental edit, because ThinLTO moves optimisation into the link.
+is_official_build = true
+
+# The PGO profile arrives through "checkout_pgo_profiles": True in
+# D:\chromium\.gclient. Without it this build stops at gn gen.
+
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+
+target_cpu = "x64"

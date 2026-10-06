@@ -55,3 +55,11 @@ python/LICENSE
 python/NOTICE
 python/dist/
 capture/certs-multi/
+
+# Device fingerprints read by scripts/fpcapture.py. A record names the exact
+# font inventory (and so the software installed), the GPU, the driver and the
+# audio hash of one machine: an HTTP profile describes a browser version, this
+# describes somebody's computer. Nothing here is published by accident. A
+# record that is meant to be shipped as a device the fork can present is moved
+# to profiles/ deliberately, from hardware whose owner meant to publish it.
+capture/fp/

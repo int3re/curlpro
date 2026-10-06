@@ -1,0 +1,102 @@
+# chromium/
+
+The fork: build configuration, patches and the scripts that apply them.
+Stage 42 in [../ROADMAP.md](../ROADMAP.md) says why it exists and what was
+decided; this file says how to run it.
+
+The Chromium checkout itself is **not** in this repository — it is ~150 GB.
+It lives at `D:\chromium` (`src` under it), with depot_tools at
+`D:\depot_tools` and a shared git mirror at `D:\chromium\git-cache`.
+
+| Here | What |
+|---|---|
+| `args/iterate.gn` | the build to develop against: component, no symbols, minutes per patch |
+| `args/release.gn` | the build to ship: official, ThinLTO and PGO, as a real Chrome is built |
+| `sync.cmd` | fetch or finish fetching the source, two workers, below-normal |
+| `checkout.cmd` | put the tree on the release branch this fork targets and sync its DEPS |
+| `build.cmd` | build `chrome` from one of the arg sets |
+| `patches/` | our patches, applied in filename order (empty until step 2) |
+
+## What the tree requires
+
+Measured against the 154 source, 2026-10-02 — the commonly-repeated advice is
+out of date on every one of these:
+
+- **Visual Studio 2026** (≥ 18.0), MSVC toolset `VC145`, with the
+  "Desktop development with C++" workload **and the MFC/ATL sub-component**.
+  VS 2022 is no longer the packaged toolchain.
+- **Windows 11 SDK 10.0.28000**, enforced by `#error Windows 10.0.28000.0 SDK
+  or higher required.` in `base/win/windows_version.cc`. Debugging Tools
+  ≥ 10.0.26100.3323, for the large-page PDBs Chrome uses.
+- `DEPOT_TOOLS_WIN_TOOLCHAIN=0`, or depot_tools tries to download Google's
+  internal toolchain, which is not ours to have.
+- `vs2026_install` pointing at the install, when Visual Studio is not on C:.
+  `vs_toolchain.py` searches `%ProgramFiles%\...\18` and nowhere else, so an
+  install on D: is simply not found; the scripts here set it.
+- **Defender excluding `D:\chromium` and `D:\depot_tools`.** Not a nicety:
+  reports of the same machine building in 30 min with exclusions and 90+
+  without are in the chromium-dev archives, and the official "why is my build
+  slow" answer leads with it.
+- `enable_nacl` must **not** be set. NaCl and PPAPI are gone from the tree and
+  the argument now fails `gn gen` as unused. Every third-party arg list on the
+  web still carries it.
+- There is **no remote build execution for external contributors on Windows**.
+  Every build is local; plan in hours, not minutes.
+
+## Not taking the machine over
+
+Both `sync.cmd` and `build.cmd` run at below-normal priority with a small
+number of workers (two and six), because the tools do not do this themselves:
+gclient and siso size their pools from the core count and know nothing about
+free memory. On this machine the default pools pegged all sixteen threads and
+put memory at 87%, and the sync then **died with exit 1 and no error message**
+— which is what a worker killed for want of memory looks like from outside.
+Both take a worker count as an argument for when the machine is free.
+
+## Building
+
+```cmd
+chromium\checkout.cmd            :: once per milestone: branch + DEPS
+chromium\build.cmd iterate       :: or: chromium\build.cmd release
+```
+
+`iterate` is a component build with `symbol_level=0`: a full build in 3–6 h on
+twelve cores, and **1–3 minutes** for a changed `.cc` afterwards, because only
+the one component DLL relinks. It is not what a shipped Chrome behaves like —
+DCHECKs are off but there is no LTO and no PGO — so a fingerprint claim is
+only ever *proven* on a `release` build.
+
+`release` is `is_official_build=true`, which pulls in ThinLTO, PGO phase 2 and
+full symbols by itself; it takes 2–3× as long and tens of minutes per
+incremental edit. The PGO profile comes from `checkout_pgo_profiles: True` in
+`D:\chromium\.gclient` — without it `gn gen` stops on a missing profile.
+
+## Proving a build
+
+```cmd
+python scripts\fpcapture.py -name patched -chrome D:\chromium\src\out\iterate\chrome.exe
+python scripts\fpcapture.py -compare capture\fp\this-machine.json capture\fp\patched.json
+```
+
+Every value the patch claims to serve must equal the target device's, and
+every value it does not touch must equal this machine's. A baseline build with
+no patches must differ from the installed Chrome in **nothing a page can read**
+except the brand list, which an unbranded Chromium reports as `Chromium`
+rather than `Google Chrome` — that difference is itself one of the things the
+patches have to put right, out of the profile that already records it.
+
+## Following upstream
+
+A milestone every four weeks. `checkout.cmd` takes the branch as an argument,
+the patches are applied in filename order and any that no longer applies is
+reported rather than forced. The branch number is the third component of a
+Chrome version: 154.0.**8037**.93 → `branch-heads/8037`. Current stable comes
+from `https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Windows`.
+
+## Licence
+
+Chromium is BSD-3; its `LICENSE` and the notices of its third-party code
+travel with any binary we distribute. The Google branding, the Google API keys
+and the `Google Chrome` name are not ours to ship — the build is Chromium with
+our patches, and what it *reports* to a page is a separate question, answered
+from a profile, which is the whole point of the stage.

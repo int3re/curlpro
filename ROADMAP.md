@@ -1106,13 +1106,142 @@ the page. In the order it can be built and measured:
    decides the languages and time zone the browser reports; screen, hardware
    and fonts stay the machine's own. Spoofing those (canvas, WebGL, fonts)
    convincingly needs a patched engine — the road of Camoufox and CloakBrowser,
-   a Chromium build to rebuild every four weeks. Whether to take it is a
-   decision for later, against what it costs; the light engines that render
-   nothing (Lightpanda) are cheap and told apart by any canvas test.
+   a Chromium build to rebuild every four weeks. **The owner took that road on
+   2026-10-02: Stage 42 below.** The light engines that render nothing
+   (Lightpanda) are cheap and told apart by any canvas test.
 5. **One source for both.** The profiles that give curlPro a browser's
    network fingerprint describe the browser the driver runs, and a session
    moves between the two with its cookies and cache — the browser where a page
    must run, curlPro for the requests after it.
+
+## Stage 42 — a Chromium that reports a measured device (in progress)
+
+The owner's direction, 2026-10-02: patch Chromium so that canvas, WebGL and
+the font list answer for a chosen machine rather than the one the build runs
+on, in C++, where no script can be caught doing it. Decided with him the same
+day, against the measurements below: the build is local (3–6 h on the
+measuring machine, against the ~46 h of chained free CI jobs that
+ungoogled-chromium needs for one Windows binary), the patches are **ours on
+stock Chromium 154** (`branch-heads/8037`, the version installed here and the
+one the `chrome-154-windows` profiles describe) rather than inherited from
+ungoogled-chromium or fingerprint-chromium, and **canvas pixels are left
+alone**. The reasoning for that last one is the stage's main finding, so it
+goes first.
+
+### Canvas is not spoofable, and the attempt is what gets noticed
+
+CreepJS — the test the industry measures itself against — runs four checks
+that catch *any* interference with canvas, noise and fixed substitution alike:
+a round-trip (write known RGBA pixel by pixel, read it back, write that into a
+second canvas, read again: a read path that perturbs anything fails, and the
+report names the channels touched); a blank canvas, whose maximum pixel must
+be zero; a 2×2 anti-aliased arc compared against **eight hardcoded real Blink
+pixel strings**, which is what makes a *fixed* substitution fail too; and
+`measureText('')`, whose bounding-box values must be integers.
+
+Camoufox, the more mature of the two forks, concluded the same and ships **no
+canvas patch at all** — `privacy.resistFingerprinting` is explicitly off, with
+the comment that it hurts rather than helps — and spends 2.16 GB of bundled
+real fonts on the problem instead. fingerprint-chromium flips the low bit of
+edge pixels and adds a 0.00001 px offset to text metrics; both trip the checks
+above. A patched canvas is therefore a worse signal than an honest one, and
+the honest one is genuinely a real Blink rendering of the host's GPU.
+
+What remains, and is enough: canvas output follows the **installed font set**
+(every probe draws text) and the raster configuration, both of which can be
+changed for real reasons rather than faked. The cost is stated plainly: two
+identities on one machine share a canvas hash, and a site that stores it can
+link them. Buying that back needs different hardware, not a patch.
+
+### What is transplantable, and therefore is data
+
+WebGL and the font inventory are lists of values, so they move the way the
+HTTP profiles move — measured from a real device, served unchanged:
+
+- `scripts/fpcapture.py` records what a page can read, and diffs two records.
+  The first run on the measuring machine (Chrome 154.0.8037.93, Intel Iris Xe
+  under ANGLE D3D11) took 2.7 s and holds **83 WebGL1 parameters, 133 WebGL2,
+  35 and 32 extensions, 12 shader precisions**, the canvas and audio hashes,
+  the text metrics, and the font inventory by three separate probes. The same
+  page read from the patched build is the test: what the patch claims to serve
+  must equal the target, and what it does not touch must equal the host. It
+  earned itself at once — across 340 values it showed the driver's light flags
+  change nothing, where Stage 41 could only say that of 26.
+- The transplant must be one whole device, both contexts at once. CreepJS
+  compares every parameter a WebGL1 and a WebGL2 context share, hashes the
+  renderer brand together with the sorted numeric parameters against ~280
+  known-real combinations, and XOR-folds the numbers against ~220 more. An
+  NVIDIA string over an Intel limit set is caught by arithmetic, not by taste.
+- It also pins the OS *version* from the font list, and resolves the CSS
+  system fonts (`font: menu`) to a platform separately from enumeration — so
+  the font set and the claimed platform have to agree in both channels.
+
+Two things the published prior art gets wrong, found by reading this machine
+rather than the sources:
+
+- **`document.fonts.check()` is not a presence oracle in Chromium.** It
+  answered `true` for all 294 probed families, the three deliberately
+  nonexistent controls included. Brave is described as leaving this path
+  unhooked; there is nothing to hook.
+- **`local()` sees fonts that measurement does not.** Eight families
+  (`Britannic Bold`, `OCR A Extended`, `Script MT Bold`…) resolved through a
+  `local()` source while a measured span could not tell them from the
+  fallback. An allow-list that filters only family matching leaks through
+  `FontUniqueNameLookup`.
+
+### The hooks, from reading the 154 tree
+
+| Surface | Where |
+|---|---|
+| every canvas 2D readback | `CanvasRenderingContext::GetImage()`, plus `TransferToImageBitmap` — the one choke point `getImageData`, `toDataURL`, `toBlob` and `convertToBlob` all pass through. **Left untouched; listed because the patch must prove it does not touch it** |
+| WebGL GL strings | `GLES2Implementation::GetStringHelper` — one function, covers `GL_VENDOR`, `GL_RENDERER`, `GL_VERSION`, `GL_EXTENSIONS` |
+| WebGL numbers | the eight `Get*Parameter` helpers in `webgl_rendering_context_base.cc`, which serve WebGL1 and WebGL2 both |
+| WebGL extensions | the existing `disabled_extensions_` / `GpuFeatureInfo::disabled_webgl_extensions` |
+| WebGPU | `GPUAdapter::CreateAdapterInfoForAdapter` |
+| `chrome://gpu`, the blocklist | `gpu::GPUInfo`, filled in `gpu_info_collector.cc` — Chromium's own `--gpu-testing-*` overrides were removed around M64–M66, so no upstream hook is left |
+| fonts, family matching | `FontDataServiceImpl::MatchFamilyName` / `FontDataManager::onMatchFamilyStyle` — Windows stopped using `DWriteFontProxy` for this; `TypefacesMatchesFamily` is the Blink-only alternative |
+| fonts, `local()` | `FontUniqueNameLookupWin::MatchUniqueName` — the leak measured above |
+| font rendering | `RendererPreferences` (`hinting`, `subpixel_rendering`, `text_contrast`, `text_gamma`), not the command line: `--font-render-hinting` is headless-only and `--disable-font-subpixel-positioning` is Linux-only |
+
+### The shape of it
+
+The build is one artefact per Chrome milestone; the identity it serves is a
+**profile read at runtime**, so a new identity costs no rebuild — the rule the
+whole project stands on, kept everywhere it can be. The fingerprint travels
+per tab, the way `WebPreferences` already travels, so one browser can hold
+several identities at once, which is what step 2 of Stage 41 wanted. A
+command-line switch of our own avoids the infobar an unknown switch raises
+(Stage 40 measured it: 151 px of window chrome instead of 95).
+
+Upstream is moving the same way and is worth watching: `NoiseToken` and
+`ExecutionContext::CanvasNoiseToken()` landed in main as per-context canvas
+noise scaffolding with no policy, no feature flag and no caller of the getter.
+The identifiability-study instrumentation that used to mark every
+fingerprinting surface was deleted in M145; `refs/branch-heads/7550` (M144) is
+the last tree that carries its list of surfaces, which is the best map of what
+Google itself considered fingerprintable.
+
+**What it costs, said once.** A rebuild every four weeks per milestone — the
+one place the "data, not rebuilds" rule breaks, and it breaks by nature of
+being a fork. ~180 MB per platform to distribute (`curlpro browser install`,
+not the wheel). Chromium's BSD licence means attribution travels with the
+binary, and the Google branding and API keys do not.
+
+### In order
+
+1. The toolchain and a baseline build of unpatched 154, so that everything
+   after is measured against something that works. VS 2026 is what the tree
+   now requires (`MSVC_TOOLSET_VERSION['2026'] = 'VC145'`) and is installed;
+   SDK 10.0.28000 is enforced by `#error` in `base/win/windows_version.cc`.
+2. The profile plumbing: a switch, a parsed profile, per-tab delivery, nothing
+   read yet. Proven by a tab that reports its own identity.
+3. WebGL, the whole measured block, both contexts, with `chrome://gpu` and
+   WebGPU moved to match. The harness's diff is the test.
+4. Fonts, at all four layers, with the `local()` leak closed and the CSS
+   system fonts following the claimed platform.
+5. Canvas: a test that proves the four CreepJS checks still pass, and that
+   the host's own rendering is what arrives.
+6. Distribution and the rebase script, then the first milestone rebase.
 
 ## A separate list: the accumulated debt
 
