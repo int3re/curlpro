@@ -108,7 +108,9 @@ class _Headers(Mapping[str, str]):
     def __getitem__(self, key: str) -> str:
         lowered = key.lower()
         for name, values in self._raw.items():
-            if name.lower() == lowered and values:
+            # len, not truth: a header sent empty is "" here, as in requests —
+            # and its values are falsy when they join to "" (HeaderValues).
+            if name.lower() == lowered and len(values):
                 return ", ".join(values)
         raise KeyError(key)
 

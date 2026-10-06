@@ -41,13 +41,18 @@ def ensure_loaded() -> list[str]:
     """
     global _autoloaded
     if _autoloaded:
-        return list_profiles()
+        return _registered()
     with _load_lock:
         if not _autoloaded:
             if _BUNDLED.is_dir():
                 load_profiles(_BUNDLED)
             _autoloaded = True
-    return list_profiles()
+    return _registered()
+
+
+def _registered() -> list[str]:
+    """What the native registry holds right now, loaded or not."""
+    return _call("curlpro_profiles_list")["profiles"]
 
 
 def register_profile(profile: dict[str, Any] | str | bytes) -> list[str]:
@@ -83,8 +88,16 @@ def list_profiles(*, measured: bool | None = None) -> list[str]:
     profile should draw from ``measured=True``: a transcribed profile
     replays a captured version's hello under another version's User-Agent,
     which is what its source claims and nothing this project has seen.
+
+    Loads the bundled profiles first, as :func:`get_profile`,
+    :func:`capabilities` and a new session do. Until 0.15.2 it was the one
+    function that did not: in a fresh process it answered ``[]``, which reads
+    exactly like "no such profiles", and a field report's
+    ``name if name in list_profiles() else default`` sent every User-Agent to
+    the default — a ClientHello of the wrong version, chosen by the very
+    function written to prevent one.
     """
-    names = _call("curlpro_profiles_list")["profiles"]
+    names = ensure_loaded()
     if measured is None:
         return names
     return [n for n in names if capabilities(n)["measured"] is measured]

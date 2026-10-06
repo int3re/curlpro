@@ -141,11 +141,7 @@ class AsyncStreamResponse:
         return detect(self.status, self.headers, b"", self.url)
 
     def header(self, name: str) -> str | None:
-        lowered = name.lower()
-        for key, values in self.headers.items():
-            if key.lower() == lowered and values:
-                return values[0]
-        return None
+        return self.headers.first(name)
 
     async def read_chunk(self, size: int = DEFAULT_CHUNK) -> bytes:
         """Reads one chunk. An empty result means the body ended."""
@@ -288,6 +284,18 @@ class AsyncWebSocket:
         return f"<AsyncWebSocket {self._id} {state}>"
 
 
+_SESSION_PARAMETERS: frozenset | None = None
+
+
+def _session_parameters() -> frozenset:
+    """The keyword arguments Session accepts, read from its signature once."""
+    global _SESSION_PARAMETERS
+    if _SESSION_PARAMETERS is None:
+        import inspect
+        _SESSION_PARAMETERS = frozenset(inspect.signature(Session.__init__).parameters) - {"self"}
+    return _SESSION_PARAMETERS
+
+
 class AsyncSession:
     """An async session over the same native session as the sync one.
 
@@ -321,6 +329,12 @@ class AsyncSession:
                 "AsyncSession(max_workers=...) has no effect since 0.2.0 and "
                 "will be removed; requests are not bounded by a thread pool",
                 DeprecationWarning, stacklevel=2)
+        # Checked here rather than left to Session: its TypeError named
+        # Session, and a field report spent its first minutes looking for the
+        # mistake in the wrong class (`proxies=`, curl_cffi's spelling).
+        unknown = [k for k in kwargs if k not in _session_parameters()]
+        if unknown:
+            raise TypeError(f"AsyncSession() got an unexpected keyword argument {unknown[0]!r}")
         self._session = Session(impersonate, **kwargs)
         self.impersonate = impersonate
 

@@ -114,11 +114,7 @@ class StreamResponse:
             yield buffer
 
     def header(self, name: str) -> str | None:
-        lowered = name.lower()
-        for key, values in self.headers.items():
-            if key.lower() == lowered and values:
-                return values[0]
-        return None
+        return self.headers.first(name)
 
     def iter_content(self, chunk_size: int = DEFAULT_CHUNK) -> Iterator[bytes]:
         """Yields the body in chunks until it ends."""

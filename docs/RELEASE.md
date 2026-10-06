@@ -6,7 +6,19 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.15.1** — a patch: `BrowserSolver().session_options()` failed once the
+**0.15.2** — a patch, from one field report (a Qrator solver for
+`login.mts.ru`, ported from curl_cffi). `list_profiles()` answered `[]` in a
+fresh process, the one profile function that did not load the bundled set
+first — so `name if name in list_profiles() else default` sent every
+User-Agent to the default, a ClientHello of the wrong version. `r.challenge`
+knows Qrator, by the rules the report measured on the wire, and tells a 403
+that is a verdict (`X-Qrator-Validate-Result`) from a bare one that is not
+(`kind="no-verdict"`: what was sent could not be read). A header value is
+still the list of values, and now also equal to and printed as the string
+requests gives, so ported `r.headers.get(name) == "captcha"` is true when it
+should be; converted on first read, at no cost to building a response.
+`AsyncSession` names itself for an unknown argument. Python only, ABI 0.25.0.
+Before it, **0.15.1** — a patch: `BrowserSolver().session_options()` failed once the
 installed Chrome was a build the profile's device list did not have — Chrome
 154.0.8037.93 arrived overnight on a machine whose profile knew builds up to
 .58, and every solver session failed with `ConfigurationError`. A build the

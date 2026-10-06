@@ -760,11 +760,7 @@ class Response:
 
     def header(self, name: str) -> str | None:
         """The first value of a header, matched case-insensitively."""
-        lowered = name.lower()
-        for key, values in self.headers.items():
-            if key.lower() == lowered and values:
-                return values[0]
-        return None
+        return self.headers.first(name)
 
     def __repr__(self) -> str:
         return f"<Response {self.status} {self.proto} {len(self.content)}b>"

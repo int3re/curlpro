@@ -13,9 +13,11 @@ passed by a browser that runs it — :mod:`curlpro.solvers` hands it to one. A
 block (Cloudflare's 1020, an Akamai "Access Denied") is a decision already
 made: no browser changes it, only another address or another request does.
 
-The Cloudflare marks are the vendor's documented ones. The others are the
-marks their challenge and block pages are known to carry; they were not
-measured on this project's stand, and each Challenge says what it matched.
+The Cloudflare marks are the vendor's documented ones. The Qrator marks were
+measured on the wire against ``login.mts.ru`` by a field report (2026-10-06),
+a browser's answers beside the library's. The others are the marks their
+challenge and block pages are known to carry; they were not measured on this
+project's stand, and each Challenge says what it matched.
 """
 
 from __future__ import annotations
@@ -36,14 +38,18 @@ _SCAN = 64 * 1024
 class Challenge:
     """An anti-bot's challenge or block, as :func:`detect` recognised it.
 
-    ``vendor`` is ``"cloudflare"``, ``"datadome"``, ``"akamai"``, ``"human"``
-    (PerimeterX), ``"imperva"`` or ``"kasada"``. ``kind`` is ``"challenge"`` —
-    a check a browser runs and passes (Cloudflare's managed and JS
-    challenges, Turnstile in front of a page); ``"captcha"`` — one that may
-    ask a person to act (DataDome's slider, HUMAN's press-and-hold);
-    ``"block"`` — a refusal no browser changes; ``"rate-limit"``. ``solvable``
-    says whether a solver can help. ``ray`` is Cloudflare's request id, the
-    one its support asks for; ``evidence`` names the marks that matched.
+    ``vendor`` is ``"cloudflare"``, ``"qrator"``, ``"datadome"``, ``"akamai"``,
+    ``"human"`` (PerimeterX), ``"imperva"`` or ``"kasada"``. ``kind`` is
+    ``"challenge"`` — a check a browser runs and passes (Cloudflare's managed
+    and JS challenges, Turnstile in front of a page, Qrator's 401 with its
+    script); ``"captcha"`` — one that may ask a person to act (DataDome's
+    slider, HUMAN's press-and-hold, Qrator's picture captcha and checkbox);
+    ``"block"`` — a refusal no browser changes; ``"rate-limit"``;
+    ``"no-verdict"`` — a refusal that is not a judgement of the visitor at
+    all: Qrator answered its validation request with a bare 403 because it
+    could not read what it was sent. ``solvable`` says whether a solver can
+    help. ``ray`` is Cloudflare's request id, the one its support asks for;
+    ``evidence`` names the marks that matched.
     """
 
     vendor: str
@@ -82,6 +88,60 @@ def _cookie_names(headers: Mapping[str, Any]) -> set:
     return names
 
 
+#: Qrator's own statuses for the checkbox branch: its bundle shows the
+#: checkbox (``qauth_show_checkbox``) on these as on a 403 with a verdict
+#: other than "captcha".
+_QRATOR_CHECKBOX = frozenset({418, 420})
+
+
+def _qrator(status: int, headers: Mapping[str, Any], text: str, url: str,
+            cookies: set) -> Challenge | None:
+    """Qrator, by the rules a field report measured on ``login.mts.ru``.
+
+    ``Server: QRATOR`` names the vendor and nothing more: it is on ordinary
+    200s as well. What makes a gate is the status with its marks:
+
+    - 401, with the ``qrator_jsr`` cookie set or the ``/__qrator/`` script in
+      the page — the JavaScript challenge;
+    - 403 from the validation endpoint with ``X-Qrator-Validate-Result:
+      captcha`` (and a fresh ``X-Qrator-Token``) — sent to the picture
+      captcha; with any other verdict, or a 418 or 420 — the checkbox;
+    - 403 from the validation endpoint **without** the verdict header — no
+      verdict at all. The report spent half a day here: a browser's 403 carried
+      ``captcha`` and a new token, its own 403 came back empty, and from
+      outside both are "403". The first means "you were judged", the second
+      "what you sent could not be read", and only the header tells them apart.
+    """
+    marks = []
+    if _header(headers, "server").lower() == "qrator":
+        marks.append("server: QRATOR")
+    if "qrator_jsr" in cookies:
+        marks.append("set-cookie: qrator_jsr")
+    if "/__qrator/" in text:
+        marks.append("/__qrator/ script")
+    # The endpoint is Qrator's by its path. It matters for the bare 403, whose
+    # only other mark is a Server header a proxy in between may rewrite.
+    if "/__qrator/" in url:
+        marks.append("/__qrator/ endpoint")
+    verdict = _header(headers, "x-qrator-validate-result")
+    if not marks and not verdict:
+        return None
+    if status == 401 and ("qrator_jsr" in cookies or "/__qrator/" in text):
+        return Challenge("qrator", "challenge", status, url, "", tuple(marks))
+    token = ("x-qrator-token",) if _header(headers, "x-qrator-token") else ()
+    if status == 403 and verdict:
+        evidence = (f"x-qrator-validate-result: {verdict}",) + token + tuple(marks)
+        # "captcha" is the picture; any other verdict is the checkbox. Both
+        # want a person, or a browser acting as one.
+        return Challenge("qrator", "captcha", status, url, "", evidence)
+    if status in _QRATOR_CHECKBOX:
+        return Challenge("qrator", "captcha", status, url, "", (f"HTTP {status} (checkbox)",) + tuple(marks))
+    if status == 403 and "/__qrator/validate" in url:
+        return Challenge("qrator", "no-verdict", status, url, "",
+                         ("403 without x-qrator-validate-result",) + tuple(marks))
+    return None
+
+
 def detect(status: int, headers: Mapping[str, Any], body: bytes = b"", url: str = "") -> Challenge | None:
     """The challenge or block a response is, or None for an ordinary one.
 
@@ -97,10 +157,19 @@ def detect(status: int, headers: Mapping[str, Any], body: bytes = b"", url: str 
     # fetch is a 403 with the header and nothing a browser would render.
     if mitigated == "challenge":
         return Challenge("cloudflare", "challenge", status, url, ray, ("cf-mitigated: challenge",))
-    if status not in _GATE_STATUSES:
+    # Qrator gates with statuses no other vendor uses (401, 418, 420), so it
+    # is read before the filter for everyone else.
+    qrator_status = status in (401, 403) or status in _QRATOR_CHECKBOX
+    if not qrator_status and status not in _GATE_STATUSES:
         return None
     text = body[:_SCAN].decode("latin-1", "replace").lower()
     cookies = _cookie_names(headers)
+    if qrator_status:
+        found = _qrator(status, headers, text, url, cookies)
+        if found is not None:
+            return found
+    if status not in _GATE_STATUSES:
+        return None
 
     if server == "cloudflare" or ray:
         if "/cdn-cgi/challenge-platform/" in text or "_cf_chl_opt" in text:

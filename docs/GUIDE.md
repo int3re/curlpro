@@ -89,7 +89,7 @@ touch it.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `impersonate` | `chrome-151-windows` | the profile name; `list_profiles()` has all 302, `list_profiles(measured=True)` the 42 captured whole |
+| `impersonate` | `chrome-151-windows` | the profile name; `list_profiles()` has all 302 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 42 captured whole |
 | `verify` | `True` | `True` — system roots; a PEM path — trust only that root; `False` — no verification |
 | `cert` | `None` | `(certificate, key)` paths for mutual TLS |
 | `trust_env` | `True` | take the proxy from `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, honouring `NO_PROXY`; an explicit `proxy` always wins |
@@ -179,7 +179,7 @@ The response:
 | Member | Meaning |
 |---|---|
 | `status`, `ok`, `proto` | `200`, `status < 400`, `"HTTP/1.1"` / `"HTTP/2.0"` / `"HTTP/3.0"` |
-| `headers` | `Headers`: a `dict[str, list[str]]` of every value of every header whose lookups ignore case — `r.headers.get("retry-after")` finds `Retry-After`; `.first(name)` gives the first value as a string. A plain dict until 0.12, where a lower-case `.get` returned `None` |
+| `headers` | `Headers`: a `dict[str, list[str]]` of every value of every header whose lookups ignore case — `r.headers.get("retry-after")` finds `Retry-After`; `.first(name)` gives the first value as a string, `.get_list(name)` the values as a plain list. Each value is still the list, and also equal to and printed as the string requests gives (`", ".join(values)`), so `r.headers.get("x") == "captcha"` holds; `.lower()` or `int()` on it fails loudly, as on a list. A plain dict until 0.12, where a lower-case `.get` returned `None` |
 | `header(name)` | the first value, case-insensitive, or `None` |
 | `content`, `text` | bytes; str decoded with the detected charset |
 | `encoding` | detected from `Content-Type`, then the BOM, then a `<meta charset>` in the first kilobytes; assignable when a site declares it wrongly |
@@ -562,12 +562,26 @@ Three hooks, each a list of callables on `s.hooks[...]`, also addable with
 
 **Anti-bot challenges.** A 403 says little; a challenge says more if one
 looks. `r.challenge` is `None` or a `Challenge` — `vendor` (`cloudflare`,
-`datadome`, `akamai`, `human`, `imperva`, `kasada`), `kind` (`challenge` — a
-check a browser runs and passes, `captcha` — one that may ask a person to act,
-`block` — a refusal no browser changes, `rate-limit`), `solvable`, `ray`
-(Cloudflare's request id). Cloudflare is recognised by the `cf-mitigated:
-challenge` header it documents for exactly this, the others by the marks their
-pages carry. `r.raise_for_challenge()` raises `ChallengeError` (`challenge`).
+`qrator`, `datadome`, `akamai`, `human`, `imperva`, `kasada`), `kind`
+(`challenge` — a check a browser runs and passes, `captcha` — one that may ask
+a person to act, `block` — a refusal no browser changes, `rate-limit`,
+`no-verdict` — see below), `solvable`, `ray` (Cloudflare's request id),
+`evidence` (the marks that matched). Cloudflare is recognised by the
+`cf-mitigated: challenge` header it documents for exactly this; Qrator by the
+rules a field report measured on `login.mts.ru` — a 401 with the `qrator_jsr`
+cookie or the `/__qrator/` script is its JavaScript challenge, a 403 from
+`/__qrator/validate` with `X-Qrator-Validate-Result` is a verdict (`captcha`
+for the picture, any other value or a 418/420 for the checkbox); the others by
+the marks their pages carry. `Server: QRATOR` alone is no gate — it is on
+ordinary 200s too. `r.raise_for_challenge()` raises `ChallengeError`
+(`challenge`).
+
+`no-verdict` is the distinction that report paid half a day for. A 403 from
+Qrator's validation endpoint **without** the verdict header is not a judgement
+of the visitor: what was sent could not be read. A browser's 403 there carried
+`captcha` and a fresh `X-Qrator-Token`; the library's own came back bare, and
+from outside both were "403". It is not `solvable` — a browser would pass, the
+request that was sent is what failed.
 
 A session with a `solver` gets past a challenge instead of returning it:
 
@@ -1218,7 +1232,7 @@ Facts that are easy to doubt and are true:
 | `request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options` | function | one request in its own session; `impersonate=` picks the profile |
 | `CurlProError`, `Timeout`, `HTTPError`, `WebSocketClosed` | exception | the hierarchy; `.code` on all; declared in the public `errors` module |
 | `errors` | module | the exception classes, importable from here or from `curlpro` |
-| `Headers` | class | the response headers: a `dict[str, list[str]]` looked up by any case, with `.first(name)` |
+| `Headers` | class | the response headers: a `dict[str, list[str]]` looked up by any case, with `.first(name)` and `.get_list(name)`; a value equals and prints as its joined string |
 | `RequestKwargs` | type | the keyword arguments of the request verbs, for `Unpack` in a wrapper's signature |
 | `DEFAULT_MAX_RESPONSE_SIZE` | constant | 100 MiB: the body limit of a buffered response when `max_response_size` is not given |
 | `PermanentError`, `ProfileCapabilityError`, `ConfigurationError` | exception | failures a retry cannot fix (section 9) |

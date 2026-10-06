@@ -135,7 +135,7 @@ __all__ = [
     "solvers",
 ]
 
-__version__ = "0.15.1"
+__version__ = "0.15.2"
 
 try:  # an installed distribution is the authority; a source checkout has none
     from importlib.metadata import version as _dist_version

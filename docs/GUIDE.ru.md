@@ -89,7 +89,7 @@ fetch), потом заголовки сессии, потом заголовк�
 
 | Параметр | По умолчанию | Значение |
 |---|---|---|
-| `impersonate` | `chrome-151-windows` | имя профиля; `list_profiles()` знает все 302, `list_profiles(measured=True)` — 42 снятых целиком |
+| `impersonate` | `chrome-151-windows` | имя профиля; `list_profiles()` знает все 302 (и с 0.15.2 сначала загружает их, как и остальные функции профилей), `list_profiles(measured=True)` — 42 снятых целиком |
 | `verify` | `True` | `True` — системные корни; путь к PEM — доверять только ему; `False` — без проверки |
 | `cert` | `None` | пути `(certificate, key)` для mTLS |
 | `trust_env` | `True` | брать прокси из `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, учитывая `NO_PROXY`; явный `proxy` всегда сильнее |
@@ -180,7 +180,7 @@ mypy, pyright и редакторы проверяют каждое имя и т
 | Член | Значение |
 |---|---|
 | `status`, `ok`, `proto` | `200`, `status < 400`, `"HTTP/1.1"` / `"HTTP/2.0"` / `"HTTP/3.0"` |
-| `headers` | `Headers`: `dict[str, list[str]]` всех значений всех заголовков, поиск в котором не учитывает регистр — `r.headers.get("retry-after")` находит `Retry-After`; `.first(name)` даёт первое значение строкой. До 0.12 — обычный dict, где `.get` в нижнем регистре возвращал `None` |
+| `headers` | `Headers`: `dict[str, list[str]]` всех значений всех заголовков, поиск в котором не учитывает регистр — `r.headers.get("retry-after")` находит `Retry-After`; `.first(name)` даёт первое значение строкой, `.get_list(name)` — значения простым списком. Значение по-прежнему список, но равно строке, которую дал бы requests (`", ".join(values)`), и печатается ею, так что `r.headers.get("x") == "captcha"` выполняется; `.lower()` или `int()` на нём падают громко, как на списке. До 0.12 — обычный dict, где `.get` в нижнем регистре возвращал `None` |
 | `header(name)` | первое значение без учёта регистра или `None` |
 | `content`, `text` | байты; str, декодированная найденной кодировкой |
 | `encoding` | из `Content-Type`, потом BOM, потом `<meta charset>` в первых килобайтах; присваиваемо, когда сайт объявляет её неверно |
@@ -562,13 +562,25 @@ CORS-preflight (раздел 7) с `.status`, `.headers` и `.reason` ответ
 
 **Проверки антиботов.** 403 говорит мало; проверка говорит больше, если
 присмотреться. `r.challenge` — `None` или `Challenge`: `vendor` (`cloudflare`,
-`datadome`, `akamai`, `human`, `imperva`, `kasada`), `kind` (`challenge` —
-проверка, которую браузер выполняет и проходит, `captcha` — та, что может
-попросить человека, `block` — отказ, который никакой браузер не изменит,
-`rate-limit`), `solvable`, `ray` (идентификатор запроса Cloudflare). Cloudflare
+`qrator`, `datadome`, `akamai`, `human`, `imperva`, `kasada`), `kind`
+(`challenge` — проверка, которую браузер выполняет и проходит, `captcha` — та,
+что может попросить человека, `block` — отказ, который никакой браузер не
+изменит, `rate-limit`, `no-verdict` — см. ниже), `solvable`, `ray`
+(идентификатор запроса Cloudflare), `evidence` (сработавшие метки). Cloudflare
 узнаётся по заголовку `cf-mitigated: challenge`, который он документирует
-ровно для этого, остальные — по меткам их страниц.
-`r.raise_for_challenge()` бросает `ChallengeError` (`challenge`).
+ровно для этого; Qrator — по правилам, снятым полевым отчётом на
+`login.mts.ru`: 401 с кукой `qrator_jsr` или скриптом `/__qrator/` — его
+JS-проверка, 403 от `/__qrator/validate` с `X-Qrator-Validate-Result` —
+вердикт (`captcha` — картинка, иное значение или 418/420 — чекбокс);
+остальные — по меткам их страниц. Один `Server: QRATOR` — не проверка: он
+стоит и на обычных 200. `r.raise_for_challenge()` бросает `ChallengeError`
+(`challenge`).
+
+`no-verdict` — различие, за которое тот отчёт заплатил полднём. 403 от
+эндпоинта проверки Qrator **без** заголовка вердикта — не суждение о
+посетителе: присланное не смогли разобрать. Браузерный 403 там нёс `captcha` и
+свежий `X-Qrator-Token`, собственный 403 библиотеки пришёл пустым, а снаружи
+оба — «403». Он не `solvable`: браузер прошёл бы, сломался отправленный запрос.
 
 Сессия с `solver` проходит проверку, а не возвращает её:
 
@@ -1207,7 +1219,7 @@ curlPro, стоит взять готовое. Каждая строка его 
 | `request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options` | функция | один запрос в своей сессии; `impersonate=` выбирает профиль |
 | `CurlProError`, `Timeout`, `HTTPError`, `WebSocketClosed` | исключение | иерархия; `.code` у всех; объявлены в публичном модуле `errors` |
 | `errors` | модуль | классы исключений, импортируемые отсюда или из `curlpro` |
-| `Headers` | класс | заголовки ответа: `dict[str, list[str]]` с поиском без учёта регистра и `.first(name)` |
+| `Headers` | класс | заголовки ответа: `dict[str, list[str]]` с поиском без учёта регистра, `.first(name)` и `.get_list(name)`; значение равно своей склеенной строке и печатается ею |
 | `RequestKwargs` | тип | ключевые аргументы глаголов запроса, для `Unpack` в сигнатуре обёртки |
 | `DEFAULT_MAX_RESPONSE_SIZE` | константа | 100 МиБ: предел тела буферизованного ответа, когда `max_response_size` не задан |
 | `PermanentError`, `ProfileCapabilityError`, `ConfigurationError` | исключение | отказы, которых не лечит повтор (раздел 9) |
