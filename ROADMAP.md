@@ -1227,18 +1227,52 @@ being a fork. ~180 MB per platform to distribute (`curlpro browser install`,
 not the wheel). Chromium's BSD licence means attribution travels with the
 binary, and the Google branding and API keys do not.
 
-### In order
+### Done so far
+
+The measurements are in [STAGE24](docs/STAGE24-RESULTS.md). The harness reads
+368 values and runs the four CreepJS canvas checks on every capture (stock
+Chrome 154: clean). And one finding moved the plan: on the measuring laptop
+`--force-high-performance-gpu` — a Chromium switch thought macOS-only — puts
+Chrome on the RTX 4050 instead of the Iris Xe on Windows too, and the two GPUs
+differ in **17 values of 368**: the four WebGL renderer strings, four uniform
+limits ANGLE trims on NVIDIA, and every drawn pixel. Over Direct3D 11, ANGLE
+flattens the rest of the WebGL block — all other parameters, extensions and
+precisions were equal. So a WebGL transplant between Windows GPUs is small,
+and its real coherence problem is the pixels, which follow the physical card;
+and a second real GPU is a second complete identity for free. The driver has
+it now: `BrowserSolver(gpu="high-performance")`, `s.browser(url, gpu=...)`,
+`Chrome(gpu=...)`, tested live on the two cards.
+
+### Blocked on the toolchain
+
+Both patches are written, exported, and round-trip onto the clean tag byte for
+byte — and **neither has been compiled**. `gn gen` stops before it starts:
+Windows SDK 10.0.28000 is not installed on the measuring machine, and
+`base/win/windows_version.cc` enforces it with an `#error`. Until it is, the
+C++ is read code, not working code, and nothing here is proven. The proofs are
+written down in [chromium/DESIGN.md](chromium/DESIGN.md) and run the day it
+builds.
+
+### In order (revised 2026-10-08, after the GPU measurement)
 
 1. The toolchain and a baseline build of unpatched 154, so that everything
    after is measured against something that works. VS 2026 is what the tree
    now requires (`MSVC_TOOLSET_VERSION['2026'] = 'VC145'`) and is installed;
    SDK 10.0.28000 is enforced by `#error` in `base/win/windows_version.cc`.
-2. The profile plumbing: a switch, a parsed profile, per-tab delivery, nothing
-   read yet. Proven by a tab that reports its own identity.
-3. WebGL, the whole measured block, both contexts, with `chrome://gpu` and
-   WebGPU moved to match. The harness's diff is the test.
-4. Fonts, at all four layers, with the `local()` leak closed and the CSS
-   system fonts following the claimed platform.
+2. ✅ **The profile plumbing and WebGL** (`chromium/patches/0001`): the driver
+   passes `--curlpro-fingerprint=<base64 JSON>`, the browser forwards it to
+   every renderer, `blink::curlpro::Fingerprint` parses it once. WebGL serves
+   the profile's `UNMASKED_VENDOR`/`RENDERER` and its limits — **lowered
+   only**, since a limit above the GPU's own is a claim the first texture
+   that trusts it exposes. Written against the 154.0.8037.100 source;
+   **not yet compiled**, see below.
+3. ✅ **Fonts** (`chromium/patches/0002`): one filter at the top of
+   `FontCache::CreateFontPlatformData`, where a CSS family name and a
+   `local()` source meet — so the eight families measured leaking past a
+   family-matching filter are closed with it. The last-resort fallback is
+   never filtered. Also not yet compiled.
+4. The remaining WebGL consistency: `chrome://gpu` and WebGPU to match the
+   strings WebGL serves, so the three do not contradict each other.
 5. Canvas: a test that proves the four CreepJS checks still pass, and that
    the host's own rendering is what arrives.
 6. Distribution and the rebase script, then the first milestone rebase.

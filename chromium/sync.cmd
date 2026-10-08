@@ -19,11 +19,7 @@ rem second run re-downloads nothing.
 setlocal
 set JOBS=%1
 if "%JOBS%"=="" set JOBS=2
-set PATH=D:\depot_tools;%PATH%
-set DEPOT_TOOLS_WIN_TOOLCHAIN=0
-set DEPOT_TOOLS_METRICS=0
-set DEPOT_TOOLS_CACHE_DIR=D:/chromium/git-cache
-set vs2026_install=D:\Program Files\Microsoft Visual Studio\18\Community
+call "%~dp0env.cmd"
 cd /d D:\chromium || exit /b 1
 echo [sync] %JOBS% workers, below-normal priority, start %DATE% %TIME%
 start "" /belownormal /b /wait cmd /c "gclient sync --nohooks --with_branch_heads --with_tags --jobs %JOBS%"

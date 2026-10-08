@@ -12,10 +12,13 @@ It lives at `D:\chromium` (`src` under it), with depot_tools at
 |---|---|
 | `args/iterate.gn` | the build to develop against: component, no symbols, minutes per patch |
 | `args/release.gn` | the build to ship: official, ThinLTO and PGO, as a real Chrome is built |
+| `env.cmd` | the environment every script runs depot_tools in — one place for what was learned the hard way |
 | `sync.cmd` | fetch or finish fetching the source, two workers, below-normal |
 | `checkout.cmd` | put the tree on the release branch this fork targets and sync its DEPS |
 | `build.cmd` | build `chrome` from one of the arg sets |
-| `patches/` | our patches, applied in filename order (empty until step 2) |
+| `patches/` | our patches, `git format-patch` files, the one source of the fork's code |
+| `patches.cmd` | apply them to the tree, in filename order, as commits (`git am --3way`) |
+| `DESIGN.md` | what each patch does and why it is where it is |
 
 ## What the tree requires
 
@@ -30,6 +33,12 @@ out of date on every one of these:
   ≥ 10.0.26100.3323, for the large-page PDBs Chrome uses.
 - `DEPOT_TOOLS_WIN_TOOLCHAIN=0`, or depot_tools tries to download Google's
   internal toolchain, which is not ours to have.
+- Short cache paths off `%LOCALAPPDATA%` when the scripts are started from an
+  MSIX-packaged app (the Claude desktop app is one): Windows redirects such a
+  process's writes there into `%LOCALAPPDATA%\Packages\<app>\LocalCache\...`,
+  some fifty characters longer, and Chromium's Python venv then failed to
+  install past `MAX_PATH`. `env.cmd` puts vpython, CIPD and the git mirror
+  under `D:\chromium`.
 - `vs2026_install` pointing at the install, when Visual Studio is not on C:.
   `vs_toolchain.py` searches `%ProgramFiles%\...\18` and nowhere else, so an
   install on D: is simply not found; the scripts here set it.
@@ -92,6 +101,16 @@ the patches are applied in filename order and any that no longer applies is
 reported rather than forced. The branch number is the third component of a
 Chrome version: 154.0.**8037**.93 → `branch-heads/8037`. Current stable comes
 from `https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Windows`.
+
+## Identity
+
+The tree's commits become the patches, and the patches are published with
+this repository: the tree's **local** git identity must be the repository's
+own (`int3re` and its GitHub noreply address), set once with
+`git -C D:\chromium\src config --local user.name/user.email`. On the
+measuring machine the global identity is another one, and the first patch
+went out with it before this was caught. Before committing a patch, its
+`From:` line is checked.
 
 ## Licence
 

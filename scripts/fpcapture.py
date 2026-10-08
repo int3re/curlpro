@@ -244,7 +244,9 @@ function glRecord(kind) {
   c.width = c.height = 64;
   const gl = c.getContext(kind, {antialias: true, preserveDrawingBuffer: true});
   if (!gl) return null;
-  const rec = {attributes: {}, parameters: {}, precision: {}, extensions: null, unmasked: {}};
+  // enums: the numeric value of every parameter recorded, as the context
+  // itself defines it — what the patched build looks a parameter up by.
+  const rec = {attributes: {}, parameters: {}, enums: {}, precision: {}, extensions: null, unmasked: {}};
   const attrs = gl.getContextAttributes() || {};
   for (const k of Object.keys(attrs)) rec.attributes[k] = plain(attrs[k]);
   const names = [];
@@ -257,6 +259,7 @@ function glRecord(kind) {
     if (gl.getError() !== gl.NO_ERROR) continue;   // not a getParameter enum here
     if (v === null || v === undefined) continue;
     rec.parameters[name] = plain(v);
+    rec.enums[name] = gl[name];
   }
   rec.extensions = (gl.getSupportedExtensions() || []).slice().sort();
   const dbg = gl.getExtension("WEBGL_debug_renderer_info");
@@ -693,6 +696,70 @@ def compare(a: Path, b: Path, show_all: bool) -> int:
     return changed
 
 
+def to_profile(record_path: Path) -> Path:
+    """The profile the patched build reads (chromium/DESIGN.md), from a record.
+
+    The WebGL blocks are the record's whole numeric blocks, not only what
+    differed from one host: another host's ANGLE may differ elsewhere, and the
+    build serves only what is *lower* than the machine's own anyway. Strings
+    other than the two unmasked ones are left out — they were the same on
+    every GPU measured, and a version string is the browser's, not the card's.
+    The fonts are every family any probe found: span measurement and local()
+    disagree, and the build must answer both alike.
+    """
+    rec = json.loads(record_path.read_text(encoding="utf-8"))
+
+    def numbers(block: dict) -> list:
+        # Each with its enum, which the build looks it up by; the name is for
+        # whoever reads the file. A record from before enums were kept has
+        # none, and is refused rather than half-used.
+        block = block or {}
+        enums = block.get("enums") or {}
+        if block.get("parameters") and not enums:
+            raise SystemExit(f"{record_path}: no enum values in the record — capture it again")
+        # Capabilities only: the integer MAX_* limits, which differ by device
+        # and which the build may lower to the target's. The rest of the
+        # block is state (ACTIVE_TEXTURE, BLEND_COLOR...) — the same in every
+        # browser — and nothing to serve.
+        return [{"name": k, "enum": enums[k], "value": v}
+                for k, v in sorted(block.get("parameters", {}).items())
+                if k.startswith("MAX_") and isinstance(v, int) and not isinstance(v, bool) and k in enums]
+
+    gl1, gl2 = rec.get("webgl") or {}, rec.get("webgl2") or {}
+    fonts = rec.get("fonts") or {}
+    profile = {
+        "source": f"{rec.get('name')} — fpcapture, {rec.get('browser', {}).get('product')}, "
+                  f"{rec.get('captured', '')[:10]}",
+        "webgl": {
+            "unmasked_vendor": (gl1.get("unmasked") or {}).get("vendor", ""),
+            "unmasked_renderer": (gl1.get("unmasked") or {}).get("renderer", ""),
+            "parameters": numbers(gl1),
+            "webgl2_parameters": numbers(gl2),
+        },
+        "fonts": {
+            "present": sorted(set(fonts.get("byMeasure", [])) | set(fonts.get("byLocal", []))),
+        },
+    }
+    out = record_path.with_name(record_path.stem + ".profile.json")
+    out.write_text(json.dumps(profile, indent=1, ensure_ascii=False), encoding="utf-8")
+    switch = switch_value(profile)
+    print(f"wrote {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}: "
+          f"{len(profile['webgl']['parameters'])} + {len(profile['webgl']['webgl2_parameters'])} "
+          f"WebGL limits, {len(profile['fonts']['present'])} fonts; "
+          f"--curlpro-fingerprint is {len(switch)} characters")
+    return out
+
+
+def switch_value(profile: dict) -> str:
+    """The profile as the build takes it: compact JSON in base64 on the
+    browser's command line, which the browser forwards to every renderer.
+    Base64 because a JSON value's quotes and spaces through Windows
+    command-line quoting is a parser bug waiting to happen."""
+    import base64
+    compact = json.dumps(profile, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return base64.b64encode(compact).decode("ascii")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("-name", default="this-machine", help="the record's name under capture/fp/")
@@ -703,7 +770,11 @@ def main() -> None:
     p.add_argument("-args", nargs="*", default=[], help="extra flags for the browser, as they are written")
     p.add_argument("-compare", nargs=2, metavar=("A", "B"), help="diff two records instead of capturing")
     p.add_argument("-all", action="store_true", help="with -compare: do not hide the per-run noise")
+    p.add_argument("-profile", metavar="RECORD", help="write the patched build's profile from a record")
     a = p.parse_args()
+    if a.profile:
+        to_profile(Path(a.profile))
+        return
     if a.compare:
         raise SystemExit(1 if compare(Path(a.compare[0]), Path(a.compare[1]), a.all) else 0)
     capture(a.name, a.chrome, a.timeout, a.headless, light=not a.plain, extra=tuple(a.args))

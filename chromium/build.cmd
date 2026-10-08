@@ -24,14 +24,7 @@ if not exist "%ARGS%" (
   echo no such configuration: %ARGS%
   exit /b 2
 )
-set PATH=D:\depot_tools;%PATH%
-set DEPOT_TOOLS_WIN_TOOLCHAIN=0
-set DEPOT_TOOLS_METRICS=0
-rem vs_toolchain.py looks for Visual Studio 2026 under %ProgramFiles%\...\18
-rem only ('2026': ['%ProgramFiles%', '18'] in _GenerateCandidatePaths), and
-rem this machine's install is on D:. vs2026_install is the documented way to
-rem say so; it becomes GYP_MSVS_OVERRIDE_PATH inside.
-set vs2026_install=D:\Program Files\Microsoft Visual Studio\18\Community
+call "%~dp0env.cmd"
 set OUT=out\%CONFIG%
 cd /d D:\chromium\src || exit /b 1
 

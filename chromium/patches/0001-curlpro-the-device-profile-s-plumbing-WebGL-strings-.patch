@@ -1,0 +1,298 @@
+From ce523abda27bd77a573c95e6c706289ca071aee4 Mon Sep 17 00:00:00 2001
+From: int3re <118649905+int3re@users.noreply.github.com>
+Date: Thu, 8 Oct 2026 02:27:53 +0300
+Subject: [PATCH 1/2] curlpro: the device profile's plumbing; WebGL strings and
+ limits
+
+The driver passes --curlpro-fingerprint=<base64 JSON>, the browser
+forwards it to renderers, blink::curlpro::Fingerprint reads it once.
+WebGL serves the profile's UNMASKED_VENDOR/RENDERER, and its limits
+only where they are lower than this GPU's own.
+---
+ .../renderer_host/render_process_host_impl.cc |   3 +
+ .../webgl/webgl_rendering_context_base.cc     |  17 ++-
+ third_party/blink/renderer/platform/BUILD.gn  |   2 +
+ .../renderer/platform/curlpro/fingerprint.cc  | 113 ++++++++++++++++++
+ .../renderer/platform/curlpro/fingerprint.h   |  69 +++++++++++
+ 5 files changed, 203 insertions(+), 1 deletion(-)
+ create mode 100644 third_party/blink/renderer/platform/curlpro/fingerprint.cc
+ create mode 100644 third_party/blink/renderer/platform/curlpro/fingerprint.h
+
+diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
+index 0d96dedc4dfeb..38d3c9562c3d4 100644
+--- a/content/browser/renderer_host/render_process_host_impl.cc
++++ b/content/browser/renderer_host/render_process_host_impl.cc
+@@ -3851,6 +3851,9 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+   // Propagate the following switches to the renderer command line (along
+   // with any associated values) if present in the browser command line.
+   static const char* const kSwitchNames[] = {
++      // curlPro: the device this renderer reports (blink::curlpro::
++      // kFingerprintSwitch); the driver gives it to the browser.
++      "curlpro-fingerprint",
+       switches::kDisableInProcessStackTraces,
+       sandbox::policy::switches::kDisableLandlockSandbox,
+       sandbox::policy::switches::kDisableSeccompFilterSandbox,
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+index 26c0a088cc1ab..bc0f4d9af5bc5 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -137,6 +137,7 @@
+ #include "third_party/blink/renderer/modules/webgl/webgl_vertex_array_object_oes.h"
+ #include "third_party/blink/renderer/modules/xr/xr_system.h"
+ #include "third_party/blink/renderer/platform/bindings/exception_state.h"
++#include "third_party/blink/renderer/platform/curlpro/fingerprint.h"
+ #include "third_party/blink/renderer/platform/bindings/script_state.h"
+ #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
+ #include "third_party/blink/renderer/platform/graphics/canvas_2d_resource_provider.h"
+@@ -4200,6 +4201,10 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+       return ScriptValue::CreateNull(script_state->GetIsolate());
+     case WebGLDebugRendererInfo::kUnmaskedRendererWebgl:
+       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
++        if (const auto& served =
++                curlpro::Fingerprint::Get().webgl_unmasked_renderer()) {
++          return WebGLAny(script_state, String::FromUtf8(*served));
++        }
+         return WebGLAny(script_state,
+                         String(ContextGL()->GetString(GL_RENDERER)));
+       }
+@@ -4209,6 +4214,10 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+       return ScriptValue::CreateNull(script_state->GetIsolate());
+     case WebGLDebugRendererInfo::kUnmaskedVendorWebgl:
+       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
++        if (const auto& served =
++                curlpro::Fingerprint::Get().webgl_unmasked_vendor()) {
++          return WebGLAny(script_state, String::FromUtf8(*served));
++        }
+         return WebGLAny(script_state,
+                         String(ContextGL()->GetString(GL_VENDOR)));
+       }
+@@ -8004,6 +8013,9 @@ ScriptValue WebGLRenderingContextBase::GetIntParameter(
+   GLint value = 0;
+   if (!isContextLost()) {
+     ContextGL()->GetIntegerv(pname, &value);
++    // curlPro: the profile's limit, when lower than this GPU's own.
++    value = static_cast<GLint>(
++        curlpro::Fingerprint::Get().WebGLLimit(pname, IsWebGL2(), value));
+     switch (pname) {
+       case GL_IMPLEMENTATION_COLOR_READ_FORMAT:
+       case GL_IMPLEMENTATION_COLOR_READ_TYPE:
+@@ -8024,8 +8036,11 @@ ScriptValue WebGLRenderingContextBase::GetInt64Parameter(
+     ScriptState* script_state,
+     GLenum pname) {
+   GLint64 value = 0;
+-  if (!isContextLost())
++  if (!isContextLost()) {
+     ContextGL()->GetInteger64v(pname, &value);
++    // curlPro: the profile's limit, when lower than this GPU's own.
++    value = curlpro::Fingerprint::Get().WebGLLimit(pname, IsWebGL2(), value);
++  }
+   return WebGLAny(script_state, value);
+ }
+ 
+diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
+index 233618cf12e7b..fe11ea543ae04 100644
+--- a/third_party/blink/renderer/platform/BUILD.gn
++++ b/third_party/blink/renderer/platform/BUILD.gn
+@@ -573,6 +573,8 @@ component("platform") {
+     "crypto.cc",
+     "crypto.h",
+     "crypto_result.h",
++    "curlpro/fingerprint.cc",
++    "curlpro/fingerprint.h",
+     "cursors.cc",
+     "cursors.h",
+     "data_resource_helper.cc",
+diff --git a/third_party/blink/renderer/platform/curlpro/fingerprint.cc b/third_party/blink/renderer/platform/curlpro/fingerprint.cc
+new file mode 100644
+index 0000000000000..4e3d0b70a1634
+--- /dev/null
++++ b/third_party/blink/renderer/platform/curlpro/fingerprint.cc
+@@ -0,0 +1,113 @@
++// Copyright 2026 The curlPro Authors. Licensed under the Apache License 2.0.
++
++#include "third_party/blink/renderer/platform/curlpro/fingerprint.h"
++
++#include <string_view>
++
++#include "base/command_line.h"
++#include "base/containers/span.h"
++#include "base/json/json_reader.h"
++#include "base/logging.h"
++#include "base/no_destructor.h"
++#include "base/values.h"
++// Blink's own base64, not base/base64.h: platform's DEPS allow this one, and
++// one header fewer to argue with checkdeps about.
++#include "third_party/blink/renderer/platform/wtf/text/base64.h"
++#include "third_party/blink/renderer/platform/wtf/text/string_view.h"
++#include "third_party/blink/renderer/platform/wtf/vector.h"
++
++namespace blink::curlpro {
++
++const char kFingerprintSwitch[] = "curlpro-fingerprint";
++
++namespace {
++
++// A block of {"name", "enum", "value"} entries, as scripts/fpcapture.py
++// writes them, into enum -> value. A malformed entry is skipped, not fatal:
++// the rest of the profile still describes the device.
++base::flat_map<unsigned, int64_t> Limits(const base::Value::Dict& webgl,
++                                         std::string_view key) {
++  base::flat_map<unsigned, int64_t> limits;
++  const base::Value::List* entries = webgl.FindList(key);
++  if (!entries) {
++    return limits;
++  }
++  for (const base::Value& entry : *entries) {
++    const base::Value::Dict* e = entry.GetIfDict();
++    if (!e) {
++      continue;
++    }
++    std::optional<int> pname = e->FindInt("enum");
++    // FindDouble reads integers too, and a limit such as WebGL2's
++    // MAX_ELEMENT_INDEX (2^32 - 2) is past what an int holds.
++    std::optional<double> value = e->FindDouble("value");
++    if (pname && value) {
++      limits[static_cast<unsigned>(*pname)] = static_cast<int64_t>(*value);
++    }
++  }
++  return limits;
++}
++
++std::optional<std::string> NonEmpty(const base::Value::Dict& d, std::string_view key) {
++  const std::string* s = d.FindString(key);
++  if (!s || s->empty()) {
++    return std::nullopt;
++  }
++  return *s;
++}
++
++}  // namespace
++
++// static
++const Fingerprint& Fingerprint::Get() {
++  static const base::NoDestructor<Fingerprint> instance;
++  return *instance;
++}
++
++Fingerprint::Fingerprint() {
++  const base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
++  if (!command_line.HasSwitch(kFingerprintSwitch)) {
++    return;
++  }
++  if (!Parse(command_line.GetSwitchValueASCII(kFingerprintSwitch))) {
++    // Reported, and then the machine's own values: a half-applied profile
++    // would be a device that exists nowhere.
++    LOG(ERROR) << "curlpro: --" << kFingerprintSwitch
++               << " is not a base64 JSON profile; reporting this machine";
++  }
++}
++
++bool Fingerprint::Parse(const std::string& base64_json) {
++  Vector<uint8_t> bytes;
++  if (!Base64Decode(StringView(base::as_byte_span(base64_json)), bytes,
++                    Base64DecodePolicy::kForgiving)) {
++    return false;
++  }
++  std::string json(bytes.begin(), bytes.end());
++  std::optional<base::Value::Dict> profile = base::JSONReader::ReadDict(json);
++  if (!profile) {
++    return false;
++  }
++  if (const base::Value::Dict* webgl = profile->FindDict("webgl")) {
++    webgl_unmasked_vendor_ = NonEmpty(*webgl, "unmasked_vendor");
++    webgl_unmasked_renderer_ = NonEmpty(*webgl, "unmasked_renderer");
++    webgl1_limits_ = Limits(*webgl, "parameters");
++    webgl2_limits_ = Limits(*webgl, "webgl2_parameters");
++  }
++  active_ = true;
++  return true;
++}
++
++int64_t Fingerprint::WebGLLimit(unsigned pname, bool webgl2, int64_t host) const {
++  if (!active_) {
++    return host;
++  }
++  const base::flat_map<unsigned, int64_t>& limits = webgl2 ? webgl2_limits_ : webgl1_limits_;
++  auto it = limits.find(pname);
++  if (it == limits.end() || it->second >= host) {
++    return host;
++  }
++  return it->second;
++}
++
++}  // namespace blink::curlpro
+diff --git a/third_party/blink/renderer/platform/curlpro/fingerprint.h b/third_party/blink/renderer/platform/curlpro/fingerprint.h
+new file mode 100644
+index 0000000000000..acde7a103e585
+--- /dev/null
++++ b/third_party/blink/renderer/platform/curlpro/fingerprint.h
+@@ -0,0 +1,69 @@
++// Copyright 2026 The curlPro Authors. Licensed under the Apache License 2.0.
++// Part of a patch set on Chromium; see chromium/DESIGN.md in the curlPro
++// repository for why each value is served where it is.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_CURLPRO_FINGERPRINT_H_
++#define THIRD_PARTY_BLINK_RENDERER_PLATFORM_CURLPRO_FINGERPRINT_H_
++
++#include <cstdint>
++#include <optional>
++#include <string>
++
++#include "base/containers/flat_map.h"
++#include "base/no_destructor.h"
++#include "third_party/blink/renderer/platform/platform_export.h"
++
++namespace blink::curlpro {
++
++// The switch the package's driver gives the browser and the browser forwards
++// to every renderer: base64 of the profile's compact JSON.
++PLATFORM_EXPORT extern const char kFingerprintSwitch[];
++
++// The device this renderer reports instead of the machine it runs on, read
++// once per process from kFingerprintSwitch. Without the switch, or with one
++// that does not parse, it is inactive and every accessor says so — the
++// browser then reports the machine, exactly as stock Chromium does.
++//
++// The rule (chromium/DESIGN.md): a measured device is served, and a
++// capability is never claimed beyond what this machine has. A limit is
++// therefore only ever lowered to the target's — see WebGLLimit.
++class PLATFORM_EXPORT Fingerprint {
++ public:
++  static const Fingerprint& Get();
++
++  Fingerprint(const Fingerprint&) = delete;
++  Fingerprint& operator=(const Fingerprint&) = delete;
++
++  bool active() const { return active_; }
++
++  // UNMASKED_VENDOR_WEBGL and UNMASKED_RENDERER_WEBGL, when the profile has
++  // them: measured, these are the only WebGL strings two real GPUs differ in.
++  const std::optional<std::string>& webgl_unmasked_vendor() const {
++    return webgl_unmasked_vendor_;
++  }
++  const std::optional<std::string>& webgl_unmasked_renderer() const {
++    return webgl_unmasked_renderer_;
++  }
++
++  // The value to report for a WebGL integer limit: the target's when the
++  // profile carries one *lower* than the machine's own `host` value, the
++  // host's otherwise. Raising a limit would claim a capability the GPU lacks;
++  // the first texture or shader that relies on it would break, and the break
++  // is the mark.
++  int64_t WebGLLimit(unsigned pname, bool webgl2, int64_t host) const;
++
++ private:
++  friend class base::NoDestructor<Fingerprint>;
++  Fingerprint();
++  bool Parse(const std::string& base64_json);
++
++  bool active_ = false;
++  std::optional<std::string> webgl_unmasked_vendor_;
++  std::optional<std::string> webgl_unmasked_renderer_;
++  base::flat_map<unsigned, int64_t> webgl1_limits_;
++  base::flat_map<unsigned, int64_t> webgl2_limits_;
++};
++
++}  // namespace blink::curlpro
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_CURLPRO_FINGERPRINT_H_
