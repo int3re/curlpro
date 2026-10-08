@@ -157,10 +157,10 @@ func TestTheProxyIsGreetedWithTheProfilesHello(t *testing.T) {
 		t.Errorf("the proxy saw ciphers/extensions %s_%s, the profile's are %s_%s",
 			gotParts[1], gotParts[2], wantParts[1], wantParts[2])
 	}
-	// And the whole JA4 differs in one field only: ALPN, which is http/1.1
-	// here on purpose while CONNECT is written as HTTP/1.1.
-	if alpnH1 := strings.Replace(want.JA4, "h2_", "h1_", 1); got.JA4 != alpnH1 {
-		t.Errorf("the proxy was greeted with JA4 %s; the profile's with ALPN http/1.1 is %s",
-			got.JA4, alpnH1)
+	// And the whole JA4 is the session's, ALPN included: the proxy is offered
+	// h2 as a browser offers it, because CONNECT over HTTP/2 can now answer
+	// for it (proxyh2.go).
+	if got.JA4 != want.JA4 {
+		t.Errorf("the proxy was greeted with JA4 %s, the session's is %s", got.JA4, want.JA4)
 	}
 }

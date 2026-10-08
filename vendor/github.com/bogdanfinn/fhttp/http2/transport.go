@@ -484,6 +484,14 @@ func (cs *clientStream) abortRequestBodyWrite(err error) {
 	cs.stopReqBody = err
 	cc.cond.Broadcast()
 	cc.mu.Unlock()
+	// curlpro: close the body as well. The flag is only read between writes,
+	// and a writer blocked inside body.Read never reaches that point: a body
+	// with no end of its own -- an HTTP/2 CONNECT tunnel's -- left RoundTrip
+	// waiting for ever on every non-2xx, so a proxy's 407 or 502 arrived as a
+	// dead network. See docs/FHTTP-PATCH.md.
+	if cs.req != nil && cs.req.Body != nil {
+		cs.req.Body.Close()
+	}
 }
 
 type stickyErrWriter struct {

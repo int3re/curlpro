@@ -169,6 +169,35 @@ func (p *pipe) Len() int {
 	// the pipe. The assignment raced with closeForError; see pipe.setBuffer.
 	cs.bufPipe.setBuffer(&dataBuffer{expected: res.ContentLength})
 '''),
+# (g) An aborted request body is closed, so a reader blocked in Read returns.
+#     On any answer that is not 2xx the client aborts the request body and
+#     then waits for the writer goroutine (`<-bodyWriter.resc`), while
+#     abortRequestBodyWrite only sets cs.stopReqBody and broadcasts -- the
+#     writer is inside body.Read and never looks. A body that ends by itself
+#     unblocks anyway; a tunnel's does not, and an HTTP/2 CONNECT whose proxy
+#     answers 407 or 502 then never returns at all. Closing the body is what
+#     x/net does and what the flag alone cannot do.
+('g', TRANSPORT,
+'''	cc := cs.cc
+	cc.mu.Lock()
+	cs.stopReqBody = err
+	cc.cond.Broadcast()
+	cc.mu.Unlock()
+''',
+'''	cc := cs.cc
+	cc.mu.Lock()
+	cs.stopReqBody = err
+	cc.cond.Broadcast()
+	cc.mu.Unlock()
+	// curlpro: close the body as well. The flag is only read between writes,
+	// and a writer blocked inside body.Read never reaches that point: a body
+	// with no end of its own -- an HTTP/2 CONNECT tunnel's -- left RoundTrip
+	// waiting for ever on every non-2xx, so a proxy's 407 or 502 arrived as a
+	// dead network. See docs/FHTTP-PATCH.md.
+	if cs.req != nil && cs.req.Body != nil {
+		cs.req.Body.Close()
+	}
+'''),
 ]
 
 

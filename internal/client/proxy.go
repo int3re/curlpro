@@ -302,6 +302,14 @@ func (s *Session) dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL,
 	if err != nil {
 		return nil, err
 	}
+	// What the proxy chose in ALPN decides how CONNECT is written. The h2
+	// branch is its own (proxyh2.go): over a stream the pathologies worked
+	// around below -- a socket closed with the 407, a gateway that hangs up
+	// instead of answering -- are not the same failures, and the retry needs
+	// no new connection.
+	if negotiatedProto(conn) == "h2" {
+		return s.connectOverH2(ctx, conn, pu, addr, userAgent)
+	}
 	// The CONNECT exchange runs on a bare socket and knows no context: without a
 	// deadline a proxy that accepted the TCP connection and went silent would hold
 	// the request forever whatever the timeout. After the tunnel it is cleared —
@@ -422,8 +430,8 @@ func deadSocket(err error) bool {
 // TLS. The scheme used to be accepted while the request went out in clear text
 // to a TLS port: the proxy did not understand it, and the credentials leaked.
 //
-// The TLS here is ordinary, not browser-like: nobody sees this fingerprint
-// except the proxy itself.
+// The handshake itself is the profile's, not Go's — see proxyTLS, which also
+// says what that cost before.
 func (s *Session) dialProxyConn(ctx context.Context, d *net.Dialer, pu *url.URL) (net.Conn, error) {
 	host := pu.Host
 	if pu.Port() == "" {
@@ -453,11 +461,11 @@ func (s *Session) dialProxyConn(ctx context.Context, d *net.Dialer, pu *url.URL)
 // before that, with a comment saying proxy providers classify their clients;
 // the handshake under them said otherwise.
 //
-// ALPN is http/1.1 alone, which is a deliberate difference from the hello the
-// session sends a site. CONNECT here is written as HTTP/1.1, and a proxy that
-// accepted an offer of h2 would be spoken to in the wrong protocol. A browser
-// reaching a secure proxy does offer h2; closing that gap is the HTTP/2 proxy,
-// and it lifts this restriction rather than working around it.
+// ALPN is the profile's own, h2 included, as a browser offers a secure proxy.
+// It was http/1.1 alone until CONNECT over HTTP/2 existed (proxyh2.go), since
+// offering a protocol we could not then speak would have broken the tunnel on
+// any proxy that accepted it -- and that restriction was the one field by
+// which this hello differed from the one the session sends a site.
 func (s *Session) proxyTLS(ctx context.Context, raw net.Conn, serverName string) (net.Conn, error) {
 	spec, err := profile.BuildSpec(s.profile)
 	if err != nil {
@@ -467,9 +475,6 @@ func (s *Session) proxyTLS(ctx context.Context, raw net.Conn, serverName string)
 	// does, and uTLS leaves the extension out when ServerName is empty.
 	if net.ParseIP(serverName) != nil {
 		serverName = ""
-	}
-	if !setALPN(spec, []string{"http/1.1"}) {
-		return nil, capabilityErr("profile %q has no ALPN extension to restrict for the proxy", s.profile.Name)
 	}
 	uconn := utls.UClient(raw, &utls.Config{
 		ServerName:             serverName,

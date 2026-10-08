@@ -599,7 +599,7 @@ with curlpro.Session("chrome-151-windows", http3=True) as s:   # QUIC right away
 
 ```python
 curlpro.Session(
-    proxy="socks5://user:pw@127.0.0.1:1080",   # http, https and socks5
+    proxy="socks5://user:pw@127.0.0.1:1080",   # http, https (h1 or h2) and socks5
     resolve={"example.com:443": "10.0.0.7"},   # curl's --resolve
     ip_version="4",                            # A records only
     verify="ca.pem",                           # a trust root of your own
@@ -610,8 +610,13 @@ curlpro.Session(
 
 The address override does not change the fingerprint: the name in SNI and in the
 `Host` header stays the same, only the socket destination moves. Through an
-`https://` proxy the channel to the proxy itself is encrypted, and the first
-`CONNECT` goes without credentials, adding them only after a 407 — as Chrome does.
+`https://` proxy the channel to the proxy itself is encrypted — and encrypted
+with the profile's own ClientHello, so the hop most likely to be logging sees
+the same JA4 the target does rather than Go's. When that proxy offers `h2`, the
+tunnel is an HTTP/2 `CONNECT` stream on a connection with the profile's
+SETTINGS. The first `CONNECT` goes without credentials either way, adding them
+only after a 407 — as Chrome does — and over `h2` the retry reuses the same
+connection.
 
 ## Your own fingerprint, without a request
 

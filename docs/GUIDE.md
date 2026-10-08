@@ -96,7 +96,7 @@ touch it.
 | `timeout` | `30.0` | a limit on the **whole** request, redirects included; a `(connect, total)` pair bounds connecting separately. `float("inf")` means no limit |
 | `connect_timeout` | `None` | the connecting limit by name: resolution, TCP, TLS. Wins over the pair's first element |
 | `response_timeout` | `None` | how long to wait for the response **headers** after the request went out. Does not bound the body. Raises `Timeout` with "response headers" in the message |
-| `proxy` | `None` | `http://`, `https://`, `socks5://`, `socks5h://`, `user:pass@` allowed; a bare `host:port` is read as `http://`. The first CONNECT carries no credentials and adds them after a 407, as Chrome does; a proxy that hangs up instead gets a second CONNECT with them on a fresh connection; one that hangs up on that too raises with code `proxy_closed` |
+| `proxy` | `None` | `http://`, `https://`, `socks5://`, `socks5h://`, `user:pass@` allowed; a bare `host:port` is read as `http://`. The first CONNECT carries no credentials and adds them after a 407, as Chrome does; a proxy that hangs up instead gets a second CONNECT with them on a fresh connection; one that hangs up on that too raises with code `proxy_closed`. An `https://` proxy is greeted with the profile's own ClientHello, and the tunnel is an HTTP/2 CONNECT stream when the proxy offers `h2` (section 12) |
 | `default_headers` | `True` | send the profile's headers. `False` sends only yours — and no `User-Agent` at all unless you pass one; the library never substitutes Go's |
 | `header_order` | `None` | the send order as a pattern with `...` for the profile's own order; section 6 |
 | `allow_redirects`, `max_redirects` | `True`, `20` | follow 3xx; the chain is in `r.history` |
@@ -975,6 +975,30 @@ what the server speaks, and the requests waiting on it open their own. A
 failure reaches every request waiting on the burst at once; each keeps its own
 `connect_timeout`. The partition keys come from `page` and `credentials`, so a
 session that names neither keeps one pool per host, as before.
+
+**The proxy is a hop with a fingerprint of its own.** A `socks5://` proxy
+carries bytes and is invisible to the target. An `https://` proxy is a TLS
+peer: it sees a ClientHello before it sees a CONNECT, and that hello reads as
+plainly as the one the target gets. Sent by Go it says Go — the wrong JA4 in
+front of every request, on the one hop a commercial proxy is most likely to be
+logging. Since 0.17 the proxy gets the profile's hello instead, the same bytes
+the target would see: measured on the stand, Go's
+`t13i131000_f57a46bbacb6_f50d94e863eb` before and the session's own
+`t13d1516h2_8daaf6152771_806a8c22fdea` after, with a test comparing the two for
+equality on every run rather than eyeballing them.
+
+That hello offers `h2` as the profile does, so a proxy may accept it — and then
+the tunnel is an HTTP/2 `CONNECT` stream (RFC 9113 §8.5: `:method` and
+`:authority`, no `:scheme` or `:path`) on a connection carrying the profile's
+own SETTINGS. Nothing in the API moves; `https://host:port` is the address it
+always was. Two details worth knowing: authentication costs nothing extra,
+because the first CONNECT still goes without credentials and answers the 407
+as a browser does, but the retry reuses the connection — a 407 ends a stream,
+not a connection. And there is one tunnel per connection: a browser would
+multiplex several CONNECTs onto one h2 connection to the proxy, so the proxy
+sees more connections than Chrome would under the same workload. Nothing a
+target can see. An `http://` proxy, and an `https://` one that does not offer
+`h2`, tunnel over HTTP/1.1 exactly as before.
 
 ## 13. Streaming, uploads, async
 

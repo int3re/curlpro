@@ -52,7 +52,7 @@ explicit `unsent` accounting and a hard 2^31−1 guard). fhttp forked before tha
 and never took it: v0.6.9, the latest, keeps the link and changes only the sign
 of `bufPipe.Len()` — which repairs the double count below but not the runaway.
 
-## The six edits
+## The seven edits
 
 | | Where | Was | Is |
 |---|---|---|---|
@@ -62,6 +62,7 @@ of `bufPipe.Len()` — which repairs the double count below but not the runaway.
 | d | `transportResponseBody.Read` | `unsent := … + cs.bufPipe.Len()` | `… - cs.bufPipe.Len()` — buffered bytes were taken on arrival and are credited when read; adding them credited every one twice |
 | e | `transportResponseBody.Read`, three sites | `cc.inflow.add(connAdd)` / `cs.inflow.add(streamAdd)` with the result ignored | the `false` that `flow.add` returns past 2^31−1 now zeroes the increment, so nothing is sent for a window already at its maximum. With a–d the sum cannot get there; this turns a would-be protocol violation into a no-op rather than a reset |
 | f | `handleResponse` + `pipe.go` | `cs.bufPipe = pipe{…}` — a whole-struct write replacing the pipe's mutex, condition and done channel | `cs.bufPipe.setBuffer(…)`, ported from x/net: the buffer is installed under the pipe's own lock, and a pipe already closed refuses it |
+| g | `abortRequestBodyWrite` | `cs.stopReqBody = err` and a broadcast | the request body is closed as well — see below |
 
 The send side (`cs.flow`, `cc.flow`) keeps its link: for sending, "no more than
 the smaller window allows" is exactly right.
@@ -101,6 +102,28 @@ on the first of three runs; with it, ten of ten pass, and the whole
 Correct accounting credits what was consumed plus at most one window of slack
 for bytes buffered ahead of the reader. The test enforces exactly that bound.
 
+## The third defect: a body that could not be given up
+
+A request body is aborted when the answer is not 2xx: the client stops the
+write, then waits for the writer goroutine to finish (`<-bodyWriter.resc` in
+`roundTrip`). `abortRequestBodyWrite` sets `cs.stopReqBody` and broadcasts —
+and the flag is only consulted *between* writes. A writer sitting inside
+`body.Read` never looks at it.
+
+Most bodies end by themselves, so the writer returns and nobody notices. A
+tunnel's body does not: an HTTP/2 `CONNECT` carries the outbound half of the
+tunnel as its request body, and that is open by definition. The first proxy to
+answer 407 or 502 therefore left `RoundTrip` waiting for ever — the status it
+sent was never read, and the request failed later as a timeout with nothing
+pointing at the proxy. Measured against the stand: 15 s, the test's own
+deadline, with the proxy showing one CONNECT and the client showing nothing.
+
+Edit (g) closes the body, which is what x/net does and what the flag alone
+cannot. With it the same refusal is reported in **4 ms**, as
+`proxy refused CONNECT: 502 Bad Gateway`, and the browser's two-step
+authentication (CONNECT, 407, CONNECT with credentials) costs one extra stream
+on the connection it was already using instead of a whole deadline.
+
 ## Keeping it
 
 `go mod vendor` regenerates the tree and silently drops the edits. Three things
@@ -110,11 +133,19 @@ fails against an unpatched transport, and `TestConcurrentCloseDuringRequests`
 fails under `-race` against an unpatched pipe — which CI runs on every push.
 Re-vendor, re-run the script, run both.
 
+`TestAnH2ProxyAnswersA407OnOneConnection` and
+`TestAnH2ProxyThatRefusesEndsAndNamesItself` fail against an unpatched
+transport too, and were run both ways to be sure of it: without edit (g) the
+first waits out its whole 15 s deadline on the 407, and the second reports
+`context deadline exceeded` — the status the proxy sent, and the word "proxy"
+with it, never arrive.
+
 `TestFlowControlTrace` in the same package is the live check against pypi. It is
 off by default and needs `FLOWTRACE` pointing at a profile directory.
 
 ## Not carried
 
-Nothing. Both defects the project found in fhttp — the window runaway and the
-close race — are carried here. What remains is the wish that upstream took
-them, so this file could be deleted.
+Nothing. All three defects the project found in fhttp — the window runaway,
+the close race and the body that could not be given up — are carried here.
+What remains is the wish that upstream took them, so this file could be
+deleted.
