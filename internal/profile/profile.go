@@ -491,6 +491,17 @@ type H3Setting struct {
 // Enabled reports whether the profile describes HTTP/3.
 func (h HTTP3Spec) Enabled() bool { return len(h.Settings) > 0 }
 
+// Datagrams reports whether the profile offers HTTP datagrams: SETTINGS_H3_DATAGRAM
+// (0x33), which Chrome sends as 1 and which CONNECT-UDP is built on top of.
+func (h HTTP3Spec) Datagrams() bool {
+	for _, s := range h.Settings {
+		if s.ID == 0x33 {
+			return s.Value != 0
+		}
+	}
+	return false
+}
+
 // TLSSpec describes the ClientHello.
 //
 // The source is one of three, in mutually exclusive order of priority:

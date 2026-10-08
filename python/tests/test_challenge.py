@@ -255,6 +255,22 @@ class AuthProxy:
             threading.Thread(target=_pipe, args=(c, up), daemon=True).start()
 
 
+def test_a_browser_will_not_take_a_proxy_it_cannot_use():
+    """Chrome's --proxy-server takes http, https and socks; an unknown scheme
+    is not an error there but a shrug, and the browser goes direct -- which
+    publishes the address the proxy was hiding. masque:// serves requests, not
+    a browser, so it is refused before Chrome starts rather than ignored after.
+    """
+    from curlpro.browser.chrome import Chrome
+
+    with pytest.raises(ValueError, match="masque"):
+        Chrome("about:blank", proxy="masque://127.0.0.1:443")
+    # The forwarder, which is the other way a proxy reaches a browser, says
+    # the same thing in its own words.
+    with pytest.raises(ValueError, match="masque"):
+        Forwarder("masque://u:p@127.0.0.1:443")
+
+
 def test_the_forwarder_adds_the_credentials(stand):
     up = AuthProxy("u", "p@ss")
     with Forwarder(f"http://u:p%40ss@127.0.0.1:{up.port}") as fw:

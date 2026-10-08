@@ -50,3 +50,27 @@ def test_target_unreachable_directly_is_not_a_proxy_error():
 def test_proxy_address_mistakes_are_configuration_errors():
     e = outcome(proxy="ftp://127.0.0.1:21")
     assert isinstance(e, curlpro.ConfigurationError)
+
+
+def test_a_masque_proxy_is_a_scheme_we_speak():
+    """masque:// reaches the dial, not the scheme check.
+
+    The distinction matters to a caller: a ConfigurationError means "you wrote
+    something I do not understand" and is permanent, while a dial failure means
+    "that proxy is down" and is worth another address. Before HTTP/3 proxies
+    existed the first was the only answer a masque:// address could get.
+    """
+    e = outcome(proxy="masque://127.0.0.1:1")
+    assert isinstance(e, curlpro.ProxyError) and not isinstance(e, curlpro.ConfigurationError)
+    assert e.stage == "dial"
+
+
+def test_http3_names_the_proxy_scheme_that_can_carry_it():
+    """QUIC through a byte-stream tunnel is impossible, and saying so beats
+    going direct: that would publish the address the proxy was hiding."""
+    for proxy in ("http://127.0.0.1:8080", "https://127.0.0.1:443", "socks5://127.0.0.1:1080"):
+        with pytest.raises(curlpro.ConfigurationError, match="masque://"):
+            curlpro.Session("chrome-151-windows", http3=True, proxy=proxy)
+    # A MASQUE proxy is accepted: the session is built, and only the request
+    # that uses it can fail.
+    curlpro.Session("chrome-151-windows", http3=True, proxy="masque://127.0.0.1:443").close()

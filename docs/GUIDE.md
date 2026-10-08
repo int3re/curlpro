@@ -96,7 +96,7 @@ touch it.
 | `timeout` | `30.0` | a limit on the **whole** request, redirects included; a `(connect, total)` pair bounds connecting separately. `float("inf")` means no limit |
 | `connect_timeout` | `None` | the connecting limit by name: resolution, TCP, TLS. Wins over the pair's first element |
 | `response_timeout` | `None` | how long to wait for the response **headers** after the request went out. Does not bound the body. Raises `Timeout` with "response headers" in the message |
-| `proxy` | `None` | `http://`, `https://`, `socks5://`, `socks5h://`, `user:pass@` allowed; a bare `host:port` is read as `http://`. The first CONNECT carries no credentials and adds them after a 407, as Chrome does; a proxy that hangs up instead gets a second CONNECT with them on a fresh connection; one that hangs up on that too raises with code `proxy_closed`. An `https://` proxy is greeted with the profile's own ClientHello, and the tunnel is an HTTP/2 CONNECT stream when the proxy offers `h2` (section 12) |
+| `proxy` | `None` | `http://`, `https://`, `socks5://`, `socks5h://`, `user:pass@` allowed; a bare `host:port` is read as `http://`. The first CONNECT carries no credentials and adds them after a 407, as Chrome does; a proxy that hangs up instead gets a second CONNECT with them on a fresh connection; one that hangs up on that too raises with code `proxy_closed`. An `https://` proxy is greeted with the profile's own ClientHello, and the tunnel is an HTTP/2 CONNECT stream when the proxy offers `h2`. `masque://` is a proxy reached over HTTP/3, the only kind that can carry HTTP/3 to the target (section 12) |
 | `default_headers` | `True` | send the profile's headers. `False` sends only yours — and no `User-Agent` at all unless you pass one; the library never substitutes Go's |
 | `header_order` | `None` | the send order as a pattern with `...` for the profile's own order; section 6 |
 | `allow_redirects`, `max_redirects` | `True`, `20` | follow 3xx; the chain is in `r.history` |
@@ -104,8 +104,8 @@ touch it.
 | `force_http1` | `False` | offer `http/1.1` alone in ALPN. This changes JA4 (two characters of it), legitimately: a browser without h2 looks like that |
 | `post_quantum` | `True` | `False` drops X25519MLKEM768 and its 1216-byte key share: the hello of a browser with post-quantum key agreement off by policy. JA4 stays, JA3 and the size move, the hello fits one TCP segment |
 | `resume` | `True` | TLS session resumption with tickets, one cache per session, as a browser does. On since the resuming hello was measured (Chrome 153 and Firefox 156): the first hello plus `pre_shared_key` last, no early data, and for Firefox without `session_ticket` — which is what goes out. The first hello of a session is untouched, so every fingerprint stays what it was |
-| `http3` | `False` | go to QUIC at once. The profile needs an `http3` section (four have one, section 12) |
-| `alt_svc` | `True` | move to HTTP/3 after an `Alt-Svc` header, as a browser does; a failed attempt falls back to TCP and is not retried for 5 minutes, doubling up to 24 hours. Needs an `http3` section; not through a proxy |
+| `http3` | `False` | go to QUIC at once. The profile needs an `http3` section (18 have one, every current Chromium build, section 12). Through a proxy only a `masque://` one; any other raises rather than going direct, which would publish the address the proxy was hiding |
+| `alt_svc` | `True` | move to HTTP/3 after an `Alt-Svc` header, as a browser does; a failed attempt falls back to TCP and is not retried for 5 minutes, doubling up to 24 hours. Needs an `http3` section. Behind a proxy it is taken only through a `masque://` one; behind any other the advertisement is left alone |
 | `resolve` | `None` | `{"example.com:443": "10.0.0.7"}` — curl's `--resolve`; SNI and `Host` keep the name. Not through a proxy |
 | `ip_version` | `None` | `"4"` or `"6"` — one address family |
 | `keep_alive` | `True` | reuse connections. `False` closes after each response, without sending `Connection: close`. An idle connection the server closed is dropped from the pool, and a request whose reused connection dies before any response byte goes once more on a new one, whatever the method, as Chromium does (section 9) |
@@ -999,6 +999,36 @@ multiplex several CONNECTs onto one h2 connection to the proxy, so the proxy
 sees more connections than Chrome would under the same workload. Nothing a
 target can see. An `http://` proxy, and an `https://` one that does not offer
 `h2`, tunnel over HTTP/1.1 exactly as before.
+
+**A proxy you reach over HTTP/3.** `masque://host:port` is a proxy spoken to
+over QUIC, and it is the only kind that can carry HTTP/3 to the target.
+Everything else about it is familiar: credentials in the URL, the same errors
+with the same stages, `https://` and `socks5://` untouched beside it. What
+changes is that one QUIC connection to the proxy carries every tunnel on it,
+as streams rather than as sockets, with the profile's own QUIC spec, SETTINGS,
+GREASE frame and pseudo-header order — nothing of Go reaches the proxy at all,
+because there is no TCP underneath to leak.
+
+Two shapes, chosen by what the target needs:
+
+| the target | how it travels | RFC |
+|---|---|---|
+| TCP — HTTP/1.1, HTTP/2, WebSocket, anything over TLS | `CONNECT`, one stream, the bytes in its DATA frames | 9114 §4.4 |
+| QUIC — HTTP/3 | `CONNECT-UDP`: extended `CONNECT` with `:protocol: connect-udp`, the target's datagrams as HTTP datagrams | 9298, 9297, 9220 |
+
+So `Session("chrome-153-windows", proxy="masque://user:pw@host:443",
+http3=True)` is an HTTP/3 request through a proxy, which every other scheme
+refuses outright — and refuses on purpose: a silent fall back to TCP would
+publish the address the proxy was there to hide.
+
+Two things to know before pointing it at a provider. The profile needs an
+`http3` section, because the proxy is spoken to with it (18 profiles have one).
+And a tunnel for QUIC has to be wider than what travels through it: forwarding
+one QUIC packet costs about 1283 bytes of datagram, so both ends need the room
+for it. Ours is asked for when the connection opens and checked when a flow
+does, with the shortfall named; the proxy's cannot be seen from here, so a
+handshake that opens a tunnel and then hears nothing says which end to suspect
+instead of reporting a dead network.
 
 ## 13. Streaming, uploads, async
 

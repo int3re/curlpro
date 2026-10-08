@@ -59,7 +59,7 @@ func (u *udpTransports) closeAll() {
 
 func (s *Session) http3() (*h3.Transport, error) {
 	s.h3.once.Do(func() {
-		s.h3.tr, s.h3.err = buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts)
+		s.h3.tr, s.h3.err = buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts, nil)
 	})
 	if s.h3.tr == nil && s.h3.err == nil {
 		// once already ran in closeH3: the transport was never created and never will be.
@@ -68,8 +68,19 @@ func (s *Session) http3() (*h3.Transport, error) {
 	return s.h3.tr, s.h3.err
 }
 
+// h3Dial is how a QUIC connection is opened for an HTTP/3 transport: the
+// signature h3.Transport.Dial has, named so that a second way of opening one
+// can be passed in (proxyh3.go, where the "socket" is a tunnel).
+type h3Dial func(ctx context.Context, addr string, cfg *utls.Config, qcfg *quic.Config) (*quic.Conn, error)
+
+// buildH3Transport assembles the transport from the profile.
+//
+// dial nil is the direct path, a UDP socket of our own. A MASQUE proxy passes
+// its own and everything else about the transport stays the profile's — which
+// is the point: the connection to the target is the browser's whether it
+// travels over a socket or inside somebody else's QUIC connection.
 func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
-	roots *x509.CertPool, certs []utls.Certificate) (*h3.Transport, error) {
+	roots *x509.CertPool, certs []utls.Certificate, dial h3Dial) (*h3.Transport, error) {
 	if !p.HTTP3.Enabled() {
 		return nil, capabilityErr("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
@@ -118,7 +129,7 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 		// Retries are the session's business: two independent mechanisms would
 		// double the declared number of requests and ignore the shared budget.
 		DisableInternalRetry: true,
-		Dial: func(ctx context.Context, addr string, cfg *utls.Config, qcfg *quic.Config) (*quic.Conn, error) {
+		Dial: dialOr(dial, func(ctx context.Context, addr string, cfg *utls.Config, qcfg *quic.Config) (*quic.Conn, error) {
 			// The spec is rebuilt for every connection: extensions are shuffled and
 			// GREASE values are drawn anew.
 			spec, err := quicSpec(p)
@@ -156,8 +167,16 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 			}
 			udp.add(ut.Transport)
 			return conn, nil
-		},
+		}),
 	}, nil
+}
+
+// dialOr picks the caller's dial over the default one.
+func dialOr(given, fallback h3Dial) h3Dial {
+	if given != nil {
+		return given
+	}
+	return fallback
 }
 
 // explainH3Error turns low-level errors into readable ones.
@@ -258,8 +277,8 @@ func parrotID(name string) (quic.QUICID, error) {
 //
 // The context comes from the caller: that way the timeout applies here as well,
 // and the body supports BodyFile just like on the ordinary path.
-func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL) (*nethttp.Response, error) {
-	tr, err := s.http3()
+func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL, proxy string) (*nethttp.Response, error) {
+	tr, err := s.http3Via(proxy)
 	if err != nil {
 		return nil, err
 	}

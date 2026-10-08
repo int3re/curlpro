@@ -478,7 +478,7 @@ URL, логин, который прокси отвергает. Всё оста
 
 ```
 timeout must be positive, got 0s (leave it unset for no limit)
-unsupported proxy scheme "ftp" (use http, https or socks5)
+unsupported proxy scheme "ftp" (use http, https, socks5 or masque)
 protocol=h2: server negotiated http/1.1. The ALPN list is left intact on
   purpose: no browser offers h2 alone
 ```
@@ -587,7 +587,7 @@ with curlpro.Session("chrome-151-windows", http3=True) as s:   # сразу QUIC
 
 ```python
 curlpro.Session(
-    proxy="socks5://user:pw@127.0.0.1:1080",   # http, https (h1 или h2) и socks5
+    proxy="socks5://user:pw@127.0.0.1:1080",   # http, https (h1 или h2), socks5, masque
     resolve={"example.com:443": "10.0.0.7"},   # как --resolve у curl
     ip_version="4",                            # только A-записи
     verify="ca.pem",                           # свой корень доверия
@@ -604,6 +604,12 @@ curlpro.Session(
 соединении с SETTINGS профиля. Первый `CONNECT` в любом случае уходит без
 учётных данных и добавляет их только после 407 — так делает Chrome, — а по
 `h2` повтор переиспользует то же соединение.
+
+`masque://host:port` — прокси, до которого идут по HTTP/3 (RFC 9298): одно
+QUIC-соединение несёт все туннели на нём потоками, а цель по QUIC едет через
+`CONNECT-UDP`, поэтому `http3=True` работает через него — чего не умеет ни
+одна другая схема. Через любой другой прокси HTTP/3 поднимает ошибку, а не
+превращается тихо в TCP: это выдало бы адрес, который прокси прятал.
 
 ## Свой отпечаток без запроса
 

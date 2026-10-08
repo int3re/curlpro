@@ -221,6 +221,18 @@ class Chrome:
         if langs:
             args.append(f"--lang={langs[0]}")
         if proxy:
+            # Chrome's --proxy-server understands http, https and socks; a
+            # scheme it does not know is not an error there but a shrug, and
+            # the browser goes direct -- publishing the address the proxy was
+            # hiding. masque:// is ours, not Chrome's, so it is refused here
+            # rather than silently dropped.
+            scheme = proxy.split("://", 1)[0].lower() if "://" in proxy else "http"
+            if scheme not in ("http", "https", "socks4", "socks5"):
+                raise ValueError(
+                    f"a browser cannot use a {scheme}:// proxy: Chrome's --proxy-server takes "
+                    "http, https, socks4 and socks5 only, and would go direct past anything "
+                    "else. Give the browser an http://, https:// or socks5:// address; a "
+                    "masque:// proxy serves requests, not a browser")
             args.append(f"--proxy-server={proxy}")
             # WebRTC would otherwise offer the machine's own address next to
             # the proxy's: two addresses for one visitor.

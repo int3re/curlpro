@@ -55,7 +55,14 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, er
 	case "http", "https", "":
 		return s.dialHTTPProxy(ctx, d, pu, addr, s.profile.Headers.UserAgent)
 	default:
-		return nil, configErr("unsupported proxy scheme %q (use http, https or socks5)", pu.Scheme)
+		if isMASQUE(pu.Scheme) {
+			// No net.Dialer reaches a MASQUE proxy: there is no TCP to the proxy
+			// at all, and a TCP target travels inside a CONNECT stream on its
+			// QUIC connection (proxyh3.go).
+			return s.dialMASQUE(ctx, pu, addr, s.profile.Headers.UserAgent)
+		}
+		return nil, configErr(
+			"unsupported proxy scheme %q (use http, https, socks5 or masque)", pu.Scheme)
 	}
 }
 
@@ -560,7 +567,7 @@ func closedWithoutBytes(err error) bool {
 }
 
 func defaultProxyPort(scheme string) string {
-	if strings.EqualFold(scheme, "https") {
+	if strings.EqualFold(scheme, "https") || isMASQUE(scheme) {
 		return "443"
 	}
 	return "8080"

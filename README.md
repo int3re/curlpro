@@ -488,7 +488,7 @@ message is written for a human and names the consequence, not only the fact:
 
 ```
 timeout must be positive, got 0s (leave it unset for no limit)
-unsupported proxy scheme "ftp" (use http, https or socks5)
+unsupported proxy scheme "ftp" (use http, https, socks5 or masque)
 protocol=h2: server negotiated http/1.1. The ALPN list is left intact on
   purpose: no browser offers h2 alone
 ```
@@ -599,7 +599,7 @@ with curlpro.Session("chrome-151-windows", http3=True) as s:   # QUIC right away
 
 ```python
 curlpro.Session(
-    proxy="socks5://user:pw@127.0.0.1:1080",   # http, https (h1 or h2) and socks5
+    proxy="socks5://user:pw@127.0.0.1:1080",   # http, https (h1 or h2), socks5, masque
     resolve={"example.com:443": "10.0.0.7"},   # curl's --resolve
     ip_version="4",                            # A records only
     verify="ca.pem",                           # a trust root of your own
@@ -617,6 +617,12 @@ tunnel is an HTTP/2 `CONNECT` stream on a connection with the profile's
 SETTINGS. The first `CONNECT` goes without credentials either way, adding them
 only after a 407 — as Chrome does — and over `h2` the retry reuses the same
 connection.
+
+`masque://host:port` is a proxy reached over HTTP/3 (RFC 9298): one QUIC
+connection carries every tunnel on it as a stream, and a QUIC target travels
+as `CONNECT-UDP` — so `http3=True` works through it, which no other scheme can
+offer. Through any other proxy HTTP/3 raises instead of quietly becoming TCP,
+because that would publish the address the proxy was hiding.
 
 ## Your own fingerprint, without a request
 

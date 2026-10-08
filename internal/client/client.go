@@ -805,6 +805,9 @@ type Session struct {
 	clientCerts []utls.Certificate
 
 	h3 h3Transport
+	// masque holds what is open towards MASQUE proxies: one HTTP/3 connection
+	// per proxy and the tunnels on it (proxyh3.go).
+	masque masqueProxies
 }
 
 // New creates a session. The profile spec is checked right away so that a data
@@ -933,12 +936,14 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if opts.HTTP3 && !p.HTTP3.Enabled() {
 		return nil, capabilityErr("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
-	// A proxy for QUIC is not implemented. Silently going direct is not an
-	// option: that would reveal the very address the proxy was meant to hide.
+	// QUIC is UDP, and an ordinary proxy's CONNECT gives a byte stream: only a
+	// MASQUE proxy can carry it (CONNECT-UDP, RFC 9298 — proxyh3.go). Going
+	// direct instead is not an option, silently or otherwise: that would reveal
+	// the very address the proxy was meant to hide.
 	if opts.HTTP3 && opts.Proxy != "" {
-		return nil, configErr("HTTP/3 through a proxy is not supported: QUIC needs " +
-			"CONNECT-UDP (RFC 9298), which no available library implements. " +
-			"Drop either http3 or the proxy")
+		if err := masqueCarriesH3(opts.Proxy); err != nil {
+			return nil, err
+		}
 	}
 	return s, nil
 }
@@ -967,6 +972,7 @@ func (s *Session) Close() {
 	s.mu.Unlock()
 
 	s.closeH3()
+	s.closeMASQUE()
 	for _, list := range conns {
 		closeAll(list)
 	}
@@ -1292,8 +1298,12 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 					"use https:// or let it be HTTP/1.1", ProtoH2)})
 		}
 	}
-	viaAltSvc := !plain && forced == "" && !s.opts.HTTP3 &&
-		s.proxyForHost(r, u.Scheme, u.Host) == "" && s.altSvcH3(u)
+	// An Alt-Svc upgrade is our own guess, so it is only taken when the path to
+	// the target can carry QUIC: directly, or through a MASQUE proxy. Behind
+	// any other proxy the advertisement is left alone — guessing wrong there
+	// would cost a request to tell us what the scheme already says.
+	viaAltSvc := !plain && forced == "" && !s.opts.HTTP3 && s.altSvcH3(u) &&
+		masqueCarriesH3(s.proxyForHost(r, u.Scheme, u.Host)) == nil
 	if forced == ProtoH3 || (forced == "" && s.opts.HTTP3) || viaAltSvc {
 		// The session option was checked when it was created; a request's demand
 		// only here: before it the profile might never have been needed.
@@ -1302,12 +1312,14 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 				"protocol=%s: profile %q has no http3 section",
 				ProtoH3, s.profile.Name)})
 		}
-		if s.proxyForHost(r, u.Scheme, u.Host) != "" {
-			return fail(&fatalError{fmt.Errorf("HTTP/3 through a proxy is not supported " +
-				"(QUIC needs CONNECT-UDP, RFC 9298)")})
+		proxy := s.proxyForHost(r, u.Scheme, u.Host)
+		if proxy != "" {
+			if err := masqueCarriesH3(proxy); err != nil {
+				return fail(&fatalError{err})
+			}
 		}
 		armHeaders()
-		resp, err := s.sendH3(req.Context(), r, u)
+		resp, err := s.sendH3(req.Context(), r, u, proxy)
 		err = headersDone(err)
 		if err == nil {
 			// sendH3 opened its own copy of the body; this one would stay
