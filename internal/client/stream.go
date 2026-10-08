@@ -25,6 +25,11 @@ type Redirect struct {
 	Status   int    `json:"status"`
 	URL      string `json:"url"`
 	Location string `json:"location"`
+	// Headers is what the server answered this hop with. A chain now hands
+	// back what each hop said, not only where it pointed: a Set-Cookie, a
+	// Retry-After or an anti-bot's mark on an intermediate 302 was otherwise
+	// gone by the time the last response arrived, and only the jar remembered.
+	Headers map[string][]string `json:"headers,omitempty"`
 }
 
 type Stream struct {
@@ -328,6 +333,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 						Status:   resp.StatusCode,
 						URL:      current.URL,
 						Location: location,
+						Headers:  resp.Header.Clone(),
 					})
 				case errors.Is(err, errRedirectUnsupported):
 					// The hop is impossible for us rather than by protocol: the

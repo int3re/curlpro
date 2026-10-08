@@ -66,7 +66,7 @@ class StreamResponse:
         # import the other way would be a cycle.
         from .session import Redirect, _preflights
         #: The redirect hops before this response, first to last.
-        self.history = [Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
+        self.history = [Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""), h.get("headers"))
                         for h in payload.get("history") or []]
         #: The CORS preflights sent before the request, in order.
         self.preflights = _preflights(payload.get("preflights"))

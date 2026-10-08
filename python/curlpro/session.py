@@ -589,7 +589,7 @@ def _response(payload: dict, content: bytes, url: str, started: float) -> "Respo
         content=content,
         url=payload.get("url") or url,
         elapsed=time.perf_counter() - started,
-        history=[Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""))
+        history=[Redirect(h.get("status", 0), h.get("url", ""), h.get("location", ""), h.get("headers"))
                  for h in payload.get("history") or []],
         preflights=_preflights(payload.get("preflights")),
         cache=payload.get("cache"),
@@ -602,14 +602,28 @@ def _preflights(items: Any) -> list[Preflight]:
 
 
 class Redirect:
-    """One hop of a redirect chain: where the server answered and with what status."""
+    """One hop of a redirect chain: where the server answered, with what status
+    and with which headers.
 
-    __slots__ = ("status", "url", "location")
+    ``headers`` is that hop's own response headers, a :class:`Headers` as the
+    final response has. A ``Set-Cookie`` on an intermediate 302, the mark of an
+    anti-bot that redirected, a ``Retry-After`` — all of it used to be gone by
+    the time the last response arrived, and only the cookie jar remembered
+    anything. ``r.history[0].header("set-cookie")`` reads one as a string.
+    """
 
-    def __init__(self, status: int, url: str, location: str):
+    __slots__ = ("status", "url", "location", "headers")
+
+    def __init__(self, status: int, url: str, location: str, headers: Any = None):
         self.status = status
         self.url = url
         self.location = location
+        #: This hop's response headers, looked up by any case.
+        self.headers = Headers(headers)
+
+    def header(self, name: str) -> "str | None":
+        """The first value of one of this hop's headers, or None."""
+        return self.headers.first(name)
 
     def __repr__(self) -> str:
         return f"<Redirect {self.status} {self.url} → {self.location}>"

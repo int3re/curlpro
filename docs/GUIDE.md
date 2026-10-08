@@ -185,7 +185,7 @@ The response:
 | `encoding` | detected from `Content-Type`, then the BOM, then a `<meta charset>` in the first kilobytes; assignable when a site declares it wrongly |
 | `json()` | `json.loads` on the raw bytes — UTF-8/16/32 are recognised by the parser itself |
 | `url` | the final URL after redirects |
-| `history` | the redirect chain as `Redirect(status, url, location)` records |
+| `history` | the redirect chain as `Redirect(status, url, location, headers)` records, first hop to last. `headers` is that hop's own response headers, a `Headers` like the final response's, with `.header(name)` for one as a string: a `Set-Cookie` on an intermediate 302, an anti-bot's mark, a `Retry-After` — all of it used to be gone by the time the last response arrived |
 | `preflight`, `preflights` | the CORS preflight that preceded the request, a `Preflight(url, status, headers, cached)` record or `None`; all of them along a redirect chain. `cached` means no OPTIONS went out: an earlier answer still covered it. A `StreamResponse` and an `AsyncSession` response carry both (and `history`) as well — the second did not until 0.10.1 |
 | `cookies` | the cookies **this** response set, as a mapping |
 | `challenge`, `raise_for_challenge()` | the anti-bot challenge or block the response is — vendor, kind, ray — or `None`; the second raises `ChallengeError` for one (section 9). A stream reads it from the headers alone |
