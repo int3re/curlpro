@@ -1628,7 +1628,7 @@ class Session:
         return Fingerprint(_call("curlpro_session_fingerprint", self._id, url.encode("utf-8")))
 
     def browser(self, url: str = "", *, headless: bool = False, executable: str | None = None,
-                profile_dir: str | None = None) -> Any:
+                profile_dir: str | None = None, gpu: str = "") -> Any:
         """Opens the session in the Chrome installed here — the browser of its
         profile's version, with its proxy, languages, time zone and cookies —
         and brings what the browser gets back into the session::
@@ -1641,13 +1641,16 @@ class Session:
         session's newer ones to the browser, ``b.local_storage(origin)`` reads
         what a single-page app keeps there. A session whose profile is not the
         installed browser's version is refused: the cookies would go on under
-        a fingerprint that betrays them. See :mod:`curlpro.browser.handoff`.
+        a fingerprint that betrays them. ``gpu="high-performance"`` opens it on
+        the discrete GPU of a dual-GPU machine. See
+        :mod:`curlpro.browser.handoff`.
         """
         if self._closed:
             raise RuntimeError("session is closed")
         from .browser.handoff import Handoff
 
-        return Handoff(self, url, headless=headless, executable=executable, profile_dir=profile_dir)
+        return Handoff(self, url, headless=headless, executable=executable, profile_dir=profile_dir,
+                       gpu=gpu)
 
     @property
     def page(self) -> str | None:

@@ -114,11 +114,18 @@ class BrowserSolver:
     def __init__(self, *, headless: bool = False, profile_dir: str | None = None,
                  executable: str | None = None, poll: float = 0.5, click: bool = True,
                  click_after: float = 2.5, timeout: float | None = None,
-                 keep_open: bool = False):
+                 keep_open: bool = False, gpu: str = ""):
         if keep_open and profile_dir:
             raise ValueError("keep_open starts each solve with no cookies; profile_dir keeps "
                              "one profile for every solve — pick one")
+        from .browser.chrome import GPUS
+        if gpu not in GPUS:
+            raise ValueError(f"gpu must be one of {GPUS!r}, not {gpu!r}")
         self.headless = headless
+        #: The GPU the solving browser renders on (``curlpro.browser.chrome.GPUS``):
+        #: "high-performance" is the discrete card of a dual-GPU machine — the
+        #: WebGL strings and every drawn pixel are then that card's.
+        self.gpu = gpu
         #: The longest a solve waits, when shorter than the session's.
         self.timeout = timeout
         #: Keep the browser between solves — one per proxy and languages —
@@ -191,7 +198,7 @@ class BrowserSolver:
             # tab is attached before its page loads.
             with Chrome("about:blank" if tz else request.url, executable=self.executable, proxy=proxy,
                         headless=self.headless, profile_dir=self.profile_dir,
-                        accept_language=request.accept_language) as chrome:
+                        accept_language=request.accept_language, gpu=self.gpu) as chrome:
                 v = chrome.version()
                 self._same_browser(v, request)
                 tab = chrome.pages()[0]["targetId"]
@@ -229,7 +236,7 @@ class BrowserSolver:
                 self._shared_forwarder = Forwarder(proxy)
                 route = self._shared_forwarder.address
             self._shared = Chrome("about:blank", executable=self.executable, headless=self.headless,
-                                  proxy=route, accept_language=accept_language)
+                                  proxy=route, accept_language=accept_language, gpu=self.gpu)
             self._shared_key = (accept_language, proxy)
             if not getattr(self, "_atexit", False):
                 atexit.register(self.close)

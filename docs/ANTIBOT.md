@@ -253,6 +253,7 @@ same OS release with the browser's own build in it.
 | `headless` | `False` | a headless Chrome says `HeadlessChrome` in its User-Agent, which no profile carries — the solver refuses the mismatch; and a captcha needs a window |
 | `profile_dir` | none | keep the browser profile between solves: a browser that has been to the site before is a returning visitor. Without it, every solve starts from a fresh profile |
 | `keep_open` | `False` | keep one browser between solves (section 3.2) |
+| `gpu` | `""` | `"high-performance"` renders on the discrete GPU of a dual-GPU machine: a second identity whose WebGL strings and every drawn pixel are that card's (section 3.3) |
 | `click` | `True` | click Turnstile's checkbox; `False` leaves it to a person |
 | `click_after` | 2.5 | seconds a check gets to pass by itself before the click |
 | `timeout` | none | the longest a solve waits, when shorter than the session's 90 s |
@@ -309,6 +310,16 @@ weights, and the browser that solves keeps the same languages and time zone —
 in the page, its `Date`, and its dedicated, shared and service workers
 (measured on the stand). `lookup()` is the one network call and is made only
 when asked.
+
+**The GPU is part of the visitor too.** The WebGL renderer string and every
+pixel a page draws come from the GPU, and they cannot be faked consistently —
+a patched string beside pixels from another card is a contradiction of its
+own. A machine with two GPUs, though, has two real identities:
+`BrowserSolver(gpu="high-performance")` and `s.browser(url,
+gpu="high-performance")` run the page on the discrete card. Measured on a
+laptop with an Intel Iris Xe and an RTX 4050: of 368 values a page reads, 17
+moved — the renderer strings, four uniform limits, every drawn pixel — and
+nothing else.
 
 ### 3.4 A solver of your own
 

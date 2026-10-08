@@ -90,6 +90,32 @@ LIGHT_FLAGS = (
 )
 
 
+#: Which GPU the browser renders on: "" leaves it to Windows and Chrome (the
+#: integrated one, on a laptop that has both), "high-performance" asks for the
+#: discrete one through --force-high-performance-gpu — a switch Chromium
+#: declares in gpu/config/gpu_switches.cc and that works on Windows, not only
+#: on the Macs it was written for. Measured on a laptop with an Intel Iris Xe
+#: and an RTX 4050, Chrome 154: of 368 values a page reads, 17 moved — the
+#: WebGL vendor and renderer strings, four uniform limits ANGLE trims on
+#: NVIDIA, and every pixel drawn, canvas 2D and WebGL alike — and nothing else,
+#: the window's chrome included. That is the point: each GPU is a complete,
+#: consistent identity, pixels and strings from the same card, which no
+#: patched WebGL string can be. There is no switch for the opposite direction.
+GPUS = ("", "high-performance")
+
+
+_LEFT_BEHIND: list = []
+
+
+def _remove_at_exit(directory: Path) -> None:
+    """A profile a slow-dying browser still held when it was closed: removed
+    when the process exits, by which time the browser is long gone."""
+    if not _LEFT_BEHIND:
+        import atexit
+        atexit.register(lambda: [shutil.rmtree(d, ignore_errors=True) for d in _LEFT_BEHIND])
+    _LEFT_BEHIND.append(directory)
+
+
 def _merge_features(args: list[str]) -> list[str]:
     """One ``--disable-features`` and one ``--enable-features``, with every
     name given: Chrome keeps only the last of a repeated switch, so the light
@@ -136,7 +162,10 @@ class Chrome:
     profile, so the browser asks for the languages the session asks for.
     ``profile_dir`` keeps the profile between runs — a browser that has been
     to a site before looks like one; without it a temporary profile is made
-    and removed on close. ``light`` (on by default) adds :data:`LIGHT_FLAGS`;
+    and removed on close. ``gpu="high-performance"`` runs the page on the
+    machine's discrete GPU where Windows would pick the integrated one — a
+    second, genuine identity on a dual-GPU machine (see :data:`GPUS`).
+    ``light`` (on by default) adds :data:`LIGHT_FLAGS`;
     ``extra_args`` are added last, unmeasured — each flag is a possible mark;
     a ``--disable-features`` list among them is merged with the driver's own.
     Use as a context manager.
@@ -145,7 +174,10 @@ class Chrome:
     def __init__(self, url: str, *, executable: str | None = None, proxy: str = "",
                  headless: bool = False, profile_dir: str | os.PathLike[str] | None = None,
                  accept_language: str = "", window_size: tuple[int, int] = (1280, 860),
-                 timeout: float = 30.0, extra_args: tuple = (), light: bool = True):
+                 timeout: float = 30.0, extra_args: tuple = (), light: bool = True,
+                 gpu: str = ""):
+        if gpu not in GPUS:
+            raise ValueError(f"gpu must be one of {GPUS!r}, not {gpu!r}")
         exe = executable or find_chrome()
         if not exe:
             raise FileNotFoundError(
@@ -195,6 +227,8 @@ class Chrome:
             args.append("--force-webrtc-ip-handling-policy=disable_non_proxied_udp")
         if headless:
             args.append("--headless=new")
+        if gpu == "high-performance":
+            args.append("--force-high-performance-gpu")
         if light:
             args.extend(LIGHT_FLAGS)
         # The caller's own, last: each flag is a possible mark, measured or not.
@@ -345,11 +379,21 @@ class Chrome:
                 if self._ws is not None:
                     self._ws.close()
                     self._ws = None
+        # Closing must not fail. Chrome 154 on Windows usually exits 0.1-0.2 s
+        # after Browser.close, but about one close in twenty took 9.5 s, and in
+        # a suite run some outlived TerminateProcess by more than ten seconds
+        # as well. This used to raise TimeoutExpired out of __exit__ — so a
+        # solve that had already passed reached its caller as an exception
+        # that was not even a ChallengeError. A process that will not die in
+        # time is left to die on its own, and its profile is removed at exit.
         try:
             self._proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             self._proc.kill()
-            self._proc.wait(timeout=10)
+            try:
+                self._proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
         if self._own_dir:
             # Chrome's helpers may hold a file a moment after the main process
             # is gone; Windows refuses to delete it meanwhile.
@@ -358,6 +402,8 @@ class Chrome:
                 if not self.profile_dir.exists():
                     break
                 time.sleep(0.25)
+            if self.profile_dir.exists():
+                _remove_at_exit(self.profile_dir)
 
     def __enter__(self) -> "Chrome":
         return self

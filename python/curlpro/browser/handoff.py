@@ -29,7 +29,7 @@ class Handoff:
     """
 
     def __init__(self, session: Any, url: str = "", *, headless: bool = False,
-                 executable: str | None = None, profile_dir: str | None = None):
+                 executable: str | None = None, profile_dir: str | None = None, gpu: str = ""):
         self._session = session
         probe = url or "https://example.com/"
         sent = {k.lower(): v for k, v in session.headers_for("GET", probe).items()}
@@ -46,7 +46,8 @@ class Handoff:
         self._page = None
         try:
             self.chrome = Chrome("about:blank", executable=executable, proxy=proxy, headless=headless,
-                                 profile_dir=profile_dir, accept_language=sent.get("accept-language", ""))
+                                 profile_dir=profile_dir, accept_language=sent.get("accept-language", ""),
+                                 gpu=gpu)
             same_browser(self.chrome.version(), sent.get("user-agent", ""), session.impersonate)
             # The cookies first, then the page: its first request carries them.
             self.chrome.set_cookies(session.cookies.export())

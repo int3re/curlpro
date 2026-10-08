@@ -6,7 +6,18 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.15.2** — a patch, from one field report (a Qrator solver for
+**0.16.0** — a minor for what it adds: `gpu="high-performance"` on
+`BrowserSolver`, `s.browser()` and `curlpro.browser.Chrome` runs the browser on
+the discrete GPU of a dual-GPU machine, through Chromium's own
+`--force-high-performance-gpu`, which works on Windows too. Measured on a
+laptop with an Intel Iris Xe and an RTX 4050: of 368 values a page reads, 17
+moved — the WebGL renderer strings, four uniform limits, every drawn pixel —
+and nothing else; each card is a whole, real identity. And a fix: about one
+Chrome in twenty took ~10 s to exit and some outlived the kill, and `close()`
+then raised `TimeoutExpired` out of `__exit__` — a solve that had passed
+reached the caller as that exception. A browser slow to die is now left to
+die, its profile removed at exit. Python only, ABI 0.25.0.
+Before it, **0.15.2** — a patch, from one field report (a Qrator solver for
 `login.mts.ru`, ported from curl_cffi). `list_profiles()` answered `[]` in a
 fresh process, the one profile function that did not load the bundled set
 first — so `name if name in list_profiles() else default` sent every

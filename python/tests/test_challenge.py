@@ -376,6 +376,77 @@ def test_the_light_flags_change_nothing_a_page_reads(stand):
     assert light == plain
 
 
+def test_closing_a_browser_that_will_not_die_does_not_raise(tmp_path):
+    # About one Chrome in twenty took 9.5 s to exit, some outlived even the
+    # kill; close() raised TimeoutExpired out of __exit__ and lost a solve
+    # that had passed. A browser that will not die is left to die.
+    import subprocess
+    import threading
+
+    from curlpro.browser.chrome import Chrome
+
+    class Undying:
+        killed = False
+
+        def wait(self, timeout=None):
+            raise subprocess.TimeoutExpired("chrome", timeout)
+
+        def kill(self):
+            Undying.killed = True
+
+    c = Chrome.__new__(Chrome)
+    c._ws, c._proc, c._lock = None, Undying(), threading.Lock()
+    c._own_dir, c.profile_dir = True, tmp_path / "profile"
+    c.profile_dir.mkdir()
+    c.close()                                # no exception
+    assert Undying.killed and not c.profile_dir.exists()
+
+
+def test_the_gpu_choice_is_checked_and_becomes_the_switch(monkeypatch, tmp_path):
+    import curlpro.browser.chrome as ch
+
+    class Started(Exception):
+        pass
+
+    seen = []
+
+    def popen(args, **kw):
+        seen.append(args)
+        raise Started
+
+    monkeypatch.setattr(ch.subprocess, "Popen", popen)
+    for gpu, flagged in (("high-performance", True), ("", False)):
+        with pytest.raises(Started):
+            ch.Chrome("about:blank", executable="chrome.exe", profile_dir=tmp_path, gpu=gpu)
+        assert ("--force-high-performance-gpu" in seen[-1]) is flagged
+    with pytest.raises(ValueError, match="gpu must be one of"):
+        ch.Chrome("about:blank", executable="chrome.exe", gpu="discrete")
+    with pytest.raises(ValueError, match="gpu must be one of"):
+        curlpro.BrowserSolver(gpu="nvidia")
+
+
+@pytest.mark.browser
+@browser
+def test_the_discrete_gpu_is_another_real_identity(stand):
+    # On a machine with two GPUs the second is a whole identity of its own:
+    # the WebGL renderer moves, nothing else the stand's page reads does.
+    from curlpro.browser import Chrome
+
+    seen = []
+    for gpu in ("", "high-performance"):
+        n = len(stand.fingerprints)
+        with Chrome(stand.base + "/fp", gpu=gpu):
+            for _ in range(200):
+                if len(stand.fingerprints) > n:
+                    break
+                time.sleep(0.05)
+        seen.append(stand.fingerprints[n])
+    default, discrete = seen
+    if default["webgl"] == discrete["webgl"]:
+        pytest.skip(f"one GPU here: {default['webgl']}")
+    assert {k for k in default if default[k] != discrete.get(k)} == {"webgl"}
+
+
 @pytest.mark.browser
 @browser
 def test_a_session_of_another_version_is_refused(stand):
