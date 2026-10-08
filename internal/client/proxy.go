@@ -3,7 +3,6 @@ package client
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -16,6 +15,9 @@ import (
 	"time"
 
 	http "github.com/bogdanfinn/fhttp"
+	utls "github.com/refraction-networking/utls"
+
+	"github.com/curlpro/curlpro/internal/profile"
 )
 
 // dialRaw opens a TCP connection to addr, through a proxy when needed.
@@ -51,7 +53,7 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, er
 	case "socks5", "socks5h":
 		return dialSOCKS5(ctx, d, pu, addr)
 	case "http", "https", "":
-		return dialHTTPProxy(ctx, d, pu, addr, s.profile.Headers.UserAgent)
+		return s.dialHTTPProxy(ctx, d, pu, addr, s.profile.Headers.UserAgent)
 	default:
 		return nil, configErr("unsupported proxy scheme %q (use http, https or socks5)", pu.Scheme)
 	}
@@ -295,8 +297,8 @@ func socksReplyText(code byte) string {
 // HTTP CONNECT
 // ---------------------------------------------------------------------------
 
-func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAgent string) (net.Conn, error) {
-	conn, err := dialProxyConn(ctx, d, pu)
+func (s *Session) dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAgent string) (net.Conn, error) {
+	conn, err := s.dialProxyConn(ctx, d, pu)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +328,7 @@ func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAg
 	if errors.As(err, &closed) && !closed.withAuth && pu.User != nil {
 		clearDeadline(conn)
 		conn.Close()
-		if conn, err = dialProxyConn(ctx, d, pu); err != nil {
+		if conn, err = s.dialProxyConn(ctx, d, pu); err != nil {
 			return nil, err
 		}
 		setDeadline(conn)
@@ -342,7 +344,7 @@ func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAg
 			// attempt needs a fresh socket, or the retry goes into a closed one.
 			clearDeadline(conn)
 			conn.Close()
-			if conn, err = dialProxyConn(ctx, d, pu); err != nil {
+			if conn, err = s.dialProxyConn(ctx, d, pu); err != nil {
 				return nil, err
 			}
 			setDeadline(conn)
@@ -360,7 +362,7 @@ func dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAg
 		if need.reusable && deadSocket(err) {
 			clearDeadline(conn)
 			conn.Close()
-			if conn, err = dialProxyConn(ctx, d, pu); err != nil {
+			if conn, err = s.dialProxyConn(ctx, d, pu); err != nil {
 				return nil, err
 			}
 			setDeadline(conn)
@@ -422,7 +424,7 @@ func deadSocket(err error) bool {
 //
 // The TLS here is ordinary, not browser-like: nobody sees this fingerprint
 // except the proxy itself.
-func dialProxyConn(ctx context.Context, d *net.Dialer, pu *url.URL) (net.Conn, error) {
+func (s *Session) dialProxyConn(ctx context.Context, d *net.Dialer, pu *url.URL) (net.Conn, error) {
 	host := pu.Host
 	if pu.Port() == "" {
 		host = net.JoinHostPort(pu.Hostname(), defaultProxyPort(pu.Scheme))
@@ -432,14 +434,57 @@ func dialProxyConn(ctx context.Context, d *net.Dialer, pu *url.URL) (net.Conn, e
 		return nil, proxyFail(ProxyStageDial, 0, fmt.Errorf("connecting to proxy: %w", err))
 	}
 	if strings.EqualFold(pu.Scheme, "https") {
-		tconn := tls.Client(conn, &tls.Config{ServerName: pu.Hostname()})
-		if err := tconn.HandshakeContext(ctx); err != nil {
+		tconn, err := s.proxyTLS(ctx, conn, pu.Hostname())
+		if err != nil {
 			conn.Close()
-			return nil, proxyFail(ProxyStageDial, 0, fmt.Errorf("TLS handshake with proxy: %w", err))
+			return nil, proxyFail(ProxyStageDial, 0, err)
 		}
 		conn = tconn
 	}
 	return conn, nil
+}
+
+// proxyTLS hands the proxy the profile's ClientHello.
+//
+// It used to be crypto/tls, so the first thing an https:// proxy saw was Go:
+// measured on the stand, JA4 t13i131000_... against the session's
+// t13d1516h2_... -- 13 ciphers to 15, 10 extensions to 16, and no ALPN at all.
+// The CONNECT headers inside the tunnel had been shaped like Chrome's long
+// before that, with a comment saying proxy providers classify their clients;
+// the handshake under them said otherwise.
+//
+// ALPN is http/1.1 alone, which is a deliberate difference from the hello the
+// session sends a site. CONNECT here is written as HTTP/1.1, and a proxy that
+// accepted an offer of h2 would be spoken to in the wrong protocol. A browser
+// reaching a secure proxy does offer h2; closing that gap is the HTTP/2 proxy,
+// and it lifts this restriction rather than working around it.
+func (s *Session) proxyTLS(ctx context.Context, raw net.Conn, serverName string) (net.Conn, error) {
+	spec, err := profile.BuildSpec(s.profile)
+	if err != nil {
+		return nil, fmt.Errorf("building the hello for the proxy: %w", err)
+	}
+	// A bare address has no name to send: an IP in SNI is not what a browser
+	// does, and uTLS leaves the extension out when ServerName is empty.
+	if net.ParseIP(serverName) != nil {
+		serverName = ""
+	}
+	if !setALPN(spec, []string{"http/1.1"}) {
+		return nil, capabilityErr("profile %q has no ALPN extension to restrict for the proxy", s.profile.Name)
+	}
+	uconn := utls.UClient(raw, &utls.Config{
+		ServerName:             serverName,
+		InsecureSkipVerify:     s.opts.InsecureSkipVerify,
+		RootCAs:                s.roots,
+		OmitEmptyPsk:           true,
+		SessionTicketsDisabled: true,
+	}, utls.HelloCustom)
+	if err := uconn.ApplyPreset(spec); err != nil {
+		return nil, fmt.Errorf("the hello for the proxy: %w", err)
+	}
+	if err := uconn.HandshakeContext(ctx); err != nil {
+		return nil, fmt.Errorf("TLS handshake with proxy: %w", err)
+	}
+	return uconn, nil
 }
 
 // needAuthError means the proxy answered 407 to a CONNECT without credentials.
