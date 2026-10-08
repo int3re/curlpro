@@ -35,7 +35,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	quic "github.com/refraction-networking/uquic"
@@ -45,26 +44,36 @@ import (
 	"github.com/curlpro/curlpro/internal/h3"
 )
 
-// A tunnel for QUIC has to be wider than what travels through it, and this is
-// the one number the design turns on.
+// A tunnel for QUIC has to be wider than what travels through it.
 //
-// A tunnelled packet costs its own length plus: the context ID of RFC 9298
-// (one byte for the zero context), the quarter stream ID that HTTP/3 puts in
-// front of every datagram (two bytes once stream IDs pass 1020), the DATAGRAM
-// frame's own header (two), and the outer packet's header and authentication
-// tag (about forty). A server's QUIC packets are 1280 bytes before its own
-// path discovery raises them -- quic-go's floor and near enough everyone's --
-// so the outer connection must be able to carry 1280 plus all of that.
+// The packets inside a flow are the inner connection's, held at 1280 bytes
+// (path discovery is off in there, see dialH3ViaMasque). Each one costs, as the
+// payload of an HTTP datagram, its own length plus the context ID of RFC 9298
+// (one byte for context zero) plus the quarter stream ID that HTTP/3 puts in
+// front of every datagram (two bytes once the stream ID passes 255). The
+// DATAGRAM frame's header and the outer packet's are the outer connection's
+// own arithmetic, already inside the limit it reports.
 //
-// Measured, this is not a nicety: with the outer connection at its library
-// default of 1280 the inner handshake sends fine and the answer never arrives,
-// because the proxy's reply is two bytes too large to forward and is dropped
-// in silence. The failure reads as "timeout: no recent network activity" --
-// a dead network, from a tunnel that is working perfectly.
+// At the library's initial packet size the connection to the proxy carries
+// 1243 bytes of datagram, and path discovery does not rescue it: quic-go sends
+// its probes only alongside packets it was sending anyway, so a connection
+// waiting for room to send is a quiet one and never finds any. Measured both
+// ways -- an idle link that had just finished its handshake grew to 1441 within
+// a second on the handshake's own tail of packets, and the same link a moment
+// later, quiet, held at 1280 for as long as anyone waited.
+//
+// So the room is asked for up front: masqueOuterPacket is the smallest initial
+// size whose estimate (the size less 37 bytes, quic-go's estimateMaxPayloadSize)
+// holds one inner packet. It is a lower limit, not a target, and it has a
+// cost: a path that cannot carry 1320-byte UDP payloads cannot carry this
+// connection at all. That is the price of tunnelling QUIC, the same one every
+// MASQUE client pays; the handshake itself still goes out at the size the
+// profile's QUIC spec pads it to, so the proxy sees the browser's Initial.
 const (
-	masqueInnerPacket = 1280
-	masqueOverhead    = 1 + 2 + 2 + 48
-	masqueOuterPacket = masqueInnerPacket + masqueOverhead
+	masqueInnerPacket  = 1280
+	masqueDatagramNeed = masqueInnerPacket + 1 + 2
+	masqueOuterPacket  = masqueDatagramNeed + 37
+	masqueRoomWait     = 3 * time.Second
 )
 
 // isMASQUE says whether a proxy scheme names a MASQUE proxy.
@@ -82,7 +91,7 @@ func isMASQUE(scheme string) bool {
 
 // masqueProxies holds what a session has open towards MASQUE proxies, keyed by
 // the proxy address: the HTTP/3 connection itself, the HTTP/3 transport whose
-// UDP goes through it, and everything that has to be closed by hand.
+// UDP goes through it, and the flows under that transport's connections.
 //
 // Per proxy and not per session because a request may name its own (Request
 // .Proxy), and an HTTP/3 transport caches its connections by host name alone:
@@ -100,12 +109,22 @@ type masqueProxy struct {
 	// Created on the first HTTP/3 request, nil until then: a proxy used only
 	// for TCP never needs one.
 	tr *h3.Transport
-	// inner are the QUIC transports built over CONNECT-UDP flows. A
-	// hand-built quic.Transport is not single-use — closing its connection
-	// does not stop it — so they are tracked and closed here, exactly as
-	// udpTransports does for the direct path.
-	inner []*quic.Transport
-	flows []*masqueFlow
+	// inner are the connections to targets built over CONNECT-UDP flows, each
+	// with what has to be closed by hand when it ends: a hand-built
+	// quic.Transport is not single-use, so its connection ending stops nothing,
+	// and the flow under it is a stream on the proxy that stays open until
+	// somebody closes it.
+	inner map[*innerQUIC]struct{}
+}
+
+type innerQUIC struct {
+	ut   *quic.Transport
+	flow *masqueFlow
+}
+
+func (i *innerQUIC) close() {
+	_ = i.ut.Close()
+	_ = i.flow.Close()
 }
 
 // masqueLink is one HTTP/3 connection to one MASQUE proxy.
@@ -114,9 +133,6 @@ type masqueLink struct {
 	qc  *quic.Conn
 	ut  *quic.Transport
 	udp *net.UDPConn
-	// roomy says the connection was established with room for a tunnelled
-	// QUIC packet; without it only CONNECT streams can be carried.
-	roomy bool
 	// pseudoOrder is the profile's, so the CONNECT's pseudo-headers go out in
 	// the browser's sequence: Chrome's :method,:authority,:scheme,:path tells
 	// it from Firefox's :method,:scheme,:authority,:path, and a proxy reads
@@ -132,6 +148,19 @@ func (l *masqueLink) close() {
 	_ = l.udp.Close()
 }
 
+// proxyEntry returns the record for one proxy, creating it. Under s.masque.mu.
+func (s *Session) proxyEntry(key string) *masqueProxy {
+	p := s.masque.open[key]
+	if p == nil {
+		p = &masqueProxy{}
+		if s.masque.open == nil {
+			s.masque.open = make(map[string]*masqueProxy, 1)
+		}
+		s.masque.open[key] = p
+	}
+	return p
+}
+
 // ---------------------------------------------------------------------------
 // The connection to the proxy
 // ---------------------------------------------------------------------------
@@ -140,7 +169,8 @@ func (l *masqueLink) close() {
 //
 // Reused across tunnels on purpose: streams are the unit a MASQUE proxy is
 // built around, and a connection per tunnel would throw away the handshake,
-// the congestion window and the proxy's own idea of who we are.
+// the congestion window, the room path discovery found, and the proxy's own
+// idea of who we are.
 func (s *Session) masqueLinkFor(ctx context.Context, pu *url.URL) (*masqueLink, error) {
 	key := pu.String()
 
@@ -149,18 +179,18 @@ func (s *Session) masqueLinkFor(ctx context.Context, pu *url.URL) (*masqueLink, 
 		s.masque.mu.Unlock()
 		return nil, errSessionClosed
 	}
+	var dead *masqueLink
 	if p := s.masque.open[key]; p != nil && p.link != nil {
 		if p.link.alive() {
 			link := p.link
 			s.masque.mu.Unlock()
 			return link, nil
 		}
-		dead := p.link
-		p.link = nil
-		s.masque.mu.Unlock()
+		dead, p.link = p.link, nil
+	}
+	s.masque.mu.Unlock()
+	if dead != nil {
 		dead.close()
-	} else {
-		s.masque.mu.Unlock()
 	}
 
 	link, err := s.dialMasqueLink(ctx, pu)
@@ -174,14 +204,7 @@ func (s *Session) masqueLinkFor(ctx context.Context, pu *url.URL) (*masqueLink, 
 		link.close()
 		return nil, errSessionClosed
 	}
-	p := s.masque.open[key]
-	if p == nil {
-		p = &masqueProxy{}
-		if s.masque.open == nil {
-			s.masque.open = make(map[string]*masqueProxy, 1)
-		}
-		s.masque.open[key] = p
-	}
+	p := s.proxyEntry(key)
 	// Two requests may have dialled at once; the first one home wins and the
 	// loser's connection is closed rather than left to idle out.
 	if p.link != nil && p.link.alive() {
@@ -211,7 +234,7 @@ func (s *Session) dialMasqueLink(ctx context.Context, pu *url.URL) (*masqueLink,
 
 	host := pu.Host
 	if pu.Port() == "" {
-		host = net.JoinHostPort(pu.Hostname(), "443")
+		host = net.JoinHostPort(pu.Hostname(), defaultProxyPort(pu.Scheme))
 	}
 	network := "udp"
 	switch s.opts.IPVersion {
@@ -256,19 +279,9 @@ func (s *Session) dialMasqueLink(ctx context.Context, pu *url.URL) (*masqueLink,
 	hsCtx, stopHS := masqueHandshakeContext(ctx)
 	defer stopHS()
 
-	// The headroom is asked for first. It is a lower limit on the outer
-	// packets, so a path whose MTU cannot hold them has no connection at all --
-	// and a path like that can still carry a CONNECT stream, which is not
-	// datagram-bound. So the handshake is tried wide, and once more at the
-	// library's own size if that failed; what was lost is then only UDP, and
-	// masqueUDP says so in as many words rather than stalling.
-	wide := *tr.QUICConfig
-	wide.InitialPacketSize = masqueOuterPacket
-	qc, err := ut.DialEarly(hsCtx, ua, cfg, &wide)
-	roomy := err == nil
-	if err != nil && ctx.Err() == nil {
-		qc, err = ut.DialEarly(hsCtx, ua, cfg, tr.QUICConfig)
-	}
+	outer := *tr.QUICConfig
+	outer.InitialPacketSize = masqueOuterPacket
+	qc, err := ut.DialEarly(hsCtx, ua, cfg, &outer)
 	if err != nil {
 		_ = ut.Close()
 		udpConn.Close()
@@ -289,8 +302,7 @@ func (s *Session) dialMasqueLink(ctx context.Context, pu *url.URL) (*masqueLink,
 		pseudo = s.profile.HTTP2.PseudoOrder
 	}
 	return &masqueLink{
-		cc: tr.NewClientConn(qc), qc: qc, ut: ut.Transport, udp: udpConn,
-		pseudoOrder: pseudo, roomy: roomy,
+		cc: tr.NewClientConn(qc), qc: qc, ut: ut.Transport, udp: udpConn, pseudoOrder: pseudo,
 	}, nil
 }
 
@@ -312,87 +324,86 @@ func masqueSettings(ctx context.Context, link *masqueLink) (*h3.Settings, error)
 }
 
 // ---------------------------------------------------------------------------
-// A TCP target: CONNECT over HTTP/3
+// The CONNECT exchange, both shapes
 // ---------------------------------------------------------------------------
 
-// dialMASQUE opens a byte tunnel to addr through a MASQUE proxy.
+// masqueExchange opens a stream, sends one CONNECT and reads its answer.
 //
-// The answer is a net.Conn the TCP paths cannot tell from a socket: the HTTP/3
-// stream frames what is written into DATA frames and unframes what is read,
-// which is what RFC 9114 says a CONNECT tunnel is, and it carries real
-// deadlines of its own — no net.Pipe in the middle as the HTTP/2 tunnel needs.
-func (s *Session) dialMASQUE(ctx context.Context, pu *url.URL, addr, userAgent string) (net.Conn, error) {
-	link, err := s.masqueLinkFor(ctx, pu)
-	if err != nil {
-		return nil, err
-	}
-
-	str, resp, err := masqueConnect(ctx, link, pu, addr, userAgent, false)
-	// A 407 is a challenge, not a refusal, and it ended a stream rather than a
-	// connection: the retry goes out on the same QUIC connection, as over
-	// HTTP/2 (proxyh2.go) and as a browser's second CONNECT does.
-	if err == nil && resp.StatusCode == nethttp.StatusProxyAuthRequired && pu.User != nil {
-		resp.Body.Close()
-		str.CancelRead(quic.StreamErrorCode(h3.ErrCodeNoError))
-		str.CancelWrite(quic.StreamErrorCode(h3.ErrCodeNoError))
-		str, resp, err = masqueConnect(ctx, link, pu, addr, userAgent, true)
-	}
-	if err != nil {
-		return nil, proxyFail(ProxyStageConnect, 0, err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		resp.Body.Close()
-		str.CancelRead(quic.StreamErrorCode(h3.ErrCodeRequestCanceled))
-		str.CancelWrite(quic.StreamErrorCode(h3.ErrCodeRequestCanceled))
-		stage := ProxyStageConnect
-		if resp.StatusCode == nethttp.StatusProxyAuthRequired {
-			stage = ProxyStageAuth
-		}
-		return nil, proxyFail(stage, resp.StatusCode, connectRefusedError{
-			status: resp.StatusCode,
-			text:   resp.Status,
-			auth:   pu.User != nil,
-		})
-	}
-	return &masqueTunnel{
-		RequestStream: str,
-		local:         link.udp.LocalAddr(),
-		remote:        link.qc.RemoteAddr(),
-	}, nil
-}
-
-// masqueConnect sends one CONNECT and reads its answer.
+// protocol empty is the plain tunnel; "connect-udp" makes it the extended
+// CONNECT of RFC 9298. withAuth=false is the first attempt, as everywhere else
+// here: a browser offers credentials only after a 407, and a proxy keeping a
+// log sees from us the pair of requests it sees from Chrome.
 //
-// withAuth=false is the first attempt, as everywhere else here: a browser
-// offers credentials only after a 407, and a proxy keeping a log sees from us
-// the pair of requests it sees from Chrome.
-func masqueConnect(ctx context.Context, link *masqueLink, pu *url.URL, target, userAgent string,
-	withAuth bool) (*h3.RequestStream, *nethttp.Response, error) {
+// The exchange is bounded by ctx and the stream is not: OpenStreamSync uses
+// its context only to wait, so the tunnel outlives the dial that opened it --
+// which the HTTP/2 path had to arrange by hand (proxyh2.go). What has to be
+// arranged here is the other half. ReadResponse takes no context at all, and a
+// proxy that accepts the stream and never answers would hold the dial past
+// every deadline; the watch below cancels the stream if ctx ends first.
+func masqueExchange(ctx context.Context, link *masqueLink, pu *url.URL, target, protocol,
+	userAgent string, withAuth bool) (*h3.RequestStream, *nethttp.Response, error) {
 	str, err := link.cc.OpenRequestStream(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("opening a CONNECT stream to the proxy: %w", err)
+		return nil, nil, fmt.Errorf("opening a stream to the proxy: %w", err)
 	}
-	// :authority is the target and there is no :path or :scheme — the request
-	// writer leaves both out when the method is CONNECT and :protocol is
-	// empty, which is the plain tunnel of RFC 9114 section 4.4.
-	req := masqueRequest(ctx, link, pu, target, "", userAgent, withAuth)
-	if err := str.SendRequestHeader(req); err != nil {
+	abort := func() {
+		str.CancelRead(quic.StreamErrorCode(h3.ErrCodeRequestCanceled))
 		str.CancelWrite(quic.StreamErrorCode(h3.ErrCodeRequestCanceled))
+	}
+	stop := context.AfterFunc(ctx, abort)
+
+	req := masqueRequest(ctx, link, pu, target, protocol, userAgent, withAuth)
+	if err := str.SendRequestHeader(req); err != nil {
+		stop()
+		abort()
 		return nil, nil, fmt.Errorf("sending CONNECT to the proxy: %w", err)
 	}
 	resp, err := str.ReadResponse()
-	if err != nil {
+	if !stop() || err != nil {
+		abort()
+		if ctx.Err() != nil {
+			return nil, nil, fmt.Errorf("the proxy did not answer CONNECT within the deadline: %w",
+				ctx.Err())
+		}
 		return nil, nil, fmt.Errorf("reading the proxy's answer to CONNECT: %w", err)
 	}
 	return str, resp, nil
 }
 
+// masqueConnect runs the exchange the way a browser does: without credentials,
+// and once more with them on a 407 -- on the same connection, because a 407
+// ended a stream rather than a connection, as over HTTP/2 (proxyh2.go).
+func masqueConnect(ctx context.Context, link *masqueLink, pu *url.URL, target, protocol,
+	userAgent string) (*h3.RequestStream, error) {
+	str, resp, err := masqueExchange(ctx, link, pu, target, protocol, userAgent, false)
+	if err == nil && resp.StatusCode == nethttp.StatusProxyAuthRequired && pu.User != nil {
+		resp.Body.Close()
+		str.CancelRead(quic.StreamErrorCode(h3.ErrCodeNoError))
+		str.CancelWrite(quic.StreamErrorCode(h3.ErrCodeNoError))
+		str, resp, err = masqueExchange(ctx, link, pu, target, protocol, userAgent, true)
+	}
+	if err != nil {
+		return nil, proxyFail(ProxyStageConnect, 0, err)
+	}
+	// RFC 9110 and RFC 9298 alike: any 2xx opens the tunnel, anything else is
+	// the proxy declining this target -- with the stage and the message the
+	// HTTP/1.1 path gives the same answer, so a pool reads all three alike.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		resp.Body.Close()
+		str.CancelRead(quic.StreamErrorCode(h3.ErrCodeRequestCanceled))
+		str.CancelWrite(quic.StreamErrorCode(h3.ErrCodeRequestCanceled))
+		return nil, refusalOf(resp.StatusCode, resp.Status, resp.Header.Get("Proxy-Authenticate"), pu)
+	}
+	return str, nil
+}
+
 // masqueRequest builds a CONNECT for the proxy, browser-shaped.
-//
-// protocol empty is the plain tunnel; "connect-udp" makes it the extended
-// CONNECT of RFC 9298, which also needs the :path the template names.
 func masqueRequest(ctx context.Context, link *masqueLink, pu *url.URL, target, protocol,
 	userAgent string, withAuth bool) *nethttp.Request {
+	// :authority is the target and there is no :path or :scheme for the plain
+	// tunnel -- the request writer leaves both out when the method is CONNECT
+	// and :protocol is empty, which is RFC 9114 section 4.4. The extended form
+	// names the proxy and puts the target in the path the template gives.
 	req := &nethttp.Request{
 		Method: nethttp.MethodConnect,
 		Header: make(nethttp.Header),
@@ -436,6 +447,32 @@ func masquePath(target string) string {
 	return "/.well-known/masque/udp/" + url.PathEscape(host) + "/" + url.PathEscape(port) + "/"
 }
 
+// ---------------------------------------------------------------------------
+// A TCP target: CONNECT over HTTP/3
+// ---------------------------------------------------------------------------
+
+// dialMASQUE opens a byte tunnel to addr through a MASQUE proxy.
+//
+// The answer is a net.Conn the TCP paths cannot tell from a socket: the HTTP/3
+// stream frames what is written into DATA frames and unframes what is read,
+// which is what RFC 9114 says a CONNECT tunnel is, and it carries real
+// deadlines of its own — no net.Pipe in the middle as the HTTP/2 tunnel needs.
+func (s *Session) dialMASQUE(ctx context.Context, pu *url.URL, addr, userAgent string) (net.Conn, error) {
+	link, err := s.masqueLinkFor(ctx, pu)
+	if err != nil {
+		return nil, err
+	}
+	str, err := masqueConnect(ctx, link, pu, addr, "", userAgent)
+	if err != nil {
+		return nil, err
+	}
+	return &masqueTunnel{
+		RequestStream: str,
+		local:         link.udp.LocalAddr(),
+		remote:        link.qc.RemoteAddr(),
+	}, nil
+}
+
 // masqueTunnel is a CONNECT stream dressed as a socket.
 //
 // Only the two addresses and a full close are added: an h3.RequestStream
@@ -468,7 +505,12 @@ func (t *masqueTunnel) Close() error {
 //
 // It is a net.PacketConn because that is the shape QUIC takes its network in:
 // quic.Transport{Conn: flow} and the connection on top of it cannot tell that
-// its datagrams are travelling inside somebody else's QUIC connection.
+// its datagrams are travelling inside somebody else's QUIC connection -- as
+// long as the flow keeps a socket's promises, and the one that matters is the
+// read deadline. quic.Transport stops its read loop by setting the deadline to
+// now and waiting for the loop to notice; a read that only looked at the
+// deadline when it began never noticed, and Close hung for as long as the
+// target stayed silent. So a deadline set while a read is waiting releases it.
 type masqueFlow struct {
 	str *h3.RequestStream
 	// peer is the address every datagram is said to come from and go to. It is
@@ -479,59 +521,69 @@ type masqueFlow struct {
 	peer  net.Addr
 	local net.Addr
 
-	// deadlines are kept as nanoseconds so a read in flight can be released by
-	// another goroutine's SetReadDeadline, which is what a net.PacketConn
-	// promises. ReceiveDatagram takes a context, so each read derives one.
-	readAt  atomic.Int64
-	writeAt atomic.Int64
+	mu      sync.Mutex
+	readAt  time.Time
+	writeAt time.Time
+	// moved ends whenever the read deadline changes, which is how a read
+	// already waiting learns that it should look at the deadline again.
+	moved   context.Context
+	stopOld context.CancelFunc
 
 	closeOnce sync.Once
-	doneCtx   context.Context
+	done      context.Context
 	markDone  context.CancelFunc
 }
 
 func newMasqueFlow(str *h3.RequestStream, peer, local net.Addr) *masqueFlow {
-	done, markDone := context.WithCancel(context.Background())
-	return &masqueFlow{str: str, peer: peer, local: local, doneCtx: done, markDone: markDone}
+	f := &masqueFlow{str: str, peer: peer, local: local}
+	f.done, f.markDone = context.WithCancel(context.Background())
+	f.moved, f.stopOld = context.WithCancel(context.Background())
+	return f
 }
-
-// readContext bounds one receive by the read deadline and by Close.
-//
-// A deadline on a net.PacketConn must be able to release a read already in
-// flight, and ReceiveDatagram takes a context rather than a deadline, so every
-// read derives one. The watcher goroutine ends with the call it belongs to.
-func (f *masqueFlow) readContext() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(context.Background())
-	if ns := f.readAt.Load(); ns != 0 {
-		deadline := time.Unix(0, ns)
-		if !deadline.After(time.Now()) {
-			cancel()
-			return ctx, cancel
-		}
-		ctx, cancel = context.WithDeadline(ctx, deadline)
-	}
-	stop := context.AfterFunc(f.closed(), cancel)
-	return ctx, func() { stop(); cancel() }
-}
-
-// closed is f.done as a context, which is what AfterFunc takes.
-func (f *masqueFlow) closed() context.Context { return f.doneCtx }
 
 func (f *masqueFlow) ReadFrom(p []byte) (int, net.Addr, error) {
 	for {
-		ctx, cancel := f.readContext()
+		f.mu.Lock()
+		deadline, moved := f.readAt, f.moved
+		f.mu.Unlock()
+		if f.done.Err() != nil {
+			return 0, nil, net.ErrClosed
+		}
+		if !deadline.IsZero() && !time.Now().Before(deadline) {
+			return 0, nil, f.timeout("read")
+		}
+
+		ctx, cancel := context.WithCancel(f.done)
+		if !deadline.IsZero() {
+			var stopDeadline context.CancelFunc
+			ctx, stopDeadline = context.WithDeadline(ctx, deadline)
+			prev := cancel
+			cancel = func() { stopDeadline(); prev() }
+		}
+		stopMoved := context.AfterFunc(moved, cancel)
 		b, err := f.str.ReceiveDatagram(ctx)
+		stopMoved()
 		cancel()
+
 		if err != nil {
-			return 0, nil, f.fail("read", err)
+			if f.done.Err() != nil {
+				return 0, nil, net.ErrClosed
+			}
+			if moved.Err() != nil {
+				continue // the deadline changed under the read: look at it again
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				return 0, nil, f.timeout("read")
+			}
+			return 0, nil, &net.OpError{Op: "read", Net: "masque", Addr: f.peer, Err: err}
 		}
 		// RFC 9298 section 4: every datagram begins with a context ID, and
 		// zero means the payload is an unmodified UDP datagram. No other
 		// context is registered here, so anything else is for a feature we
 		// did not ask for — dropped, as a UDP socket drops what it cannot
 		// parse, rather than failing the whole flow.
-		id, n, err := quicvarint.Parse(b)
-		if err != nil || id != 0 {
+		id, n, perr := quicvarint.Parse(b)
+		if perr != nil || id != 0 {
 			continue
 		}
 		return copy(p, b[n:]), f.peer, nil
@@ -539,17 +591,23 @@ func (f *masqueFlow) ReadFrom(p []byte) (int, net.Addr, error) {
 }
 
 func (f *masqueFlow) WriteTo(p []byte, _ net.Addr) (int, error) {
-	if f.doneCtx.Err() != nil {
+	if f.done.Err() != nil {
 		return 0, net.ErrClosed
 	}
-	if ns := f.writeAt.Load(); ns != 0 && !time.Unix(0, ns).After(time.Now()) {
-		return 0, f.fail("write", context.DeadlineExceeded)
+	f.mu.Lock()
+	deadline := f.writeAt
+	f.mu.Unlock()
+	if !deadline.IsZero() && !time.Now().Before(deadline) {
+		return 0, f.timeout("write")
 	}
 	buf := make([]byte, 0, len(p)+1)
 	buf = quicvarint.Append(buf, 0)
 	buf = append(buf, p...)
 	if err := f.str.SendDatagram(buf); err != nil {
-		return 0, f.fail("write", err)
+		if f.done.Err() != nil {
+			return 0, net.ErrClosed
+		}
+		return 0, &net.OpError{Op: "write", Net: "masque", Addr: f.peer, Err: err}
 	}
 	return len(p), nil
 }
@@ -571,39 +629,78 @@ func (f *masqueFlow) SetDeadline(t time.Time) error {
 }
 
 func (f *masqueFlow) SetReadDeadline(t time.Time) error {
-	f.readAt.Store(deadlineNanos(t))
+	f.mu.Lock()
+	f.readAt = t
+	f.stopOld()
+	f.moved, f.stopOld = context.WithCancel(context.Background())
+	f.mu.Unlock()
 	return nil
 }
 
 func (f *masqueFlow) SetWriteDeadline(t time.Time) error {
-	f.writeAt.Store(deadlineNanos(t))
+	f.mu.Lock()
+	f.writeAt = t
+	f.mu.Unlock()
 	return nil
 }
 
-func deadlineNanos(t time.Time) int64 {
-	if t.IsZero() {
-		return 0
-	}
-	return t.UnixNano()
+// timeout is the error a socket gives for a deadline: a net.Error whose
+// Timeout is true, which QUIC reads as "nothing yet" and not as a dead network.
+func (f *masqueFlow) timeout(op string) error {
+	return &net.OpError{Op: op, Net: "masque", Addr: f.peer, Err: errFlowTimeout{}}
 }
 
-// fail dresses an error as a net.Error so QUIC reads it the way it reads a
-// socket's: a timeout is a timeout and not the end of the connection.
-func (f *masqueFlow) fail(op string, err error) error {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return &net.OpError{Op: op, Net: "masque", Addr: f.peer, Err: errTimeoutOnFlow{}}
+type errFlowTimeout struct{}
+
+func (errFlowTimeout) Error() string   { return "i/o timeout" }
+func (errFlowTimeout) Timeout() bool   { return true }
+func (errFlowTimeout) Temporary() bool { return true }
+
+// room is how many bytes one HTTP datagram may carry on this flow right now.
+//
+// Asked rather than computed: SendDatagram reports the limit in its error and
+// sends nothing, so an oversized probe is free and the answer is the
+// connection's own rather than our arithmetic about it. 4 KiB is oversized by
+// construction -- the limit can never exceed the packet buffer, 1452 bytes --
+// so the probe cannot be sent by mistake.
+func (f *masqueFlow) room() int {
+	var tooLarge *quic.DatagramTooLargeError
+	if errors.As(f.str.SendDatagram(make([]byte, 4096)), &tooLarge) {
+		return int(tooLarge.MaxDatagramPayloadSize)
 	}
-	if f.doneCtx.Err() != nil {
-		return net.ErrClosed
-	}
-	return &net.OpError{Op: op, Net: "masque", Addr: f.peer, Err: err}
+	return 4096
 }
 
-type errTimeoutOnFlow struct{}
-
-func (errTimeoutOnFlow) Error() string   { return "i/o timeout" }
-func (errTimeoutOnFlow) Timeout() bool   { return true }
-func (errTimeoutOnFlow) Temporary() bool { return true }
+// waitForRoom confirms that the connection to the proxy can carry one inner
+// packet per datagram, and says so in as many words when it cannot.
+//
+// With the initial size masqueOuterPacket asks for, the answer is yes at once;
+// this is the check that the arithmetic above still holds against the library
+// actually linked, and the short wait covers the moment after the handshake
+// when the estimate is being replaced. The alternative to saying it here is a
+// handshake that sends fine and hears nothing.
+func (f *masqueFlow) waitForRoom(ctx context.Context) error {
+	limit := time.NewTimer(masqueRoomWait)
+	defer limit.Stop()
+	tick := time.NewTicker(20 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		r := f.room()
+		if r >= masqueDatagramNeed {
+			return nil
+		}
+		select {
+		case <-tick.C:
+		case <-limit.C:
+			return fmt.Errorf("the connection to the proxy carries datagrams of %d bytes and a "+
+				"tunnelled QUIC packet needs %d, so UDP cannot be carried over it "+
+				"(a TCP target still can)", r, masqueDatagramNeed)
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for the connection to the proxy to make room for a "+
+				"tunnelled QUIC packet (%d of %d bytes): %w", r, masqueDatagramNeed, ctx.Err())
+		}
+	}
+}
 
 // masqueUDP opens a CONNECT-UDP flow to addr through the proxy.
 func (s *Session) masqueUDP(ctx context.Context, pu *url.URL, addr, userAgent string) (*masqueFlow, error) {
@@ -632,74 +729,16 @@ func (s *Session) masqueUDP(ctx context.Context, pu *url.URL, addr, userAgent st
 			"(SETTINGS 0x33), so CONNECT-UDP cannot be offered with its fingerprint", s.profile.Name)
 	}
 
-	str, resp, err := masqueUDPConnect(ctx, link, pu, addr, userAgent, false)
-	if err == nil && resp.StatusCode == nethttp.StatusProxyAuthRequired && pu.User != nil {
-		resp.Body.Close()
-		str.CancelRead(quic.StreamErrorCode(h3.ErrCodeNoError))
-		str.CancelWrite(quic.StreamErrorCode(h3.ErrCodeNoError))
-		str, resp, err = masqueUDPConnect(ctx, link, pu, addr, userAgent, true)
-	}
+	str, err := masqueConnect(ctx, link, pu, addr, "connect-udp", userAgent)
 	if err != nil {
-		return nil, proxyFail(ProxyStageConnect, 0, err)
-	}
-	// RFC 9298 section 3: success is 2xx, and anything else is the proxy
-	// declining this target.
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		resp.Body.Close()
-		str.CancelRead(quic.StreamErrorCode(h3.ErrCodeRequestCanceled))
-		str.CancelWrite(quic.StreamErrorCode(h3.ErrCodeRequestCanceled))
-		stage := ProxyStageConnect
-		if resp.StatusCode == nethttp.StatusProxyAuthRequired {
-			stage = ProxyStageAuth
-		}
-		return nil, proxyFail(stage, resp.StatusCode, fmt.Errorf(
-			"proxy refused CONNECT-UDP to %s with %s", addr, resp.Status))
+		return nil, err
 	}
 	flow := newMasqueFlow(str, link.qc.RemoteAddr(), link.udp.LocalAddr())
-	// Checked here, where it can still be said plainly. A datagram the outer
-	// connection cannot hold is not an error anybody sees: the proxy drops the
-	// answer, the inner handshake times out, and the report is of a network
-	// that went quiet.
-	if room := flow.budget(); room < masqueInnerPacket+masqueOverhead-48 {
+	if err := flow.waitForRoom(ctx); err != nil {
 		_ = flow.Close()
-		return nil, proxyFail(ProxyStageConnect, 0, fmt.Errorf(
-			"the connection to the proxy carries datagrams of %d bytes, and a tunnelled "+
-				"QUIC packet needs about %d: the path to the proxy cannot hold them, so UDP "+
-				"cannot be carried over it (a TCP target still can)",
-			room, masqueInnerPacket+3))
+		return nil, proxyFail(ProxyStageConnect, 0, err)
 	}
 	return flow, nil
-}
-
-// budget is how many bytes one HTTP datagram may carry on this flow.
-//
-// Asked rather than computed: SendDatagram reports the limit in its error and
-// sends nothing, so an oversized probe is free and the answer is the
-// connection's own rather than our arithmetic about it.
-func (f *masqueFlow) budget() int {
-	var tooLarge *quic.DatagramTooLargeError
-	if errors.As(f.str.SendDatagram(make([]byte, 1<<16)), &tooLarge) {
-		return int(tooLarge.MaxDatagramPayloadSize)
-	}
-	return 1 << 16
-}
-
-func masqueUDPConnect(ctx context.Context, link *masqueLink, pu *url.URL, target, userAgent string,
-	withAuth bool) (*h3.RequestStream, *nethttp.Response, error) {
-	str, err := link.cc.OpenRequestStream(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("opening a CONNECT-UDP stream to the proxy: %w", err)
-	}
-	req := masqueRequest(ctx, link, pu, target, "connect-udp", userAgent, withAuth)
-	if err := str.SendRequestHeader(req); err != nil {
-		str.CancelWrite(quic.StreamErrorCode(h3.ErrCodeRequestCanceled))
-		return nil, nil, fmt.Errorf("sending CONNECT-UDP to the proxy: %w", err)
-	}
-	resp, err := str.ReadResponse()
-	if err != nil {
-		return nil, nil, fmt.Errorf("reading the proxy's answer to CONNECT-UDP: %w", err)
-	}
-	return str, resp, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -715,11 +754,11 @@ func (s *Session) http3Via(proxy string) (*h3.Transport, error) {
 	if proxy == "" {
 		return s.http3()
 	}
-	pu, err := parseProxy(proxy)
-	if err != nil {
+	if err := masqueCarriesH3(proxy); err != nil {
 		return nil, err
 	}
-	if err := masqueCarriesH3(proxy); err != nil {
+	pu, err := parseProxy(proxy)
+	if err != nil {
 		return nil, err
 	}
 
@@ -729,14 +768,7 @@ func (s *Session) http3Via(proxy string) (*h3.Transport, error) {
 	if s.masque.closed {
 		return nil, errSessionClosed
 	}
-	p := s.masque.open[key]
-	if p == nil {
-		p = &masqueProxy{}
-		if s.masque.open == nil {
-			s.masque.open = make(map[string]*masqueProxy, 1)
-		}
-		s.masque.open[key] = p
-	}
+	p := s.proxyEntry(key)
 	if p.tr != nil {
 		return p.tr, nil
 	}
@@ -761,42 +793,45 @@ func (s *Session) dialH3ViaMasque(ctx context.Context, pu *url.URL, key, addr st
 	if err != nil {
 		return nil, err
 	}
-	// The flow outlives this dial: the connection built on it is kept by the
-	// transport, and a flow bound to the dial's context would be torn down the
-	// moment the first request finished. It is closed by closeMASQUE instead,
-	// with everything else the proxy holds.
-	flow, err := s.masqueUDP(context.WithoutCancel(ctx), pu, addr, s.profile.Headers.UserAgent)
+	// The dial's context bounds the exchange and not the flow: the stream
+	// under it was opened with the context only to wait for it, so the
+	// connection built on the flow outlives the request that built it.
+	flow, err := s.masqueUDP(ctx, pu, addr, s.profile.Headers.UserAgent)
 	if err != nil {
 		return nil, err
 	}
-	ut := &quic.UTransport{Transport: &quic.Transport{Conn: flow}, QUICSpec: spec}
+	in := &innerQUIC{
+		ut:   &quic.Transport{Conn: flow},
+		flow: flow,
+	}
+	ut := &quic.UTransport{Transport: in.ut, QUICSpec: spec}
 
-	// The inner connection keeps the packet size its QUIC spec gives it -- that
-	// is part of the fingerprint -- and is forbidden to grow it. Path discovery
-	// inside a tunnel learns nothing: a probe too large for the outer
-	// connection is not a packet lost on the path but a datagram the proxy
-	// never sends, and the discoverer would read the silence as a smaller MTU
-	// while the real limit is the tunnel's.
+	// The inner connection keeps its packets at the size it starts with
+	// (masqueInnerPacket, the library default) and is forbidden to grow them.
+	// Path discovery inside a tunnel learns nothing: a probe too large for the
+	// connection to the proxy is not a packet lost on the path but a datagram
+	// that is never sent, and the room confirmed in masqueUDP is room for
+	// exactly this size.
 	inner := *qcfg
 	inner.DisablePathMTUDiscovery = true
 
 	qc, err := ut.DialEarly(ctx, flow.peer, cfg, &inner)
 	if err != nil {
-		_ = ut.Close()
-		_ = flow.Close()
-		// A silent handshake through an open tunnel has one likely cause, and
-		// it is not the target: the proxy's own datagrams are too small to
-		// carry the target's QUIC packets back. Our side of that was checked
-		// when the flow opened; the proxy's cannot be seen from here, so it is
-		// named in the one place where it would otherwise look like a dead
-		// network.
-		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "no recent network activity") {
+		in.close()
+		// A handshake that hears nothing through an open tunnel has two
+		// likely causes and neither is the network: the target does not
+		// answer QUIC on that port, or the proxy cannot forward the target's
+		// packets back -- its own datagrams too small for them, which drops
+		// every answer without a word. Our side's room was checked before the
+		// handshake; the proxy's cannot be seen from here.
+		var idle *quic.IdleTimeoutError
+		var hs *quic.HandshakeTimeoutError
+		if errors.As(err, &idle) || errors.As(err, &hs) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, proxyFail(ProxyStageConnect, 0, fmt.Errorf(
-				"nothing came back from %s through the MASQUE proxy, although the tunnel opened "+
-					"and carries %d bytes each way from here. The usual cause is the proxy's own "+
-					"datagram size: forwarding one QUIC packet costs about %d bytes, and a proxy "+
-					"below that drops the answers without a word. Underlying error: %w",
-				addr, flow.budget(), masqueInnerPacket+3, err))
+				"nothing came back from %s through the MASQUE proxy, although the tunnel "+
+					"opened: either %s does not answer QUIC there, or the proxy cannot forward "+
+					"QUIC packets back (it needs datagrams of %d bytes for them). Underlying "+
+					"error: %w", addr, addr, masqueDatagramNeed, err))
 		}
 		return nil, proxyFail(ProxyStageConnect, 0, fmt.Errorf(
 			"QUIC handshake with %s through the MASQUE proxy: %w", addr, err))
@@ -806,30 +841,35 @@ func (s *Session) dialH3ViaMasque(ctx context.Context, pu *url.URL, key, addr st
 	if s.masque.closed {
 		s.masque.mu.Unlock()
 		_ = qc.CloseWithError(0, "")
-		_ = ut.Close()
-		_ = flow.Close()
+		in.close()
 		return nil, errSessionClosed
 	}
-	if p := s.masque.open[key]; p != nil {
-		p.inner = append(p.inner, ut.Transport)
-		p.flows = append(p.flows, flow)
+	p := s.proxyEntry(key)
+	if p.inner == nil {
+		p.inner = make(map[*innerQUIC]struct{})
 	}
+	p.inner[in] = struct{}{}
 	s.masque.mu.Unlock()
+
+	// When the connection ends -- idle, closed by the target, or by the
+	// transport -- its flow and its transport go with it. Left to the
+	// session's close they would outlive it by hours: a stream held open on
+	// the proxy, a socket the proxy keeps for us, and a read loop here, per
+	// connection the session ever made.
+	context.AfterFunc(qc.Context(), func() {
+		s.masque.mu.Lock()
+		if p := s.masque.open[key]; p != nil {
+			delete(p.inner, in)
+		}
+		s.masque.mu.Unlock()
+		in.close()
+	})
 	return qc, nil
 }
 
-// closeMASQUE closes everything a session opened towards MASQUE proxies.
-//
-// The order is the one that terminates: the HTTP/3 transports first, so each
-// inner connection says goodbye while it still can; then the flows, which is
-// what releases the read loop of every inner QUIC transport; then those
-// transports; then the link.
-//
-// Flows before transports and not after, because a quic.Transport given a
-// net.PacketConn of ours is not single-use: its Close waits for the read loop,
-// and that loop is sitting in the flow's ReadFrom. Closing the transport first
-// hung Session.Close for as long as the tunnel lived -- intermittently, since
-// it depended on where the loop happened to be.
+// closeMASQUE closes everything a session opened towards MASQUE proxies: the
+// HTTP/3 transports first, so each inner connection says goodbye while it
+// still can, then what those connections ran on, then the link.
 func (s *Session) closeMASQUE() {
 	s.masque.mu.Lock()
 	open := s.masque.open
@@ -841,11 +881,8 @@ func (s *Session) closeMASQUE() {
 		if p.tr != nil {
 			_ = p.tr.Close()
 		}
-		for _, f := range p.flows {
-			_ = f.Close()
-		}
-		for _, ut := range p.inner {
-			_ = ut.Close()
+		for in := range p.inner {
+			in.close()
 		}
 		if p.link != nil {
 			p.link.close()

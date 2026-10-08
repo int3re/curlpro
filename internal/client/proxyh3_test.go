@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	nethttp "net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -45,6 +46,20 @@ type masqueStand struct {
 }
 
 func newMasqueStand(t *testing.T) *masqueStand {
+	return newMasqueStandSized(t, masqueOuterPacket)
+}
+
+// newMasqueStandSized raises the stand with the given initial packet size for
+// its own connections; zero is the library's default.
+//
+// The size is the proxy's half of the room a tunnel needs. Its answers carry
+// the target's QUIC packets back, and a proxy at the default size cannot
+// forward one -- nor will path discovery find it room, since quic-go probes
+// only alongside what it was sending anyway and a reply too large to send is
+// not sent. A real MASQUE proxy has the room or carries no UDP; the stand has
+// it by default so the tests test the client, and goes without it for the one
+// test of what the client says when a proxy does not.
+func newMasqueStandSized(t *testing.T, packet uint16) *masqueStand {
 	t.Helper()
 	cert, err := utls.LoadX509KeyPair("../../capture/certs/tls.crt", "../../capture/certs/tls.key")
 	if err != nil {
@@ -61,14 +76,9 @@ func newMasqueStand(t *testing.T) *masqueStand {
 			NextProtos:   []string{"h3"},
 		},
 		QUICConfig: &quic.Config{
-			MaxIdleTimeout:  30 * time.Second,
-			EnableDatagrams: true,
-			// The same headroom the client asks for, and for the same reason in
-			// the other direction: the proxy's answers carry the target's QUIC
-			// packets, and a proxy at the library's default size cannot forward
-			// one. A real MASQUE proxy has this or it carries no UDP; here it is
-			// explicit so the test is testing the client and not the stand.
-			InitialPacketSize: masqueOuterPacket,
+			MaxIdleTimeout:    30 * time.Second,
+			EnableDatagrams:   true,
+			InitialPacketSize: packet,
 		},
 		EnableDatagrams: true,
 		Handler:         nethttp.HandlerFunc(p.serve),
@@ -437,5 +447,173 @@ func TestAMasqueProxyThatIsNotThereSaysSo(t *testing.T) {
 	}
 	if pe.Stage != ProxyStageDial {
 		t.Errorf("stage %q, expected %q", pe.Stage, ProxyStageDial)
+	}
+}
+
+// A proxy without room for the target's packets is named, not waited out.
+//
+// Everything opens -- the QUIC connection, the CONNECT-UDP stream, the flow --
+// and then the proxy cannot forward a single answer, because each is a few
+// bytes larger than its own connection carries. It drops them without a word.
+// What the client can say is that the tunnel opened and nothing came back, and
+// which two things that means; what it must not do is hang, or read as a dead
+// network.
+func TestAMasqueProxyWithoutRoomIsNamed(t *testing.T) {
+	stand := startH3Stand(t)
+	p := newMasqueStandSized(t, 0)
+	s := auditSession(t, Options{Proxy: "masque://" + p.addr, HTTP3: true,
+		Timeout: 15 * time.Second})
+
+	start := time.Now()
+	_, err := s.Do(&Request{Method: "GET", URL: stand.url("/x")})
+	took := time.Since(start)
+	if err == nil {
+		t.Fatal("a proxy that cannot forward the answers carried the request")
+	}
+	if took > 10*time.Second {
+		t.Errorf("it took %s; the handshake's own limit is 3 s", took.Round(time.Millisecond))
+	}
+	for _, want := range []string{"tunnel opened", "1283"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error does not say %q: %v", want, err)
+		}
+	}
+	var pe *ProxyError
+	if !errors.As(err, &pe) || pe.Stage != ProxyStageConnect {
+		t.Errorf("not a ProxyError at the connect stage: %v", err)
+	}
+}
+
+// A read deadline set while a read is waiting releases it, as a socket's does.
+//
+// This is the promise quic.Transport.Close leans on: it stops its read loop by
+// setting the deadline to now and waits for the loop to notice. A flow that
+// read its deadline once, at the start of the read, never noticed -- and
+// closing a session hung for as long as the target stayed silent.
+func TestAFlowReleasesAWaitingReadOnANewDeadline(t *testing.T) {
+	stand := startH3Stand(t)
+	p := newMasqueStand(t)
+	s := auditSession(t, Options{Proxy: "masque://" + p.addr})
+	pu, _ := url.Parse("masque://" + p.addr)
+
+	flow, err := s.masqueUDP(context.Background(), pu, stand.addr, "")
+	if err != nil {
+		t.Fatalf("opening the flow: %v", err)
+	}
+	defer flow.Close()
+
+	got := make(chan error, 1)
+	go func() {
+		_, _, err := flow.ReadFrom(make([]byte, 1500))
+		got <- err
+	}()
+	time.Sleep(100 * time.Millisecond) // the read is waiting: nobody sends to it
+	_ = flow.SetReadDeadline(time.Now())
+
+	select {
+	case err := <-got:
+		var ne net.Error
+		if !errors.As(err, &ne) || !ne.Timeout() {
+			t.Errorf("the released read did not report a timeout: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a deadline set during the read did not release it")
+	}
+
+	// And a closed flow ends a waiting read with net.ErrClosed.
+	_ = flow.SetReadDeadline(time.Time{})
+	go func() {
+		_, _, err := flow.ReadFrom(make([]byte, 1500))
+		got <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	_ = flow.Close()
+	select {
+	case err := <-got:
+		if !errors.Is(err, net.ErrClosed) {
+			t.Errorf("a read ended by Close said %v, not net.ErrClosed", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close did not release a waiting read")
+	}
+}
+
+// When a connection through the proxy ends, its flow goes with it.
+//
+// Left to the session's close, each one would hold a stream open on the proxy,
+// a socket the proxy keeps for us and a read loop here -- per connection the
+// session ever made, for as long as the session lives.
+func TestAnEndedConnectionReleasesItsFlow(t *testing.T) {
+	stand := startH3Stand(t)
+	p := newMasqueStand(t)
+	proxy := "masque://" + p.addr
+	s := auditSession(t, Options{Proxy: proxy, HTTP3: true, Timeout: 15 * time.Second})
+
+	if _, err := s.Do(&Request{Method: "GET", URL: stand.url("/x")}); err != nil {
+		t.Fatalf("HTTP/3 through the MASQUE proxy: %v", err)
+	}
+	pu, _ := url.Parse(proxy)
+	key := pu.String()
+	open := func() int {
+		s.masque.mu.Lock()
+		defer s.masque.mu.Unlock()
+		if e := s.masque.open[key]; e != nil {
+			return len(e.inner)
+		}
+		return 0
+	}
+	if n := open(); n != 1 {
+		t.Fatalf("%d connections recorded through the proxy, expected one", n)
+	}
+
+	tr, err := s.http3Via(proxy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr.CloseIdleConnections()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for open() != 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if n := open(); n != 0 {
+		t.Errorf("%d flows outlived their connection", n)
+	}
+}
+
+// A 407 to a CONNECT without credentials is the auth stage on every transport.
+//
+// The HTTP/1.1 path always said so -- code proxy_auth, a PermanentError, since
+// the same request will not pass next time either. Over HTTP/2 it came back as
+// the connect stage with code proxy, which a pool reads as "worth a retry", and
+// the two newer paths have to agree with the oldest one.
+func TestA407WithoutCredentialsIsTheAuthStageEverywhere(t *testing.T) {
+	needs := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:s3cret"))
+
+	h2 := newH2Proxy(t, "127.0.0.1:1")
+	h2.needs = needs
+	mq := newMasqueStand(t)
+	mq.needs = needs
+
+	for name, proxy := range map[string]string{
+		"h2":     "https://localhost:" + portOf(t, h2.addr()),
+		"masque": "masque://" + mq.addr,
+	} {
+		s := auditSession(t, Options{Proxy: proxy, Timeout: 10 * time.Second})
+		_, err := s.Do(&Request{Method: "GET", URL: "https://example.invalid/"})
+		var pe *ProxyError
+		if !errors.As(err, &pe) {
+			t.Errorf("%s: not a ProxyError: %v", name, err)
+			continue
+		}
+		if pe.Stage != ProxyStageAuth || pe.Status != 407 {
+			t.Errorf("%s: stage %q status %d, expected %q and 407", name, pe.Stage, pe.Status, ProxyStageAuth)
+		}
+		if code := Code(err); code != CodeProxyAuth {
+			t.Errorf("%s: code %q, expected %q", name, code, CodeProxyAuth)
+		}
+		if !strings.Contains(err.Error(), "user:pass") {
+			t.Errorf("%s: the error does not say how to give credentials: %v", name, err)
+		}
 	}
 }

@@ -120,7 +120,8 @@ deadline, with the proxy showing one CONNECT and the client showing nothing.
 
 Edit (g) closes the body, which is what x/net does and what the flag alone
 cannot. With it the same refusal is reported in **4 ms**, as
-`proxy refused CONNECT: 502 Bad Gateway`, and the browser's two-step
+`proxy refused CONNECT with 502 Bad Gateway` (the wording the HTTP/1.1 path
+uses, since both now go through one classifier), and the browser's two-step
 authentication (CONNECT, 407, CONNECT with credentials) costs one extra stream
 on the connection it was already using instead of a whole deadline.
 

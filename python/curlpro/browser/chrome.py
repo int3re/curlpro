@@ -153,6 +153,36 @@ def find_chrome() -> str | None:
     return None
 
 
+
+def chrome_proxy(proxy: str) -> str:
+    """The proxy address as Chrome's --proxy-server reads it, or ValueError.
+
+    Chrome knows http, https, socks4, socks and socks5 (net/base/
+    proxy_string_util.cc). Anything else is not an error there: the entry is
+    "silently discarded" (net/proxy_resolution/proxy_list.cc), an empty list is
+    UseDirect(), and the browser goes out from this machine's own address --
+    the one the proxy was there to hide. So an unknown scheme is refused here.
+
+    socks5h:// is the one with an exact equivalent, and it is translated rather
+    than refused: the h asks the proxy to resolve the name, and Chrome's SOCKS5
+    client always does that, sending the host as a domain (kEndPointDomain in
+    net/socket/socks5_client_socket.cc). Until this existed a socks5h:// session
+    opened in a browser went direct.
+    """
+    scheme, sep, rest = proxy.partition("://")
+    if not sep:
+        return proxy  # a bare host:port, which Chrome reads as http
+    low = scheme.lower()
+    if low == "socks5h":
+        return "socks5://" + rest
+    if low in ("http", "https", "socks4", "socks", "socks5"):
+        return proxy
+    raise ValueError(
+        f"a browser cannot use a {scheme}:// proxy: Chrome's --proxy-server takes http, "
+        "https, socks4 and socks5, and goes direct past anything else -- from this "
+        "machine's own address. Give the browser an http://, https:// or socks5:// "
+        "address; a masque:// proxy serves requests, not a browser")
+
 class Chrome:
     """A Chrome started on ``url`` with a profile of its own.
 
@@ -221,19 +251,7 @@ class Chrome:
         if langs:
             args.append(f"--lang={langs[0]}")
         if proxy:
-            # Chrome's --proxy-server understands http, https and socks; a
-            # scheme it does not know is not an error there but a shrug, and
-            # the browser goes direct -- publishing the address the proxy was
-            # hiding. masque:// is ours, not Chrome's, so it is refused here
-            # rather than silently dropped.
-            scheme = proxy.split("://", 1)[0].lower() if "://" in proxy else "http"
-            if scheme not in ("http", "https", "socks4", "socks5"):
-                raise ValueError(
-                    f"a browser cannot use a {scheme}:// proxy: Chrome's --proxy-server takes "
-                    "http, https, socks4 and socks5 only, and would go direct past anything "
-                    "else. Give the browser an http://, https:// or socks5:// address; a "
-                    "masque:// proxy serves requests, not a browser")
-            args.append(f"--proxy-server={proxy}")
+            args.append(f"--proxy-server={chrome_proxy(proxy)}")
             # WebRTC would otherwise offer the machine's own address next to
             # the proxy's: two addresses for one visitor.
             args.append("--force-webrtc-ip-handling-policy=disable_non_proxied_udp")
@@ -316,7 +334,9 @@ class Chrome:
         default languages, not the profile's (measured: ``ja-JP,en-US,en``
         where the profile said ``ja-JP,ja,en-US,en``) — so a session's
         languages hold in the browser's own profile, not in a context."""
-        params = {"proxyServer": proxy} if proxy else {}
+        # The same rules as the command line: CDP hands proxyServer to the
+        # same parser, which drops what it does not know and goes direct.
+        params = {"proxyServer": chrome_proxy(proxy)} if proxy else {}
         return self.send("Target.createBrowserContext", **params)["browserContextId"]
 
     def open(self, url: str, context: str = "") -> str:

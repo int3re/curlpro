@@ -84,12 +84,17 @@ func (s *Session) connectOverH2(ctx context.Context, conn net.Conn, pu *url.URL,
 		}
 		return fail(classifyConnect(err))
 	}
-	if resp.StatusCode != http.StatusOK {
-		status, text := resp.StatusCode, resp.Status
+	// Any 2xx opens the tunnel (RFC 9110, section 9.3.6), as on HTTP/1.1. The
+	// rest is read the way that path reads it: a 407 is the auth stage --
+	// asking for credentials when none were given, refusing them when they
+	// were -- and was reported here as the connect stage, which made a 407
+	// over h2 a retryable ProxyError where over HTTP/1.1 it was the permanent
+	// ProxyAuthError.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		status, text, challenge := resp.StatusCode, resp.Status, resp.Header.Get("Proxy-Authenticate")
 		resp.Body.Close()
 		body.Close()
-		return fail(proxyFail(ProxyStageConnect, status,
-			fmt.Errorf("proxy refused CONNECT: %s", text)))
+		return fail(refusalOf(status, text, challenge, pu))
 	}
 	// The tunnel is up: the dial's deadline no longer applies to it. A false
 	// here means the deadline fired first and the stream is already going.

@@ -415,6 +415,19 @@ func classifyConnect(err error) error {
 	return proxyFail(ProxyStageConnect, 0, err)
 }
 
+// refusalOf is a CONNECT's non-2xx answer as the error the HTTP/1.1 path
+// gives for it, for the paths that read the answer as a response rather than
+// from a socket (HTTP/2, HTTP/3): a 407 without credentials asks for them, a
+// 407 with them is the credentials refused, anything else is the proxy
+// declining -- each with its stage, through the same classifier, so a pool
+// reads the three transports alike.
+func refusalOf(status int, text, challenge string, pu *url.URL) error {
+	if status == http.StatusProxyAuthRequired && pu.User == nil {
+		return classifyConnect(needAuthError{reusable: true, scheme: challenge})
+	}
+	return classifyConnect(connectRefusedError{status: status, text: text, auth: pu.User != nil})
+}
+
 // deadSocket says the CONNECT failed at the transport, not at HTTP: the peer
 // hung up before a byte (proxyClosedError from the peek) or the write itself
 // failed because the peer had already closed (reset, broken pipe). An HTTP

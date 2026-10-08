@@ -1024,11 +1024,15 @@ publish the address the proxy was there to hide.
 Two things to know before pointing it at a provider. The profile needs an
 `http3` section, because the proxy is spoken to with it (18 profiles have one).
 And a tunnel for QUIC has to be wider than what travels through it: forwarding
-one QUIC packet costs about 1283 bytes of datagram, so both ends need the room
-for it. Ours is asked for when the connection opens and checked when a flow
-does, with the shortfall named; the proxy's cannot be seen from here, so a
-handshake that opens a tunnel and then hears nothing says which end to suspect
-instead of reporting a dead network.
+one QUIC packet costs 1283 bytes of datagram, so both ends need the room for
+it. Ours is asked for when the connection opens — its packets start at 1320
+bytes rather than the library's 1280, because path discovery cannot be relied
+on to find the room later, and a path to the proxy that cannot carry 1320-byte
+UDP payloads cannot carry this connection — and checked when a flow opens,
+with any shortfall named. The proxy's room cannot be seen from here, so a
+handshake that opens a tunnel and then hears nothing names the two things that
+means — the target does not answer QUIC, or the proxy cannot forward its
+packets back — instead of reporting a dead network.
 
 ## 13. Streaming, uploads, async
 

@@ -261,10 +261,16 @@ def test_a_browser_will_not_take_a_proxy_it_cannot_use():
     publishes the address the proxy was hiding. masque:// serves requests, not
     a browser, so it is refused before Chrome starts rather than ignored after.
     """
-    from curlpro.browser.chrome import Chrome
+    from curlpro.browser.chrome import Chrome, chrome_proxy
 
     with pytest.raises(ValueError, match="masque"):
         Chrome("about:blank", proxy="masque://127.0.0.1:443")
+    # socks5h:// is not a scheme Chrome knows either, and went direct the same
+    # way; it has an exact equivalent, since Chrome's SOCKS5 always lets the
+    # proxy resolve the name, so it is translated rather than refused.
+    assert chrome_proxy("socks5h://127.0.0.1:1080") == "socks5://127.0.0.1:1080"
+    for kept in ("http://h:1", "https://h:1", "socks5://h:1", "socks4://h:1", "h:8080"):
+        assert chrome_proxy(kept) == kept
     # The forwarder, which is the other way a proxy reaches a browser, says
     # the same thing in its own words.
     with pytest.raises(ValueError, match="masque"):
