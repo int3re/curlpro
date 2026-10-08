@@ -52,6 +52,32 @@ out of date on every one of these:
 - There is **no remote build execution for external contributors on Windows**.
   Every build is local; plan in hours, not minutes.
 
+## The SDK revision has to be the pinned one, not just the pinned version
+
+The tree names an exact servicing revision — `docs/windows_build_instructions.md`
+in 154.0.8037.100 asks for **10.0.28000.2270** — and it means it. Chromium
+checks pre-generated MIDL output into `third_party/win_build_output/midl/`
+because `midl.exe` is not reproducible across SDK revisions, and
+`build/toolchain/win/midl.py` compares byte for byte with no flag and no
+environment variable to skip it. Build with another revision and it stops:
+
+```
+midl.exe output different from files in gen/chrome/windows_services/...
+To rebaseline: copy /y <tmp>\* ..\..\third_party\win_build_output\midl\...
+```
+
+The Visual Studio Installer's `Windows11SDK.28000` component gave
+**10.0.28000.2114** here (May 2026) against the pinned .2270 (June 2026), and
+every directory is still named `10.0.28000.0`, so only
+`(Get-Item '...\bin\10.0.28000.0\x64\midl.exe').VersionInfo.ProductVersion`
+tells them apart. The fix is the standalone installer for the exact revision
+from the [Windows SDK downloads](https://learn.microsoft.com/windows/apps/windows-sdk/downloads)
+page; rebaselining works too but writes machine-specific files into the tree,
+which `checkout.cmd` and `patches.cmd` then refuse as a dirty tree.
+
+Only `chrome` and its services need MIDL. `compile-patched.cmd` builds the two
+Blink targets our patches touch and is unaffected.
+
 ## Not taking the machine over
 
 Both `sync.cmd` and `build.cmd` run at below-normal priority with a small

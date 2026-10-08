@@ -1243,15 +1243,16 @@ and a second real GPU is a second complete identity for free. The driver has
 it now: `BrowserSolver(gpu="high-performance")`, `s.browser(url, gpu=...)`,
 `Chrome(gpu=...)`, tested live on the two cards.
 
-### Blocked on the toolchain
+### The toolchain works, and both patches compile
 
-Both patches are written, exported, and round-trip onto the clean tag byte for
-byte — and **neither has been compiled**. `gn gen` stops before it starts:
-Windows SDK 10.0.28000 is not installed on the measuring machine, and
-`base/win/windows_version.cc` enforces it with an `#error`. Until it is, the
-C++ is read code, not working code, and nothing here is proven. The proofs are
-written down in [chromium/DESIGN.md](chromium/DESIGN.md) and run the day it
-builds.
+SDK 10.0.28000 and MFC/ATL went in on 2026-10-08. `gn gen` makes 34110
+targets, `gn check` passes, and both patches compile — each alone and both
+together ([STAGE24](docs/STAGE24-RESULTS.md)). What remains before a browser
+exists is a full `chrome` build, and that is blocked on one thing: Chromium
+pins an SDK **revision**, 10.0.28000.2270, and the Visual Studio Installer
+supplies .2114. The pre-generated MIDL output checked into the tree is
+compared byte for byte with no way to skip it, so `chrome` stops there.
+`compile-patched.cmd` is unaffected and is how the patches are checked today.
 
 ### In order (revised 2026-10-08, after the GPU measurement)
 

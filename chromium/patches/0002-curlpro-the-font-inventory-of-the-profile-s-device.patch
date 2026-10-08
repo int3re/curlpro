@@ -1,6 +1,6 @@
-From 3208d38f6076d843a51fbede2f293066903347f5 Mon Sep 17 00:00:00 2001
+From 4c207a65418401d59330de61ee1d423d66911c96 Mon Sep 17 00:00:00 2001
 From: int3re <118649905+int3re@users.noreply.github.com>
-Date: Thu, 8 Oct 2026 08:33:11 +0300
+Date: Thu, 8 Oct 2026 20:38:16 +0300
 Subject: [PATCH 2/2] curlpro: the font inventory of the profile's device
 
 FontCache::CreateFontPlatformData is where a CSS family name and a
@@ -15,7 +15,7 @@ filtered, and a profile without a font list changes nothing.
  3 files changed, 50 insertions(+)
 
 diff --git a/third_party/blink/renderer/platform/curlpro/fingerprint.cc b/third_party/blink/renderer/platform/curlpro/fingerprint.cc
-index 4e3d0b70a1634..54b71fd5f6e23 100644
+index 1b7a986db7635..65725829a1d46 100644
 --- a/third_party/blink/renderer/platform/curlpro/fingerprint.cc
 +++ b/third_party/blink/renderer/platform/curlpro/fingerprint.cc
 @@ -3,6 +3,8 @@
@@ -35,12 +35,12 @@ index 4e3d0b70a1634..54b71fd5f6e23 100644
  #include "third_party/blink/renderer/platform/wtf/vector.h"
  
  namespace blink::curlpro {
-@@ -88,6 +91,18 @@ bool Fingerprint::Parse(const std::string& base64_json) {
+@@ -91,6 +94,18 @@ bool Fingerprint::Parse(const std::string& base64_json) {
    if (!profile) {
      return false;
    }
-+  if (const base::Value::Dict* fonts = profile->FindDict("fonts")) {
-+    if (const base::Value::List* present = fonts->FindList("present")) {
++  if (const base::DictValue* fonts = profile->FindDict("fonts")) {
++    if (const base::ListValue* present = fonts->FindList("present")) {
 +      std::vector<std::string> lowered;
 +      lowered.reserve(present->size());
 +      for (const base::Value& family : *present) {
@@ -51,10 +51,10 @@ index 4e3d0b70a1634..54b71fd5f6e23 100644
 +      fonts_ = base::flat_set<std::string>(std::move(lowered));
 +    }
 +  }
-   if (const base::Value::Dict* webgl = profile->FindDict("webgl")) {
+   if (const base::DictValue* webgl = profile->FindDict("webgl")) {
      webgl_unmasked_vendor_ = NonEmpty(*webgl, "unmasked_vendor");
      webgl_unmasked_renderer_ = NonEmpty(*webgl, "unmasked_renderer");
-@@ -98,6 +113,13 @@ bool Fingerprint::Parse(const std::string& base64_json) {
+@@ -101,6 +116,13 @@ bool Fingerprint::Parse(const std::string& base64_json) {
    return true;
  }
  

@@ -90,23 +90,45 @@ that card produces. That belongs in the driver now, ahead of any build.
 5. Canvas: proof that the guards stay clean.
 6. Distribution and the rebase.
 
-## The patches, and what "written" means here
+## The patches compile
 
-Two patches exist (`chromium/patches/`), both exported from commits on the
-release tag and both round-tripping onto a clean tag byte for byte. **Neither
-has been compiled**: `gn gen` stops before the first file, because Windows SDK
-10.0.28000 is missing and `base/win/windows_version.cc` enforces it with an
-`#error`. Read code is not working code, and nothing in them is proven.
+Two patches (`chromium/patches/`), exported from commits on the release tag,
+round-tripping onto a clean tag byte for byte, and **compiled** — each alone
+and both together. The toolchain was the blocker until the owner installed
+Windows SDK 10.0.28000 and MFC/ATL on 2026-10-08; `gn gen` then made 34110
+targets and `gn check` passed on `platform`, `webgl` and `content/browser`,
+which confirmed the DEPS reasoning (Blink's own `Base64Decode`, since
+`base/base64.h` is not allowed in platform).
 
-What was done instead, since a typo would cost a build of hours: every API
-they touch was read in the 154.0.8037.100 tree rather than recalled —
-`AtomicString::empty()` and `GetString()`, `String::DeprecatedLower()`,
-`Utf8()` and `FromUtf8(std::string_view)`, `base::flat_set`'s constructor from
-a moved vector and its `contains()`, `base::as_byte_span`, and `IsWebGL2()`,
-which is not in `webgl_rendering_context_base.h` at all but inherited from
-`WebGLContextObjectSupport`. Two of those did not match what the first draft
-assumed. Blink's own `Base64Decode` is used rather than `base/base64.h`, which
-platform's DEPS do not allow.
+**Reading the tree is not the same as compiling against it.** Before the SDK
+arrived, every API the patches touch was read in the 154.0.8037.100 source
+rather than recalled, and that caught two wrong assumptions:
+`IsWebGL2()` is inherited from `WebGLContextObjectSupport`, not declared in
+`webgl_rendering_context_base.h`, and `base/base64.h` is out of bounds. The
+compiler then found nine more in one file, all of them the same mistake —
+JSON types taken from memory. This tree has **`base::DictValue` and
+`base::ListValue`**, not `base::Value::Dict` and `::List`, and
+`JSONReader::ReadDict` takes its options argument rather than defaulting it.
+No amount of careful reading had caught that, because the reading never
+visited `base/values.h`.
+
+Two lessons kept in `chromium/compile-patched.cmd`, which builds the three
+touched files in under a minute:
+
+- **The documented single-object syntax is a trap here.** `ninja`'s
+  `source.cc^` resolved to nothing under siso and reported "no work to do" —
+  indistinguishable from success, while no object was written. The script
+  names the object paths from the generated `.ninja` files instead, where a
+  wrong name fails loudly. The first "it compiles" was that silent no-op.
+- **Six compile workers do not fit in this machine.** They put `MemoryError`
+  in two Blink generators and `LLVM ERROR: out of memory` in clang, with 5 GB
+  of RAM and 9 GB of commit free: the tail reaches ~2.5 GB a job. Two workers
+  compile the three files in 56 s.
+
+A patch that does not compile on its own is not published: the JSON fix landed
+first in 0002, where the compiler happened to be run, and was moved back into
+0001, where the code it fixes is introduced. Both were then compiled
+separately to prove it.
 
 ## The build environment, as found
 
