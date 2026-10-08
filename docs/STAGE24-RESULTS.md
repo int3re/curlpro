@@ -90,6 +90,24 @@ that card produces. That belongs in the driver now, ahead of any build.
 5. Canvas: proof that the guards stay clean.
 6. Distribution and the rebase.
 
+## The patches, and what "written" means here
+
+Two patches exist (`chromium/patches/`), both exported from commits on the
+release tag and both round-tripping onto a clean tag byte for byte. **Neither
+has been compiled**: `gn gen` stops before the first file, because Windows SDK
+10.0.28000 is missing and `base/win/windows_version.cc` enforces it with an
+`#error`. Read code is not working code, and nothing in them is proven.
+
+What was done instead, since a typo would cost a build of hours: every API
+they touch was read in the 154.0.8037.100 tree rather than recalled —
+`AtomicString::empty()` and `GetString()`, `String::DeprecatedLower()`,
+`Utf8()` and `FromUtf8(std::string_view)`, `base::flat_set`'s constructor from
+a moved vector and its `contains()`, `base::as_byte_span`, and `IsWebGL2()`,
+which is not in `webgl_rendering_context_base.h` at all but inherited from
+`WebGLContextObjectSupport`. Two of those did not match what the first draft
+assumed. Blink's own `Base64Decode` is used rather than `base/base64.h`, which
+platform's DEPS do not allow.
+
 ## The build environment, as found
 
 - The tree now **requires Visual Studio 2026** (`MSVC_TOOLSET_VERSION['2026'] =
