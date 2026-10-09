@@ -1288,6 +1288,18 @@ Nothing now stands between the tree and a browser but the hours it takes.
    `Chrome(fingerprint=...)`.
 4. The remaining WebGL consistency: `chrome://gpu` and WebGPU to match the
    strings WebGL serves, so the three do not contradict each other.
+   **Found first (2026-10-09): every record taken here is from a 32-bit
+   Chrome.** It is installed under `Program Files (x86)`; its client hints say
+   `wow64: true` and its JS heap is capped at 1,206,000,000 bytes against a
+   64-bit Chrome's ~4.29 GB. And its WebGPU returns no adapter on either GPU,
+   with `webgpu: enabled` in the feature status: Dawn's own blocklist, read
+   off `chrome://gpu`, says "Invalid consteval interpretation of 22nd bit on
+   Windows x86 with SM 6.0+" (crbug.com/42250788), a rule compiled in only for
+   `ARCH_CPU_X86` (`gpu/config/webgpu_blocklist_impl.cc`). The fork is x64, so
+   against these records it differs in all three for the architecture alone.
+   Before the WebGPU patch and before the first proof the records are retaken
+   with a 64-bit Chrome; `fpcapture` now keeps the heap limit and warns when a
+   profile is built from a 32-bit record.
 5. Canvas: a test that proves the four CreepJS checks still pass, and that
    the host's own rendering is what arrives.
 6. Distribution and the rebase script, then the first milestone rebase.

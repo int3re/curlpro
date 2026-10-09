@@ -522,6 +522,12 @@ async function misc() {
   r.timezoneOffset = new Date().getTimezoneOffset();
   r.chromeKeys = window.chrome ? Object.keys(window.chrome).sort() : null;
   r.visibilityState = document.visibilityState;
+  // The browser's own bitness, which no user-agent field states: a 32-bit
+  // Chrome on 64-bit Windows reports wow64 in the client hints, and its JS
+  // heap is capped near 1.1 GB against 64-bit's 4.29 GB. Measured here: the
+  // installed Chrome was 32-bit, every record taken from it said so in both,
+  // and an x64 build compared against them differs for that reason alone.
+  r.jsHeapSizeLimit = performance.memory ? performance.memory.jsHeapSizeLimit : null;
   if (n.userAgentData) {
     r.brands = n.userAgentData.brands.map(b => b.brand + ";" + b.version);
     r.mobile = n.userAgentData.mobile;
@@ -728,6 +734,14 @@ def to_profile(record_path: Path) -> Path:
     gl1, gl2 = rec.get("webgl") or {}, rec.get("webgl2") or {}
     fonts = rec.get("fonts") or {}
     brand = vendor_brand((rec.get("misc") or {}).get("brands") or [])
+    if ((rec.get("misc") or {}).get("highEntropy") or {}).get("wow64") is True:
+        # Said, not refused: the WebGL strings and the fonts of such a record
+        # are the device's all the same. What is not is everything a 32-bit
+        # process changes, and the fork is an x64 build.
+        print(f"warning: {record_path.name} was taken from a 32-bit Chrome (wow64). The fork is "
+              "x64: WebGPU (Chrome blocks D3D12 adapters on 32-bit builds with SM 6.0+), the JS "
+              "heap limit and the wow64 hint will differ from it for that reason alone. Take the "
+              "record with a 64-bit Chrome.", file=sys.stderr)
     profile = {
         "source": f"{rec.get('name')} — fpcapture, {rec.get('browser', {}).get('product')}, "
                   f"{rec.get('captured', '')[:10]}",
