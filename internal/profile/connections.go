@@ -56,13 +56,25 @@ type ConnPolicy struct {
 
 // ConnPolicyFor returns the family's connection policy.
 func ConnPolicyFor(family string) ConnPolicy {
-	switch family {
-	case "chrome", "chromium", "edge", "yandex", "opera", "brave", "samsung":
+	if Chromium(family) {
 		return ConnPolicy{Attempts: 4, SpareBeforePreface: true, IPPooling: true,
 			SplitCredentials: true, PartitionBySite: true, FramePartition: true}
+	}
+	switch family {
 	case "firefox", "tor":
 		// Keyed by site since 0.14; 0.13 kept Firefox's pool whole.
 		return ConnPolicy{Attempts: 6, PartitionBySite: true}
 	}
 	return ConnPolicy{}
+}
+
+// Chromium reports a family built on Chromium's network stack, whose
+// behaviour below the page -- connections, HTTP/2 priorities, proxy tunnels --
+// is Chrome's whatever the brand.
+func Chromium(family string) bool {
+	switch family {
+	case "chrome", "chromium", "edge", "yandex", "opera", "brave", "samsung":
+		return true
+	}
+	return false
 }

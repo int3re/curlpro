@@ -7,7 +7,8 @@ tree. Line endings are preserved. It fails loudly if an anchor is missing and
 its result is absent — the sign that the upstream text moved. Two tests fail
 against an unpatched tree as well: internal/client/h2flow_test.go for the
 window accounting, and TestConcurrentCloseDuringRequests under -race for the
-pipe. See docs/FHTTP-PATCH.md for why each edit exists.
+pipe; the proxy tests catch (g) and (h). See docs/FHTTP-PATCH.md for why each
+edit exists.
 """
 import io
 import sys
@@ -198,6 +199,67 @@ func (p *pipe) Len() int {
 		cs.req.Body.Close()
 	}
 '''),
+# (h) A request may choose the priority its HEADERS frame carries.
+#     fhttp writes one priority -- the transport's HeaderPriority -- on every
+#     stream. Chrome does not: it gives each stream the weight of its own
+#     RequestPriority and makes it depend, exclusively, on the last open
+#     stream of the same or a higher priority (net/spdy/
+#     http2_priority_dependencies.cc). A CONNECT tunnel to a proxy is
+#     DEFAULT_PRIORITY, weight 147, chained after the tunnel before it; a page's
+#     request weight 256 on stream 0 said otherwise. The choice is a function
+#     of the stream ID because the parent is a stream ID and fhttp assigns
+#     them: the caller learns its own at the moment the frame is written.
+('h1', TRANSPORT,
+'''// requires cc.wmu be held
+func (cc *ClientConn) writeHeaders(streamID uint32, endStream bool, maxFrameSize int, hdrs []byte) error {
+	first := true // first frame written (HEADERS is first, then CONTINUATION)''',
+'''// HeaderPriorityFunc chooses the priority of one request's HEADERS frame,
+// given the stream ID the request was assigned. curlpro: see
+// WithHeaderPriority and docs/FHTTP-PATCH.md.
+type HeaderPriorityFunc func(streamID uint32) PriorityParam
+
+type headerPriorityKey struct{}
+
+// WithHeaderPriority returns a context whose request carries the priority f
+// chooses instead of the transport's HeaderPriority.
+func WithHeaderPriority(ctx context.Context, f HeaderPriorityFunc) context.Context {
+	return context.WithValue(ctx, headerPriorityKey{}, f)
+}
+
+// headerPriorityFor is the request's own choice, nil when it made none.
+func headerPriorityFor(req *http.Request, streamID uint32) *PriorityParam {
+	f, ok := req.Context().Value(headerPriorityKey{}).(HeaderPriorityFunc)
+	if !ok || f == nil {
+		return nil
+	}
+	p := f(streamID)
+	return &p
+}
+
+// requires cc.wmu be held
+func (cc *ClientConn) writeHeaders(streamID uint32, endStream bool, maxFrameSize int, hdrs []byte) error {
+	return cc.writeHeadersPriority(streamID, endStream, maxFrameSize, hdrs, nil)
+}
+
+// writeHeadersPriority is writeHeaders with the request's own priority, when
+// it chose one. requires cc.wmu be held
+func (cc *ClientConn) writeHeadersPriority(streamID uint32, endStream bool, maxFrameSize int, hdrs []byte, own *PriorityParam) error {
+	first := true // first frame written (HEADERS is first, then CONTINUATION)'''),
+('h2', TRANSPORT,
+'''			if cc.t.HeaderPriority != nil {
+				defaultHeaderPriorityParam = *cc.t.HeaderPriority
+			}
+''',
+'''			if cc.t.HeaderPriority != nil {
+				defaultHeaderPriorityParam = *cc.t.HeaderPriority
+			}
+			if own != nil {
+				defaultHeaderPriorityParam = *own
+			}
+'''),
+('h3', TRANSPORT,
+'''	werr := cc.writeHeaders(cs.ID, endStream, int(cc.maxFrameSize), hdrs)''',
+'''	werr := cc.writeHeadersPriority(cs.ID, endStream, int(cc.maxFrameSize), hdrs, headerPriorityFor(req, cs.ID))'''),
 ]
 
 

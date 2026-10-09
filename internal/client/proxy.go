@@ -305,6 +305,21 @@ func socksReplyText(code byte) string {
 // ---------------------------------------------------------------------------
 
 func (s *Session) dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAgent string) (net.Conn, error) {
+	// A proxy already spoken to over HTTP/2 takes the tunnel as one more
+	// stream on that connection, as a browser's proxy session does
+	// (proxyh2.go). If the shared connection fails under the tunnel -- the
+	// proxy went away while it idled -- one fresh connection is tried, which
+	// is what Chrome does with a stale pooled session.
+	key := pu.String()
+	if strings.EqualFold(pu.Scheme, "https") {
+		if pc := s.takeH2Proxy(key); pc != nil {
+			tun, err := s.connectOverH2(ctx, pc, pu, addr, userAgent)
+			if err == nil || !pc.broken() || ctx.Err() != nil {
+				return tun, err
+			}
+		}
+	}
+
 	conn, err := s.dialProxyConn(ctx, d, pu)
 	if err != nil {
 		return nil, err
@@ -315,7 +330,11 @@ func (s *Session) dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL,
 	// instead of answering -- are not the same failures, and the retry needs
 	// no new connection.
 	if negotiatedProto(conn) == "h2" {
-		return s.connectOverH2(ctx, conn, pu, addr, userAgent)
+		pc, err := s.addH2Proxy(key, conn)
+		if err != nil {
+			return nil, err
+		}
+		return s.connectOverH2(ctx, pc, pu, addr, userAgent)
 	}
 	// The CONNECT exchange runs on a bare socket and knows no context: without a
 	// deadline a proxy that accepted the TCP connection and went silent would hold

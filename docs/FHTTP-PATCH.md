@@ -52,7 +52,7 @@ explicit `unsent` accounting and a hard 2^31−1 guard). fhttp forked before tha
 and never took it: v0.6.9, the latest, keeps the link and changes only the sign
 of `bufPipe.Len()` — which repairs the double count below but not the runaway.
 
-## The seven edits
+## The eight edits
 
 | | Where | Was | Is |
 |---|---|---|---|
@@ -63,6 +63,7 @@ of `bufPipe.Len()` — which repairs the double count below but not the runaway.
 | e | `transportResponseBody.Read`, three sites | `cc.inflow.add(connAdd)` / `cs.inflow.add(streamAdd)` with the result ignored | the `false` that `flow.add` returns past 2^31−1 now zeroes the increment, so nothing is sent for a window already at its maximum. With a–d the sum cannot get there; this turns a would-be protocol violation into a no-op rather than a reset |
 | f | `handleResponse` + `pipe.go` | `cs.bufPipe = pipe{…}` — a whole-struct write replacing the pipe's mutex, condition and done channel | `cs.bufPipe.setBuffer(…)`, ported from x/net: the buffer is installed under the pipe's own lock, and a pipe already closed refuses it |
 | g | `abortRequestBodyWrite` | `cs.stopReqBody = err` and a broadcast | the request body is closed as well — see below |
+| h | `writeHeaders` + its call in `roundTrip` | the transport's `HeaderPriority` on every HEADERS frame | a request may choose its own through `WithHeaderPriority`, given the stream ID it was assigned — see below |
 
 The send side (`cs.flow`, `cc.flow`) keeps its link: for sending, "no more than
 the smaller window allows" is exactly right.
@@ -125,6 +126,24 @@ uses, since both now go through one classifier), and the browser's two-step
 authentication (CONNECT, 407, CONNECT with credentials) costs one extra stream
 on the connection it was already using instead of a whole deadline.
 
+## Not a defect: a priority per stream
+
+Edit (h) fixes nothing that was broken; it adds what fhttp lacked. fhttp
+writes one HEADERS priority, the transport's, on every stream. Chrome gives
+each stream the weight of its own priority and makes it depend, exclusively,
+on the newest open stream of the same or a higher one
+(`net/spdy/http2_priority_dependencies.cc`). On a connection to a proxy that
+is visible: every tunnel is `DEFAULT_PRIORITY`, weight 147, and the second
+tunnel hangs off the first while the first lives — where fhttp would have
+written a page navigation's weight 256 on stream 0, every time.
+
+The choice is a function of the stream ID because the parent is a stream ID
+and fhttp is the one that assigns them: `WithHeaderPriority(ctx, f)` puts `f`
+in the request's context, and `writeHeaders` calls it with the ID in hand.
+Requests without one keep the transport's priority, so nothing else moved.
+`TestH2TunnelsCarryChromesPriorityChain` reads the frames the proxy received
+and fails without it (weight 256 on stream 0, twice).
+
 ## Keeping it
 
 `go mod vendor` regenerates the tree and silently drops the edits. Three things
@@ -147,6 +166,6 @@ off by default and needs `FLOWTRACE` pointing at a profile directory.
 ## Not carried
 
 Nothing. All three defects the project found in fhttp — the window runaway,
-the close race and the body that could not be given up — are carried here.
-What remains is the wish that upstream took them, so this file could be
-deleted.
+the close race and the body that could not be given up — are carried here, and
+so is the one capability it lacked, a priority per stream. What remains is the
+wish that upstream took them, so this file could be deleted.

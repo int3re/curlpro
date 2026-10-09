@@ -808,6 +808,9 @@ type Session struct {
 	// masque holds what is open towards MASQUE proxies: one HTTP/3 connection
 	// per proxy and the tunnels on it (proxyh3.go).
 	masque masqueProxies
+	// h2proxies are the HTTP/2 connections to https:// proxies that agreed
+	// to h2, shared by the tunnels on them (proxyh2.go).
+	h2proxies h2Proxies
 }
 
 // New creates a session. The profile spec is checked right away so that a data
@@ -973,6 +976,7 @@ func (s *Session) Close() {
 
 	s.closeH3()
 	s.closeMASQUE()
+	s.closeH2Proxies()
 	for _, list := range conns {
 		closeAll(list)
 	}

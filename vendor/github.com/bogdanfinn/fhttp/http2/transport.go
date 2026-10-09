@@ -1252,7 +1252,7 @@ func (cc *ClientConn) roundTrip(req *http.Request) (res *http.Response, gotErrAf
 
 	cc.wmu.Lock()
 	endStream := !hasBody && !hasTrailers
-	werr := cc.writeHeaders(cs.ID, endStream, int(cc.maxFrameSize), hdrs)
+	werr := cc.writeHeadersPriority(cs.ID, endStream, int(cc.maxFrameSize), hdrs, headerPriorityFor(req, cs.ID))
 	cc.wmu.Unlock()
 	traceWroteHeaders(cs.trace)
 	cc.mu.Unlock()
@@ -1421,8 +1421,37 @@ func (cc *ClientConn) awaitOpenSlotForRequest(req *http.Request) error {
 	}
 }
 
+// HeaderPriorityFunc chooses the priority of one request's HEADERS frame,
+// given the stream ID the request was assigned. curlpro: see
+// WithHeaderPriority and docs/FHTTP-PATCH.md.
+type HeaderPriorityFunc func(streamID uint32) PriorityParam
+
+type headerPriorityKey struct{}
+
+// WithHeaderPriority returns a context whose request carries the priority f
+// chooses instead of the transport's HeaderPriority.
+func WithHeaderPriority(ctx context.Context, f HeaderPriorityFunc) context.Context {
+	return context.WithValue(ctx, headerPriorityKey{}, f)
+}
+
+// headerPriorityFor is the request's own choice, nil when it made none.
+func headerPriorityFor(req *http.Request, streamID uint32) *PriorityParam {
+	f, ok := req.Context().Value(headerPriorityKey{}).(HeaderPriorityFunc)
+	if !ok || f == nil {
+		return nil
+	}
+	p := f(streamID)
+	return &p
+}
+
 // requires cc.wmu be held
 func (cc *ClientConn) writeHeaders(streamID uint32, endStream bool, maxFrameSize int, hdrs []byte) error {
+	return cc.writeHeadersPriority(streamID, endStream, maxFrameSize, hdrs, nil)
+}
+
+// writeHeadersPriority is writeHeaders with the request's own priority, when
+// it chose one. requires cc.wmu be held
+func (cc *ClientConn) writeHeadersPriority(streamID uint32, endStream bool, maxFrameSize int, hdrs []byte, own *PriorityParam) error {
 	first := true // first frame written (HEADERS is first, then CONTINUATION)
 	for len(hdrs) > 0 && cc.werr == nil {
 		chunk := hdrs
@@ -1440,6 +1469,9 @@ func (cc *ClientConn) writeHeaders(streamID uint32, endStream bool, maxFrameSize
 
 			if cc.t.HeaderPriority != nil {
 				defaultHeaderPriorityParam = *cc.t.HeaderPriority
+			}
+			if own != nil {
+				defaultHeaderPriorityParam = *own
 			}
 
 			cc.fr.WriteHeaders(HeadersFrameParam{

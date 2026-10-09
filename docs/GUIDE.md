@@ -994,11 +994,15 @@ own SETTINGS. Nothing in the API moves; `https://host:port` is the address it
 always was. Two details worth knowing: authentication costs nothing extra,
 because the first CONNECT still goes without credentials and answers the 407
 as a browser does, but the retry reuses the connection — a 407 ends a stream,
-not a connection. And there is one tunnel per connection: a browser would
-multiplex several CONNECTs onto one h2 connection to the proxy, so the proxy
-sees more connections than Chrome would under the same workload. Nothing a
-target can see. An `http://` proxy, and an `https://` one that does not offer
-`h2`, tunnel over HTTP/1.1 exactly as before.
+not a connection. And the tunnels share the connection, as Chrome's do: one
+HTTP/2 connection per proxy, every tunnel a stream on it, closed after the
+session's idle limit once the last tunnel has gone, and replaced if the proxy
+dropped it while it idled. For a Chromium profile each tunnel's HEADERS carry
+Chrome's own priority — weight 147, exclusive, depending on the tunnel opened
+before it while that one lives — which is how Chrome chains the streams of one
+priority; other families keep their profile's. An `http://` proxy, and an
+`https://` one that does not offer `h2`, tunnel over HTTP/1.1 exactly as
+before.
 
 **A proxy you reach over HTTP/3.** `masque://host:port` is a proxy spoken to
 over QUIC, and it is the only kind that can carry HTTP/3 to the target.
