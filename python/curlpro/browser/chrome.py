@@ -183,6 +183,22 @@ def chrome_proxy(proxy: str) -> str:
         "machine's own address. Give the browser an http://, https:// or socks5:// "
         "address; a masque:// proxy serves requests, not a browser")
 
+def fingerprint_switch(profile) -> str:
+    """The device profile as the patched build takes it: compact JSON, base64.
+
+    ``profile`` is a dict or the path of a ``.profile.json`` written by
+    ``scripts/fpcapture.py -profile``. Base64 because a JSON value's quotes and
+    spaces through Windows command-line quoting is a parser bug waiting to
+    happen (chromium/DESIGN.md); the encoding must stay byte for byte the one
+    fpcapture writes, which a test holds it to.
+    """
+    import base64
+    if not isinstance(profile, dict):
+        profile = json.loads(Path(profile).read_text(encoding="utf-8"))
+    compact = json.dumps(profile, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return base64.b64encode(compact).decode("ascii")
+
+
 class Chrome:
     """A Chrome started on ``url`` with a profile of its own.
 
@@ -198,14 +214,19 @@ class Chrome:
     ``light`` (on by default) adds :data:`LIGHT_FLAGS`;
     ``extra_args`` are added last, unmeasured — each flag is a possible mark;
     a ``--disable-features`` list among them is merged with the driver's own.
-    Use as a context manager.
+    ``fingerprint`` is a device profile — a ``.profile.json`` from
+    ``scripts/fpcapture.py -profile``, or its dict — for the patched build
+    (``chromium/``): it then reports that device's WebGL strings and limits,
+    its fonts and its browser brand. A stock Chrome ignores the switch, and
+    raises no infobar for it, since only listed flags do. Use as a context
+    manager.
     """
 
     def __init__(self, url: str, *, executable: str | None = None, proxy: str = "",
                  headless: bool = False, profile_dir: str | os.PathLike[str] | None = None,
                  accept_language: str = "", window_size: tuple[int, int] = (1280, 860),
                  timeout: float = 30.0, extra_args: tuple = (), light: bool = True,
-                 gpu: str = ""):
+                 gpu: str = "", fingerprint=None):
         if gpu not in GPUS:
             raise ValueError(f"gpu must be one of {GPUS!r}, not {gpu!r}")
         exe = executable or find_chrome()
@@ -259,6 +280,16 @@ class Chrome:
             args.append("--headless=new")
         if gpu == "high-performance":
             args.append("--force-high-performance-gpu")
+        if fingerprint is not None:
+            # Windows caps a whole command line at 32,767 characters; a
+            # measured profile is about 7,500 (157 fonts), so this is room
+            # to spare, but a profile past it is refused here rather than
+            # truncated by the system into a different device.
+            switch = f"--curlpro-fingerprint={fingerprint_switch(fingerprint)}"
+            if len(switch) > 30000:
+                raise ValueError(f"the device profile is {len(switch)} characters on the "
+                                 "command line, past what Windows passes whole")
+            args.append(switch)
         if light:
             args.extend(LIGHT_FLAGS)
         # The caller's own, last: each flag is a possible mark, measured or not.

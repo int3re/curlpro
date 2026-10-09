@@ -35,6 +35,10 @@ rem gclient's `git clean` would argue with.
 copy /y "%ARGS%" "%OUT%\args.gn" >nul || exit /b 1
 echo [build] %CONFIG% at %DATE% %TIME%
 call gn gen "%OUT%" || exit /b 1
+rem The MIDL output pinned in the tree must match this SDK's byte for byte;
+rem on a revision other than the pinned one, three type libraries do not, and
+rem only those are rebaselined, never committed (midl-baseline.py says why).
+call python3 "%~dp0midl-baseline.py" "%OUT%" 2 || exit /b 1
 echo [build] %JOBS% workers, below-normal priority
 start "" /belownormal /b /wait cmd /c "autoninja -C %OUT% -j %JOBS% chrome"
 set RC=%ERRORLEVEL%

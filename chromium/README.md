@@ -18,6 +18,7 @@ It lives at `D:\chromium` (`src` under it), with depot_tools at
 | `build.cmd` | build `chrome` from one of the arg sets |
 | `patches/` | our patches, `git format-patch` files, the one source of the fork's code |
 | `patches.cmd` | apply them to the tree, in filename order, as commits (`git am --3way`) |
+| `midl-baseline.py` | make the tree's pinned MIDL output agree with this SDK where only type libraries differ; `build.cmd` runs it |
 | `DESIGN.md` | what each patch does and why it is where it is |
 
 ## What the tree requires
@@ -70,13 +71,40 @@ The Visual Studio Installer's `Windows11SDK.28000` component gave
 **10.0.28000.2114** here (May 2026) against the pinned .2270 (June 2026), and
 every directory is still named `10.0.28000.0`, so only
 `(Get-Item '...\bin\10.0.28000.0\x64\midl.exe').VersionInfo.ProductVersion`
-tells them apart. The fix is the standalone installer for the exact revision
-from the [Windows SDK downloads](https://learn.microsoft.com/windows/apps/windows-sdk/downloads)
-page; rebaselining works too but writes machine-specific files into the tree,
-which `checkout.cmd` and `patches.cmd` then refuse as a dirty tree.
+tells them apart. And .2270 cannot be had any more: winget carries .1721,
+.2114 and .2526, the downloads page offers the newest, and the archive page
+lists no 28000 at all (checked 2026-10-09).
 
-Only `chrome` and its services need MIDL. `compile-patched.cmd` builds the two
-Blink targets our patches touch and is unaffected.
+So what actually differs was measured, all nineteen MIDL actions at once:
+every `.h`, `_i.c`, `_p.c` and `dlldata.c` is byte-identical on .2114, and
+four **type libraries** are not — `updater_legacy_idl` with its `_user` and
+`_system` variants, and `windows_services`' `tracing_service_idl`. Ten bytes
+each, at the same size: a two-byte value and two four-byte words of the
+library's internal tables swapped between `00000000` and `FFFFFFFF`. `chrome`
+depends on two of them, both through `chrome/browser:core` (`gn path`): the
+updater's header, to talk to GoogleUpdate, and the elevated tracing service's,
+to start it. It uses neither `.tlb` as code.
+
+`midl-baseline.py` does what `midl.py`'s own message says — "To rebaseline:
+copy …" — but only for type libraries, and only when every text output of the
+same action already matches; a difference in anything a compiler reads stops
+it, with the files named, and then it is the pinned SDK that is needed.
+`build.cmd` runs it before every build. The copied files are machine-specific
+and never committed: `checkout.cmd` and `patches.cmd` put the pinned ones back
+(`git checkout -- "third_party/win_build_output/midl/*.tlb"`) before they look
+for a clean tree.
+
+`compile-patched.cmd` builds only the files our patches touch and needs no
+MIDL at all.
+
+## Line endings
+
+`C:\Program Files\Git\etc\gitconfig` sets `core.autocrlf=true` for the whole
+machine, and the tree's files are LF. A file rewritten from Windows — or
+merely checked out again under that setting — comes back CRLF: git normalises
+it on commit, so the patch is clean, but the working copy no longer matches
+what every other file is. The tree is set `core.autocrlf=false` locally, as
+Chromium's own Windows instructions ask.
 
 ## Not taking the machine over
 

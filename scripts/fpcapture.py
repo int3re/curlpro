@@ -727,6 +727,7 @@ def to_profile(record_path: Path) -> Path:
 
     gl1, gl2 = rec.get("webgl") or {}, rec.get("webgl2") or {}
     fonts = rec.get("fonts") or {}
+    brand = vendor_brand((rec.get("misc") or {}).get("brands") or [])
     profile = {
         "source": f"{rec.get('name')} — fpcapture, {rec.get('browser', {}).get('product')}, "
                   f"{rec.get('captured', '')[:10]}",
@@ -740,14 +741,35 @@ def to_profile(record_path: Path) -> Path:
             "present": sorted(set(fonts.get("byMeasure", [])) | set(fonts.get("byLocal", []))),
         },
     }
+    if brand:
+        # The build reports this beside "Chromium" and the GREASE entry, and
+        # Chromium's own seeding by the major version reproduces the measured
+        # list, order included (chromium/patches/0003, scripts/chromium_brands.py).
+        profile["ua"] = {"brand": brand}
     out = record_path.with_name(record_path.stem + ".profile.json")
     out.write_text(json.dumps(profile, indent=1, ensure_ascii=False), encoding="utf-8")
     switch = switch_value(profile)
     print(f"wrote {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}: "
           f"{len(profile['webgl']['parameters'])} + {len(profile['webgl']['webgl2_parameters'])} "
-          f"WebGL limits, {len(profile['fonts']['present'])} fonts; "
+          f"WebGL limits, {len(profile['fonts']['present'])} fonts, "
+          f"brand {brand or '(none: Chromium only)'}; "
           f"--curlpro-fingerprint is {len(switch)} characters")
     return out
+
+
+def vendor_brand(brands: list) -> str:
+    """The brand a Chromium-based browser adds to "Chromium" and the GREASE
+    entry: "Google Chrome", "Microsoft Edge", "Opera". Empty for Chromium
+    itself, or when the record holds no single such brand.
+
+    The GREASE entry is recognised by Chromium's own grammar, "Not" + c + "A"
+    + c + "Brand" over its eleven characters (scripts/chromium_brands.py),
+    not by a guess at what looks odd."""
+    from chromium_brands import CHARS
+    grease = {f"Not{a}A{b}Brand" for a in CHARS for b in CHARS}
+    names = [b.rsplit(";", 1)[0] for b in brands]
+    own = [n for n in names if n != "Chromium" and n not in grease]
+    return own[0] if len(own) == 1 else ""
 
 
 def switch_value(profile: dict) -> str:

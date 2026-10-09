@@ -1,0 +1,114 @@
+From da7845947b308ddb0427b40edf9b2df0c49af1ff Mon Sep 17 00:00:00 2001
+From: int3re <118649905+int3re@users.noreply.github.com>
+Date: Fri, 9 Oct 2026 04:48:01 +0300
+Subject: [PATCH] curlpro: the brand of the browser the profile was measured on
+
+A Chromium build reports two brands, the GREASE one and "Chromium"; Google
+Chrome reports a third, "Google Chrome", in navigator.userAgentData and in
+every Sec-CH-UA header. An unbranded build answering with two is the
+plainest mark it could carry.
+
+The brand comes from the device profile (--curlpro-fingerprint, "ua.brand")
+and goes in where the branded build puts version_info::GetProductName(): the
+GREASE value and the shuffle are seeded by the major version, so the list is
+the measured Chrome's, order included. Without a profile, or with no brand
+in it, the list is Chromium's own. This is the one value the browser process
+serves itself: the client hints are built there, not in the renderer.
+---
+ .../embedder_support/user_agent_utils.cc      | 66 +++++++++++++++++++
+ 1 file changed, 66 insertions(+)
+
+diff --git a/components/embedder_support/user_agent_utils.cc b/components/embedder_support/user_agent_utils.cc
+index 5d96c60405807..b4454d9c4d2b8 100644
+--- a/components/embedder_support/user_agent_utils.cc
++++ b/components/embedder_support/user_agent_utils.cc
+@@ -13,9 +13,11 @@
+ #include <vector>
+ 
+ #include "base/android/device_info.h"
++#include "base/base64.h"
+ #include "base/command_line.h"
+ #include "base/compiler_specific.h"
+ #include "base/feature_list.h"
++#include "base/json/json_reader.h"
+ #include "base/logging.h"
+ #include "base/no_destructor.h"
+ #include "base/strings/strcat.h"
+@@ -58,6 +60,68 @@ namespace embedder_support {
+ 
+ namespace {
+ 
++#if BUILDFLAG(CHROMIUM_BRANDING)
++// curlpro: the brand of the browser the device profile was measured on.
++//
++// A Chromium build reports two brands, the GREASE one and "Chromium"; Google
++// Chrome reports a third, "Google Chrome", and that is the list every page and
++// every Sec-CH-UA header sees from the browser the profile describes. An
++// unbranded build answering with two is the plainest mark it could carry.
++//
++// So the brand comes from the profile (--curlpro-fingerprint, the base64 JSON
++// the package's driver passes: "ua": {"brand": "Google Chrome"}), and goes in
++// exactly where the branded build puts version_info::GetProductName(): the
++// GREASE value and the shuffle are seeded by the major version, so the list
++// that comes out is the one the measured Chrome sent, order included. Without
++// a profile, or with one that names no brand, the list is Chromium's own.
++//
++// The renderer reads the same switch for WebGL and fonts
++// (third_party/blink/renderer/platform/curlpro); this is the one value the
++// browser process serves itself, because the client hints are built here.
++std::optional<std::string> ReadProfileBrand() {
++  const base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
++  constexpr char kSwitch[] = "curlpro-fingerprint";
++  if (!command_line.HasSwitch(kSwitch)) {
++    return std::nullopt;
++  }
++  std::string json;
++  // Forgiving, as the renderer decodes the same switch: both sides must agree
++  // on what a profile is.
++  if (!base::Base64Decode(command_line.GetSwitchValueASCII(kSwitch), &json,
++                          base::Base64DecodePolicy::kForgiving)) {
++    LOG(ERROR) << "curlpro: --" << kSwitch << " is not base64; brands are Chromium's";
++    return std::nullopt;
++  }
++  std::optional<base::DictValue> profile =
++      base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
++  if (!profile) {
++    LOG(ERROR) << "curlpro: --" << kSwitch << " is not JSON; brands are Chromium's";
++    return std::nullopt;
++  }
++  const std::string* brand = profile->FindStringByDottedPath("ua.brand");
++  if (!brand || brand->empty()) {
++    return std::nullopt;
++  }
++  // A brand goes out in a structured header (Sec-CH-UA); a real one is a
++  // product name. Anything outside that is refused rather than quoted.
++  for (char c : *brand) {
++    if (!base::IsAsciiAlphaNumeric(c) && c != ' ' && c != '.' && c != '-' &&
++        c != '_') {
++      LOG(ERROR) << "curlpro: brand \"" << *brand
++                 << "\" is not a product name; brands are Chromium's";
++      return std::nullopt;
++    }
++  }
++  return *brand;
++}
++
++const std::optional<std::string>& ProfileBrand() {
++  static const base::NoDestructor<std::optional<std::string>> brand(
++      ReadProfileBrand());
++  return *brand;
++}
++#endif  // BUILDFLAG(CHROMIUM_BRANDING)
++
+ #if BUILDFLAG(IS_WIN)
+ 
+ // The registry key where the UniversalApiContract version value can be read
+@@ -165,6 +229,8 @@ const blink::UserAgentBrandList GetUserAgentBrandList(
+   std::optional<std::string> brand;
+ #if !BUILDFLAG(CHROMIUM_BRANDING)
+   brand = version_info::GetProductName();
++#else
++  brand = ProfileBrand();  // curlpro: the measured browser's, when given
+ #endif
+ 
+   std::string brand_version =

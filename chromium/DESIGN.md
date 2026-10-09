@@ -26,7 +26,7 @@ differ anyway — they follow the card).
 the package's driver (curlpro.browser.Chrome)
   │  chrome.exe --curlpro-fingerprint=<base64 of the profile's compact JSON>
   ▼
-browser process: forwards the switch, does not read it
+browser process: forwards the switch; reads it for one value, the brand
   │  one entry in kSwitchNames, RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer
   ▼
 renderer: blink::curlpro::Fingerprint::Get(), parsed once per process
@@ -69,6 +69,7 @@ WebGL getParameter(UNMASKED_*), the limit helpers, the font matching
 | the WebGL limits | `WebGLRenderingContextBase::GetIntParameter` and its siblings, by enum | one place serves both WebGL1 and WebGL2; lowered only (the rule above) |
 | the font inventory | the top of `FontCache::CreateFontPlatformData` (`font_cache_skia_win.cc`) | both paths meet there — a CSS family name and a `local()` source — so one filter serves both. Brave filters family matching alone, and measured here that leaks eight families `local()` still resolves. `AlternateFontName::kLastResort` is never filtered: it is Chromium's own fallback, and hiding it leaves glyphs unrendered, which is louder than any font list |
 | `document.fonts.check()` | nothing | measured: it answers true for families that do not exist |
+| the brand list: `navigator.userAgentData.brands`, `Sec-CH-UA` and its full-version form | `GetUserAgentBrandList` in `components/embedder_support/user_agent_utils.cc` (patch 0003), where a Google-branded build puts `version_info::GetProductName()` | an unbranded build reports `Chromium` and the GREASE entry alone, and every page and header can see the missing third. The brand is the one value the **browser** process reads from the switch: client hints are built there, not in a renderer. One name is all it takes — the GREASE entry and the order are seeded by the major version, so `"Google Chrome"` at 154 gives exactly the list Chrome 154 sent (`Chromium`, `Google Chrome`, `Not A(Brand;99`), checked against the measured record by `python/tests/test_device_profile.py` |
 
 ## The profile file
 
@@ -88,6 +89,11 @@ Written from an `fpcapture` record of the target device, by
   }
 }
 ```
+
+With `"ua": {"brand": "Google Chrome"}` beside it when the record shows one:
+`fpcapture` takes the brand that is neither `Chromium` nor Chromium's GREASE
+entry, recognised by Chromium's own grammar for it. The package's driver
+passes the whole file as `Chrome(fingerprint=...)`.
 
 The parameter blocks carry the target's whole measured block, not only what
 differed on one host: another host's ANGLE may differ elsewhere. `fonts.present`

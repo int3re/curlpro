@@ -1,5 +1,5 @@
 @echo off
-rem Compile the three files the patches touch, and nothing else.
+rem Compile the files the patches touch, and nothing else.
 rem
 rem   chromium\compile-patched.cmd            :: 2 workers, below-normal
 rem   chromium\compile-patched.cmd iterate 8  :: a configuration and a count
@@ -28,7 +28,7 @@ if not exist "out\%CONFIG%\args.gn" (
   echo [compile] no out\%CONFIG% -- run chromium\build.cmd %CONFIG% first
   exit /b 2
 )
-set OBJS=obj/third_party/blink/renderer/platform/platform/fingerprint.obj obj/third_party/blink/renderer/platform/platform/font_cache_skia_win.obj obj/third_party/blink/renderer/modules/webgl/webgl/webgl_rendering_context_base.obj
+set OBJS=obj/third_party/blink/renderer/platform/platform/fingerprint.obj obj/third_party/blink/renderer/platform/platform/font_cache_skia_win.obj obj/third_party/blink/renderer/modules/webgl/webgl/webgl_rendering_context_base.obj obj/components/embedder_support/user_agent/user_agent_utils.obj
 echo [compile] %CONFIG%, %JOBS% workers, below-normal, at %DATE% %TIME%
 start "" /belownormal /b /wait cmd /c "autoninja -C out\%CONFIG% -j %JOBS% %OBJS%"
 set RC=%ERRORLEVEL%

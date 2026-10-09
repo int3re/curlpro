@@ -15,6 +15,9 @@ rem (chromium/README.md, "Identity").
 setlocal
 call "%~dp0env.cmd"
 cd /d D:\chromium\src || exit /b 1
+rem Type libraries midl-baseline.py rebaselined for this machine's SDK are
+rem not work to keep: the pinned ones go back before the tree is judged.
+call git checkout -- "third_party/win_build_output/midl/*.tlb" 2>nul
 for /f "delims=" %%s in ('git status --porcelain --untracked-files=no') do (
   echo [patches] the tree has uncommitted changes; apply onto a clean tree
   exit /b 3

@@ -1246,13 +1246,18 @@ it now: `BrowserSolver(gpu="high-performance")`, `s.browser(url, gpu=...)`,
 ### The toolchain works, and both patches compile
 
 SDK 10.0.28000 and MFC/ATL went in on 2026-10-08. `gn gen` makes 34110
-targets, `gn check` passes, and both patches compile — each alone and both
-together ([STAGE24](docs/STAGE24-RESULTS.md)). What remains before a browser
-exists is a full `chrome` build, and that is blocked on one thing: Chromium
-pins an SDK **revision**, 10.0.28000.2270, and the Visual Studio Installer
-supplies .2114. The pre-generated MIDL output checked into the tree is
-compared byte for byte with no way to skip it, so `chrome` stops there.
-`compile-patched.cmd` is unaffected and is how the patches are checked today.
+targets, `gn check` passes, and every patch compiles — each alone and all
+together ([STAGE24](docs/STAGE24-RESULTS.md)).
+
+The one block on a full `chrome` build was the SDK **revision**: Chromium pins
+10.0.28000.2270, the Visual Studio Installer supplied .2114, and .2270 is no
+longer offered anywhere (winget, the downloads page, the archive — 2026-10-09).
+Measured rather than assumed, all nineteen MIDL actions at once: every header
+and every C file is byte-identical on .2114, and four type libraries differ by
+ten bytes of internal table layout. `chromium/midl-baseline.py` rebaselines
+exactly those — only `.tlb`, only when every text output of the same action
+matches, never committed — and `build.cmd` runs it; all nineteen then match.
+Nothing now stands between the tree and a browser but the hours it takes.
 
 ### In order (revised 2026-10-08, after the GPU measurement)
 
@@ -1265,13 +1270,22 @@ compared byte for byte with no way to skip it, so `chrome` stops there.
    every renderer, `blink::curlpro::Fingerprint` parses it once. WebGL serves
    the profile's `UNMASKED_VENDOR`/`RENDERER` and its limits — **lowered
    only**, since a limit above the GPU's own is a claim the first texture
-   that trusts it exposes. Written against the 154.0.8037.100 source;
-   **not yet compiled**, see below.
+   that trusts it exposes. Compiles against 154.0.8037.100.
 3. ✅ **Fonts** (`chromium/patches/0002`): one filter at the top of
    `FontCache::CreateFontPlatformData`, where a CSS family name and a
    `local()` source meet — so the eight families measured leaking past a
    family-matching filter are closed with it. The last-resort fallback is
-   never filtered. Also not yet compiled.
+   never filtered. Compiles.
+3a. ✅ **The brand** (`chromium/patches/0003`): an unbranded build reports
+   `Chromium` and the GREASE entry and no third brand, in
+   `navigator.userAgentData` and every `Sec-CH-UA` — the plainest mark it
+   could carry. The profile names the measured browser's brand
+   (`"ua": {"brand": "Google Chrome"}`, taken by `fpcapture` from the record),
+   and the browser process puts it where a Google-branded build puts its
+   product name; Chromium's own seeding by the major version then yields the
+   measured list exactly, GREASE and order included (checked against the RTX
+   4050 record). Compiles. The driver passes a profile as
+   `Chrome(fingerprint=...)`.
 4. The remaining WebGL consistency: `chrome://gpu` and WebGPU to match the
    strings WebGL serves, so the three do not contradict each other.
 5. Canvas: a test that proves the four CreepJS checks still pass, and that

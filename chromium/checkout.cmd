@@ -29,6 +29,10 @@ rem gclient may rewrite origin when it hits trouble; the docs say to check it.
 for /f "delims=" %%u in ('git remote get-url origin') do set ORIGIN=%%u
 echo [checkout] origin is %ORIGIN%
 
+rem Type libraries midl-baseline.py rebaselined for this machine's SDK are
+rem not work to keep: the pinned ones go back before the tree is judged.
+call git checkout -- "third_party/win_build_output/midl/*.tlb" 2>nul
+
 rem The reset below discards whatever the tree holds. Our patches live in
 rem chromium/patches/ and are applied by a script, so a clean tree loses
 rem nothing -- but a dirty one may be work not yet written down there.
