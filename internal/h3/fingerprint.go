@@ -94,14 +94,17 @@ func greaseFrame() []byte {
 	return out
 }
 
+// RequestPriority is what a request stream's PRIORITY_UPDATE says: "u=0, i",
+// a document's, which is every request this package makes on its own.
+const RequestPriority = "u=0, i"
+
 // priorityUpdateFrame assembles PRIORITY_UPDATE for a request stream.
 //
 // The body is the stream identifier and the priority in structured-field form
 // (RFC 9218). Chrome sends the frame per request, filling in its stream ID:
 // sending it once with a zero matches the browser only for the first request of
 // a connection.
-func priorityUpdateFrame(frameType, streamID uint64) []byte {
-	const priority = "u=0, i"
+func priorityUpdateFrame(frameType, streamID uint64, priority string) []byte {
 	body := quicvarint.Append(nil, streamID)
 	body = append(body, priority...)
 

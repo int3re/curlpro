@@ -473,7 +473,7 @@ func TestAMasqueProxyWithoutRoomIsNamed(t *testing.T) {
 	if took > 10*time.Second {
 		t.Errorf("it took %s; the handshake's own limit is 3 s", took.Round(time.Millisecond))
 	}
-	for _, want := range []string{"tunnel opened", "1283"} {
+	for _, want := range []string{"tunnel opened", "cannot forward"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the error does not say %q: %v", want, err)
 		}
@@ -614,6 +614,92 @@ func TestA407WithoutCredentialsIsTheAuthStageEverywhere(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "user:pass") {
 			t.Errorf("%s: the error does not say how to give credentials: %v", name, err)
+		}
+	}
+}
+
+// The two CONNECTs go out the way Chrome builds them, field for field.
+//
+// A proxy reads these before anything else, and Chrome's are not a page
+// request's: the plain tunnel is :method and :authority, then user-agent and
+// the credentials (BuildTunnelRequest), with a PRIORITY_UPDATE of "i" -- the
+// DEFAULT_PRIORITY, incremental, it sets on the tunnel stream. CONNECT-UDP
+// puts :scheme, :path and :protocol before :method (the extended-CONNECT
+// builder inserts them first), adds capsule-protocol: ?1, and declares no
+// priority at all. The profile's request order, and the h3 client's "u=0, i"
+// on every stream, said otherwise. The stand here is the hand-rolled one: it
+// decodes the QPACK itself and keeps the fields in wire order.
+func TestMasqueConnectsAreShapedLikeChromes(t *testing.T) {
+	stand := startH3Stand(t)
+	s := auditSession(t, Options{})
+	ua := s.profile.Headers.UserAgent
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pu, _ := url.Parse("masque://user:pw@" + stand.addr)
+	link, err := s.masqueLinkFor(ctx, pu)
+	if err != nil {
+		t.Fatalf("connecting to the stand: %v", err)
+	}
+
+	check := func(name string, protocol, agent string, withAuth bool, names []string, priority string) {
+		t.Helper()
+		str, resp, err := masqueExchange(ctx, link, pu, "example.com:443", protocol, agent, withAuth)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		resp.Body.Close()
+		got := stand.last(t)
+		if strings.Join(got.Names, " ") != strings.Join(names, " ") {
+			t.Errorf("%s: fields\n got %v\nwant %v", name, got.Names, names)
+		}
+		if agent != "" && got.Headers["user-agent"] != agent {
+			t.Errorf("%s: user-agent %q", name, got.Headers["user-agent"])
+		}
+		time.Sleep(50 * time.Millisecond) // the control stream is its own stream
+		p, ok := stand.priorityOf(uint64(str.StreamID()))
+		switch {
+		case priority == "" && ok:
+			t.Errorf("%s: declared priority %q; Chrome declares none", name, p)
+		case priority != "" && p != priority:
+			t.Errorf("%s: priority %q (declared %v), want %q", name, p, ok, priority)
+		}
+	}
+
+	check("CONNECT", "", ua, true,
+		[]string{":method", ":authority", "user-agent", "proxy-authorization"}, "i")
+	if got := stand.last(t).Headers[":authority"]; got != "example.com:443" {
+		t.Errorf("CONNECT :authority %q; Chrome always writes the port", got)
+	}
+
+	check("CONNECT-UDP", "connect-udp", ua, false,
+		[]string{":scheme", ":path", ":protocol", ":method", ":authority",
+			"user-agent", "capsule-protocol"}, "")
+	udp := stand.last(t)
+	if udp.Headers["capsule-protocol"] != "?1" || udp.Headers[":protocol"] != "connect-udp" {
+		t.Errorf("CONNECT-UDP fields %v", udp.Headers)
+	}
+	if udp.Headers[":path"] != "/.well-known/masque/udp/example.com/443/" {
+		t.Errorf("CONNECT-UDP :path %q", udp.Headers[":path"])
+	}
+
+	// No user agent is no user-agent field -- not quic-go's own in its place.
+	check("CONNECT without a user agent", "", "", false, []string{":method", ":authority"}, "i")
+}
+
+// :authority for CONNECT-UDP names the proxy as Chrome does, without https's
+// own port.
+func TestTheMasqueAuthorityDropsTheDefaultPort(t *testing.T) {
+	for raw, want := range map[string]string{
+		"masque://proxy.example":         "proxy.example",
+		"masque://proxy.example:443":     "proxy.example",
+		"masque://u:p@proxy.example:443": "proxy.example",
+		"masque://proxy.example:8443":    "proxy.example:8443",
+		"masque://[2001:db8::1]:443":     "[2001:db8::1]",
+		"masque://[2001:db8::1]:8443":    "[2001:db8::1]:8443",
+	} {
+		pu, _ := url.Parse(raw)
+		if got := authorityOf(pu); got != want {
+			t.Errorf("%s: %q, want %q", raw, got, want)
 		}
 	}
 }

@@ -20,7 +20,8 @@ package client
 //
 // The connection to the proxy is the profile's own: its QUIC spec, so the
 // ClientHello and the transport parameters are the browser's, its HTTP/3
-// SETTINGS, its GREASE frame, its pseudo-header order on the CONNECT. The same
+// SETTINGS, its GREASE frame -- and the CONNECTs on it are shaped as Chrome's
+// own builders shape them (masqueRequest), not as a page's requests. The same
 // reasoning as proxyTLS in proxy.go — the hop that sees the most of a request
 // should see a browser — except that here there is no TCP underneath to give
 // anything else away.
@@ -44,36 +45,32 @@ import (
 	"github.com/curlpro/curlpro/internal/h3"
 )
 
-// A tunnel for QUIC has to be wider than what travels through it.
+// A tunnel for QUIC has to be wider than what travels through it, and the
+// sizes here are Chrome's own (net/quic/quic_session_pool.cc).
 //
-// The packets inside a flow are the inner connection's, held at 1280 bytes
-// (path discovery is off in there, see dialH3ViaMasque). Each one costs, as the
-// payload of an HTTP datagram, its own length plus the context ID of RFC 9298
-// (one byte for context zero) plus the quarter stream ID that HTTP/3 puts in
-// front of every datagram (two bytes once the stream ID passes 255). The
-// DATAGRAM frame's header and the outer packet's are the outer connection's
-// own arithmetic, already inside the limit it reports.
+// The connection to the proxy is a session carrying proxy traffic, and Chrome
+// gives such a session its usual packet size plus a hundred bytes:
+// kDefaultMaxPacketSize, 1250, plus additional_proxy_packet_length, 100
+// (net/quic/quic_context.h). quic-go's own 1280 would not do in any case: at
+// that size the connection carries 1243 bytes of datagram, and path discovery
+// does not rescue it, because quic-go sends its probes only alongside packets
+// it was sending anyway -- a link waiting for room to send is a quiet one, and
+// measured, it held at 1280 for as long as anyone waited. The price is Chrome's
+// too: a path that cannot carry 1350-byte UDP payloads cannot carry the
+// connection. The handshake still goes out at the size the profile's QUIC spec
+// pads it to, so the proxy sees the browser's Initial either way.
 //
-// At the library's initial packet size the connection to the proxy carries
-// 1243 bytes of datagram, and path discovery does not rescue it: quic-go sends
-// its probes only alongside packets it was sending anyway, so a connection
-// waiting for room to send is a quiet one and never finds any. Measured both
-// ways -- an idle link that had just finished its handshake grew to 1441 within
-// a second on the handshake's own tail of packets, and the same link a moment
-// later, quiet, held at 1280 for as long as anyone waited.
-//
-// So the room is asked for up front: masqueOuterPacket is the smallest initial
-// size whose estimate (the size less 37 bytes, quic-go's estimateMaxPayloadSize)
-// holds one inner packet. It is a lower limit, not a target, and it has a
-// cost: a path that cannot carry 1320-byte UDP payloads cannot carry this
-// connection at all. That is the price of tunnelling QUIC, the same one every
-// MASQUE client pays; the handshake itself still goes out at the size the
-// profile's QUIC spec pads it to, so the proxy sees the browser's Initial.
+// The connection inside a flow is then sized to what the flow carries, as
+// Chrome sizes it: the largest datagram the proxy connection will take, less
+// the quarter stream ID HTTP/3 puts in front of each and the one-byte context
+// ID of RFC 9298 -- and no more than masqueInnerPacket, the size a direct
+// connection starts at. Nothing is assumed about the room; it is asked.
 const (
-	masqueInnerPacket  = 1280
-	masqueDatagramNeed = masqueInnerPacket + 1 + 2
-	masqueOuterPacket  = masqueDatagramNeed + 37
-	masqueRoomWait     = 3 * time.Second
+	masqueOuterPacket = 1250 + 100
+	masqueInnerPacket = 1280
+	// masqueMinPacket is QUIC's own floor (RFC 9000, section 14): a flow that
+	// cannot carry packets this large cannot carry QUIC at all.
+	masqueMinPacket = 1200
 )
 
 // isMASQUE says whether a proxy scheme names a MASQUE proxy.
@@ -133,11 +130,6 @@ type masqueLink struct {
 	qc  *quic.Conn
 	ut  *quic.Transport
 	udp *net.UDPConn
-	// pseudoOrder is the profile's, so the CONNECT's pseudo-headers go out in
-	// the browser's sequence: Chrome's :method,:authority,:scheme,:path tells
-	// it from Firefox's :method,:scheme,:authority,:path, and a proxy reads
-	// those fields before it reads anything else.
-	pseudoOrder []string
 }
 
 func (l *masqueLink) alive() bool { return l.qc.Context().Err() == nil }
@@ -297,13 +289,7 @@ func (s *Session) dialMasqueLink(ctx context.Context, pu *url.URL) (*masqueLink,
 		}
 		return nil, proxyFail(ProxyStageDial, 0, fmt.Errorf("QUIC handshake with proxy %s: %w", host, err))
 	}
-	pseudo := s.profile.HTTP3.PseudoOrder
-	if len(pseudo) == 0 {
-		pseudo = s.profile.HTTP2.PseudoOrder
-	}
-	return &masqueLink{
-		cc: tr.NewClientConn(qc), qc: qc, ut: ut.Transport, udp: udpConn, pseudoOrder: pseudo,
-	}, nil
+	return &masqueLink{cc: tr.NewClientConn(qc), qc: qc, ut: ut.Transport, udp: udpConn}, nil
 }
 
 // masqueSettings waits for the proxy's SETTINGS and reports what it allows.
@@ -342,7 +328,14 @@ func masqueSettings(ctx context.Context, link *masqueLink) (*h3.Settings, error)
 // every deadline; the watch below cancels the stream if ctx ends first.
 func masqueExchange(ctx context.Context, link *masqueLink, pu *url.URL, target, protocol,
 	userAgent string, withAuth bool) (*h3.RequestStream, *nethttp.Response, error) {
-	str, err := link.cc.OpenRequestStream(ctx)
+	// The plain tunnel is declared as Chrome declares one, DEFAULT_PRIORITY and
+	// incremental, which serialises to "i"; CONNECT-UDP gets no PRIORITY_UPDATE,
+	// because Chrome sets no priority on that stream at all.
+	priority := "i"
+	if protocol != "" {
+		priority = ""
+	}
+	str, err := link.cc.OpenRequestStreamWithPriority(ctx, priority)
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening a stream to the proxy: %w", err)
 	}
@@ -352,7 +345,7 @@ func masqueExchange(ctx context.Context, link *masqueLink, pu *url.URL, target, 
 	}
 	stop := context.AfterFunc(ctx, abort)
 
-	req := masqueRequest(ctx, link, pu, target, protocol, userAgent, withAuth)
+	req := masqueRequest(ctx, pu, target, protocol, userAgent, withAuth)
 	if err := str.SendRequestHeader(req); err != nil {
 		stop()
 		abort()
@@ -397,41 +390,80 @@ func masqueConnect(ctx context.Context, link *masqueLink, pu *url.URL, target, p
 	return str, nil
 }
 
-// masqueRequest builds a CONNECT for the proxy, browser-shaped.
-func masqueRequest(ctx context.Context, link *masqueLink, pu *url.URL, target, protocol,
+// masqueRequest builds a CONNECT for the proxy as Chrome's builders do.
+//
+// The plain tunnel is CreateSpdyHeadersFromHttpRequest over the headers of
+// BuildTunnelRequest: :method, then :authority as host:port with the port
+// always written, and no :scheme or :path (RFC 9114, section 4.4); then
+// user-agent, then the credentials. Proxy-Connection is HTTP/1.1's and is
+// dropped from a frame.
+//
+// CONNECT-UDP is CreateSpdyHeadersFromHttpRequestForExtendedConnect, which
+// inserts :scheme, :path and :protocol first and only then calls the same
+// builder -- so its pseudo-headers go out as :scheme, :path, :protocol,
+// :method, :authority, an order no ordinary request of any browser has, and
+// the profile's request order would have put them back the ordinary way.
+// :authority names the proxy without a default port (GetHostAndOptionalPort),
+// and capsule-protocol: ?1 follows user-agent
+// (net/quic/quic_proxy_datagram_client_socket.cc). Chrome sends no credentials
+// there yet -- its own proxies take a token through the delegate's headers,
+// which go in before the rest, so that is where ours go.
+func masqueRequest(ctx context.Context, pu *url.URL, target, protocol,
 	userAgent string, withAuth bool) *nethttp.Request {
-	// :authority is the target and there is no :path or :scheme for the plain
-	// tunnel -- the request writer leaves both out when the method is CONNECT
-	// and :protocol is empty, which is RFC 9114 section 4.4. The extended form
-	// names the proxy and puts the target in the path the template gives.
 	req := &nethttp.Request{
 		Method: nethttp.MethodConnect,
 		Header: make(nethttp.Header),
 		Host:   target,
 		URL:    &url.URL{Host: target},
 	}
-	if protocol != "" {
-		req.Proto = protocol
-		req.Host = pu.Host
-		req.URL = &url.URL{Scheme: "https", Host: pu.Host, Path: masquePath(target)}
+	auth := ""
+	if withAuth && pu.User != nil {
+		pass, _ := pu.User.Password()
+		auth = "Basic " + base64.StdEncoding.EncodeToString([]byte(pu.User.Username()+":"+pass))
 	}
-	req = req.WithContext(ctx)
-
-	order := []string{"user-agent"}
+	// An empty value rather than no key: the request writer substitutes its
+	// own User-Agent, quic-go's, when the key is missing altogether.
+	req.Header["user-agent"] = []string{}
 	if userAgent != "" {
 		req.Header["user-agent"] = []string{userAgent}
 	}
-	if withAuth && pu.User != nil {
-		pass, _ := pu.User.Password()
-		req.Header["proxy-authorization"] = []string{
-			"Basic " + base64.StdEncoding.EncodeToString([]byte(pu.User.Username()+":"+pass))}
-		order = append(order, "proxy-authorization")
+
+	var order, pseudo []string
+	if protocol == "" {
+		pseudo = []string{":method", ":authority"}
+		order = []string{"user-agent"}
+		if auth != "" {
+			req.Header["proxy-authorization"] = []string{auth}
+			order = append(order, "proxy-authorization")
+		}
+	} else {
+		req.Proto = protocol
+		req.Host = authorityOf(pu)
+		req.URL = &url.URL{Scheme: "https", Host: req.Host, Path: masquePath(target)}
+		pseudo = []string{":scheme", ":path", ":protocol", ":method", ":authority"}
+		if auth != "" {
+			req.Header["proxy-authorization"] = []string{auth}
+			order = append(order, "proxy-authorization")
+		}
+		req.Header["capsule-protocol"] = []string{"?1"}
+		order = append(order, "user-agent", "capsule-protocol")
 	}
 	req.Header[h3.HeaderOrderKey] = order
-	if pseudo := link.pseudoOrder; len(pseudo) > 0 {
-		req.Header[h3.PseudoHeaderOrderKey] = pseudo
+	req.Header[h3.PseudoHeaderOrderKey] = pseudo
+	return req.WithContext(ctx)
+}
+
+// authorityOf is the proxy as Chrome writes it in :authority for extended
+// CONNECT: the host, and the port only when it is not https's own.
+func authorityOf(pu *url.URL) string {
+	if port := pu.Port(); port != "" && port != "443" {
+		return pu.Host
 	}
-	return req
+	host := pu.Hostname()
+	if strings.Contains(host, ":") {
+		return "[" + host + "]"
+	}
+	return host
 }
 
 // masquePath is the CONNECT-UDP target, in the template of RFC 9298 section 3.
@@ -513,6 +545,10 @@ func (t *masqueTunnel) Close() error {
 // target stayed silent. So a deadline set while a read is waiting releases it.
 type masqueFlow struct {
 	str *h3.RequestStream
+	// packet is the largest QUIC packet this flow carries in one datagram:
+	// the inner connection is held to it, and a write above it is said to
+	// be too large in as many words.
+	packet int
 	// peer is the address every datagram is said to come from and go to. It is
 	// the proxy's, because that is the truth of the socket: the target's
 	// address is the proxy's business and may not resolve here at all. QUIC
@@ -607,6 +643,15 @@ func (f *masqueFlow) WriteTo(p []byte, _ net.Addr) (int, error) {
 		if f.done.Err() != nil {
 			return 0, net.ErrClosed
 		}
+		// The one write that can be too large is a handshake packet the
+		// profile's QUIC spec pads beyond the size the connection was given --
+		// Firefox's parrots pad every Initial datagram to 1357 bytes. Named,
+		// so the error says what does not fit where.
+		var tooLarge *quic.DatagramTooLargeError
+		if errors.As(err, &tooLarge) {
+			err = fmt.Errorf("a %d-byte QUIC packet does not fit the datagrams the connection "+
+				"to the proxy carries (%d bytes with framing): %w", len(p), tooLarge.MaxDatagramPayloadSize, err)
+		}
 		return 0, &net.OpError{Op: "write", Net: "masque", Addr: f.peer, Err: err}
 	}
 	return len(p), nil
@@ -656,13 +701,15 @@ func (errFlowTimeout) Error() string   { return "i/o timeout" }
 func (errFlowTimeout) Timeout() bool   { return true }
 func (errFlowTimeout) Temporary() bool { return true }
 
-// room is how many bytes one HTTP datagram may carry on this flow right now.
+// room is how many bytes one datagram to the proxy may carry right now.
 //
 // Asked rather than computed: SendDatagram reports the limit in its error and
 // sends nothing, so an oversized probe is free and the answer is the
 // connection's own rather than our arithmetic about it. 4 KiB is oversized by
 // construction -- the limit can never exceed the packet buffer, 1452 bytes --
-// so the probe cannot be sent by mistake.
+// so the probe cannot be sent by mistake. The limit is for what
+// conn.SendDatagram is given, which is the HTTP datagram whole: the quarter
+// stream ID HTTP/3 puts in front is inside it.
 func (f *masqueFlow) room() int {
 	var tooLarge *quic.DatagramTooLargeError
 	if errors.As(f.str.SendDatagram(make([]byte, 4096)), &tooLarge) {
@@ -671,35 +718,19 @@ func (f *masqueFlow) room() int {
 	return 4096
 }
 
-// waitForRoom confirms that the connection to the proxy can carry one inner
-// packet per datagram, and says so in as many words when it cannot.
-//
-// With the initial size masqueOuterPacket asks for, the answer is yes at once;
-// this is the check that the arithmetic above still holds against the library
-// actually linked, and the short wait covers the moment after the handshake
-// when the estimate is being replaced. The alternative to saying it here is a
-// handshake that sends fine and hears nothing.
-func (f *masqueFlow) waitForRoom(ctx context.Context) error {
-	limit := time.NewTimer(masqueRoomWait)
-	defer limit.Stop()
-	tick := time.NewTicker(20 * time.Millisecond)
-	defer tick.Stop()
-	for {
-		r := f.room()
-		if r >= masqueDatagramNeed {
-			return nil
-		}
-		select {
-		case <-tick.C:
-		case <-limit.C:
-			return fmt.Errorf("the connection to the proxy carries datagrams of %d bytes and a "+
-				"tunnelled QUIC packet needs %d, so UDP cannot be carried over it "+
-				"(a TCP target still can)", r, masqueDatagramNeed)
-		case <-ctx.Done():
-			return fmt.Errorf("waiting for the connection to the proxy to make room for a "+
-				"tunnelled QUIC packet (%d of %d bytes): %w", r, masqueDatagramNeed, ctx.Err())
-		}
+// size settles the largest QUIC packet the flow carries: the room less what
+// each datagram spends before the packet -- the quarter stream ID and the
+// context ID -- capped at masqueInnerPacket, and refused below QUIC's floor.
+func (f *masqueFlow) size() error {
+	overhead := quicvarint.Len(uint64(f.str.StreamID()/4)) + 1
+	room := f.room()
+	f.packet = min(room-overhead, masqueInnerPacket)
+	if f.packet < masqueMinPacket {
+		return fmt.Errorf("the connection to the proxy carries datagrams of %d bytes, and a "+
+			"QUIC packet needs at least %d plus %d of framing: UDP cannot be carried over it "+
+			"(a TCP target still can)", room, masqueMinPacket, overhead)
 	}
+	return nil
 }
 
 // masqueUDP opens a CONNECT-UDP flow to addr through the proxy.
@@ -734,7 +765,7 @@ func (s *Session) masqueUDP(ctx context.Context, pu *url.URL, addr, userAgent st
 		return nil, err
 	}
 	flow := newMasqueFlow(str, link.qc.RemoteAddr(), link.udp.LocalAddr())
-	if err := flow.waitForRoom(ctx); err != nil {
+	if err := flow.size(); err != nil {
 		_ = flow.Close()
 		return nil, proxyFail(ProxyStageConnect, 0, err)
 	}
@@ -806,13 +837,12 @@ func (s *Session) dialH3ViaMasque(ctx context.Context, pu *url.URL, key, addr st
 	}
 	ut := &quic.UTransport{Transport: in.ut, QUICSpec: spec}
 
-	// The inner connection keeps its packets at the size it starts with
-	// (masqueInnerPacket, the library default) and is forbidden to grow them.
-	// Path discovery inside a tunnel learns nothing: a probe too large for the
-	// connection to the proxy is not a packet lost on the path but a datagram
-	// that is never sent, and the room confirmed in masqueUDP is room for
-	// exactly this size.
+	// The inner connection is given the size the flow carries and forbidden to
+	// grow it. Path discovery inside a tunnel learns nothing: a probe too large
+	// for the connection to the proxy is not a packet lost on the path but a
+	// datagram that is never sent.
 	inner := *qcfg
+	inner.InitialPacketSize = uint16(flow.packet)
 	inner.DisablePathMTUDiscovery = true
 
 	qc, err := ut.DialEarly(ctx, flow.peer, cfg, &inner)
@@ -830,8 +860,9 @@ func (s *Session) dialH3ViaMasque(ctx context.Context, pu *url.URL, key, addr st
 			return nil, proxyFail(ProxyStageConnect, 0, fmt.Errorf(
 				"nothing came back from %s through the MASQUE proxy, although the tunnel "+
 					"opened: either %s does not answer QUIC there, or the proxy cannot forward "+
-					"QUIC packets back (it needs datagrams of %d bytes for them). Underlying "+
-					"error: %w", addr, addr, masqueDatagramNeed, err))
+					"its QUIC packets back -- a proxy whose own datagrams are smaller than the "+
+					"target's packets drops every answer without a word. Underlying error: %w",
+				addr, addr, err))
 		}
 		return nil, proxyFail(ProxyStageConnect, 0, fmt.Errorf(
 			"QUIC handshake with %s through the MASQUE proxy: %w", addr, err))

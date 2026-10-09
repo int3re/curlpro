@@ -1023,16 +1023,23 @@ publish the address the proxy was there to hide.
 
 Two things to know before pointing it at a provider. The profile needs an
 `http3` section, because the proxy is spoken to with it (18 profiles have one).
-And a tunnel for QUIC has to be wider than what travels through it: forwarding
-one QUIC packet costs 1283 bytes of datagram, so both ends need the room for
-it. Ours is asked for when the connection opens — its packets start at 1320
-bytes rather than the library's 1280, because path discovery cannot be relied
-on to find the room later, and a path to the proxy that cannot carry 1320-byte
-UDP payloads cannot carry this connection — and checked when a flow opens,
-with any shortfall named. The proxy's room cannot be seen from here, so a
-handshake that opens a tunnel and then hears nothing names the two things that
-means — the target does not answer QUIC, or the proxy cannot forward its
-packets back — instead of reporting a dead network.
+And a tunnel for QUIC has to be wider than what travels through it, so the
+sizes are Chrome's own: the connection to the proxy uses 1350-byte packets —
+Chrome's 1250 plus the hundred it adds for a session that carries proxy
+traffic — and the connection to the target inside a flow is sized to what the
+flow actually carries, as Chrome sizes it. The cost is Chrome's too: a path to
+the proxy that cannot carry 1350-byte UDP payloads cannot carry the
+connection. The proxy's own room cannot be seen from here, so a handshake that
+opens a tunnel and then hears nothing names the two things that means — the
+target does not answer QUIC, or the proxy cannot forward its packets back —
+instead of reporting a dead network.
+
+What the proxy sees is Chrome's too, checked against Chromium's source and on
+the wire: a plain tunnel is `:method`, `:authority` (with the port), then
+`user-agent` and the credentials, declared with priority `i`; `CONNECT-UDP`
+puts `:scheme`, `:path` and `:protocol` before `:method`, sends
+`capsule-protocol: ?1`, names the proxy without port 443, and declares no
+priority.
 
 ## 13. Streaming, uploads, async
 

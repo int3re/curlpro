@@ -105,9 +105,10 @@ type ClientConn struct {
 //
 // The frame carries the identifier of the stream it refers to, so it is sent per
 // request. Sending it once with a zero matched only the first request of a
-// connection.
-func (c *ClientConn) sendPriorityUpdate(streamID quic.StreamID) {
-	if c.fingerprint == nil || c.fingerprint.PriorityParam == 0 {
+// connection. An empty priority sends nothing: Chrome declares one only for a
+// stream whose priority it set, and leaves the rest at the default unsaid.
+func (c *ClientConn) sendPriorityUpdate(streamID quic.StreamID, priority string) {
+	if c.fingerprint == nil || c.fingerprint.PriorityParam == 0 || priority == "" {
 		return
 	}
 	c.controlMx.Lock()
@@ -115,7 +116,7 @@ func (c *ClientConn) sendPriorityUpdate(streamID quic.StreamID) {
 	if c.controlStream == nil {
 		return
 	}
-	_, _ = c.controlStream.Write(priorityUpdateFrame(c.fingerprint.PriorityParam, uint64(streamID)))
+	_, _ = c.controlStream.Write(priorityUpdateFrame(c.fingerprint.PriorityParam, uint64(streamID), priority))
 }
 
 // awaitSettings waits for the control stream to be written, but not forever: if
@@ -233,7 +234,19 @@ func newClientConn(
 
 // OpenRequestStream opens a new request stream on the HTTP/3 connection.
 func (c *ClientConn) OpenRequestStream(ctx context.Context) (*RequestStream, error) {
-	return c.openRequestStream(ctx, c.requestWriter, nil, c.disableCompression, c.maxResponseHeaderBytes)
+	return c.OpenRequestStreamWithPriority(ctx, RequestPriority)
+}
+
+// OpenRequestStreamWithPriority opens a request stream whose PRIORITY_UPDATE
+// says priority, or that sends none when it is empty.
+//
+// For the streams that are not a page's requests. Chrome gives a CONNECT
+// tunnel to a proxy DEFAULT_PRIORITY, incremental, which it declares as "i"
+// (net/http/http_proxy_connect_job.cc), and a CONNECT-UDP stream no priority at
+// all; a tunnel announced as "u=0, i" -- a top-level document -- is a thing no
+// browser sends a proxy.
+func (c *ClientConn) OpenRequestStreamWithPriority(ctx context.Context, priority string) (*RequestStream, error) {
+	return c.openRequestStream(ctx, c.requestWriter, nil, c.disableCompression, c.maxResponseHeaderBytes, priority)
 }
 
 func (c *ClientConn) openRequestStream(
@@ -242,6 +255,7 @@ func (c *ClientConn) openRequestStream(
 	reqDone chan<- struct{},
 	disableCompression bool,
 	maxHeaderBytes int,
+	priority string,
 ) (*RequestStream, error) {
 	// The control stream must go out before the request, or the server sees a
 	// request without SETTINGS and the fingerprint comes out incomplete.
@@ -284,7 +298,7 @@ func (c *ClientConn) openRequestStream(
 	}
 
 	// The priority is declared before the request and addresses this very stream.
-	c.sendPriorityUpdate(str.StreamID())
+	c.sendPriorityUpdate(str.StreamID(), priority)
 
 	hstr := c.rawConn.TrackStream(str)
 	rsp := &http.Response{}
@@ -418,6 +432,7 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		reqDone,
 		c.disableCompression,
 		c.maxResponseHeaderBytes,
+		RequestPriority,
 	)
 	if err != nil {
 		return nil, &errConnUnusable{e: err}

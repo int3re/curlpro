@@ -51,6 +51,9 @@ type h3Stand struct {
 	mu      sync.Mutex
 	seen    []h3Request
 	closers []io.Closer
+	// priorities are the PRIORITY_UPDATE frames the client sent on its
+	// control stream, by the stream they name.
+	priorities map[uint64]string
 }
 
 // h3Request is one request as it arrived, with the field order preserved.
@@ -196,11 +199,55 @@ func (s *h3Stand) serveUni(str *quic.ReceiveStream, dec *cqpack.Decoder) {
 	switch t {
 	case h3StreamQPACKEn:
 		_ = dec.ReadEncoderStream(str)
-	case h3StreamControl, h3StreamQPACKDe:
+	case h3StreamControl:
+		s.readControl(r)
+	case h3StreamQPACKDe:
 		_, _ = io.Copy(io.Discard, str)
 	default:
 		_, _ = io.Copy(io.Discard, str)
 	}
+}
+
+// readControl records the PRIORITY_UPDATE frames of the client's control
+// stream (RFC 9218, section 7.1: the prioritized stream's ID, then the
+// priority field value) and skips every other frame.
+func (s *h3Stand) readControl(r quicvarint.Reader) {
+	const priorityUpdateRequest = 0xF0700
+	for {
+		frameType, err := quicvarint.Read(r)
+		if err != nil {
+			return
+		}
+		n, err := quicvarint.Read(r)
+		if err != nil {
+			return
+		}
+		payload := make([]byte, n)
+		if _, err := io.ReadFull(r, payload); err != nil {
+			return
+		}
+		if frameType != priorityUpdateRequest {
+			continue
+		}
+		id, used, err := quicvarint.Parse(payload)
+		if err != nil {
+			continue
+		}
+		s.mu.Lock()
+		if s.priorities == nil {
+			s.priorities = map[uint64]string{}
+		}
+		s.priorities[id] = string(payload[used:])
+		s.mu.Unlock()
+	}
+}
+
+// priorityOf is what the client declared for a stream, and whether it did.
+func (s *h3Stand) priorityOf(stream uint64) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	v, ok := s.priorities[stream]
+	return v, ok
 }
 
 func (s *h3Stand) serveStream(str *quic.Stream, dec *cqpack.Decoder) {
