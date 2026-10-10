@@ -268,7 +268,7 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 
 | Parameter | Meaning |
 |---|---|
-| `impersonate` | profile name; `chrome-151-windows` by default |
+| `impersonate` | profile name; `chrome-155-windows` by default (`chrome-151-windows` through 0.16.0) |
 | `timeout` | limit for the whole request; a `(connect, total)` pair bounds establishing the connection separately |
 | `connect_timeout`, `response_timeout` | the same limits by name: connecting (resolution, TCP, TLS) and the wait for the response headers. `response_timeout` covers the gap the other two leave — a server that accepts and then thinks — and does not bound the body: once the headers are in, only `timeout` applies |
 | `proxy` | `http://`, `https://`, `socks5://` or `socks5h://`, `user:pass` allowed. An address with no scheme — `1.2.3.4:8080` — is read as `http://`; there is no probing, a SOCKS proxy has to say so. `HTTP_PROXY` is read for `http://` requests and `HTTPS_PROXY` for `https://`, `ALL_PROXY` for both, `NO_PROXY` excludes. The first CONNECT goes without credentials and adds them after a 407, as Chrome does; a proxy that hangs up instead of challenging gets a second CONNECT with credentials on a fresh connection, and one that hangs up on that too is reported as such (`proxy_closed`) |

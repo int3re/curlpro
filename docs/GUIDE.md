@@ -83,13 +83,13 @@ assembly serves HTTP/1.1, HTTP/2 and HTTP/3 — there is one copy of the rules.
 
 ## 4. Sessions: every parameter
 
-`curlpro.Session(impersonate="chrome-151-windows", **options)`. Every option
+`curlpro.Session(impersonate="chrome-155-windows", **options)`. Every option
 has a default that reproduces a browser; the table says what changes when you
 touch it.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `impersonate` | `chrome-151-windows` | the profile name; `list_profiles()` has all 309 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 44 captured whole |
+| `impersonate` | `chrome-155-windows` | the profile name, the newest Chrome captured whole (`chrome-151-windows` through 0.16.0); `list_profiles()` has all 309 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 44 captured whole |
 | `verify` | `True` | `True` — system roots; a PEM path — trust only that root; `False` — no verification |
 | `cert` | `None` | `(certificate, key)` paths for mutual TLS |
 | `trust_env` | `True` | take the proxy from `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, honouring `NO_PROXY`; an explicit `proxy` always wins |
