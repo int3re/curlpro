@@ -6,7 +6,30 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.16.0** — a minor for what it adds: `gpu="high-performance"` on
+**0.17.0** — a minor, because what goes on the wire changed without anyone
+asking: a session that names no profile is `chrome-155-windows`, captured live
+on 2026-10-10, where it was `chrome-151-windows`, and a desktop Chromium
+profile without `device=` answers `Accept-CH` with its version's newest build
+(155.0.8059.40) instead of the first (155.0.8059.12), a build Chrome's own
+updater leaves few users on. Beside them, proxies: an `https://` proxy is
+greeted with the profile's own ClientHello, where Go's said "Go" before
+anything else was sent (13 ciphers, 10 extensions, no ALPN), and tunnelled
+over HTTP/2 when it offers `h2` — every tunnel a stream on one connection, with
+Chrome's priorities, where each had paid a handshake; `masque://` is a proxy
+reached over HTTP/3, the only kind that carries `http3=True` to the target —
+CONNECT and CONNECT-UDP as Chrome writes them, its packet sizes, checked
+against the Chromium source. Every redirect hop keeps its own response
+headers (`r.history[0].header("set-cookie")`), where only the jar remembered
+them. In the corpus, `chrome-155-windows` and `firefox-157-windows` captured
+(155's hello, frames and header order are 153's; 157 differs from 156 only in
+the User-Agent), Chrome 156 and the macOS and Linux Chrome 155 derived and
+marked, the identity pools on every 154 build to .100 and on 155 and 156: 309
+profiles, 44 captured whole, 13 derived. `curlpro capture` trusts the stand in
+Firefox by itself, keeps a parent's measured header order when a capture
+agrees with it, and refuses a parent that is not measured. ABI 0.26.0: the
+redirect headers are a field Python reads, which an older library leaves
+empty without a word.
+Before it, **0.16.0** — a minor for what it adds: `gpu="high-performance"` on
 `BrowserSolver`, `s.browser()` and `curlpro.browser.Chrome` runs the browser on
 the discrete GPU of a dual-GPU machine, through Chromium's own
 `--force-high-performance-gpu`, which works on Windows too. Measured on a

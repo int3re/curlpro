@@ -166,7 +166,12 @@ func curlpro_free(s *C.char) {
 // curlpro_session_clear_cache), top_level on the session, per request and in
 // the preview (curlpro_session_set_top_level), partition on a cookie, and
 // partitioning in the capabilities' cookie policy.
-const Version = "0.25.0"
+// 0.26.0: headers on every redirect hop in history, which Python reads (an
+// older library sends none, and r.history[i].headers would be silently
+// empty); masque:// proxies, reached over HTTP/3 (an older library refuses the
+// scheme); https:// proxies greeted with the profile's ClientHello and
+// tunnelled over HTTP/2 when they offer h2.
+const Version = "0.26.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {

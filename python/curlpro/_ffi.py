@@ -218,7 +218,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Minimum version of the native part: major and minor. Raise it together
 # with lib/curlpro.go whenever Python starts depending on a new export or field.
-REQUIRED_VERSION = (0, 25)
+REQUIRED_VERSION = (0, 26)
 
 
 def _check_version() -> None:
