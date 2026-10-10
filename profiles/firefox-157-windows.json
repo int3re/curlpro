@@ -1,0 +1,31 @@
+{
+  "name": "firefox-157-windows",
+  "based_on": "firefox-156-windows",
+  "tls": {
+    "raw_client_hello": "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",
+    "signature_algorithms": [
+      1027,
+      1283,
+      1539,
+      2052,
+      2053,
+      2054,
+      1025,
+      1281,
+      1537,
+      515,
+      513
+    ],
+    "permute_extensions": false
+  },
+  "http1": {},
+  "http2": {},
+  "http3": {},
+  "quic": {},
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:157.0) Gecko/20100101 Firefox/157.0"
+  },
+  "websocket": {},
+  "fetch": {},
+  "resources": {}
+}

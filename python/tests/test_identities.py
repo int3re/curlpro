@@ -121,7 +121,8 @@ def test_a_delta_on_a_pooled_profile_has_no_pool_unless_it_says_so():
     """The macOS Safari profiles stand on the iOS captures, Edge on Chrome 153,
     the transcribed iOS and iPadOS deltas on the iOS captures: none of them may
     inherit a pool, a template or the parent's hint values."""
-    pooled = {f"chrome-{v}-{o}" for v in (151, 152, 153, 154) for o in ("windows", "macos", "linux")} | set(SEED["ios"]) | {
+    pooled = {f"chrome-{v}-{o}" for v in (151, 152, 153, 154, 155, 156)
+              for o in ("windows", "macos", "linux")} | set(SEED["ios"]) | {
         p.stem for p in (REPO / "profiles").glob("firefox-*-linux.json")}
     pooled |= {"chrome-152-android", "yandex-26.8-android"}
     # The files on disk, not the registry: another test may register a delta on

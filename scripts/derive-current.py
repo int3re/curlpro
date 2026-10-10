@@ -1,5 +1,6 @@
-"""Write the presets for the browser versions current on 2026-09-26 that this
-project could not capture yet, as deltas on captured twins, marked.
+"""Write the presets for the browser versions current on 2026-09-26 and
+2026-10-10 that this project could not capture yet, as deltas on captured
+twins, marked.
 
 Every profile written here carries ``source.kind = "derived"``: its ClientHello,
 HTTP/2 frames and header sets are a captured twin's, and only what published
@@ -27,6 +28,18 @@ The evidence, read on 2026-09-26:
   token frozen at 18_7 with Version/27.0. The macOS string is assumed in the
   form every Safari since 14 sends (Intel Mac OS X 10_15_7), not seen.
 
+Added on 2026-10-10:
+
+- Chrome 155 for Windows is captured (155.0.8059.39, ``curlpro capture``):
+  its ClientHello, HTTP/2 frames and header order are Chrome 153's, the
+  User-Agent and the brands aside, and the brands it sent are exactly what
+  scripts/chromium_brands.py computes for 155. So Chrome 155 for macOS and
+  Linux stand on their 153 twins with 155's User-Agent and brands.
+- Chrome 156 went stable on 2026-10-07 (chromiumdash: 156.0.8078.12, Windows)
+  while the Chrome here is 155: it stands on the captured chrome-155-windows,
+  and its macOS and Linux twins on the 153 ones. Three majors in a row kept
+  the hello; that is evidence, not a measurement of 156.
+
 Run: ``python scripts/derive-current.py`` then ``python scripts/gen-identities.py``
 and ``python scripts/gen-safari-fetch.py``.
 """
@@ -42,6 +55,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from chromium_brands import sec_ch_ua  # noqa: E402
 
 DATE = "2026-09-26"
+DATE_1010 = "2026-10-10"
 
 WIN = "Windows NT 10.0; Win64; x64"
 MAC = "Macintosh; Intel Mac OS X 10_15_7"
@@ -52,6 +66,17 @@ def chrome_ua(platform: str, major: int, extra: str = "") -> str:
     return (f"Mozilla/5.0 ({platform}) AppleWebKit/537.36 (KHTML, like Gecko) "
             f"Chrome/{major}.0.0.0 Safari/537.36{extra}")
 
+
+CHROME_155_NOTE = ("Derived, not captured: Chrome 155 was captured on Windows (155.0.8059.39, "
+                   "2026-10-10) and its ClientHello, HTTP/2 frames and header order are Chrome 153's; "
+                   "this {os} twin stands on {base} with 155's User-Agent and brands, computed as "
+                   "Chromium computes them. Replace with a capture from {os}.")
+CHROME_156_NOTE = ("Derived, not captured: Chrome 156 went stable on 2026-10-07 (chromiumdash, Stable: "
+                   "156.0.8078.12), and the Chrome on this project's stand is 155. The ClientHello, "
+                   "HTTP/2 frames and header sets are {base}'s; the User-Agent and the brand list are "
+                   "156's, the brands computed as Chromium computes them. Chrome 153, 154 and 155 sent the "
+                   "same hello, which is evidence, not a measurement: replace with a capture when Chrome "
+                   "156 is on the stand.")
 
 CHROME_NOTE = ("Derived, not captured: Chrome 154 went stable on 2026-09-22 (chromiumdash, Stable: "
                "154.0.8037.57/.58), and the Chrome on this project's stand is still 153. The ClientHello, "
@@ -83,6 +108,21 @@ PLAN = [
      sec_ch_ua(152, "Opera", 136), "https://blogs.opera.com/desktop/2026/09/opera-136-0-6008-52-stable-update/",
      "Derived, not captured: Opera 136.0.6008.52 (2026-09-24) on Chromium 152.0.7977.130, standing on "
      "Chrome 152 for macOS with Opera's User-Agent and brands; Opera's own TLS was not measured."),
+    ("chrome-155-macos", "chrome-153-macos", chrome_ua(MAC, 155), sec_ch_ua(155, "Google Chrome", 155),
+     "https://chromiumdash.appspot.com/releases?platform=Mac",
+     CHROME_155_NOTE.format(os="macOS", base="chrome-153-macos"), DATE_1010),
+    ("chrome-155-linux", "chrome-153-linux", chrome_ua(LINUX, 155), sec_ch_ua(155, "Google Chrome", 155),
+     "https://chromiumdash.appspot.com/releases?platform=Linux",
+     CHROME_155_NOTE.format(os="Linux", base="chrome-153-linux"), DATE_1010),
+    ("chrome-156-windows", "chrome-155-windows", chrome_ua(WIN, 156), sec_ch_ua(156, "Google Chrome", 156),
+     "https://chromiumdash.appspot.com/releases?platform=Windows",
+     CHROME_156_NOTE.format(base="chrome-155-windows"), DATE_1010),
+    ("chrome-156-macos", "chrome-153-macos", chrome_ua(MAC, 156), sec_ch_ua(156, "Google Chrome", 156),
+     "https://chromiumdash.appspot.com/releases?platform=Mac",
+     CHROME_156_NOTE.format(base="chrome-153-macos"), DATE_1010),
+    ("chrome-156-linux", "chrome-153-linux", chrome_ua(LINUX, 156), sec_ch_ua(156, "Google Chrome", 156),
+     "https://chromiumdash.appspot.com/releases?platform=Linux",
+     CHROME_156_NOTE.format(base="chrome-153-linux"), DATE_1010),
     ("safari-27-ios", "safari-26-ios",
      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) "
      "Version/27.0 Mobile/15E148 Safari/604.1", None, "https://github.com/openwrt/uhttpd/issues/42",
@@ -117,7 +157,7 @@ def resolved_order(name: str) -> list[dict]:
 def main() -> int:
     check = "--check" in sys.argv
     drift = False
-    for name, base, ua, brands, src, note in PLAN:
+    for name, base, ua, brands, src, note, *date in PLAN:
         order = resolved_order(base)
         for h in order:
             k = h["key"].lower()
@@ -128,7 +168,8 @@ def main() -> int:
         want = {
             "name": name,
             "based_on": base,
-            "source": {"kind": "derived", "from": src, "date": DATE, "path": "scripts/derive-current.py",
+            "source": {"kind": "derived", "from": src, "date": date[0] if date else DATE,
+                       "path": "scripts/derive-current.py",
                        "note": note},
             "headers": {"user_agent": ua, "order": order},
         }

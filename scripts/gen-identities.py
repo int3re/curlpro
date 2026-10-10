@@ -90,6 +90,10 @@ DESKTOP = [
     # Derived, not captured (scripts/derive-current.py): the pool is Chrome 154's
     # builds on the 153 capture's hints order.
     ("chrome-154-windows", "windows", "154"), ("chrome-154-macos", "macos", "154"), ("chrome-154-linux", "linux", "154"),
+    # Chrome 155 for Windows is captured (2026-10-10); its macOS and Linux
+    # twins, and every Chrome 156, are derived (scripts/derive-current.py).
+    ("chrome-155-windows", "windows", "155"), ("chrome-155-macos", "macos", "155"), ("chrome-155-linux", "linux", "155"),
+    ("chrome-156-windows", "windows", "156"), ("chrome-156-macos", "macos", "156"), ("chrome-156-linux", "linux", "156"),
 ]
 # Not edge-153-windows: Edge writes its own build into "Microsoft Edge";v= and
 # sec-ch-ua-full-version (153.0.3xxx.xx) next to Chromium's in the list, and

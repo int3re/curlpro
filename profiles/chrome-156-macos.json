@@ -1,15 +1,15 @@
 {
-  "name": "chrome-154-linux",
-  "based_on": "chrome-153-linux",
+  "name": "chrome-156-macos",
+  "based_on": "chrome-153-macos",
   "source": {
     "kind": "derived",
-    "from": "https://chromiumdash.appspot.com/releases?platform=Linux",
-    "date": "2026-09-26",
+    "from": "https://chromiumdash.appspot.com/releases?platform=Mac",
+    "date": "2026-10-10",
     "path": "scripts/derive-current.py",
-    "note": "Derived, not captured: Chrome 154 went stable on 2026-09-22 (chromiumdash, Stable: 154.0.8037.57/.58), and the Chrome on this project's stand is still 153. The ClientHello, HTTP/2 frames and header sets are chrome-153-linux's; the User-Agent and the brand list are 154's, the brands computed as Chromium computes them. Chrome 153 added a TLS extension 152 lacked, so a major can change the hello: replace with a capture when Chrome 154 is on the stand."
+    "note": "Derived, not captured: Chrome 156 went stable on 2026-10-07 (chromiumdash, Stable: 156.0.8078.12), and the Chrome on this project's stand is 155. The ClientHello, HTTP/2 frames and header sets are chrome-153-macos's; the User-Agent and the brand list are 156's, the brands computed as Chromium computes them. Chrome 153, 154 and 155 sent the same hello, which is evidence, not a measurement: replace with a capture when Chrome 156 is on the stand."
   },
   "headers": {
-    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
     "order": [
       {
         "key": "cache-control",
@@ -21,7 +21,7 @@
       },
       {
         "key": "sec-ch-ua",
-        "value": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\""
+        "value": "\"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"156\", \"Google Chrome\";v=\"156\""
       },
       {
         "key": "sec-ch-ua-mobile",
@@ -29,7 +29,7 @@
       },
       {
         "key": "sec-ch-ua-platform",
-        "value": "\"Linux\""
+        "value": "\"macOS\""
       },
       {
         "key": "upgrade-insecure-requests",
@@ -77,7 +77,7 @@
       },
       {
         "key": "accept-language",
-        "value": "en-US,en;q=0.9"
+        "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
       },
       {
         "key": "cookie",
@@ -99,14 +99,14 @@
   },
   "client_hints": {
     "values": {
-      "sec-ch-ua-full-version": "\"154.0.8037.17\"",
-      "sec-ch-ua-arch": "\"x86\"",
-      "sec-ch-ua-platform-version": "\"\"",
+      "sec-ch-ua-full-version": "\"156.0.8078.12\"",
+      "sec-ch-ua-arch": "\"arm\"",
+      "sec-ch-ua-platform-version": "\"15.6.1\"",
       "sec-ch-ua-model": "\"\"",
       "sec-ch-ua-bitness": "\"64\"",
       "sec-ch-ua-wow64": "?0",
       "sec-ch-ua-form-factors": "\"Desktop\"",
-      "sec-ch-ua-full-version-list": "\"Chromium\";v=\"154.0.8037.17\", \"Google Chrome\";v=\"154.0.8037.17\", \"Not A(Brand\";v=\"99.0.0.0\""
+      "sec-ch-ua-full-version-list": "\"Not:A-Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"156.0.8078.12\", \"Google Chrome\";v=\"156.0.8078.12\""
     },
     "order": [
       {
@@ -323,105 +323,136 @@
   },
   "devices": [
     {
-      "name": "Linux, Chrome 154.0.8037.17",
-      "full_version": "154.0.8037.17",
+      "name": "macOS 15.6.1 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "15.6.1",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.7 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "15.7.0",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.7.1 (Intel), Chrome 156.0.8078.12",
+      "platform_version": "15.7.1",
+      "full_version": "156.0.8078.12",
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.44",
-      "full_version": "154.0.8037.44",
+      "name": "macOS 15.7.5 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "15.7.5",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "macOS 15.7.9 (Intel), Chrome 156.0.8078.12",
+      "platform_version": "15.7.9",
+      "full_version": "156.0.8078.12",
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.57",
-      "full_version": "154.0.8037.57",
-      "hint_arch": "x86",
+      "name": "macOS 15.8 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "15.8.0",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.58",
-      "full_version": "154.0.8037.58",
-      "hint_arch": "x86",
+      "name": "macOS 26.0.1 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "26.0.1",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.59",
-      "full_version": "154.0.8037.59",
-      "hint_arch": "x86",
+      "name": "macOS 26.1 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "26.1.0",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.92",
-      "full_version": "154.0.8037.92",
-      "hint_arch": "x86",
+      "name": "macOS 26.2 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "26.2.0",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.93",
-      "full_version": "154.0.8037.93",
-      "hint_arch": "x86",
+      "name": "macOS 26.3.2 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "26.3.2",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.94",
-      "full_version": "154.0.8037.94",
-      "hint_arch": "x86",
+      "name": "macOS 26.4.1 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "26.4.1",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.95",
-      "full_version": "154.0.8037.95",
-      "hint_arch": "x86",
+      "name": "macOS 26.5.2 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "26.5.2",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.97",
-      "full_version": "154.0.8037.97",
-      "hint_arch": "x86",
+      "name": "macOS 26.6.2 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "26.6.2",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.98",
-      "full_version": "154.0.8037.98",
-      "hint_arch": "x86",
+      "name": "macOS 26.7 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "26.7.0",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.99",
-      "full_version": "154.0.8037.99",
-      "hint_arch": "x86",
-      "bitness": "64",
-      "wow64": "?0",
-      "form_factors": "Desktop"
-    },
-    {
-      "name": "Linux, Chrome 154.0.8037.100",
-      "full_version": "154.0.8037.100",
-      "hint_arch": "x86",
+      "name": "macOS 27.0 (Apple silicon), Chrome 156.0.8078.12",
+      "platform_version": "27.0.0",
+      "full_version": "156.0.8078.12",
+      "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"

@@ -291,9 +291,19 @@ Two practical notes from the same session, both of which cost a run:
 switches. An explicit `-browser` still has to agree with the name: a profile
 called firefox-154 built from a Chrome connection is not a weaker profile but a
 false one, and nothing downstream can tell. Firefox has no equivalent of
-`--ignore-certificate-errors`, so the stand's self-signed certificate stops at
-an interstitial: the ClientHello is captured, the headers are not. Click through
-it once, or use `-manual`.
+`--ignore-certificate-errors`, so `capture` writes the stand's certificate into
+each throwaway Firefox profile as an exception (`cert_override.txt`, the
+five-field line Firefox writes itself when "Accept the Risk" is clicked; a
+three-field one is ignored). Firefox 157 was captured that way, TLS and headers
+in one unattended run; before, the headers needed a click per window.
+
+A delta keeps its parent's header order when the capture agrees with it. The
+stand sees one navigation — no cookie, no referer, no revalidation — while the
+parent's order was measured on richer pages (STAGE17, STAGE18); writing the
+stand's order over it moved the rule-placed slots and dropped `referer`,
+`if-modified-since` and `if-none-match`. So when every header the browser sent
+stands in the parent's order in the same sequence, the parent's positions are
+kept with this capture's values (`sec-ch-ua` names the new major).
 
 The stand measures TLS and HTTP/2. The HTTP/1.1 order, case and `Connection`
 header, the fetch set and the WebSocket handshake are measured once per browser
@@ -337,6 +347,13 @@ shows at once what changed between versions.
 
 Replay the spec against `tls.browserleaks.com/tls` and compare `ja3n_hash`, `ja4`
 and `akamai_text` with what the real browser produced.
+
+Not against the local echo-server's JA4: its `_c` part changes from connection
+to connection for the very same hello (five values in six runs of
+chrome-155-windows, 2026-10-10) while the sorted, GREASE-free extension set does
+not, so it hashes something that varies per connection (the GREASE codepoints or
+the permuted order; which was not looked into). Compare the extension sets there,
+or `Session.fingerprint().ja4`, which the library computes itself.
 
 Additionally: `tls.tlsfingerprint.io/api/tls/fingerprints/{norm_hex_id}/exists` —
 confirms that such a fingerprint occurs in real traffic at all.

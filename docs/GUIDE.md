@@ -89,7 +89,7 @@ touch it.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `impersonate` | `chrome-151-windows` | the profile name; `list_profiles()` has all 302 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 42 captured whole |
+| `impersonate` | `chrome-151-windows` | the profile name; `list_profiles()` has all 309 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 44 captured whole |
 | `verify` | `True` | `True` — system roots; a PEM path — trust only that root; `False` — no verification |
 | `cert` | `None` | `(certificate, key)` paths for mutual TLS |
 | `trust_env` | `True` | take the proxy from `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, honouring `NO_PROXY`; an explicit `proxy` always wins |
@@ -767,18 +767,18 @@ partitions, and a Firefox profile sent a captcha's frame no cookies at all.
 
 ## 11. Profiles, devices and mobile
 
-302 profiles ship in the wheel. 42 of them are captured whole — by this
+309 profiles ship in the wheel. 44 of them are captured whole — by this
 project's own runs of `curlpro capture` or by the curl-impersonate signatures
-it imported, each with the hashes to prove it: 20 Chrome (118 to 153), 4 Edge,
-5 Firefox (133, 135, 144, 155, 156), 9 Safari (15.6.1 to 26.0.1, macOS and
+it imported, each with the hashes to prove it: 21 Chrome (118 to 153, and 155),
+4 Edge, 6 Firefox (133, 135, 144, 155, 156, 157), 9 Safari (15.6.1 to 26.0.1, macOS and
 iOS), Tor 14, Yandex Browser 26.8 for Android, and two okhttp 5.5 (JVM and
 Conscrypt). 14 more are captured but for their HTTP/2 SETTINGS (Chrome 98 to
 116, Chrome 99 for Android, Edge 98 to 101, Safari 15.3 and 15.5): those
 signatures recorded no SETTINGS frame, and until 0.12 the profiles sent an
 empty one — a frame no browser sends; the values are now wreq-util's for each
 version, and the profile says so. 238 are transcribed from `0x676e67/wreq-util`
-(108 Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera), and 8 are derived here
-for the versions current on 2026-09-26 that were not on the stand — see the
+(108 Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera), and 13 are derived here
+for the versions current on 2026-09-26 and 2026-10-10 that were not on the stand — see the
 next paragraphs, and prefer `list_profiles(measured=True)` when drawing a
 profile at random. Many share a TLS fingerprint: all of them together form 17
 distinct JA4 values, because a transcribed or derived profile always replays a
@@ -797,7 +797,10 @@ on this project's stand, as deltas on captured twins: `chrome-154-windows`,
 153's, taken on trust), `edge-154-windows` (on the derived Chrome 154),
 `opera-136-windows` and `-macos` (Opera 136 is built on Chromium 152, whose
 capture it replays), `safari-27-ios` (a real iOS 27.0 Safari User-Agent on the
-Safari 26 capture) and `safari-27-macos`. Their `source` block has kind
+Safari 26 capture) and `safari-27-macos`; and since 2026-10-10 `chrome-155-macos`
+and `-linux` (Chrome 155 was captured on Windows and its hello, frames and
+header order are 153's) and `chrome-156-windows`, `-macos` and `-linux` (Chrome
+156 went stable on 2026-10-07 while the stand had 155). Their `source` block has kind
 `derived` and names the published fact each rests on; like a transcription
 they report `measured: False` and raise `transcribed_profile`, and a live
 capture replaces each the day its browser is on the stand. A mark may also

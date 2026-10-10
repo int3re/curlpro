@@ -54,7 +54,7 @@ curlpro.register_profile({
 
 ## Что умеет
 
-- **302 профиля**: 42 сняты целиком (Chrome 118–153, Edge, Firefox 133–156, Safari, Tor, Яндекс.Браузер, okhttp 5.5), 14 сняты, кроме HTTP/2 SETTINGS, 238 транскрибированы из wreq-util и 8 выведены для версий, актуальных на 26.09.2026 (Chrome 154, Edge 154, Opera 136, Safari 27), — все помечены, и `list_profiles(measured=True)` даёт список снятых;
+- **309 профилей**: 44 сняты целиком (Chrome 118–153 и 155, Edge, Firefox 133–157, Safari, Tor, Яндекс.Браузер, okhttp 5.5), 14 сняты, кроме HTTP/2 SETTINGS, 238 транскрибированы из wreq-util и 13 выведены для версий, ещё не побывавших на стенде (Chrome 154 и 156, Chrome 155 для macOS и Linux, Edge 154, Opera 136, Safari 27), — все помечены, и `list_profiles(measured=True)` даёт список снятых;
   мобильные — Chrome и Яндекс для Android, Safari для iOS.
 - **Все слои отпечатка сразу** — TLS, HTTP/2, HTTP/3, HTTP/1.1 и WebSocket
   (таблица ниже).
@@ -177,7 +177,7 @@ go build -tags nofoxio -buildmode=c-shared -o dist/libcurlpro.so ./lib
 pip install curlpro
 ```
 
-Ни Go, ни компилятора не нужно: нативная библиотека и все 302 профиля уже
+Ни Go, ни компилятора не нужно: нативная библиотека и все 309 профилей уже
 внутри колеса. Готовые колёса собраны для пяти платформ:
 
 | Платформа | Колесо |

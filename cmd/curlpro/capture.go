@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
@@ -115,6 +117,22 @@ profile from a single capture would pin a random permutation.
 	if *name == "" {
 		fs.Usage()
 		return fmt.Errorf("-name is required")
+	}
+
+	// The parent is judged before a browser is started, not after: a refusal
+	// at the end throws away a run of samples.
+	if *basedOn != "" {
+		reg := profile.NewRegistry()
+		if err := reg.LoadFS(os.DirFS(*out), "."); err != nil {
+			return err
+		}
+		base, err := reg.Resolve(*basedOn)
+		if err != nil {
+			return fmt.Errorf("parent: %w", err)
+		}
+		if err := measuredParent(reg, *basedOn, base); err != nil {
+			return err
+		}
 	}
 
 	bin, err := findEchoServer(*server)
@@ -283,6 +301,15 @@ func toDelta(p *profile.Profile, basedOn, dir string) (*profile.Profile, error) 
 	if err != nil {
 		return nil, fmt.Errorf("parent: %w", err)
 	}
+	// Provenance travels down a chain (profile.merge): a delta that names no
+	// source of its own keeps its ancestors' mark. A capture written on a
+	// derived or transcribed parent therefore came out as derived itself --
+	// Chrome 155, captured live on 2026-10-10 onto the derived chrome-154-windows,
+	// counted as not measured. A mark that covers only part of the profile is
+	// lifted by the capture that brings that part, and is let through.
+	if err := measuredParent(reg, basedOn, base); err != nil {
+		return nil, err
+	}
 	delta := &profile.Profile{
 		Name:    p.Name,
 		BasedOn: basedOn,
@@ -292,7 +319,104 @@ func toDelta(p *profile.Profile, basedOn, dir string) (*profile.Profile, error) 
 	if !reflect.DeepEqual(p.HTTP2, base.HTTP2) {
 		delta.HTTP2 = p.HTTP2
 	}
+	if agreesWith(p.Headers.Order, base.Headers.Order) {
+		// The parent's positions, this capture's values: a header's value can
+		// move with the version (sec-ch-ua names the major) while its place
+		// does not.
+		merged := withValues(base.Headers.Order, p.Headers.Order)
+		if reflect.DeepEqual(merged, base.Headers.Order) {
+			delta.Headers.Order = nil
+			fmt.Printf("header order: what was sent keeps %s's order and values; inherited\n", basedOn)
+		} else {
+			delta.Headers.Order = merged
+			fmt.Printf("header order: what was sent keeps %s's order; its positions, "+
+				"this capture's values\n", basedOn)
+		}
+	}
 	return delta, nil
+}
+
+// withValues is the parent's order with the values the capture saw for the
+// headers it saw.
+func withValues(parent, captured []profile.HeaderPair) []profile.HeaderPair {
+	seen := make(map[string]string, len(captured))
+	for _, h := range captured {
+		if !slotNames[strings.ToLower(h.Key)] {
+			seen[strings.ToLower(h.Key)] = h.Value
+		}
+	}
+	out := make([]profile.HeaderPair, len(parent))
+	copy(out, parent)
+	for i, h := range out {
+		if v, ok := seen[strings.ToLower(h.Key)]; ok {
+			out[i].Value = v
+		}
+	}
+	return out
+}
+
+// measuredParent refuses a parent whose mark the capture would inherit.
+func measuredParent(reg *profile.Registry, basedOn string, base *profile.Profile) error {
+	if base.Source != nil && len(base.Source.Covers) == 0 {
+		return fmt.Errorf("-based-on %s: it is %s, not captured, and a capture on it would "+
+			"inherit that mark; base it on a captured profile (%s)",
+			basedOn, base.Source.Kind, nearestMeasured(reg, basedOn))
+	}
+	return nil
+}
+
+// nearestMeasured walks a profile's based_on chain to the first ancestor that
+// is measured, for the message that refuses an unmeasured parent.
+func nearestMeasured(reg *profile.Registry, name string) string {
+	seen := map[string]bool{}
+	for name != "" && !seen[name] {
+		seen[name] = true
+		p, err := reg.Resolve(name)
+		if err != nil {
+			break
+		}
+		if p.Source == nil {
+			return "the nearest in its chain is " + name
+		}
+		name = p.BasedOn
+	}
+	return "none in its chain"
+}
+
+// slotNames are the headers withSlots places by rule rather than by sight: a
+// navigational GET on the stand sends none of them.
+var slotNames = map[string]bool{"cookie": true, "content-type": true, "content-length": true, "origin": true}
+
+// agreesWith says whether the headers the browser actually sent appear in the
+// parent's order, in the same relative order.
+//
+// The stand sees one navigation: no cookie, no referer, no conditional
+// request, no body. A parent's order is richer -- measured on a page that
+// primed cookies, followed redirects and revalidated (docs/STAGE17-RESULTS.md,
+// STAGE18) -- and a delta that wrote the stand's order over it put the
+// rule-placed slots where the rule said and dropped referer, if-modified-since
+// and if-none-match altogether. Firefox 157 came out of the stand with "a new
+// header order" that was exactly that: every header it sent was where 156
+// has it. When nothing the browser sent contradicts the parent, the parent's
+// order is the better measurement of both.
+func agreesWith(captured, parent []profile.HeaderPair) bool {
+	pos := make(map[string]int, len(parent))
+	for i, h := range parent {
+		pos[strings.ToLower(h.Key)] = i
+	}
+	last := -1
+	for _, h := range captured {
+		name := strings.ToLower(h.Key)
+		if slotNames[name] {
+			continue
+		}
+		at, ok := pos[name]
+		if !ok || at < last {
+			return false
+		}
+		last = at
+	}
+	return len(parent) > 0
 }
 
 // declined is a delta written with explicit empty sections where its parent
@@ -368,10 +492,11 @@ func collect(bin, addr, crt, key string, want int, name, browser string,
 			return nil, err
 		}
 		fmt.Printf("browser:  %s\n", launcher.path)
-		if launcher.family == "firefox" {
-			fmt.Printf("%s\n", firefoxCertWarning)
+		if launcher.family == "firefox" || launcher.family == "tor" {
+			fmt.Printf("trust:    the stand's certificate goes into each throwaway profile " +
+				"as an exception (cert_override.txt)\n")
 		}
-		go driveBrowser(launcher, url, want, dwell)
+		go driveBrowser(launcher, url, want, dwell, addr, crt)
 	}
 
 	var details []echoDetail
@@ -446,19 +571,35 @@ type launcher struct {
 	path   string
 }
 
-// firefoxCertWarning is printed instead of being worked around. Firefox has no
-// equivalent of --ignore-certificate-errors: an invalid certificate is refused
-// by an interstitial, and there is no preference that turns it off. The
-// ClientHello does reach the stand — the handshake completes before Firefox
-// judges the certificate — but no request follows, so the headers never arrive
-// and the profile would come out half-captured.
-const firefoxCertWarning = `
-warning:  Firefox refuses the stand's self-signed certificate with an
-          interstitial, and has no switch to ignore it. The TLS layer will be
-          captured, the headers will not. Click "Advanced" -> "Accept the Risk
-          and Continue" in the first window, or run with -manual and drive the
-          browser yourself.
-`
+// firefoxTrust writes the stand's certificate into a throwaway Firefox
+// profile as an exception, the record Firefox itself writes when "Accept the
+// Risk and Continue" is clicked.
+//
+// Firefox has no --ignore-certificate-errors: an invalid certificate gets an
+// interstitial, the ClientHello reaches the stand but no request follows, and
+// the profile used to come out with its TLS and without its headers unless
+// somebody clicked through every window. The exception is the line format
+// Firefox reads -- host:port, the SHA-256 OID, the fingerprint of the DER in
+// colon hex, the override bits (U: an untrusted issuer, which a self-signed
+// stand is) -- with the five fields it expects: a three-field line is
+// ignored, and the interstitial comes back.
+func firefoxTrust(dir, addr, crt string) error {
+	data, err := os.ReadFile(crt)
+	if err != nil {
+		return err
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return fmt.Errorf("%s holds no PEM certificate", crt)
+	}
+	sum := sha256.Sum256(block.Bytes)
+	hexes := make([]string, len(sum))
+	for i, b := range sum {
+		hexes[i] = fmt.Sprintf("%02X", b)
+	}
+	line := fmt.Sprintf("%s\tOID.2.16.840.1.101.3.4.2.1\t%s\tU\t\n", addr, strings.Join(hexes, ":"))
+	return os.WriteFile(filepath.Join(dir, "cert_override.txt"), []byte(line), 0o644)
+}
 
 // familyOf reads the browser family out of a profile name: chrome-152-windows
 // is Chrome, firefox-154-windows is Firefox. The name is the only statement of
@@ -580,11 +721,16 @@ func browserPaths(family string) []string {
 // for Testing on a CI runner, say — spends longer on its first run and misses
 // the request entirely. The measurement that found this collected 4 samples out
 // of 5 twice in a row.
-func driveBrowser(l launcher, url string, times int, dwell time.Duration) {
+func driveBrowser(l launcher, url string, times int, dwell time.Duration, addr, crt string) {
 	for i := 0; i < times+2; i++ { // with a margin: some visits go to the favicon
 		dir, err := os.MkdirTemp("", "curlpro-capture-")
 		if err != nil {
 			return
+		}
+		if l.family == "firefox" || l.family == "tor" {
+			if err := firefoxTrust(dir, addr, crt); err != nil {
+				fmt.Fprintf(os.Stderr, "the stand's certificate could not be trusted: %v\n", err)
+			}
 		}
 		cmd := exec.Command(l.path, browserArgs(l.family, dir, url)...)
 		if cmd.Start() == nil {

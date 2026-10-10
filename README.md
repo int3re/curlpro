@@ -56,7 +56,7 @@ curlpro.register_profile({
 
 ## Features
 
-- **302 profiles**: 42 captured whole (Chrome 118-153, Edge, Firefox 133-156, Safari, Tor, Yandex Browser, okhttp 5.5), 14 captured but for their HTTP/2 SETTINGS, 238 transcribed from wreq-util and 8 derived for the versions current on 2026-09-26 (Chrome 154, Edge 154, Opera 136, Safari 27) — each marked, and `list_profiles(measured=True)` is the captured list;
+- **309 profiles**: 44 captured whole (Chrome 118-153 and 155, Edge, Firefox 133-157, Safari, Tor, Yandex Browser, okhttp 5.5), 14 captured but for their HTTP/2 SETTINGS, 238 transcribed from wreq-util and 13 derived for the versions not yet on the stand (Chrome 154 and 156, Chrome 155 for macOS and Linux, Edge 154, Opera 136, Safari 27) — each marked, and `list_profiles(measured=True)` is the captured list;
   mobile — Chrome and Yandex for Android, Safari for iOS.
 - **Every fingerprint layer at once** — TLS, HTTP/2, HTTP/3, HTTP/1.1 and WebSocket
   (table below).
@@ -180,7 +180,7 @@ The wheels on PyPI are built without the tag, so JA4H is present there.
 pip install curlpro
 ```
 
-Neither Go nor a compiler is needed: the native library and all 302 profiles are
+Neither Go nor a compiler is needed: the native library and all 309 profiles are
 already inside the wheel. Wheels are built for five platforms:
 
 | Platform | Wheel |

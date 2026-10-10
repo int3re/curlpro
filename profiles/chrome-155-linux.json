@@ -1,15 +1,15 @@
 {
-  "name": "chrome-154-linux",
+  "name": "chrome-155-linux",
   "based_on": "chrome-153-linux",
   "source": {
     "kind": "derived",
     "from": "https://chromiumdash.appspot.com/releases?platform=Linux",
-    "date": "2026-09-26",
+    "date": "2026-10-10",
     "path": "scripts/derive-current.py",
-    "note": "Derived, not captured: Chrome 154 went stable on 2026-09-22 (chromiumdash, Stable: 154.0.8037.57/.58), and the Chrome on this project's stand is still 153. The ClientHello, HTTP/2 frames and header sets are chrome-153-linux's; the User-Agent and the brand list are 154's, the brands computed as Chromium computes them. Chrome 153 added a TLS extension 152 lacked, so a major can change the hello: replace with a capture when Chrome 154 is on the stand."
+    "note": "Derived, not captured: Chrome 155 was captured on Windows (155.0.8059.39, 2026-10-10) and its ClientHello, HTTP/2 frames and header order are Chrome 153's; this Linux twin stands on chrome-153-linux with 155's User-Agent and brands, computed as Chromium computes them. Replace with a capture from Linux."
   },
   "headers": {
-    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
     "order": [
       {
         "key": "cache-control",
@@ -21,7 +21,7 @@
       },
       {
         "key": "sec-ch-ua",
-        "value": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\""
+        "value": "\"Google Chrome\";v=\"155\", \"Chromium\";v=\"155\", \"Not(A:Brand\";v=\"24\""
       },
       {
         "key": "sec-ch-ua-mobile",
@@ -99,14 +99,14 @@
   },
   "client_hints": {
     "values": {
-      "sec-ch-ua-full-version": "\"154.0.8037.17\"",
+      "sec-ch-ua-full-version": "\"155.0.8059.12\"",
       "sec-ch-ua-arch": "\"x86\"",
       "sec-ch-ua-platform-version": "\"\"",
       "sec-ch-ua-model": "\"\"",
       "sec-ch-ua-bitness": "\"64\"",
       "sec-ch-ua-wow64": "?0",
       "sec-ch-ua-form-factors": "\"Desktop\"",
-      "sec-ch-ua-full-version-list": "\"Chromium\";v=\"154.0.8037.17\", \"Google Chrome\";v=\"154.0.8037.17\", \"Not A(Brand\";v=\"99.0.0.0\""
+      "sec-ch-ua-full-version-list": "\"Google Chrome\";v=\"155.0.8059.12\", \"Chromium\";v=\"155.0.8059.12\", \"Not(A:Brand\";v=\"24.0.0.0\""
     },
     "order": [
       {
@@ -323,104 +323,40 @@
   },
   "devices": [
     {
-      "name": "Linux, Chrome 154.0.8037.17",
-      "full_version": "154.0.8037.17",
+      "name": "Linux, Chrome 155.0.8059.12",
+      "full_version": "155.0.8059.12",
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.44",
-      "full_version": "154.0.8037.44",
+      "name": "Linux, Chrome 155.0.8059.26",
+      "full_version": "155.0.8059.26",
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.57",
-      "full_version": "154.0.8037.57",
+      "name": "Linux, Chrome 155.0.8059.27",
+      "full_version": "155.0.8059.27",
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.58",
-      "full_version": "154.0.8037.58",
+      "name": "Linux, Chrome 155.0.8059.39",
+      "full_version": "155.0.8059.39",
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop"
     },
     {
-      "name": "Linux, Chrome 154.0.8037.59",
-      "full_version": "154.0.8037.59",
-      "hint_arch": "x86",
-      "bitness": "64",
-      "wow64": "?0",
-      "form_factors": "Desktop"
-    },
-    {
-      "name": "Linux, Chrome 154.0.8037.92",
-      "full_version": "154.0.8037.92",
-      "hint_arch": "x86",
-      "bitness": "64",
-      "wow64": "?0",
-      "form_factors": "Desktop"
-    },
-    {
-      "name": "Linux, Chrome 154.0.8037.93",
-      "full_version": "154.0.8037.93",
-      "hint_arch": "x86",
-      "bitness": "64",
-      "wow64": "?0",
-      "form_factors": "Desktop"
-    },
-    {
-      "name": "Linux, Chrome 154.0.8037.94",
-      "full_version": "154.0.8037.94",
-      "hint_arch": "x86",
-      "bitness": "64",
-      "wow64": "?0",
-      "form_factors": "Desktop"
-    },
-    {
-      "name": "Linux, Chrome 154.0.8037.95",
-      "full_version": "154.0.8037.95",
-      "hint_arch": "x86",
-      "bitness": "64",
-      "wow64": "?0",
-      "form_factors": "Desktop"
-    },
-    {
-      "name": "Linux, Chrome 154.0.8037.97",
-      "full_version": "154.0.8037.97",
-      "hint_arch": "x86",
-      "bitness": "64",
-      "wow64": "?0",
-      "form_factors": "Desktop"
-    },
-    {
-      "name": "Linux, Chrome 154.0.8037.98",
-      "full_version": "154.0.8037.98",
-      "hint_arch": "x86",
-      "bitness": "64",
-      "wow64": "?0",
-      "form_factors": "Desktop"
-    },
-    {
-      "name": "Linux, Chrome 154.0.8037.99",
-      "full_version": "154.0.8037.99",
-      "hint_arch": "x86",
-      "bitness": "64",
-      "wow64": "?0",
-      "form_factors": "Desktop"
-    },
-    {
-      "name": "Linux, Chrome 154.0.8037.100",
-      "full_version": "154.0.8037.100",
+      "name": "Linux, Chrome 155.0.8059.40",
+      "full_version": "155.0.8059.40",
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
