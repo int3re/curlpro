@@ -29,7 +29,10 @@ Chrome 153 / Windows 10 (STAGE19) — the navigation order from the stand's
 second page, the fetch order from the Pixel 7 capture of Chrome 152, which the
 desktop capture matched wherever no custom header disturbed the cluster — and
 the default values of the capture machine, so that a session without a device
-chosen still answers a site the way that machine does.
+chosen still answers a site the way that machine does. Elsewhere the defaults
+are the first release of the pool on the newest build of the version: Chrome
+updates itself, so the build a version's users run is mostly its last one, and
+the first build named a browser nobody had kept.
 
 Without ``device=`` a session sends the defaults, a real machine; with
 ``device="random"`` it draws one identity from the pool for its lifetime, as
@@ -143,11 +146,14 @@ def desktop_devices(os_: str, major: str, s: dict) -> list[dict]:
 
 def desktop_values(os_: str, major: str, brands: str, s: dict) -> dict:
     """The hints a session sends without a device: the capture machine's on
-    chrome-153-windows, the pool's first identity elsewhere."""
+    chrome-153-windows, elsewhere the pool's first release on the version's
+    newest build (until 2026-10-10 its first build, 155.0.8059.12 on the
+    default profile while Chrome 155 was at .39)."""
     if os_ == "windows" and major == "153":
         v = dict(MACHINE)
     else:
-        d = desktop_devices(os_, major, s)[0]
+        newest = s["chrome_builds"][major][-1]
+        d = next(d for d in desktop_devices(os_, major, s) if d["full_version"] == newest)
         v = {"sec-ch-ua-full-version": f'"{d["full_version"]}"', "sec-ch-ua-arch": f'"{d["hint_arch"]}"',
              "sec-ch-ua-platform-version": f'"{d.get("platform_version", "")}"', "sec-ch-ua-model": '""',
              "sec-ch-ua-bitness": '"64"', "sec-ch-ua-wow64": d["wow64"], "sec-ch-ua-form-factors": '"Desktop"'}

@@ -882,8 +882,8 @@ a device the profile goes out as captured, reduced string included. Your own
 list goes in `devices=[{"name": ..., "model": ..., "platform_version": ...}]`.
 A name not in the list is refused.
 
-**Desktop identities.** Since 0.11 the Chromium desktops of 151–153
-(`chrome-151…153-windows/macos/linux`) carry what varies between real users of
+**Desktop identities.** Since 0.11 the Chromium desktops of 151–153, and of
+154–156 since they came (`chrome-151…156-windows/macos/linux`), carry what varies between real users of
 one browser version besides the phone: on Windows the release —
 `sec-ch-ua-platform-version` is the UniversalApiContract version, `10.0.0` on
 Windows 10 22H2, `14.0.0`/`15.0.0`/`19.0.0` on Windows 11 22H2/23H2/24H2 — the
@@ -903,7 +903,9 @@ Safari 26 froze the OS token at `18_7` and writes the real version only in
 the session, as on Android, and `fingerprint().device` names it; without
 `device=` the profile sends the capture machine's values (Windows 10 22H2,
 build 153.0.8010.52, a 32-bit Chrome, on `chrome-153-windows`), elsewhere the
-pool's first identity, and on Safari and Firefox the captured string. The TLS
+pool's first release on the newest build of the version (after 0.16.0; through
+it, the first build — Chrome updates itself, so few users stay on that), and on
+Safari and Firefox the captured string. The TLS
 never moves. The seed is `scripts/identities.json`, every list with its source;
 `scripts/gen-identities.py` writes the profiles and `--check` fails CI on
 drift. `edge-153-windows` has no pool: Edge writes its own build next to

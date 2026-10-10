@@ -80,14 +80,14 @@
   },
   "client_hints": {
     "values": {
-      "sec-ch-ua-full-version": "\"152.0.7977.42\"",
+      "sec-ch-ua-full-version": "\"152.0.7977.85\"",
       "sec-ch-ua-arch": "\"arm\"",
       "sec-ch-ua-platform-version": "\"15.6.1\"",
       "sec-ch-ua-model": "\"\"",
       "sec-ch-ua-bitness": "\"64\"",
       "sec-ch-ua-wow64": "?0",
       "sec-ch-ua-form-factors": "\"Desktop\"",
-      "sec-ch-ua-full-version-list": "\"Chromium\";v=\"152.0.7977.42\", \"Not?A_Brand\";v=\"24.0.0.0\", \"Google Chrome\";v=\"152.0.7977.42\""
+      "sec-ch-ua-full-version-list": "\"Chromium\";v=\"152.0.7977.85\", \"Not?A_Brand\";v=\"24.0.0.0\", \"Google Chrome\";v=\"152.0.7977.85\""
     },
     "order": [
       {
