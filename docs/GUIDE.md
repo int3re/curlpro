@@ -1251,6 +1251,19 @@ Facts that are easy to doubt and are true:
   profile replays it as raw bytes (`allow_blunt_mimicry`). JA4 is unchanged
   from 152 (the extension set is the same as far as JA4 counts), JA3N moves.
   Captured live on 2026-09-22, five samples, HTTP/2 identical to 152.
+- Two things a replayed Chrome capture got wrong, found on 2026-10-14 by
+  reading Chrome 155.0.8059.40 off a bare socket against `chrome-155-windows`.
+  The trust_anchors list (`0xca34`): Chrome's root store has 28 identifiers
+  from 153 where 152 had 32, and Chromium never permutes them — the compiled-in
+  order up to 153, sorted bytewise from 154 (942bda4) — while every profile
+  from 153 inherited 152's 32 and drew a new order per connection, 206 bytes
+  where Chrome sends 186. And GREASE ECH: BoringSSL draws its payload from four
+  lengths on every connection (the extension is 186, 218, 250 or 282 bytes), but
+  a capture replayed from raw bytes kept the one length it caught, so
+  `chrome-151` and every later Chrome, Chrome 152 for Android, Edge 153/154 and
+  Opera 136 sent one length on every connection. Both are fixed; the default
+  profile now matches Chrome 155 field for field, the random parts drawn from
+  the same sets. Firefox keeps its captured ECH length: NSS pads to a fixed size.
 - Firefox 156 dropped the two FFDHE groups (ffdhe2048, ffdhe3072) from
   `supported_groups`: five groups instead of seven, a hello four bytes shorter,
   the same JA4 (which hashes no groups) and a different JA3N. Captured live on

@@ -845,6 +845,17 @@ func buildProfile(name string, details []echoDetail) (*profile.Profile, error) {
 		}
 		fmt.Printf("  the ClientHello has an extension unknown to uTLS: allow_blunt_mimicry enabled\n")
 	}
+	// The browser's own trust_anchors list, in its order. Without it the delta
+	// inherits its parent's, which replaces the captured bytes: Chrome 153 and
+	// 155, captured with 28 identifiers, went out with Chrome 152's 32.
+	ids, err := profile.TrustAnchorsFromRaw(p.TLS.RawClientHello)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) > 0 {
+		p.TLS.TrustAnchors = ids
+		fmt.Printf("  trust_anchors: %d identifiers, in the order sent\n", len(ids))
+	}
 
 	frames := first.Metadata.HTTP2Frames
 	for _, s := range frames.Settings {

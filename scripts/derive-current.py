@@ -46,6 +46,7 @@ and ``python scripts/gen-safari-fetch.py``.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -154,6 +155,42 @@ def resolved_order(name: str) -> list[dict]:
     raise SystemExit(f"no header order in the chain of {name}")
 
 
+def resolved_trust_anchors(name: str) -> list[str] | None:
+    while name:
+        d = load(name)
+        ids = (d.get("tls") or {}).get("trust_anchors")
+        if ids:
+            return list(ids)
+        name = d.get("based_on")
+    return None
+
+
+def relative_oid(s: str) -> bytes:
+    out = bytearray()
+    for arc in (int(a) for a in s.split(".")):
+        chunk = [arc & 0x7F]
+        arc >>= 7
+        while arc:
+            chunk.append(0x80 | (arc & 0x7F))
+            arc >>= 7
+        out += bytes(reversed(chunk))
+    return bytes(out)
+
+
+def chrome_major(name: str) -> int | None:
+    m = re.match(r"chrome-(\d+)-", name)
+    return int(m.group(1)) if m else None
+
+
+# From 154 Chromium sorts the trust_anchors list bytewise before encoding it
+# (942bda4, "Sort TAI list", first in 154.0.8031.0); up to 153 it went out in
+# the compiled-in root store's order. A Chrome 154+ derived on a 153 capture
+# therefore carries the capture's list sorted — Chrome 155's capture shows
+# exactly that order.
+TAI_SORTED_NOTE = (" The trust_anchors list goes out sorted bytewise, as Chromium sends it from 154 "
+                   "(942bda4); the set is the capture's, Chrome's root store being unchanged since 153.")
+
+
 def main() -> int:
     check = "--check" in sys.argv
     drift = False
@@ -173,6 +210,13 @@ def main() -> int:
                        "note": note},
             "headers": {"user_agent": ua, "order": order},
         }
+        major, base_major = chrome_major(name), chrome_major(base)
+        if major and base_major and major >= 154 > base_major:
+            ids = resolved_trust_anchors(base)
+            if ids:
+                want["tls"] = {"trust_anchors": sorted(ids, key=relative_oid)}
+                want["source"]["note"] += TAI_SORTED_NOTE
+                want = {k: want[k] for k in ("name", "based_on", "source", "tls", "headers")}
         path = PROFILES / f"{name}.json"
         if path.exists():
             have = load(name)

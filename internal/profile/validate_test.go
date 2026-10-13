@@ -1,7 +1,7 @@
 package profile
 
 import (
-	"sort"
+	"bytes"
 	"strings"
 	"testing"
 
@@ -134,16 +134,14 @@ func TestNonGreaseSignatureAlgorithmsUntouched(t *testing.T) {
 	}
 }
 
-// Chrome 152 shuffles the trust_anchors order on every handshake: measuring
-// three runs gave the same set of 32 entries in different orders. A constant
-// permutation would set us apart from a browser on any sample of a few
-// connections.
-func TestTrustAnchorsOrderIsShuffled(t *testing.T) {
-	ids := []string{"11129.9.1", "11129.9.2", "11129.9.3", "44947.2.1",
-		"44947.2.2", "52580.200109.1.1", "52580.200109.1.2", "11129.9.4"}
-	seen := map[string]int{}
-	var first []string
-	for i := 0; i < 64; i++ {
+// Chrome never permutes its trust_anchors list: it went out in the root store's
+// order up to 153 and sorted bytewise from 154. A list drawn anew per
+// connection set the client apart on any two of them, so the extension carries
+// the profile's order, the same on every build.
+func TestTrustAnchorsKeepTheProfileOrder(t *testing.T) {
+	ids := []string{"44947.2.1", "52580.200109.1.7", "11129.9.1", "11129.9.15", "44947.2.20"}
+	var first []byte
+	for i := 0; i < 16; i++ {
 		ext, err := buildTrustAnchors(ids)
 		if err != nil {
 			t.Fatal(err)
@@ -152,31 +150,18 @@ func TestTrustAnchorsOrderIsShuffled(t *testing.T) {
 		if !ok || g.Id != TrustAnchorsID {
 			t.Fatalf("got %T with number %v", ext, ok)
 		}
-		got := parseTrustAnchors(g.Data)
-		if len(got) != len(ids) {
-			t.Fatalf("%d entries, expected %d", len(got), len(ids))
-		}
 		if first == nil {
-			first = got
+			first = g.Data
+		} else if !bytes.Equal(g.Data, first) {
+			t.Fatalf("build %d changed the bytes: the order must not move", i)
 		}
-		seen[strings.Join(got, ",")]++
 	}
-	if len(seen) < 5 {
-		t.Errorf("64 builds produced %d orders — looks like a constant one", len(seen))
-	}
-	// The set must be preserved: shuffling changes only the order.
-	sorted := append([]string(nil), first...)
-	sort.Strings(sorted)
-	want := append([]string(nil), ids...)
-	sort.Strings(want)
-	for i := range want {
-		if sorted[i] != want[i] {
-			t.Fatalf("the set changed: %v against %v", sorted, want)
-		}
+	if got := parseTrustAnchors(first); strings.Join(got, ",") != strings.Join(ids, ",") {
+		t.Fatalf("got %v, expected %v in that order", got, ids)
 	}
 }
 
-// Encoding a relative OID must survive the round trip to bytes and back.
+// Encoding a relative OID must survive the round trip to bytes and back, in order.
 func TestTrustAnchorsRoundTrip(t *testing.T) {
 	ids := []string{"11129.9.13", "52580.200109.1.11", "44947.2.15"}
 	ext, err := buildTrustAnchors(ids)
@@ -184,13 +169,8 @@ func TestTrustAnchorsRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := parseTrustAnchors(ext.(*utls.GenericExtension).Data)
-	sort.Strings(got)
-	want := append([]string(nil), ids...)
-	sort.Strings(want)
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("got %v, expected %v", got, want)
-		}
+	if strings.Join(got, ",") != strings.Join(ids, ",") {
+		t.Fatalf("got %v, expected %v", got, ids)
 	}
 }
 

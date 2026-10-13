@@ -32,6 +32,9 @@ func BuildSpec(p *Profile) (*utls.ClientHelloSpec, error) {
 	switch {
 	case p.TLS.RawClientHello != "":
 		spec, err = specFromRaw(p.TLS.RawClientHello, p.TLS.BluntMimicry())
+		if err == nil && Chromium(p.Family()) {
+			boringECHGrease(spec)
+		}
 	case len(p.TLS.Extensions) > 0:
 		spec, err = specFromDeclared(&p.TLS)
 	case len(p.TLS.ClientHelloSpec) > 0:
@@ -52,6 +55,26 @@ func BuildSpec(p *Profile) (*utls.ClientHelloSpec, error) {
 		spec.Extensions = utls.ShuffleChromeTLSExtensions(spec.Extensions)
 	}
 	return spec, nil
+}
+
+// boringECHPayloadLens are the GREASE ECH payload lengths, before the AEAD tag,
+// that BoringSSL draws from on every connection: 32 * random(4..7)
+// (setup_ech_grease in ssl/encrypted_client_hello.cc), so a Chromium browser's
+// extension is 186, 218, 250 or 282 bytes, a new pick each time.
+var boringECHPayloadLens = []uint16{128, 160, 192, 224}
+
+// boringECHGrease gives a parsed Chromium capture its GREASE ECH lengths back.
+//
+// Parsing keeps only the length the capture happened to draw, and a replay then
+// sent it on every connection: Chrome 155.0.8059.40 sent all four lengths over
+// twelve connections, chrome-155-windows one (2026-10-14). NSS pads its inner
+// hello to a fixed size instead, so a Firefox capture keeps its own length.
+func boringECHGrease(spec *utls.ClientHelloSpec) {
+	for _, e := range spec.Extensions {
+		if g, ok := e.(*utls.GREASEEncryptedClientHelloExtension); ok {
+			g.CandidatePayloadLens = append([]uint16(nil), boringECHPayloadLens...)
+		}
+	}
 }
 
 func specFromRaw(b64 string, blunt bool) (*utls.ClientHelloSpec, error) {

@@ -1,10 +1,9 @@
 package profile
 
 import (
-	"crypto/rand"
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
-	"math/big"
 	"strconv"
 	"strings"
 
@@ -17,11 +16,17 @@ import (
 // pick a matching chain and skip sending unnecessary intermediates.
 // It does not affect certificate validation — only the choice of chain.
 //
-// What matters for the fingerprint is that **Chrome shuffles the identifiers**:
-// measuring Chrome 152 across three runs produced the same set of 32 entries
-// in different orders. A profile replaying captured bytes verbatim would send
-// the same permutation every time, which would tell us apart from the browser
-// on any sample of a few connections.
+// The order is the browser's and it does not move. Chromium never permutes the
+// list: up to 153 it went out in the order of the compiled-in root store
+// (kChromeRootCertList), and from 154 it is sorted bytewise before it is encoded
+// (942bda4, "Sort TAI list", first in 154.0.8031.0). Chrome 155.0.8059.40 sent
+// one order over twenty connections and four launches (2026-10-14). Until then
+// this library drew a new order per connection, after a Chrome 152 note of three
+// runs in three orders that the source does not bear out — which on its own set
+// the client apart from the browser on any two connections.
+//
+// The set follows Chrome's root store: 32 identifiers in 151 and 152, 28 from
+// 153. A profile therefore names its own list, in the order its capture shows.
 
 // TrustAnchorsID is the extension number (IETF draft, temporary codepoint).
 const TrustAnchorsID = 51764
@@ -33,10 +38,8 @@ func BuildTrustAnchors(ids []string) (utls.TLSExtension, error) {
 	return buildTrustAnchors(ids)
 }
 
-// buildTrustAnchors assembles the extension from a list of relative OIDs.
-//
-// The order is drawn anew on every spec build, and a spec is built for every
-// connection — exactly as the browser does it.
+// buildTrustAnchors assembles the extension from a list of relative OIDs, in
+// the order given: the profile's list is the browser's order.
 func buildTrustAnchors(ids []string) (utls.TLSExtension, error) {
 	encoded := make([][]byte, 0, len(ids))
 	for _, id := range ids {
@@ -46,7 +49,6 @@ func buildTrustAnchors(ids []string) (utls.TLSExtension, error) {
 		}
 		encoded = append(encoded, raw)
 	}
-	shuffle(encoded)
 
 	var body []byte
 	for _, raw := range encoded {
@@ -93,25 +95,32 @@ func encodeBase128(n uint64) []byte {
 	return buf
 }
 
-// shuffle permutes the list in place.
+// TrustAnchorsFromRaw reads the trust_anchors list out of a captured
+// ClientHello (base64, as in tls.raw_client_hello), in the order sent, or nil
+// when the hello has none.
 //
-// The randomness is cryptographic: the shuffle is part of the fingerprint, and
-// a predictable sequence here is just as bad as a constant one.
-func shuffle(items [][]byte) {
-	for i := len(items) - 1; i > 0; i-- {
-		n, err := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
-		if err != nil {
-			return // without randomness leave it as is: better than a panic
-		}
-		j := n.Int64()
-		items[i], items[j] = items[j], items[i]
+// A capture must write it into its profile: a delta without its own list
+// inherits the parent's, and the inherited list replaces the captured bytes —
+// that is how Chrome 153 and 155 went out with Chrome 152's 32 identifiers
+// where they send 28.
+func TrustAnchorsFromRaw(b64 string) ([]string, error) {
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, fmt.Errorf("raw_client_hello: invalid base64: %w", err)
 	}
+	spec, err := (&utls.Fingerprinter{AllowBluntMimicry: true}).RawClientHello(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parsing the captured ClientHello: %w", err)
+	}
+	for _, e := range spec.Extensions {
+		if g, ok := e.(*utls.GenericExtension); ok && g.Id == TrustAnchorsID {
+			return parseTrustAnchors(g.Data), nil
+		}
+	}
+	return nil, nil
 }
 
 // parseTrustAnchors reads the list out of the extension payload.
-//
-// The capture path needs it: a ClientHello taken from a browser holds bytes,
-// while the profile must receive a list, which is then shuffled on its own.
 func parseTrustAnchors(data []byte) []string {
 	if len(data) < 2 {
 		return nil

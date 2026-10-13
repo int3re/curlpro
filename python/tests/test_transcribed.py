@@ -59,9 +59,14 @@ def test_every_transcribed_profile_is_a_delta_with_a_note():
         # The one TLS a transcription may carry: Firefox 151 to 153 without 0xc009,
         # which Firefox itself turned off in 151 while wreq-util declares 150's
         # list (test_firefox_defaults.py). Everything else of the hello is captured.
-        if "tls" in d:
+        # And a derived Chrome 154+ on a 153 capture: the capture's trust_anchors
+        # list sorted bytewise, as Chromium sends it from 154.
+        if "tls" in d and p.name.startswith("firefox-"):
             assert re.fullmatch(r"firefox-15[123]-\w+\.json", p.name) and set(d["tls"]) == {"cipher_suites"}, p.name
             assert 0xC009 not in d["tls"]["cipher_suites"] and "FIREFOX_151_0_RELEASE" in d["source"]["note"], p.name
+        elif "tls" in d:
+            assert d["source"]["kind"] == "derived" and set(d["tls"]) == {"trust_anchors"}, p.name
+            assert int(p.name.split("-")[1]) >= 154 and "sorted bytewise" in d["source"]["note"], p.name
     assert seen > 200
 
 

@@ -473,14 +473,20 @@ relative OIDs:
 }
 ```
 
-The order in the file does not matter: it is **drawn afresh on every
-connection**, because that is what the browser does. A measurement of Chrome 152
-over three runs gave the same set of 32 entries in three different orders; a
-constant permutation would tell the client from the browser on any sample of
-several connections.
+The order in the file is the order sent, on every connection. Chromium never
+permutes the list: up to 153 it went out in the order of the compiled-in root
+store, and from 154 it is sorted bytewise before encoding (942bda4, "Sort TAI
+list"). Chrome 155.0.8059.40 sent one order over twenty connections and four
+launches (2026-10-14). Until then the library drew a new order per connection,
+after a note on Chrome 152 that the source does not bear out.
 
-The list changes together with Chrome's root store — roughly every two weeks —
-and is updated by editing data, without a rebuild.
+The set follows Chrome's root store: 32 identifiers in 151 and 152, 28 from 153.
+A capture writes its own list, in the order it shows (`curlpro capture` does,
+since 2026-10-14): a delta without one inherits its parent's, and the inherited
+list replaces the captured bytes — which is how Chrome 153 and 155 went out with
+152's 32. A derived Chrome 154+ standing on a 153 capture carries that list
+sorted (`scripts/derive-current.py`). The list is updated by editing data,
+without a rebuild.
 
 ## What must break the loading of a profile
 
@@ -489,7 +495,7 @@ A profile has to be rejected rather than quietly degraded:
 - `pre_shared_key` among the extensions → an error: the capture was made on a
   resumed session, whereas a browser has `padding` in that place
 - `trust_anchors` in the extension list → an error: the list is set by the
-  `tls.trust_anchors` field, because its order is drawn per connection
+  `tls.trust_anchors` field, which the TCP and the QUIC hello both read
 - a cycle in `based_on`
 - a `settings_order` that does not cover every key in `settings`
 - a profile that declares `http3` but does not declare `alpn` with `h3`
