@@ -38,6 +38,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 PROFILES = REPO / "profiles"
 SOURCE = "github.com/0x676e67/wreq-util"
+# What Firefox itself says it sends, read from its source at each release tag
+# (2026-10-14), against wreq-util's claim that 136 to 151 equal 135.
+FIREFOX_KNOWN = ("wreq-util declares Firefox 136 to 151 equal to 135. Firefox's own release defaults "
+                 "(StaticPrefList.yaml and nsNSSIOLayer.cpp at each FIREFOX_N_0_RELEASE tag) agree up to 150: "
+                 "0xc009 went off in 151, 0xc00a in 154, and the FFDHE groups left supported_groups in 156 — "
+                 "what the Firefox 155 to 157 captured here show.")
 
 # ---------------------------------------------------------------------------
 # Parsing wreq-util's Rust
@@ -323,7 +329,8 @@ def header_order(base: str, ua_key: str, values: dict[str, str]) -> list[dict]:
 
 
 def write_profile(name: str, base: str, fam: str, ver: str, os_: str, ua: str, sec_ch_ua: str | None,
-                  accept_language: str, http2_override: dict | None, note: str, sha: str, today: str) -> None:
+                  accept_language: str, http2_override: dict | None, note: str, sha: str, today: str,
+                  tls_override: dict | None = None) -> None:
     values = {"accept-language": accept_language}
     if sec_ch_ua:
         values["sec-ch-ua"] = sec_ch_ua
@@ -340,6 +347,7 @@ def write_profile(name: str, base: str, fam: str, ver: str, os_: str, ua: str, s
             "date": today,
             "note": note,
         },
+        **({"tls": tls_override} if tls_override else {}),
         "headers": {"user_agent": ua, "order": header_order(base, "user-agent", values)},
     }
     if http2_override:
@@ -437,14 +445,24 @@ def plan(data: dict, sha: str) -> tuple[list[dict], list[tuple[str, str]]]:
                 if ofam == "opera":
                     note += (" wreq-util gives every Opera version one tuple — the ALPS codepoint of Chromium 131 — "
                              "although the User-Agent names Chromium up to 147; taken as claimed.")
+                tls = None
                 if ofam == "firefox" and vkey(ver) >= (136,):
-                    note += (" wreq-util declares Firefox 136 to 151 equal to 135; the Firefox 155 and 156 captured "
-                             "here differ (15 ciphers, no FFDHE groups), so where the change happened is unknown.")
+                    note += " " + FIREFOX_KNOWN
+                    if vkey(ver) >= (154,):
+                        skipped.append((name, "Firefox 154 dropped 0xc00a and 156 the FFDHE groups, which no wreq-util "
+                                              "tuple says; the captured 155 to 157 stand for them"))
+                        continue
+                    if vkey(ver) >= (151,):
+                        tls = {"cipher_suites": [c for c in resolved(base, "tls")["cipher_suites"] if c != 0xC009]}
+                        note += (" So the captured list goes out without 0xc009 here (security.ssl3."
+                                 f"ecdhe_ecdsa_aes_128_sha is false from FIREFOX_151_0_RELEASE): {len(tls['cipher_suites'])} "
+                                 "ciphers; the ECH GREASE length and everything else stay the capture's.")
                 if ofam == "safari" and vkey(ver) >= (26, 1) and variant == "":
                     note += (" wreq-util declares Safari 26.1 to 26.4 equal to 18.5 — without the X25519MLKEM768 "
                              "key share that the captured 26.0 and 26.0.1 carry; taken as claimed.")
                 jobs.append({"name": name, "base": base, "fam": ofam, "ver": ver, "os": os_, "ua": ua, "sec": sec,
-                             "lang": lang, "http2": http2, "note": note, "sha": sha, "today": today, "tuple": tup})
+                             "lang": lang, "http2": http2, "tls": tls, "note": note, "sha": sha, "today": today,
+                             "tuple": tup})
     return jobs, skipped
 
 
@@ -464,7 +482,7 @@ def main() -> None:
     if args.write:
         for j in jobs:
             write_profile(j["name"], j["base"], j["fam"], j["ver"], j["os"], j["ua"], j["sec"], j["lang"],
-                          j["http2"], j["note"], j["sha"], j["today"])
+                          j["http2"], j["note"], j["sha"], j["today"], j["tls"])
         print(f"\nwritten: {len(jobs)}")
 
 

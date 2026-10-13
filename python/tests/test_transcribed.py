@@ -1,6 +1,7 @@
 """Transcribed profiles: another project's description of a browser, taken
 on trust and marked as such at every level a caller can see."""
 import json
+import re
 from pathlib import Path
 
 import curlpro
@@ -51,10 +52,16 @@ def test_every_transcribed_profile_is_a_delta_with_a_note():
         # devices and client_hints are what gen-identities.py adds on top (an
         # empty pool, on a delta of a pooled profile); fetch is the derived
         # Safari set gen-safari-fetch.py writes from the delta's own navigation order.
-        assert set(d) <= {"name", "based_on", "source", "headers", "http2", "devices", "device_kind", "client_hints", "fetch"}, \
-            f"{p.name}: a transcribed delta carries {set(d)}"
+        assert set(d) <= {"name", "based_on", "source", "headers", "http2", "devices", "device_kind", "client_hints",
+                          "fetch", "tls"}, f"{p.name}: a transcribed delta carries {set(d)}"
         if "fetch" in d:
             assert p.name.startswith("safari-") and d["fetch"]["derived"] is True, p.name
+        # The one TLS a transcription may carry: Firefox 151 to 153 without 0xc009,
+        # which Firefox itself turned off in 151 while wreq-util declares 150's
+        # list (test_firefox_defaults.py). Everything else of the hello is captured.
+        if "tls" in d:
+            assert re.fullmatch(r"firefox-15[123]-\w+\.json", p.name) and set(d["tls"]) == {"cipher_suites"}, p.name
+            assert 0xC009 not in d["tls"]["cipher_suites"] and "FIREFOX_151_0_RELEASE" in d["source"]["note"], p.name
     assert seen > 200
 
 

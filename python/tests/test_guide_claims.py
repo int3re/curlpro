@@ -95,8 +95,8 @@ def test_the_number_of_distinct_ja4_values():
             assert root(n) in pre_kyber, f"{n} showed the padding variant {ja4}"
             ja4 = flip[ja4]
         groups.setdefault(ja4, []).append(n)
-    assert len(groups) == 17, "\n".join(f"{k}: {v}" for k, v in sorted(groups.items()))
-    assert "17 distinct JA4" in TEXT and "17 distinct JA4" in LLMS
+    assert len(groups) == 18, "\n".join(f"{k}: {v}" for k, v in sorted(groups.items()))
+    assert "18 distinct JA4" in TEXT and "18 distinct JA4" in LLMS
 
 
 def test_which_profiles_have_http3_and_fetch_sets():

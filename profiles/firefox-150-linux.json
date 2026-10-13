@@ -7,7 +7,7 @@
     "ref": "e3922a2b2d976487cb4cf4e7b0ac290b3ce77f66",
     "path": "src/emulate/profile/firefox.rs",
     "date": "2026-09-22",
-    "note": "ClientHello, HTTP/2 frames and header sets are those captured for firefox-144-macos; wreq-util declares firefox 150 to use the same TLS and HTTP/2 configuration (ff150: tls_options!('4', 'CIPHER_LIST_1', 'CURVES_2', 'KEY_SHARES_2'), http2_options!(1)). The User-Agent is wreq-util's; accept-language is wreq-util's. Nothing was seen on the wire for this version here. wreq-util declares Firefox 136 to 151 equal to 135; the Firefox 155 and 156 captured here differ (15 ciphers, no FFDHE groups), so where the change happened is unknown."
+    "note": "ClientHello, HTTP/2 frames and header sets are those captured for firefox-144-macos; wreq-util declares firefox 150 to use the same TLS and HTTP/2 configuration (ff150: tls_options!('4', 'CIPHER_LIST_1', 'CURVES_2', 'KEY_SHARES_2'), http2_options!(1)). The User-Agent is wreq-util's; accept-language is wreq-util's. Nothing was seen on the wire for this version here. wreq-util declares Firefox 136 to 151 equal to 135. Firefox's own release defaults (StaticPrefList.yaml and nsNSSIOLayer.cpp at each FIREFOX_N_0_RELEASE tag) agree up to 150: 0xc009 went off in 151, 0xc00a in 154, and the FFDHE groups left supported_groups in 156 — what the Firefox 155 to 157 captured here show."
   },
   "headers": {
     "user_agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:150.0) Gecko/20100101 Firefox/150.0",

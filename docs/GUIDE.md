@@ -780,9 +780,10 @@ version, and the profile says so. 238 are transcribed from `0x676e67/wreq-util`
 (108 Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera), and 13 are derived here
 for the versions current on 2026-09-26 and 2026-10-10 that were not on the stand — see the
 next paragraphs, and prefer `list_profiles(measured=True)` when drawing a
-profile at random. Many share a TLS fingerprint: all of them together form 17
-distinct JA4 values, because a transcribed or derived profile always replays a
-captured hello, so the count does not grow. A browser family keeps its ClientHello across several versions
+profile at random. Many share a TLS fingerprint: all of them together form 18
+distinct JA4 values, because a transcribed or derived profile replays a
+captured hello, so the count barely grows — the one exception is Firefox 151,
+whose cipher list is corrected from Firefox's own source (below). A browser family keeps its ClientHello across several versions
 and differs in the User-Agent and headers. One group — Chrome 119 to 131 and
 Edge 119/120, the last Chromium hellos before the post-quantum key share —
 shows a second JA4 spelling on some connections (`…1517…` beside `…1516…`):
@@ -1255,6 +1256,19 @@ Facts that are easy to doubt and are true:
   the same JA4 (which hashes no groups) and a different JA3N. Captured live on
   2026-09-21, five samples; everything else — HTTP/2 settings, header sets —
   matched Firefox 155 and is inherited from it.
+- Firefox offers fewer ciphers since 151, by its own defaults (StaticPrefList.yaml
+  at each `FIREFOX_N_0_RELEASE` tag): `0xc009` (ECDHE-ECDSA-AES128-SHA) went off
+  in 151, `0xc00a` (ECDHE-ECDSA-AES256-SHA) in 154. From 154 it offers Chrome's
+  fifteen ciphers, so JA4's sorted cipher hash is Chrome's (`8daaf6152771`)
+  while the order on the wire stays Gecko's — `0x1301, 0x1303, 0x1302` — and
+  the extension part of JA4 stays Firefox's (`3cbfd9057e0d` from 135 to 157).
+  That is not a hello no browser sends: Firefox 157.0.1 sent exactly it to a
+  bare socket, field for field with `firefox-157-windows`, record length
+  included (2026-10-14, after a report that took it for one). The same reading
+  found the real fault: the transcribed `firefox-151-*` carried 150's seventeen
+  ciphers, as wreq-util declares; they now send 151's sixteen and say so in
+  their `source` note. `tests/test_firefox_defaults.py` holds every desktop
+  Firefox profile to its release's defaults — ciphers and FFDHE groups.
 - postman-echo.com sits behind Cloudflare, which rewrites `Accept-Encoding` to
   `gzip, br` before the origin echoes it. Judge headers on a raw stand
   (`python/tests/rawserver.py`), not on a public echo.
