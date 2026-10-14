@@ -6,7 +6,23 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.17.0** — a minor, because what goes on the wire changed without anyone
+**0.17.1** — a patch, from one field report and the re-checks it set off; every
+change is to what a profile sends, each now matching the browser measured on a
+bare socket and the browser's own source at its release tags. The report took
+`firefox-155/156/157` — fifteen ciphers, Chrome's cipher hash in JA4, Gecko's
+order — for a hello no browser sends; Firefox itself turned 0xc009 off in 151
+and 0xc00a in 154, and Firefox 157.0.1 sent exactly that hello, field for field.
+The same reading found `firefox-151-*` with 150's seventeen ciphers; they send
+151's sixteen. In Chrome two things were wrong: the trust_anchors list, which
+Chrome's root store cut from 32 to 28 in 153 and Chromium never permutes
+(sorted bytewise from 154), went out as 152's 32 in a new order per connection
+from every profile since 153; and the GREASE ECH length, which BoringSSL draws
+from four per connection, stayed the one a capture caught on every replayed
+Chromium profile (151 and later, Android 152, Edge 153/154, Opera 136). Now
+`chrome-155-windows`, the default, matches Chrome 155.0.8059.40 field for field.
+`curlpro capture` writes a capture's own trust_anchors list. 18 distinct JA4.
+ABI 0.26.0, the native library rebuilt.
+Before it, **0.17.0** — a minor, because what goes on the wire changed without anyone
 asking: a session that names no profile is `chrome-155-windows`, captured live
 on 2026-10-10, where it was `chrome-151-windows`, and a desktop Chromium
 profile without `device=` answers `Accept-CH` with its version's newest build
