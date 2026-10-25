@@ -1,9 +1,11 @@
 package profile
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 
@@ -16,14 +18,16 @@ import (
 // pick a matching chain and skip sending unnecessary intermediates.
 // It does not affect certificate validation — only the choice of chain.
 //
-// The order is the browser's and it does not move. Chromium never permutes the
-// list: up to 153 it went out in the order of the compiled-in root store
-// (kChromeRootCertList), and from 154 it is sorted bytewise before it is encoded
-// (942bda4, "Sort TAI list", first in 154.0.8031.0). Chrome 155.0.8059.40 sent
-// one order over twenty connections and four launches (2026-10-14). Until then
-// this library drew a new order per connection, after a Chrome 152 note of three
-// runs in three orders that the source does not bear out — which on its own set
-// the client apart from the browser on any two connections.
+// The order never moves between the connections of one browser process. In
+// Chrome 152 and 153 the list sat in an absl::flat_hash_set
+// (net/ssl/ssl_config_service.h), so each process iterated it in an order of its
+// own — the three Chrome 152 runs that gave three orders — and every connection
+// of that process sent it; such a profile says trust_anchors_order:
+// "per_process", and a session draws its order once (ForSession). From 154 the
+// list is sorted bytewise before it is encoded (942bda4, "Sort TAI list", first
+// in 154.0.8031.0): Chrome 155.0.8059.40 sent one order over twenty connections
+// and four launches (2026-10-14). Until 0.17.1 this library drew a new order per
+// connection, which no Chrome ever did.
 //
 // The set follows Chrome's root store: 32 identifiers in 151 and 152, 28 from
 // 153. A profile therefore names its own list, in the order its capture shows.
@@ -118,6 +122,30 @@ func TrustAnchorsFromRaw(b64 string) ([]string, error) {
 		}
 	}
 	return nil, nil
+}
+
+// TrustAnchorsPerProcess is the trust_anchors_order of Chrome 152 and 153.
+const TrustAnchorsPerProcess = "per_process"
+
+// ForSession returns the profile a session sends: with a "per_process" list,
+// a copy whose order is drawn once, here, for every connection the session
+// makes. The browser drew it once per process; a session is that process.
+func (p *Profile) ForSession() *Profile {
+	if p.TLS.TrustAnchorsOrder != TrustAnchorsPerProcess || len(p.TLS.TrustAnchors) < 2 {
+		return p
+	}
+	clone := *p
+	ids := append([]string(nil), p.TLS.TrustAnchors...)
+	for i := len(ids) - 1; i > 0; i-- {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
+		if err != nil {
+			return p // without randomness, the listed order: better than a panic
+		}
+		j := n.Int64()
+		ids[i], ids[j] = ids[j], ids[i]
+	}
+	clone.TLS.TrustAnchors = ids
+	return &clone
 }
 
 // parseTrustAnchors reads the list out of the extension payload.

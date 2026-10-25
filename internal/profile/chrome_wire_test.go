@@ -2,6 +2,7 @@ package profile
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -34,8 +35,9 @@ func trustAnchorBytes(t *testing.T, spec *utls.ClientHelloSpec) []byte {
 }
 
 // The trust_anchors list follows Chrome's root store (32 identifiers in 151 and
-// 152, 28 from 153) and its order: the compiled-in order up to 153, sorted
-// bytewise from 154 (942bda4). The same bytes on every connection.
+// 152, 28 from 153) and its order: one per process up to 153 (a hash set),
+// sorted bytewise from 154 (942bda4). The same bytes on every connection of a
+// session.
 func TestChromeTrustAnchorsByVersion(t *testing.T) {
 	reg := repoRegistry(t)
 	cases := []struct {
@@ -79,8 +81,24 @@ func TestChromeTrustAnchorsByVersion(t *testing.T) {
 		isSorted := sort.SliceIsSorted(encoded, func(i, j int) bool { return bytes.Compare(encoded[i], encoded[j]) < 0 })
 		if isSorted != c.sorted {
 			t.Errorf("%s: sorted bytewise = %v, Chrome %s", c.name, isSorted,
-				map[bool]string{true: "sorts from 154", false: "sent the root store's order up to 153"}[c.sorted])
+				map[bool]string{true: "sorts from 154", false: "drew one per process up to 153"}[c.sorted])
 		}
+		// 152 and 153 drew one order per process, a session here; 154+ sorts.
+		if perProcess := p.TLS.TrustAnchorsOrder == TrustAnchorsPerProcess; perProcess != !c.sorted {
+			t.Errorf("%s: trust_anchors_order %q", c.name, p.TLS.TrustAnchorsOrder)
+		}
+		if !c.sorted {
+			orders := map[string]bool{}
+			for i := 0; i < 8; i++ {
+				orders[fmt.Sprint(p.ForSession().TLS.TrustAnchors)] = true
+			}
+			if len(orders) < 2 {
+				t.Errorf("%s: eight sessions drew one order; Chrome %s drew one per process", c.name, c.name[7:10])
+			}
+		} else if q := p.ForSession(); !equalStrings(q.TLS.TrustAnchors, p.TLS.TrustAnchors) {
+			t.Errorf("%s: a session moved a sorted list", c.name)
+		}
+		p = p.ForSession()
 		var first []byte
 		for i := 0; i < 8; i++ {
 			spec, err := BuildSpec(p)

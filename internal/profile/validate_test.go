@@ -134,8 +134,8 @@ func TestNonGreaseSignatureAlgorithmsUntouched(t *testing.T) {
 	}
 }
 
-// Chrome never permutes its trust_anchors list: it went out in the root store's
-// order up to 153 and sorted bytewise from 154. A list drawn anew per
+// Chrome never permutes its trust_anchors list between connections: one order
+// per process up to 153, sorted bytewise from 154. A list drawn anew per
 // connection set the client apart on any two of them, so the extension carries
 // the profile's order, the same on every build.
 func TestTrustAnchorsKeepTheProfileOrder(t *testing.T) {

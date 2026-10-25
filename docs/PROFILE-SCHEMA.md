@@ -473,12 +473,25 @@ relative OIDs:
 }
 ```
 
-The order in the file is the order sent, on every connection. Chromium never
-permutes the list: up to 153 it went out in the order of the compiled-in root
-store, and from 154 it is sorted bytewise before encoding (942bda4, "Sort TAI
-list"). Chrome 155.0.8059.40 sent one order over twenty connections and four
-launches (2026-10-14). Until then the library drew a new order per connection,
-after a note on Chrome 152 that the source does not bear out.
+The order in the file is the order sent, on every connection of a session.
+Chromium never moves it between the connections of one process. From 154 the
+list is sorted bytewise before encoding (942bda4, "Sort TAI list"): Chrome
+155.0.8059.40 sent one order over twenty connections and four launches
+(2026-10-14). In 152 and 153 it sat in an `absl::flat_hash_set`
+(`net/ssl/ssl_config_service.h`), whose iteration order is seeded per process —
+the three Chrome 152 runs that gave three orders. Such a profile says so, and
+each session draws one order for all its connections:
+
+```json
+"tls": {
+  "trust_anchors": ["…"],
+  "trust_anchors_order": "per_process"
+}
+```
+
+The mode belongs to the list: a delta that brings a list of its own resets it,
+so a sorted Chrome 155 on a Chrome 153 parent does not inherit the drawing. Until
+0.17.1 the library drew a new order per connection, which no Chrome did.
 
 The set follows Chrome's root store: 32 identifiers in 151 and 152, 28 from 153.
 A capture writes its own list, in the order it shows (`curlpro capture` does,

@@ -278,7 +278,12 @@ def chain_section(profile, section, field):
 # stack's places for the validators are older than both versions.
 PAIRS = [
     ("chrome-153-windows", "chrome-153", "chrome-154"),
+    # Chrome 155 turned JPEG XL on (kJXLImageFormat): image/jxl leads the
+    # Accept of every image and every document (2026-10-26, 155.0.8059.40).
+    ("chrome-155-windows", "chrome-155", "chrome-155"),
     ("firefox-156-windows", "firefox-156", "firefox-156"),
+    # Firefox 158 put image/jxl after image/avif in every image Accept (2026-10-26).
+    ("firefox-158-windows", "firefox-158", "firefox-158"),
 ]
 
 # The -cache page's resources, by path, for the revalidation priorities.

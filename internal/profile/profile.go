@@ -522,9 +522,15 @@ type TLSSpec struct {
 
 	SignatureAlgorithms []uint16 `json:"signature_algorithms,omitempty"`
 	// TrustAnchors are root identifiers for extension 0xCA34, given as relative
-	// OIDs ("11129.9.13"). Their order in the profile does not matter: it is
-	// redrawn for every connection, exactly as Chrome does.
-	TrustAnchors      []string `json:"trust_anchors,omitempty"`
+	// OIDs ("11129.9.13"), in the order the browser sends them.
+	TrustAnchors []string `json:"trust_anchors,omitempty"`
+	// TrustAnchorsOrder says how that order behaves: "" sends the list as
+	// written, on every connection (Chrome 154 and later sort it); "per_process"
+	// draws one order per session and keeps it for all its connections, TCP and
+	// QUIC — Chrome 152 and 153 kept the list in an absl::flat_hash_set
+	// (net/ssl/ssl_config_service.h), whose iteration order is seeded per
+	// process. It belongs to the list: a delta with a list of its own resets it.
+	TrustAnchorsOrder string   `json:"trust_anchors_order,omitempty"`
 	ALPN              []string `json:"alpn,omitempty"`
 	PermuteExtensions *bool    `json:"permute_extensions,omitempty"`
 
@@ -913,6 +919,12 @@ func (p *Profile) validate() error {
 		return fmt.Errorf("tls.permute_extensions is not set: use true for Chrome >= 110 " +
 			"and false for every other browser; the library will not guess")
 	}
+	switch p.TLS.TrustAnchorsOrder {
+	case "", TrustAnchorsPerProcess:
+	default:
+		return fmt.Errorf("tls.trust_anchors_order %q: it is empty (the list as written) or %q",
+			p.TLS.TrustAnchorsOrder, TrustAnchorsPerProcess)
+	}
 	// pre_shared_key only appears in a capture of a resumed session. On a fresh
 	// connection there is no ticket, uTLS sends an empty extension — and the
 	// client drops it through OmitEmptyPsk. The result: the profile quietly loses
@@ -1052,6 +1064,9 @@ func merge(dst, src *Profile) {
 	}
 	if src.TLS.TrustAnchors != nil {
 		dst.TLS.TrustAnchors = src.TLS.TrustAnchors
+		dst.TLS.TrustAnchorsOrder = src.TLS.TrustAnchorsOrder
+	} else if src.TLS.TrustAnchorsOrder != "" {
+		dst.TLS.TrustAnchorsOrder = src.TLS.TrustAnchorsOrder
 	}
 	if src.TLS.SignatureAlgorithms != nil {
 		dst.TLS.SignatureAlgorithms = src.TLS.SignatureAlgorithms

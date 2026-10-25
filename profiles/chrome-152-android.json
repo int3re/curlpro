@@ -52,7 +52,8 @@
       "44947.2.13",
       "11129.9.2",
       "11129.9.7"
-    ]
+    ],
+    "trust_anchors_order": "per_process"
   },
   "http1": {},
   "http3": {},

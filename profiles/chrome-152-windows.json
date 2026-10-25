@@ -52,7 +52,8 @@
       "11129.9.3",
       "52580.200109.1.13",
       "11129.9.5"
-    ]
+    ],
+    "trust_anchors_order": "per_process"
   },
   "headers": {
     "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",

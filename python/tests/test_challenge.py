@@ -118,6 +118,32 @@ def test_a_solver_gets_the_request_through(stand):
     assert len(solver.calls) == 1
 
 
+class Renewing(Clearing):
+    """A solver whose every pass gets a clearance of its own, as the site issues."""
+
+    def solve(self, request):  # noqa: ANN001, ANN201
+        self.calls.append(request)
+        host = request.url.split("//", 1)[1].split("/", 1)[0].split(":", 1)[0]
+        cookie = {"name": "cf_clearance", "value": f"passed-{len(self.calls)}",
+                  "domain": host, "path": "/", "host_only": True}
+        return curlpro.Solution([cookie], request.user_agent, "test") if request.verify([cookie]) else None
+
+
+def test_a_clearance_taken_back_mid_session_is_solved_again(stand):
+    # Cloudflare's Precursor (Armed mode, 2026-10-19) can take a cf_clearance
+    # back while the session runs: the next request meets the check again with
+    # the cookie still in the jar. The session solves it again rather than
+    # handing the caller the 403.
+    solver = Renewing()
+    with curlpro.Session("chrome-154-windows", solver=solver) as s:
+        assert s.get(stand.base + "/gate").status == 200
+        assert s.get(stand.base + "/gate").status == 200 and len(solver.calls) == 1
+        stand.revoked.add("passed-1")
+        r = s.get(stand.base + "/gate")
+        assert r.status == 200 and r.challenge is None and len(solver.calls) == 2
+        assert s.get(stand.base + "/echo-cookies").json()["cookie"] == "cf_clearance=passed-2"
+
+
 def test_one_solve_for_a_burst(stand):
     solver = Clearing()
     with curlpro.Session("chrome-154-windows", solver=solver) as s:

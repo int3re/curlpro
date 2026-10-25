@@ -89,7 +89,7 @@ touch it.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `impersonate` | `chrome-155-windows` | the profile name, the newest Chrome captured whole (`chrome-151-windows` through 0.16.0); `list_profiles()` has all 309 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 44 captured whole |
+| `impersonate` | `chrome-155-windows` | the profile name, the newest Chrome captured whole (`chrome-151-windows` through 0.16.0); `list_profiles()` has all 310 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 45 captured whole |
 | `verify` | `True` | `True` — system roots; a PEM path — trust only that root; `False` — no verification |
 | `cert` | `None` | `(certificate, key)` paths for mutual TLS |
 | `trust_env` | `True` | take the proxy from `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, honouring `NO_PROXY`; an explicit `proxy` always wins |
@@ -767,10 +767,10 @@ partitions, and a Firefox profile sent a captcha's frame no cookies at all.
 
 ## 11. Profiles, devices and mobile
 
-309 profiles ship in the wheel. 44 of them are captured whole — by this
+310 profiles ship in the wheel. 45 of them are captured whole — by this
 project's own runs of `curlpro capture` or by the curl-impersonate signatures
 it imported, each with the hashes to prove it: 21 Chrome (118 to 153, and 155),
-4 Edge, 6 Firefox (133, 135, 144, 155, 156, 157), 9 Safari (15.6.1 to 26.0.1, macOS and
+4 Edge, 7 Firefox (133, 135, 144, 155, 156, 157, 158), 9 Safari (15.6.1 to 26.0.1, macOS and
 iOS), Tor 14, Yandex Browser 26.8 for Android, and two okhttp 5.5 (JVM and
 Conscrypt). 14 more are captured but for their HTTP/2 SETTINGS (Chrome 98 to
 116, Chrome 99 for Android, Edge 98 to 101, Safari 15.3 and 15.5): those
@@ -1254,8 +1254,11 @@ Facts that are easy to doubt and are true:
 - Two things a replayed Chrome capture got wrong, found on 2026-10-14 by
   reading Chrome 155.0.8059.40 off a bare socket against `chrome-155-windows`.
   The trust_anchors list (`0xca34`): Chrome's root store has 28 identifiers
-  from 153 where 152 had 32, and Chromium never permutes them — the compiled-in
-  order up to 153, sorted bytewise from 154 (942bda4) — while every profile
+  from 153 where 152 had 32, and Chromium never moves them between the
+  connections of a process — an order drawn per process up to 153 (the list
+  sat in an `absl::flat_hash_set`; a session draws one now,
+  `trust_anchors_order: "per_process"`, corrected after 0.17.1), sorted bytewise
+  from 154 (942bda4) — while every profile
   from 153 inherited 152's 32 and drew a new order per connection, 206 bytes
   where Chrome sends 186. And GREASE ECH: BoringSSL draws its payload from four
   lengths on every connection (the extension is 186, 218, 250 or 282 bytes), but
@@ -1264,6 +1267,15 @@ Facts that are easy to doubt and are true:
   Opera 136 sent one length on every connection. Both are fixed; the default
   profile now matches Chrome 155 field for field, the random parts drawn from
   the same sets. Firefox keeps its captured ECH length: NSS pads to a fixed size.
+- JPEG XL entered `Accept` in both browsers in October 2026, measured on the
+  stand on 2026-10-26. Chrome 155 turned `kJXLImageFormat` on by default:
+  `image/jxl` leads the Accept of every navigation, frame and image
+  (`image/jxl,image/avif,…`). Firefox 158 puts it after AVIF in every image
+  Accept (`image/avif,image/jxl,…`) and leaves documents alone; its ClientHello
+  is 157's. `chrome-155-windows` and `firefox-158-windows` carry their own
+  resources section now, and the derived Chrome 155 and 156 for macOS and Linux
+  stand on the captured Chrome 155 with their own platform, where they stood on
+  the 153 twins and sent 153's Accept.
 - Firefox 156 dropped the two FFDHE groups (ffdhe2048, ffdhe3072) from
   `supported_groups`: five groups instead of seven, a hello four bytes shorter,
   the same JA4 (which hashes no groups) and a different JA3N. Captured live on

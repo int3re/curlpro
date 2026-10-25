@@ -1,44 +1,12 @@
 {
   "name": "chrome-155-macos",
-  "based_on": "chrome-153-macos",
+  "based_on": "chrome-155-windows",
   "source": {
     "kind": "derived",
     "from": "https://chromiumdash.appspot.com/releases?platform=Mac",
-    "date": "2026-10-10",
+    "date": "2026-10-26",
     "path": "scripts/derive-current.py",
-    "note": "Derived, not captured: Chrome 155 was captured on Windows (155.0.8059.39, 2026-10-10) and its ClientHello, HTTP/2 frames and header order are Chrome 153's; this macOS twin stands on chrome-153-macos with 155's User-Agent and brands, computed as Chromium computes them. Replace with a capture from macOS. The trust_anchors list goes out sorted bytewise, as Chromium sends it from 154 (942bda4); the set is the capture's, Chrome's root store being unchanged since 153."
-  },
-  "tls": {
-    "trust_anchors": [
-      "44947.2.1",
-      "44947.2.6",
-      "44947.2.13",
-      "44947.2.14",
-      "44947.2.15",
-      "44947.2.18",
-      "44947.2.19",
-      "44947.2.20",
-      "52580.200109.1.7",
-      "52580.200109.1.8",
-      "52580.200109.1.9",
-      "52580.200109.1.10",
-      "52580.200109.1.11",
-      "52580.200109.1.12",
-      "52580.200109.1.13",
-      "52580.200109.1.18",
-      "52580.200109.1.19",
-      "11129.9.1",
-      "11129.9.4",
-      "11129.9.5",
-      "11129.9.6",
-      "11129.9.7",
-      "11129.9.8",
-      "11129.9.10",
-      "11129.9.11",
-      "11129.9.12",
-      "11129.9.13",
-      "11129.9.15"
-    ]
+    "note": "Derived, not captured: Chrome 155 was captured on Windows (155.0.8059.39 and .40, 2026-10-10 and 2026-10-26), and this macOS twin stands on that capture — its ClientHello, HTTP/2 frames, header sets and resources, image/jxl in Accept included — with macOS's sec-ch-ua-platform and User-Agent and 155's brands, computed as Chromium computes them. Replace with a capture from macOS."
   },
   "headers": {
     "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
@@ -81,7 +49,7 @@
       },
       {
         "key": "accept",
-        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
       },
       {
         "key": "sec-fetch-site",

@@ -886,6 +886,9 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 		}
 	}
 
+	// Chrome 152 and 153 drew their trust_anchors order once per process.
+	p = p.ForSession()
+
 	s := &Session{
 		profile:    p,
 		opts:       opts,

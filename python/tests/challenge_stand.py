@@ -207,6 +207,9 @@ class Stand:
         self.storage_done = 0
         self.storage_cookies: list[str] = []
         self.gate_hits = 0
+        # Clearances the site took back while the session ran (Cloudflare's
+        # Precursor can, in Armed mode): a revoked value meets the check again.
+        self.revoked: set[str] = set()
         stand = self
 
         class H(BaseHTTPRequestHandler):
@@ -267,7 +270,10 @@ class Stand:
                     return
                 if u.path == "/gate":
                     stand.gate_hits += 1
-                    if "cf_clearance=passed" in (self.headers.get("Cookie") or ""):
+                    jar = dict(c.strip().split("=", 1) for c in (self.headers.get("Cookie") or "").split(";")
+                               if "=" in c)
+                    value = jar.get("cf_clearance", "")
+                    if value.startswith("passed") and value not in stand.revoked:
                         self._send(200, json.dumps({"ok": True}).encode(), ctype="application/json")
                     else:
                         self._send(403, CHECK.encode(), [("cf-mitigated", "challenge"),

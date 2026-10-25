@@ -40,6 +40,17 @@ Added on 2026-10-10:
   and its macOS and Linux twins on the 153 ones. Three majors in a row kept
   the hello; that is evidence, not a measurement of 156.
 
+Revised on 2026-10-26:
+
+- Chrome 155 turned JPEG XL on (kJXLImageFormat, enabled by default from 155):
+  image/jxl leads the Accept of every navigation, frame and image, as the
+  captured Chrome 155 shows (capture/subres/chrome-155-*). Chrome 155 and 156
+  for macOS and Linux therefore stand on the captured chrome-155-windows rather
+  than on their 153 twins, with their own platform, User-Agent and brands —
+  what a twin changes (the hello, the frames and the header sets come from
+  BoringSSL and the network stack, not from the OS: every Chrome/Edge and
+  Linux/macOS pair the corpus holds agrees).
+
 Run: ``python scripts/derive-current.py`` then ``python scripts/gen-identities.py``
 and ``python scripts/gen-safari-fetch.py``.
 """
@@ -57,6 +68,8 @@ from chromium_brands import sec_ch_ua  # noqa: E402
 
 DATE = "2026-09-26"
 DATE_1010 = "2026-10-10"
+DATE_1026 = "2026-10-26"
+PLATFORM = {"windows": '"Windows"', "macos": '"macOS"', "linux": '"Linux"'}
 
 WIN = "Windows NT 10.0; Win64; x64"
 MAC = "Macintosh; Intel Mac OS X 10_15_7"
@@ -68,16 +81,17 @@ def chrome_ua(platform: str, major: int, extra: str = "") -> str:
             f"Chrome/{major}.0.0.0 Safari/537.36{extra}")
 
 
-CHROME_155_NOTE = ("Derived, not captured: Chrome 155 was captured on Windows (155.0.8059.39, "
-                   "2026-10-10) and its ClientHello, HTTP/2 frames and header order are Chrome 153's; "
-                   "this {os} twin stands on {base} with 155's User-Agent and brands, computed as "
-                   "Chromium computes them. Replace with a capture from {os}.")
+CHROME_155_NOTE = ("Derived, not captured: Chrome 155 was captured on Windows (155.0.8059.39 and .40, "
+                   "2026-10-10 and 2026-10-26), and this {os} twin stands on that capture — its "
+                   "ClientHello, HTTP/2 frames, header sets and resources, image/jxl in Accept included — "
+                   "with {os}'s sec-ch-ua-platform and User-Agent and 155's brands, computed as Chromium "
+                   "computes them. Replace with a capture from {os}.")
 CHROME_156_NOTE = ("Derived, not captured: Chrome 156 went stable on 2026-10-07 (chromiumdash, Stable: "
                    "156.0.8078.12), and the Chrome on this project's stand is 155. The ClientHello, "
-                   "HTTP/2 frames and header sets are {base}'s; the User-Agent and the brand list are "
-                   "156's, the brands computed as Chromium computes them. Chrome 153, 154 and 155 sent the "
-                   "same hello, which is evidence, not a measurement: replace with a capture when Chrome "
-                   "156 is on the stand.")
+                   "HTTP/2 frames, header sets and resources are the captured chrome-155-windows's{os}; the "
+                   "User-Agent and the brand list are 156's, the brands computed as Chromium computes them. "
+                   "Chrome 153, 154 and 155 sent the same hello, which is evidence, not a measurement: "
+                   "replace with a capture when Chrome 156 is on the stand.")
 
 CHROME_NOTE = ("Derived, not captured: Chrome 154 went stable on 2026-09-22 (chromiumdash, Stable: "
                "154.0.8037.57/.58), and the Chrome on this project's stand is still 153. The ClientHello, "
@@ -109,21 +123,21 @@ PLAN = [
      sec_ch_ua(152, "Opera", 136), "https://blogs.opera.com/desktop/2026/09/opera-136-0-6008-52-stable-update/",
      "Derived, not captured: Opera 136.0.6008.52 (2026-09-24) on Chromium 152.0.7977.130, standing on "
      "Chrome 152 for macOS with Opera's User-Agent and brands; Opera's own TLS was not measured."),
-    ("chrome-155-macos", "chrome-153-macos", chrome_ua(MAC, 155), sec_ch_ua(155, "Google Chrome", 155),
+    ("chrome-155-macos", "chrome-155-windows", chrome_ua(MAC, 155), sec_ch_ua(155, "Google Chrome", 155),
      "https://chromiumdash.appspot.com/releases?platform=Mac",
-     CHROME_155_NOTE.format(os="macOS", base="chrome-153-macos"), DATE_1010),
-    ("chrome-155-linux", "chrome-153-linux", chrome_ua(LINUX, 155), sec_ch_ua(155, "Google Chrome", 155),
+     CHROME_155_NOTE.format(os="macOS"), DATE_1026),
+    ("chrome-155-linux", "chrome-155-windows", chrome_ua(LINUX, 155), sec_ch_ua(155, "Google Chrome", 155),
      "https://chromiumdash.appspot.com/releases?platform=Linux",
-     CHROME_155_NOTE.format(os="Linux", base="chrome-153-linux"), DATE_1010),
+     CHROME_155_NOTE.format(os="Linux"), DATE_1026),
     ("chrome-156-windows", "chrome-155-windows", chrome_ua(WIN, 156), sec_ch_ua(156, "Google Chrome", 156),
      "https://chromiumdash.appspot.com/releases?platform=Windows",
-     CHROME_156_NOTE.format(base="chrome-155-windows"), DATE_1010),
-    ("chrome-156-macos", "chrome-153-macos", chrome_ua(MAC, 156), sec_ch_ua(156, "Google Chrome", 156),
+     CHROME_156_NOTE.format(os=""), DATE_1010),
+    ("chrome-156-macos", "chrome-155-windows", chrome_ua(MAC, 156), sec_ch_ua(156, "Google Chrome", 156),
      "https://chromiumdash.appspot.com/releases?platform=Mac",
-     CHROME_156_NOTE.format(base="chrome-153-macos"), DATE_1010),
-    ("chrome-156-linux", "chrome-153-linux", chrome_ua(LINUX, 156), sec_ch_ua(156, "Google Chrome", 156),
+     CHROME_156_NOTE.format(os=", with macOS's sec-ch-ua-platform"), DATE_1026),
+    ("chrome-156-linux", "chrome-155-windows", chrome_ua(LINUX, 156), sec_ch_ua(156, "Google Chrome", 156),
      "https://chromiumdash.appspot.com/releases?platform=Linux",
-     CHROME_156_NOTE.format(base="chrome-153-linux"), DATE_1010),
+     CHROME_156_NOTE.format(os=", with Linux's sec-ch-ua-platform"), DATE_1026),
     ("safari-27-ios", "safari-26-ios",
      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) "
      "Version/27.0 Mobile/15E148 Safari/604.1", None, "https://github.com/openwrt/uhttpd/issues/42",
@@ -184,7 +198,7 @@ def chrome_major(name: str) -> int | None:
 
 # From 154 Chromium sorts the trust_anchors list bytewise before encoding it
 # (942bda4, "Sort TAI list", first in 154.0.8031.0); up to 153 it went out in
-# the compiled-in root store's order. A Chrome 154+ derived on a 153 capture
+# an order drawn once per browser process (an absl::flat_hash_set). A Chrome 154+ derived on a 153 capture
 # therefore carries the capture's list sorted — Chrome 155's capture shows
 # exactly that order.
 TAI_SORTED_NOTE = (" The trust_anchors list goes out sorted bytewise, as Chromium sends it from 154 "
@@ -196,12 +210,15 @@ def main() -> int:
     drift = False
     for name, base, ua, brands, src, note, *date in PLAN:
         order = resolved_order(base)
+        platform = PLATFORM.get(name.rsplit("-", 1)[-1]) if name.startswith("chrome-") else None
         for h in order:
             k = h["key"].lower()
             if k == "sec-ch-ua" and brands:
                 h["value"] = brands
             elif k == "user-agent" and h.get("value"):
                 h["value"] = ua
+            elif k == "sec-ch-ua-platform" and platform and h.get("value"):
+                h["value"] = platform
         want = {
             "name": name,
             "based_on": base,
