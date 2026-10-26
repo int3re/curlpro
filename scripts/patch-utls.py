@@ -68,6 +68,8 @@ NEW_FILE = '''// [curlPro] Not part of uTLS: written by scripts/patch-utls.py.
 package tls
 
 import (
+	"io"
+
 	"golang.org/x/crypto/cryptobyte"
 )
 
@@ -90,6 +92,28 @@ func (uconn *UConn) encodeInner(inner *clientHelloMsg, maxNameLength int) ([]byt
 		return uconn.boringEncodedInner(inner, maxNameLength)
 	}
 	return encodeInnerClientHelloReorderOuterExts(inner, maxNameLength, uconn.extensionsList())
+}
+
+// outerExtensionTypes is the outer hello's extension types in the order they
+// go out. uTLS's extensionsList reads each type off a zeroed buffer, so an
+// extension that writes nothing — padding with nothing to pad, as on a Chrome
+// 117–120 hello grown past 512 bytes by ECH — reads as type 0, server_name, and
+// the inner hello carried the name twice: a server refuses that inner hello
+// with illegal_parameter.
+func (uconn *UConn) outerExtensionTypes() []uint16 {
+	var ids []uint16
+	for _, ext := range uconn.Extensions {
+		n := ext.Len()
+		if n < 4 {
+			continue
+		}
+		buf := make([]byte, n)
+		if _, err := ext.Read(buf); err != nil && err != io.EOF {
+			continue
+		}
+		ids = append(ids, uint16(buf[0])<<8|uint16(buf[1]))
+	}
+	return ids
 }
 
 // boringEncodedInner builds the EncodedClientHelloInner from the outer hello as
@@ -118,7 +142,7 @@ func (uconn *UConn) boringEncodedInner(inner *clientHelloMsg, maxNameLength int)
 	b.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) { b.AddUint8(compressionNone) })
 	b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 		var compressed []uint16
-		for _, id := range uconn.extensionsList() {
+		for _, id := range uconn.outerExtensionTypes() {
 			switch id {
 			case extensionServerName:
 				if inner.serverName == "" {
@@ -189,8 +213,8 @@ def main():
     for tag, path, old, new in EDITS:
         if path not in files:
             raw = io.open(path, 'rb').read()
-            nl = '\\r\\n' if b'\\r\\n' in raw else '\\n'
-            files[path] = [raw.decode('utf-8').replace('\\r\\n', '\\n'), nl, [], []]
+            nl = '\r\n' if b'\r\n' in raw else '\n'
+            files[path] = [raw.decode('utf-8').replace('\r\n', '\n'), nl, [], []]
         entry = files[path]
         t = entry[0]
         if new in t:
@@ -203,7 +227,7 @@ def main():
         entry[0] = t.replace(old, new, 1)
         entry[2].append(tag)
     for path, (t, nl, applied, skipped) in files.items():
-        io.open(path, 'wb').write(t.replace('\\n', nl).encode('utf-8'))
+        io.open(path, 'wb').write(t.replace('\n', nl).encode('utf-8'))
         print(f'{path}: applied {applied or "-"}, already present {skipped or "-"}')
     io.open(NEW, 'wb').write(NEW_FILE.encode('utf-8'))
     print(f'{NEW}: written')

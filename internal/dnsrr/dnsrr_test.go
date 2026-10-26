@@ -18,21 +18,35 @@ type zone struct {
 	t       *testing.T
 	answer  func(q dnsmessage.Question, b *dnsmessage.Builder) dnsmessage.RCode
 	queries atomic.Int32
-	trunc   bool // answer UDP with TC set, the full answer over TCP only
+	trunc   atomic.Bool // answer UDP with TC set, the full answer over TCP only
 	addr    string
+}
+
+// listenSamePort opens UDP and TCP on one loopback port, as a DNS server
+// listens. The port is drawn for UDP; Windows reserves ranges for TCP alone
+// (netsh int ipv4 show excludedportrange), so a refused TCP bind draws again.
+func listenSamePort(t *testing.T) (net.PacketConn, net.Listener) {
+	t.Helper()
+	var err error
+	for range 20 {
+		var pc net.PacketConn
+		if pc, err = net.ListenPacket("udp", "127.0.0.1:0"); err != nil {
+			break
+		}
+		var ln net.Listener
+		if ln, err = net.Listen("tcp", pc.LocalAddr().String()); err == nil {
+			return pc, ln
+		}
+		pc.Close()
+	}
+	t.Fatal(err)
+	return nil, nil
 }
 
 func startZone(t *testing.T, answer func(q dnsmessage.Question, b *dnsmessage.Builder) dnsmessage.RCode) *zone {
 	z := &zone{t: t, answer: answer}
-	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	pc, ln := listenSamePort(t)
 	z.addr = pc.LocalAddr().String()
-	ln, err := net.Listen("tcp", z.addr)
-	if err != nil {
-		t.Fatal(err)
-	}
 	t.Cleanup(func() { pc.Close(); ln.Close() })
 	go func() {
 		buf := make([]byte, 65535)
@@ -79,13 +93,13 @@ func (z *zone) reply(msg []byte, udp bool) []byte {
 		return nil
 	}
 	b := dnsmessage.NewBuilder(nil, dnsmessage.Header{ID: h.ID, Response: true, RecursionDesired: true,
-		Truncated: udp && z.trunc})
+		Truncated: udp && z.trunc.Load()})
 	b.EnableCompression()
 	b.StartQuestions()
 	b.Question(q)
 	b.StartAnswers()
 	rcode := dnsmessage.RCodeSuccess
-	if !(udp && z.trunc) {
+	if !(udp && z.trunc.Load()) {
 		rcode = z.answer(q, &b)
 	}
 	out, err := b.Finish()
@@ -242,7 +256,7 @@ func TestATruncatedAnswerIsAskedAgainOverTCP(t *testing.T) {
 		https(b, "site.test.", 300, 1, ".", dnsmessage.SVCParam{Key: dnsmessage.SVCParamALPN, Value: alpn("h3")})
 		return dnsmessage.RCodeSuccess
 	})
-	z.trunc = true
+	z.trunc.Store(true)
 	if res := lookup(t, z, "site.test", 443); !res.ALPN("h3") {
 		t.Fatalf("%+v", res.Services)
 	}

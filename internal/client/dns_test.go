@@ -27,17 +27,31 @@ type testZone struct {
 	asked   []string // "TYPE name"
 }
 
+// listenSamePort opens UDP and TCP on one loopback port, as a DNS server
+// listens. The port is drawn for UDP; Windows reserves ranges for TCP alone
+// (netsh int ipv4 show excludedportrange), so a refused TCP bind draws again.
+func listenSamePort(t *testing.T) (net.PacketConn, net.Listener) {
+	t.Helper()
+	var err error
+	for range 20 {
+		var pc net.PacketConn
+		if pc, err = net.ListenPacket("udp", "127.0.0.1:0"); err != nil {
+			break
+		}
+		var ln net.Listener
+		if ln, err = net.Listen("tcp", pc.LocalAddr().String()); err == nil {
+			return pc, ln
+		}
+		pc.Close()
+	}
+	t.Fatal(err)
+	return nil, nil
+}
+
 func newTestZone(t *testing.T) *testZone {
 	z := &testZone{https: map[string][]string{}, ech: map[string][]byte{}}
-	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	pc, ln := listenSamePort(t)
 	z.addr = pc.LocalAddr().String()
-	ln, err := net.Listen("tcp", z.addr)
-	if err != nil {
-		t.Fatal(err)
-	}
 	t.Cleanup(func() { pc.Close(); ln.Close() })
 	go func() {
 		buf := make([]byte, 65535)

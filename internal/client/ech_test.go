@@ -176,6 +176,44 @@ func TestECHInnerIsChromes(t *testing.T) {
 	}
 }
 
+// A Chrome 117–120 hello carries padding until ECH grows it past 512 bytes, and
+// then the padding writes nothing. uTLS's own list of the outer's extensions
+// read that as server_name, and the inner hello named the site twice: Go's
+// server, like tls.browserleaks.com, refused it with illegal_parameter. Whether
+// the padding writes anything depends on the GREASE placeholder drawn per
+// connection, hence the dozen sessions.
+func TestECHInnerOfAPaddedHello(t *testing.T) {
+	cfg, key := echConfigFor(t, 7, "public.echsite.test")
+	srv := startECHServer(t, cfg, key)
+	z := newTestZone(t)
+	q := "_" + srv.port + "._https.echsite.test."
+	z.https[q], z.ech[q] = []string{"h2"}, echList(cfg)
+
+	for i := 0; i < 12; i++ {
+		s := echSession(t, "chrome-120-windows", z, srv)
+		if _, err := s.Do(&Request{Method: "GET", URL: "https://echsite.test:" + srv.port + "/"}); err != nil {
+			t.Fatalf("session %d: %v", i, err)
+		}
+		s.Close()
+	}
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	for i, ok := range srv.accepted {
+		if !ok {
+			t.Fatalf("session %d: ECH not accepted", i)
+		}
+	}
+	for _, h := range srv.inner {
+		seen := map[uint16]bool{}
+		for _, x := range h.Extensions {
+			if seen[x] {
+				t.Fatalf("the inner hello carries %d twice: %v", x, h.Extensions)
+			}
+			seen[x] = true
+		}
+	}
+}
+
 // The server cannot decrypt (its key is not the published one) and answers as
 // its public name with retry configurations: Chrome connects once more with
 // them (tls_stream_attempt.cc), and the second hello is accepted.
