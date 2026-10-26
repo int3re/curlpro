@@ -6,7 +6,23 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.17.1** — a patch, from one field report and the re-checks it set off; every
+**0.18.0** — a minor, because what goes on the wire changed without anyone
+asking: a Chromium 108+ or Firefox 133+ session asks DNS for the origin's HTTPS
+record (RFC 9460) before it connects, as those browsers do, and acts on it — an
+`alpn=h3` record sends the first request to HTTP/3, and on a Chromium profile an
+`ech` record makes the ClientHello real ECH (RFC 9849), its inner hello
+BoringSSL's, measured against Chrome 155 on the new `cmd/echstand` and matched
+field for field (`scripts/patch-utls.py` carries it on the vendored uTLS); a
+rejection with retry configurations is retried once, as Chrome. `dns=` takes
+servers or DNS over HTTPS, with Chrome's own DoH request; behind a proxy nothing
+is resolved locally. Beside it: Firefox 158 captured; `image/jxl` in the Accept
+of Chrome 155's documents and images and Firefox 158's images, measured; the
+derived Chrome 155/156 for macOS and Linux on the captured Chrome 155; Chrome
+152/153's trust_anchors drawn once per session, as each browser process did. Not
+yet: ECH over QUIC (an ECH origin stays on TCP), resumption inside ECH,
+Firefox's inner hello. ABI 0.27.0: `dns` is configuration an older library
+would ignore, and `trust_anchors_order` does not load into one. 310 profiles.
+Before it, **0.17.1** — a patch, from one field report and the re-checks it set off; every
 change is to what a profile sends, each now matching the browser measured on a
 bare socket and the browser's own source at its release tags. The report took
 `firefox-155/156/157` — fifteen ciphers, Chrome's cipher hash in JA4, Gecko's

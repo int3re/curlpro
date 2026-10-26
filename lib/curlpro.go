@@ -171,7 +171,11 @@ func curlpro_free(s *C.char) {
 // empty); masque:// proxies, reached over HTTP/3 (an older library refuses the
 // scheme); https:// proxies greeted with the profile's ClientHello and
 // tunnelled over HTTP/2 when they offer h2.
-const Version = "0.26.0"
+// 0.27.0: dns on the session (HTTPS records, servers, DNS over HTTPS — an
+// older library would ignore it and ask nothing), and the profile-level
+// tls.trust_anchors_order (a file carrying it does not load into an older
+// library); real ECH from an HTTPS record on Chromium profiles.
+const Version = "0.27.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
