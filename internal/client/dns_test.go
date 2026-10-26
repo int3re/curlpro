@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -20,13 +21,14 @@ import (
 type testZone struct {
 	addr    string
 	https   map[string][]string // query name -> alpn of one ServiceMode record
+	ech     map[string][]byte   // query name -> the record's ECHConfigList
 	queries atomic.Int32
 	mu      sync.Mutex
 	asked   []string // "TYPE name"
 }
 
 func newTestZone(t *testing.T) *testZone {
-	z := &testZone{https: map[string][]string{}}
+	z := &testZone{https: map[string][]string{}, ech: map[string][]byte{}}
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -81,6 +83,7 @@ func (z *testZone) answer(msg []byte) []byte {
 	z.mu.Lock()
 	z.asked = append(z.asked, q.Type.String()+" "+q.Name.String())
 	alpns, hasHTTPS := z.https[q.Name.String()]
+	ech := z.ech[q.Name.String()]
 	z.mu.Unlock()
 	b := dnsmessage.NewBuilder(nil, dnsmessage.Header{ID: h.ID, Response: true, RecursionDesired: true, RecursionAvailable: true})
 	b.StartQuestions()
@@ -96,9 +99,18 @@ func (z *testZone) answer(msg []byte) []byte {
 			for _, a := range alpns {
 				v = append(append(v, byte(len(a))), a...)
 			}
+			// On a "_port._https" name the target names the host itself (RFC
+			// 9460, 9.1): "." would point at the owner, where no address lives.
+			target := "."
+			if parts := strings.SplitN(q.Name.String(), "._https.", 2); len(parts) == 2 {
+				target = parts[1]
+			}
+			params := []dnsmessage.SVCParam{{Key: dnsmessage.SVCParamALPN, Value: v}}
+			if ech != nil {
+				params = append(params, dnsmessage.SVCParam{Key: dnsmessage.SVCParamECH, Value: ech})
+			}
 			b.HTTPSResource(rh, dnsmessage.HTTPSResource{SVCBResource: dnsmessage.SVCBResource{
-				Priority: 1, Target: dnsmessage.MustNewName("."),
-				Params: []dnsmessage.SVCParam{{Key: dnsmessage.SVCParamALPN, Value: v}}}})
+				Priority: 1, Target: dnsmessage.MustNewName(target), Params: params}})
 		}
 	}
 	out, _ := b.Finish()
@@ -137,7 +149,7 @@ func TestAnHTTPSRecordNamingH3GoesStraightToHTTP3(t *testing.T) {
 	if resp.Proto != "HTTP/3.0" {
 		t.Fatalf("the first request went over %s", resp.Proto)
 	}
-	if !z.saw("TypeHTTPS _" + port + "._https.h3site.test.") || !z.saw("TypeA h3site.test.") {
+	if !z.saw("TypeHTTPS _"+port+"._https.h3site.test.") || !z.saw("TypeA h3site.test.") {
 		t.Fatalf("asked %v", z.asked)
 	}
 }
@@ -168,9 +180,12 @@ func TestDNSOverHTTPSResolvesAndAsks(t *testing.T) {
 	var posts atomic.Int32
 	var badType atomic.Value
 	doh := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Chrome's own DoH request, as its net log shows it.
 		if r.Method != "POST" || r.Header.Get("Content-Type") != "application/dns-message" ||
-			r.Header.Get("Accept") != "application/dns-message" || r.Header.Get("Cookie") != "" {
-			badType.Store(r.Method + " " + r.Header.Get("Content-Type") + " " + r.Header.Get("Accept"))
+			r.Header.Get("Accept") != "application/dns-message" || r.Header.Get("Cookie") != "" ||
+			r.Header.Get("User-Agent") != "Chrome" || r.Header.Get("Accept-Language") != "*" ||
+			r.Header.Get("Accept-Encoding") != "identity" || r.Header.Get("Priority") != "u=4, i" {
+			badType.Store(fmt.Sprint(r.Method, " ", r.Header))
 		}
 		posts.Add(1)
 		q, _ := io.ReadAll(r.Body)

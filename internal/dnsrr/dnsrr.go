@@ -167,7 +167,7 @@ func (r *Resolver) Lookup(ctx context.Context, host string, port int) (*Result, 
 	// The query is not tied to the first caller's context: a request that
 	// gives up must not cancel the answer the next one waits for.
 	qctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	res, ttl, err := r.resolve(qctx, key)
+	res, ttl, err := r.resolve(qctx, key, host, port)
 	cancel()
 	e.res, e.err = res, err
 	switch {
@@ -191,33 +191,18 @@ func clamp(d, lo, hi time.Duration) time.Duration {
 	return min(max(d, lo), hi)
 }
 
-// resolve asks for one name and follows AliasMode records to their target.
-func (r *Resolver) resolve(ctx context.Context, name string) (*Result, time.Duration, error) {
-	ttl := maxTTL
-	seen := map[string]bool{}
-	for hop := 0; hop <= maxAliases; hop++ {
-		if seen[name] {
-			return &Result{}, ttl, nil // a loop: no service, as for a dead end
-		}
-		seen[name] = true
-		answer, err := r.exchange(ctx, name, dnsmessage.TypeHTTPS)
-		if err != nil {
-			return nil, 0, err
-		}
-		services, alias, rttl, err := parseHTTPS(answer, name)
-		if err != nil {
-			return nil, 0, err
-		}
-		ttl = min(ttl, rttl)
-		if alias == "" {
-			return &Result{Services: services}, ttl, nil
-		}
-		if alias == "." {
-			return &Result{}, ttl, nil // "no service here" (RFC 9460, 2.5.1)
-		}
-		name = alias
+// resolve asks for the origin's records. AliasMode is not followed: Chrome
+// does not (parseHTTPS), so neither is a query made that it would not make.
+func (r *Resolver) resolve(ctx context.Context, name, host string, port int) (*Result, time.Duration, error) {
+	answer, err := r.exchange(ctx, name, dnsmessage.TypeHTTPS)
+	if err != nil {
+		return nil, 0, err
 	}
-	return &Result{}, ttl, nil
+	services, _, ttl, err := parseHTTPS(answer, name, host, port)
+	if err != nil {
+		return nil, 0, err
+	}
+	return &Result{Services: services}, ttl, nil
 }
 
 func (r *Resolver) exchange(ctx context.Context, name string, t dnsmessage.Type) ([]byte, error) {

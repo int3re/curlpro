@@ -61,6 +61,12 @@ curlpro.register_profile({
 - **Every fingerprint layer at once** — TLS, HTTP/2, HTTP/3, HTTP/1.1 and WebSocket
   (table below).
 - **HTTP/3 with a verified fingerprint** and the `Alt-Svc` upgrade a browser performs.
+- **DNS as a browser asks it**: the HTTPS record (RFC 9460) is asked for first, as
+  Chrome 108+ and Firefox do — `alpn=h3` takes the first request to HTTP/3, and an
+  `ech` record encrypts the ClientHello with **real ECH**, the inner hello
+  BoringSSL's, measured against Chrome 155 field for field; `dns=` takes servers
+  or DNS over HTTPS (with Chrome's own DoH request). Behind a proxy nothing is
+  resolved locally.
 - **Native async**: a request becomes a goroutine, and the process keeps one thread;
   on free-threaded Python (3.14t) the GIL stays off and threads parse in parallel.
 - **Page loads as a browser loads them**: `load_page()` fetches a document and the

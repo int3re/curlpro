@@ -1,0 +1,118 @@
+// [curlPro] Not part of uTLS: written by scripts/patch-utls.py.
+
+package tls
+
+import (
+	"golang.org/x/crypto/cryptobyte"
+)
+
+// ECHInnerStyle chooses how the ClientHelloInner is built for real ECH.
+type ECHInnerStyle int
+
+const (
+	// ECHInnerGo is uTLS's own: the Go client's hello with the outer's key
+	// shares, signature algorithms, session ID and groups copied in.
+	ECHInnerGo ECHInnerStyle = iota
+	// ECHInnerBoringSSL is Chrome's, as BoringSSL builds it
+	// (ssl_encrypt_client_hello, ssl_add_clienthello_tlsext_inner).
+	ECHInnerBoringSSL
+)
+
+// encodeInner is the EncodedClientHelloInner the outer hello carries, in the
+// style the connection asks for.
+func (uconn *UConn) encodeInner(inner *clientHelloMsg, maxNameLength int) ([]byte, error) {
+	if uconn.ECHInner == ECHInnerBoringSSL {
+		return uconn.boringEncodedInner(inner, maxNameLength)
+	}
+	return encodeInnerClientHelloReorderOuterExts(inner, maxNameLength, uconn.extensionsList())
+}
+
+// boringEncodedInner builds the EncodedClientHelloInner from the outer hello as
+// it goes out. The inner random is inner's, so that the server's acceptance
+// confirmation is checked against what the server decrypted.
+func (uconn *UConn) boringEncodedInner(inner *clientHelloMsg, maxNameLength int) ([]byte, error) {
+	hello := uconn.HandshakeState.Hello
+	var greaseVersion uint16
+	for _, v := range hello.SupportedVersions {
+		if isGREASEUint16(v) {
+			greaseVersion = v
+			break
+		}
+	}
+	b := cryptobyte.NewBuilder(nil)
+	b.AddUint16(VersionTLS12)
+	b.AddBytes(inner.random)
+	b.AddUint8(0) // legacy_session_id: the outer's stands for it (RFC 9849, 5.1)
+	b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+		for _, c := range hello.CipherSuites {
+			if isGREASEUint16(c) || c>>8 == 0x13 {
+				b.AddUint16(c)
+			}
+		}
+	})
+	b.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) { b.AddUint8(compressionNone) })
+	b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+		var compressed []uint16
+		for _, id := range uconn.extensionsList() {
+			switch id {
+			case extensionServerName:
+				if inner.serverName == "" {
+					continue
+				}
+				b.AddUint16(extensionServerName)
+				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+					b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+						b.AddUint8(0) // host_name
+						b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+							b.AddBytes([]byte(inner.serverName))
+						})
+					})
+				})
+			case extensionEncryptedClientHello:
+				b.AddUint16(extensionEncryptedClientHello)
+				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) { b.AddUint8(1) }) // inner
+			case extensionSupportedVersions:
+				b.AddUint16(extensionSupportedVersions)
+				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+					b.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) {
+						if greaseVersion != 0 {
+							b.AddUint16(greaseVersion)
+						}
+						b.AddUint16(VersionTLS13)
+					})
+				})
+			case extensionSupportedPoints, extensionExtendedMasterSecret, extensionSessionTicket,
+				extensionRenegotiationInfo, utlsExtensionPadding, extensionPreSharedKey:
+				// TLS 1.2 only, or the outer's own: not in the inner hello.
+			default:
+				compressed = append(compressed, id)
+			}
+		}
+		if len(compressed) > 0 {
+			b.AddUint16(extensionECHOuterExtensions)
+			b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+				b.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) {
+					for _, id := range compressed {
+						b.AddUint16(id)
+					}
+				})
+			})
+		}
+	})
+	h, err := b.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	// The name padded to maximum_name_length, then the whole to a multiple of
+	// 32 (RFC 9849, 6.1.3) — both, as BoringSSL adds them.
+	pad := 0
+	if inner.serverName != "" {
+		if n := len(inner.serverName); n <= maxNameLength {
+			pad = maxNameLength - n
+		}
+	} else {
+		pad = 9 + maxNameLength
+	}
+	pad += 31 - ((len(h) + pad - 1) % 32)
+	return append(h, make([]byte, pad)...), nil
+}

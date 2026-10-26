@@ -108,7 +108,7 @@ touch it.
 | `alt_svc` | `True` | move to HTTP/3 after an `Alt-Svc` header, as a browser does; a failed attempt falls back to TCP and is not retried for 5 minutes, doubling up to 24 hours. Needs an `http3` section. Behind a proxy it is taken only through a `masque://` one; behind any other the advertisement is left alone |
 | `resolve` | `None` | `{"example.com:443": "10.0.0.7"}` — curl's `--resolve`; SNI and `Host` keep the name. Not through a proxy |
 | `ip_version` | `None` | `"4"` or `"6"` — one address family |
-| `dns` | `None` | what resolves names, and whether HTTPS records (RFC 9460) are asked for first, as the browser asks. `None`: the system's servers for the records, addresses as always; `"off"`: no records (0.17's client); `"1.1.1.1"` or a comma list with ports: those servers for addresses and records; `"https://…"`: DNS over HTTPS (RFC 8484) for both, through a session of the same profile. Chromium 108+ and Firefox 133+ ask on a direct connection, and an `alpn=h3` record sends the first request to HTTP/3 (Chrome's DNS ALPN job). Behind any proxy nothing is resolved locally — section 12 |
+| `dns` | `None` | what resolves names, and whether HTTPS records (RFC 9460) are asked for first, as the browser asks. `None`: the system's servers for the records, addresses as always; `"off"`: no records (0.17's client); `"1.1.1.1"` or a comma list with ports: those servers for addresses and records; `"https://…"`: DNS over HTTPS (RFC 8484) for both, through a session of the same profile. Chromium 108+ and Firefox 133+ ask on a direct connection, an `alpn=h3` record sends the first request to HTTP/3 (Chrome's DNS ALPN job), and an `ech` record encrypts the ClientHello on a Chromium profile, the inner hello Chrome's. Behind any proxy nothing is resolved locally — section 12 |
 | `keep_alive` | `True` | reuse connections. `False` closes after each response, without sending `Connection: close`. An idle connection the server closed is dropped from the pool, and a request whose reused connection dies before any response byte goes once more on a new one, whatever the method, as Chromium does (section 9) |
 | `max_idle_conns`, `idle_conn_timeout` | `0`, `0.0` | pool size and idle lifetime; zero means the library's defaults |
 | `retries` | `0` | attempts after the first. Only idempotent methods are retried unless `retry_methods` says otherwise |
@@ -1051,6 +1051,47 @@ the wire: a plain tunnel is `:method`, `:authority` (with the port), then
 puts `:scheme`, `:path` and `:protocol` before `:method`, sends
 `capsule-protocol: ?1`, names the proxy without port 443, and declares no
 priority.
+
+### DNS, HTTPS records and ECH
+
+A browser asks DNS for more than an address before it connects. Chrome (from
+108, `kUseDnsHttpsSvcb`) and Firefox (from 133 at least,
+`network.dns.native_https_query`, not on Windows 10) ask for the origin's HTTPS
+record (RFC 9460) through the system's servers — plain DNS is enough — and act
+on it. From 0.18 a session does the same, on a direct connection to a name:
+
+- `alpn=h3` sends the first request to HTTP/3, with no Alt-Svc and no TCP
+  connection first (Chrome's DNS ALPN job); a failure falls back to TCP and is
+  remembered with Alt-Svc's failures.
+- `ech` encrypts the ClientHello (RFC 9849) on a Chromium profile whose hello
+  carries ECH. The outer hello names the configuration's public name, the inner
+  one the site, and the inner hello is BoringSSL's, measured against Chrome 155
+  on `cmd/echstand` field for field: GREASE and the TLS 1.3 suites, the real
+  name, the inner marker, `supported_versions` with GREASE and TLS 1.3 alone,
+  every other TLS 1.3 extension compressed in the outer's order between two
+  GREASE ones, nothing of TLS 1.2, the name padded to `maximum_name_length` and
+  the whole to a multiple of 32 (`scripts/patch-utls.py`). A server that
+  rejects it with retry configurations gets one more connection with them, or
+  without ECH when it sends none, as Chrome does.
+- The record is read by Chrome's rules (`dns_response_result_extractor.cc`):
+  AliasMode records are not followed, a record must point at the host — on
+  another port, `_PORT._https.host` with the host as an explicit target — its
+  `port` must be the request's, and `http/1.1` joins its ALPN unless
+  `no-default-alpn` says otherwise.
+
+Nothing is asked behind a proxy — the proxy resolves — nor for an address,
+`localhost` or a name pinned with `resolve=`. `dns=` picks the servers: the
+system's (the default), `"off"`, a list of servers, or DoH (`"https://…"`),
+whose requests are Chrome's own, read off its net log: a POST with
+`accept`/`content-type: application/dns-message`, `accept-language: *`,
+`user-agent: Chrome`, `accept-encoding: identity`, `priority: u=4, i`.
+
+Not reproduced yet: ECH over QUIC — an origin with an ECH configuration stays
+on TCP, where Chrome would take HTTP/3 with ECH, because QUIC without it would
+send in clear the name ECH hides; resumption inside ECH — Chrome puts the PSK in
+the inner hello alone, and a connection with ECH here makes a full handshake;
+Firefox's inner hello, which NSS builds — a Firefox profile keeps its GREASE
+ECH on such a site; Firefox's DoH request, which is not measured.
 
 ## 13. Streaming, uploads, async
 

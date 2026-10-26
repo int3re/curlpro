@@ -390,7 +390,16 @@ func decodeInnerClientHello(outer *clientHelloMsg, encoded []byte) (*clientHello
 		return nil, errInvalidECHExt
 	}
 
-	if len(inner.supportedVersions) != 1 || (len(inner.supportedVersions) >= 1 && inner.supportedVersions[0] != VersionTLS13) {
+	// [curlPro] A GREASE value is not a version: BoringSSL's inner hello offers
+	// one beside TLS 1.3, and the decoder rebuilding it for the transcript
+	// refused it.
+	var innerVersions []uint16
+	for _, v := range inner.supportedVersions {
+		if !isGREASEUint16(v) {
+			innerVersions = append(innerVersions, v)
+		}
+	}
+	if len(innerVersions) != 1 || innerVersions[0] != VersionTLS13 {
 		return nil, errors.New("tls: client sent encrypted_client_hello extension and offered incompatible versions")
 	}
 

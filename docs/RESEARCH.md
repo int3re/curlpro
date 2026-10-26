@@ -238,3 +238,45 @@ all** — Chrome 100–149, Firefox 109–151, Safari 15–26, Edge 101–148.
 The fingerprint quality is no worse, but there is no equivalent of
 `utls.Fingerprinter` (learning a profile from a capture), and the profiles are
 Rust code as well. For our purpose it loses.
+
+## Two months on: the field on 2026-10-26
+
+Read from the projects' tags, changelogs, merged pull requests and issues for
+2026-08-15 to 2026-10-26 (three parallel reads; dates from the tag pages, the
+release pages misdate them). What each moved, and what it meant here.
+
+**curl_cffi 0.16.3 / 0.17.0rc1, curl-impersonate 2.3.1.** Fingerprints updated
+as data between releases (`curl-cffi update`, a paid weekly tier at
+impersonate.pro), the engine's profiles generated from that service; Chrome
+150–152, Firefox 153–155; trust_anchors for Chrome 152; MASQUE to the proxy;
+shared DNS and TLS caches across threads; `dns=` beside `doh_url`; WebSocket
+permessage-deflate; abi3t and Android wheels. Open demand: retries on 429/5xx,
+stream backpressure, async cancellation, response hooks, TCP fingerprints.
+
+**httpcloak 1.7.3** — the closest in kind. Raw ClientHello replay, trust_anchors
+per Chrome version, Chrome's HTTP/2 dependency chain and HPACK indexing, ECH
+configurations from DNS, TCP/IP fingerprint settings, SOCKS5 UDP for HTTP/3;
+presets to Chrome 155.
+
+**bogdanfinn/tls-client 1.17.1, wreq / wreq-util, wreq-python 0.13 (rnet
+renamed), impit 0.15, primp 2.0.** Chrome 150–154 at best; HTTP/3 over SOCKS5
+UDP and H2/H3 racing (tls-client); trust anchors from the Chromium root store
+(wreq-util, tls-client); impit found its own HTTP/3 bypassing the proxy and its
+HTTPS-record lookups leaking the real address (#598). Issue wreq#1294 named the
+per-process order of Chrome 152/153's trust anchors (an absl::flat_hash_set),
+which the source confirmed here.
+
+**Browsers.** Chrome and Firefox now release every two weeks (Chrome from 153).
+Chrome 155 turned JPEG XL on, Firefox 158 too: `image/jxl` in Accept.
+Cloudflare's Precursor (Armed) can take a clearance back mid-session; JA4 1.0.1
+drops HTTP/2 pseudo-headers from JA4H and GREASE from the signature algorithms —
+both already so here.
+
+**What it turned into (0.18).** Measured, not copied: Firefox 158 and Chrome
+155's resources captured (`image/jxl`); the derived Chrome 155/156 for macOS and
+Linux moved onto the captured Chrome 155; Chrome 152/153's trust anchors drawn
+per session; HTTPS records asked for as the browser asks (h3 at once, `dns=`,
+DoH with Chrome's own request); real ECH with BoringSSL's inner hello, checked
+against Chrome 155 on `cmd/echstand`. Left: ECH over QUIC, resumption inside
+ECH, Firefox's NSS inner hello; the profile-update channel and new wheels
+(musllinux, Windows ARM64) were offered and set aside.

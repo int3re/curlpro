@@ -56,10 +56,15 @@ var knownKeys = map[dnsmessage.SVCParamKey]bool{
 }
 
 // parseHTTPS reads the HTTPS records of name out of an answer, following a
-// CNAME chain inside it. It returns the ServiceMode records that name the
-// owner itself as their target, or the target of an AliasMode record, and the
-// smallest TTL among what it used.
-func parseHTTPS(msg []byte, name string) (services []Service, alias string, ttl time.Duration, err error) {
+// CNAME chain inside it, by Chrome's rules (net/dns/dns_response_result_
+// extractor.cc, 155): an AliasMode record anywhere clears the answer, since
+// Chrome does not follow one; a ServiceMode record is kept when its target —
+// the owner for "." — is host or, without a port prefix, the end of the CNAME
+// chain, when its port is the request's, and when it leaves a protocol to
+// speak; http/1.1 joins its ALPN unless no-default-alpn says otherwise, and
+// when no record allows that default nothing is kept. alias is unused and
+// always empty: kept for the resolver's loop, which never follows one.
+func parseHTTPS(msg []byte, name, host string, port int) (services []Service, alias string, ttl time.Duration, err error) {
 	var p dnsmessage.Parser
 	h, err := p.Start(msg)
 	if err != nil {
@@ -129,33 +134,58 @@ func parseHTTPS(msg []byte, name string) (services []Service, alias string, ttl 
 		owner = next
 	}
 	found := false
+	host = strings.ToLower(strings.TrimSuffix(host, ".")) + "."
+	defaultALPN := false
 	for _, r := range recs {
 		if r.owner != owner {
 			continue
 		}
 		found = true
 		ttl = min(ttl, time.Duration(r.ttl)*time.Second)
-		target := strings.ToLower(r.r.Target.String())
 		if r.r.Priority == 0 {
-			// AliasMode: the first one wins, and ServiceMode records beside it
-			// are to be ignored (RFC 9460, 2.4.2).
-			return nil, target, ttl, nil
+			return nil, "", ttl, nil // AliasMode: Chrome keeps nothing
 		}
-		if target != "." && target != owner {
-			// Another endpoint's name: a browser would resolve it separately;
-			// Chrome takes service records for the origin itself.
+		target := strings.ToLower(r.r.Target.String())
+		if target == "." {
+			target = owner
+		}
+		// The target must be where the addresses are: host itself, or the end
+		// of its CNAME chain — which a "_port._https" owner never is.
+		if target != host && (target != owner || strings.HasPrefix(owner, "_")) {
 			continue
 		}
 		s, ok := service(&r.r.SVCBResource)
-		if ok {
-			services = append(services, s)
+		if !ok || (s.Port != 0 && int(s.Port) != port) {
+			continue
 		}
+		if !s.NoDefaultALPN {
+			defaultALPN = true
+			if !contains(s.ALPN, "http/1.1") {
+				s.ALPN = append(s.ALPN, "http/1.1")
+			}
+		}
+		if len(s.ALPN) == 0 {
+			continue
+		}
+		services = append(services, s)
 	}
 	if !found {
 		ttl = negativeTTLFrom(&p)
 	}
+	if !defaultALPN {
+		services = nil
+	}
 	sort.SliceStable(services, func(i, j int) bool { return services[i].Priority < services[j].Priority })
 	return services, "", ttl, nil
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 func service(r *dnsmessage.SVCBResource) (Service, bool) {

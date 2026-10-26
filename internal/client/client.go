@@ -819,6 +819,9 @@ type Session struct {
 
 	// dns resolves names and asks for HTTPS records (dns.go).
 	dns dnsState
+	// echCapable: a Chromium profile whose hello carries ECH, which uses an
+	// origin's ECH configuration when DNS publishes one.
+	echCapable bool
 }
 
 // New creates a session. The profile spec is checked right away so that a data
@@ -898,6 +901,7 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	p = p.ForSession()
 
 	s := &Session{
+		echCapable: profile.Chromium(p.Family()) && sendsECH(helloSpec),
 		profile:    p,
 		opts:       opts,
 		alpn:       alpnFromProfile(p),
@@ -1325,7 +1329,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// the target can carry QUIC: directly, or through a MASQUE proxy. Behind
 	// any other proxy the advertisement is left alone — guessing wrong there
 	// would cost a request to tell us what the scheme already says.
-	viaAltSvc := !plain && forced == "" && !s.opts.HTTP3 && s.altSvcH3(u) &&
+	viaAltSvc := !plain && forced == "" && !s.opts.HTTP3 && s.altSvcH3(u) && !s.echPinsTCP(u) &&
 		masqueCarriesH3(s.proxyForHost(r, u.Scheme, u.Host)) == nil
 	// An HTTPS record naming h3 sends the browser to HTTP/3 on the first
 	// request, Alt-Svc or not: Chrome's DNS ALPN job, Firefox's
@@ -1334,7 +1338,8 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	viaDNS := false
 	if !plain && forced == "" && !s.opts.HTTP3 && !viaAltSvc && s.profile.HTTP3.Enabled() && !s.h3Broken(u) {
 		if px := s.proxyForHost(r, u.Scheme, u.Host); px == "" {
-			viaDNS = s.httpsRecord(req.Context(), u, px, dnsRecordWait).ALPN("h3")
+			rec := s.httpsRecord(req.Context(), u, px, dnsRecordWait)
+			viaDNS = rec.ALPN("h3") && !(s.echCapable && rec.ECH() != nil)
 		}
 	}
 	if forced == ProtoH3 || (forced == "" && s.opts.HTTP3) || viaAltSvc || viaDNS {
@@ -1457,93 +1462,44 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 	dialCtx, done := s.connectContext(ctx)
 	defer done()
 
-	raw, err := s.dialRaw(dialCtx, ds.addr, ds.proxy)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cleartext: no ClientHello, so no TLS fingerprint — but the HTTP/1.1 half
-	// of the profile still applies, and that is the half a plain-HTTP server
-	// can see. The header order and case come from the profile exactly as they
-	// do over TLS, because the connection is an ordinary h1 connection from
-	// here on.
-	if ds.plain {
-		return newH1Conn(raw, ds), nil
-	}
-
-	// The spec is built per connection: ShuffleChromeTLSExtensions mutates the
-	// slice in place, so reusing it would freeze the order.
-	spec, err := profile.BuildSpec(s.profile)
-	if err != nil {
-		raw.Close()
-		return nil, err
-	}
-	// The resuming ClientHello is a different message from the first one, and
-	// no profile describes it: a browser's very first hello has nothing to
-	// resume with, so a capture never contains pre_shared_key. The extension is
-	// appended here, last, exactly where a browser puts it. With OmitEmptyPsk
-	// it stays off the wire until a ticket exists, so the first handshake is
-	// byte-for-byte what it was.
-	if s.opts.Resume {
-		spec.Extensions = append(spec.Extensions, &utls.UtlsPreSharedKeyExtension{})
-		// Firefox's resuming hello has no session_ticket extension: NSS offers
-		// the TLS 1.2 ticket slot only when it holds no TLS 1.3 ticket. Chrome
-		// keeps it. The profile says which, and the cache says whether this
-		// connection will resume at all — the first hello must stay as captured.
-		if s.profile.TLS.ResumeOmitsSessionTicket != nil && *s.profile.TLS.ResumeOmitsSessionTicket && s.hasTicket(u.Hostname()) {
-			dropSessionTicket(spec)
+	// Real ECH where the origin publishes a configuration and the browser
+	// would use it (dns.go): asked before the TCP connection, as Chrome asks
+	// for the record beside the address and reads it at the TLS handshake.
+	ech := s.echConfig(dialCtx, u, ds)
+	var raw net.Conn
+	var uconn *utls.UConn
+	for attempt := 0; ; attempt++ {
+		var err error
+		raw, err = s.dialRaw(dialCtx, ds.addr, ds.proxy)
+		if err != nil {
+			return nil, err
 		}
-	}
 
-	// ALPN lives inside the spec, and ApplyPreset overrides Config.NextProtos.
-	// So restricting the protocol means editing the extension, not the config.
-	// The fingerprint changes legitimately: a browser without h2 looks like this.
-	//
-	// The flag comes from dialSpec rather than from the session options: it is
-	// part of the pool key, so a WebSocket h1 connection cannot replace the h2 one.
-	if ds.forceHTTP1 {
-		if !setALPN(spec, []string{"http/1.1"}) {
-			raw.Close()
-			return nil, capabilityErr("force_http1: profile %q has no ALPN extension to restrict", s.profile.Name)
+		// Cleartext: no ClientHello, so no TLS fingerprint — but the HTTP/1.1 half
+		// of the profile still applies, and that is the half a plain-HTTP server
+		// can see. The header order and case come from the profile exactly as they
+		// do over TLS, because the connection is an ordinary h1 connection from
+		// here on.
+		if ds.plain {
+			return newH1Conn(raw, ds), nil
 		}
-	}
-	if s.opts.DisablePostQuantum {
-		dropPostQuantum(spec)
-	}
-
-	cfg := &utls.Config{
-		ServerName:         u.Hostname(),
-		InsecureSkipVerify: s.opts.InsecureSkipVerify,
-		RootCAs:            s.roots,
-		Certificates:       s.clientCerts,
-		// Profiles captured on a resumed connection contain pre_shared_key.
-		// On a first connection there is no ticket yet, and uTLS refuses by
-		// default to send an empty extension. A browser in that situation simply
-		// does not send it — OmitEmptyPsk reproduces exactly that.
-		OmitEmptyPsk: true,
-	}
-	if s.opts.Resume {
-		// One cache per session: tickets belong to the identity, and sharing
-		// them between sessions would let two identities be linked by the very
-		// mechanism meant to make each look like a returning browser.
-		cfg.ClientSessionCache = s.tlsSessions
-	} else {
-		cfg.SessionTicketsDisabled = true
-	}
-	if len(s.alpn) > 0 {
-		cfg.NextProtos = s.alpn
-	}
-
-	uconn := utls.UClient(raw, cfg, utls.HelloCustom)
-	if err := uconn.ApplyPreset(spec); err != nil {
+		uconn, err = s.handshakeTLS(dialCtx, raw, u, ds, ech)
+		if err == nil {
+			break
+		}
 		raw.Close()
-		return nil, fmt.Errorf("ApplyPreset: %w", err)
-	}
-	// The handshake runs under the same limit as TCP: a host that accepted the
-	// connection and went silent would otherwise eat the whole request budget.
-	if err := uconn.HandshakeContext(dialCtx); err != nil {
-		raw.Close()
-		return nil, fmt.Errorf("TLS handshake: %w", err)
+		// The server could not decrypt the hello and answered as its public
+		// name with retry configurations: Chrome connects once more with them,
+		// or with ECH off when there are none (tls_stream_attempt.cc).
+		var rej *utls.ECHRejectionError
+		if ech != nil && attempt == 0 && errors.As(err, &rej) {
+			ech = nil
+			if len(rej.RetryConfigList) > 0 {
+				ech = rej.RetryConfigList
+			}
+			continue
+		}
+		return nil, err
 	}
 
 	// The protocol was chosen by the server. An empty ALPN means HTTP/1.1 — that
@@ -1569,6 +1525,102 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 		uconn.Close()
 		return nil, fmt.Errorf("server negotiated %q, which is not supported", proto)
 	}
+}
+
+// handshakeTLS runs the profile's TLS handshake on a fresh connection, with
+// real ECH when ech holds a configuration list.
+func (s *Session) handshakeTLS(dialCtx context.Context, raw net.Conn, u *url.URL, ds dialSpec, ech []byte) (*utls.UConn, error) {
+	// The spec is built per connection: ShuffleChromeTLSExtensions mutates the
+	// slice in place, so reusing it would freeze the order.
+	spec, err := profile.BuildSpec(s.profile)
+	if err != nil {
+		return nil, err
+	}
+	// The resuming ClientHello is a different message from the first one, and
+	// no profile describes it: a browser's very first hello has nothing to
+	// resume with, so a capture never contains pre_shared_key. The extension is
+	// appended here, last, exactly where a browser puts it. With OmitEmptyPsk
+	// it stays off the wire until a ticket exists, so the first handshake is
+	// byte-for-byte what it was.
+	// With ECH Chrome carries the PSK inside the inner hello alone; that is not
+	// reproduced yet, so a connection with ECH does not resume.
+	resume := s.opts.Resume && ech == nil
+	if resume {
+		spec.Extensions = append(spec.Extensions, &utls.UtlsPreSharedKeyExtension{})
+		// Firefox's resuming hello has no session_ticket extension: NSS offers
+		// the TLS 1.2 ticket slot only when it holds no TLS 1.3 ticket. Chrome
+		// keeps it. The profile says which, and the cache says whether this
+		// connection will resume at all — the first hello must stay as captured.
+		if s.profile.TLS.ResumeOmitsSessionTicket != nil && *s.profile.TLS.ResumeOmitsSessionTicket && s.hasTicket(u.Hostname()) {
+			dropSessionTicket(spec)
+		}
+	}
+
+	// ALPN lives inside the spec, and ApplyPreset overrides Config.NextProtos.
+	// So restricting the protocol means editing the extension, not the config.
+	// The fingerprint changes legitimately: a browser without h2 looks like this.
+	//
+	// The flag comes from dialSpec rather than from the session options: it is
+	// part of the pool key, so a WebSocket h1 connection cannot replace the h2 one.
+	if ds.forceHTTP1 {
+		if !setALPN(spec, []string{"http/1.1"}) {
+			return nil, capabilityErr("force_http1: profile %q has no ALPN extension to restrict", s.profile.Name)
+		}
+	}
+	if s.opts.DisablePostQuantum {
+		dropPostQuantum(spec)
+	}
+
+	cfg := &utls.Config{
+		ServerName:         u.Hostname(),
+		InsecureSkipVerify: s.opts.InsecureSkipVerify,
+		RootCAs:            s.roots,
+		Certificates:       s.clientCerts,
+		// Profiles captured on a resumed connection contain pre_shared_key.
+		// On a first connection there is no ticket yet, and uTLS refuses by
+		// default to send an empty extension. A browser in that situation simply
+		// does not send it — OmitEmptyPsk reproduces exactly that.
+		OmitEmptyPsk: true,
+	}
+	if resume {
+		// One cache per session: tickets belong to the identity, and sharing
+		// them between sessions would let two identities be linked by the very
+		// mechanism meant to make each look like a returning browser.
+		cfg.ClientSessionCache = s.tlsSessions
+	} else {
+		cfg.SessionTicketsDisabled = true
+	}
+	if len(s.alpn) > 0 {
+		cfg.NextProtos = s.alpn
+	}
+	if ech != nil {
+		// uTLS refuses a configuration list on a client that would accept
+		// TLS 1.2; the outer hello still offers 1.2, as the spec says.
+		cfg.EncryptedClientHelloConfigList = ech
+		cfg.MinVersion = utls.VersionTLS13
+		// Once ECH is accepted uTLS checks the server's answer against its own
+		// record of the inner hello, which takes ALPN from the config: the
+		// spec's list goes there, or a negotiated h2 reads as unrequested.
+		for _, e := range spec.Extensions {
+			if a, ok := e.(*utls.ALPNExtension); ok {
+				cfg.NextProtos = append([]string(nil), a.AlpnProtocols...)
+			}
+		}
+	}
+
+	uconn := utls.UClient(raw, cfg, utls.HelloCustom)
+	if ech != nil {
+		uconn.ECHInner = utls.ECHInnerBoringSSL // the inner hello Chrome builds (scripts/patch-utls.py)
+	}
+	if err := uconn.ApplyPreset(spec); err != nil {
+		return nil, fmt.Errorf("ApplyPreset: %w", err)
+	}
+	// The handshake runs under the same limit as TCP: a host that accepted the
+	// connection and went silent would otherwise eat the whole request budget.
+	if err := uconn.HandshakeContext(dialCtx); err != nil {
+		return nil, fmt.Errorf("TLS handshake: %w", err)
+	}
+	return uconn, nil
 }
 
 // transport builds the HTTP/2 transport from the profile.

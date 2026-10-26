@@ -57,6 +57,10 @@ type UConn struct {
 
 	// echCtx is the echContex returned by makeClientHello()
 	echCtx *echClientContext
+
+	// [curlPro] ECHInner chooses how the ClientHelloInner is built when real
+	// ECH is used (u_ech_curlpro.go).
+	ECHInner ECHInnerStyle
 }
 
 // UClient returns a new uTLS client, with behavior depending on clientHelloID.
@@ -511,7 +515,7 @@ func (uconn *UConn) computeAndUpdateOuterECHExtension(inner *clientHelloMsg, ech
 		encapKey = ech.encapsulatedKey
 	}
 
-	encodedInner, err := encodeInnerClientHelloReorderOuterExts(inner, int(ech.config.MaxNameLength), uconn.extensionsList())
+	encodedInner, err := uconn.encodeInner(inner, int(ech.config.MaxNameLength)) // [curlPro]
 	if err != nil {
 		return err
 	}

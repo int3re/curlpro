@@ -1304,6 +1304,30 @@ Nothing now stands between the tree and a browser but the hours it takes.
    the host's own rendering is what arrives.
 6. Distribution and the rebase script, then the first milestone rebase.
 
+## Stage 43 — DNS as the browser asks it, and real ECH ✅ done 2026-10-26
+
+From a read of the competitors (docs/RESEARCH.md, "Two months on") and of what
+Chrome 155 does that the client did not. Chrome asks for the origin's HTTPS
+record by default (from 108) and acts on it; the client never asked.
+
+- **Data, measured:** Firefox 158 (curlpro capture: 157's TLS; a bare socket:
+  field for field); Chrome 155's and Firefox 158's resources and cache pages on
+  the stand — `image/jxl` in Accept (Chrome 155's kJXLImageFormat; Firefox 158);
+  Chrome 155/156 for macOS and Linux on the captured Chrome 155; Chrome 152/153's
+  trust anchors drawn once per session (`trust_anchors_order: "per_process"`,
+  the absl::flat_hash_set of ssl_config_service.h).
+- **`internal/dnsrr`:** HTTPS records over the system's servers, given servers
+  or DoH, read by Chrome's rules (dns_response_result_extractor.cc), cached by TTL.
+- **The client:** `dns=`; `alpn=h3` to HTTP/3 on the first request; nothing
+  resolved behind a proxy; DoH with Chrome's request, read off its net log.
+- **Real ECH:** `scripts/patch-utls.py` builds BoringSSL's ClientHelloInner in
+  the vendored uTLS; `cmd/echstand` (DoH plus an ECH-keyed TLS server, Chrome
+  pointed at it through its own Local State) measured Chrome 155's outer and
+  inner hellos, and the client matches them field for field; retry
+  configurations taken once, as Chrome.
+- **Not yet:** ECH over QUIC (an ECH origin stays on TCP), the PSK inside the
+  inner hello (no resumption with ECH), Firefox's inner hello (NSS) and DoH.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

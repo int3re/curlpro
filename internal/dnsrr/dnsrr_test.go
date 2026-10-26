@@ -146,34 +146,60 @@ func TestAServiceRecordGivesALPNAndECH(t *testing.T) {
 	}
 }
 
+// Another port asks the "_port._https" name, and its record has to name the
+// host as its target: "." would mean the owner, where no address lives, and
+// Chrome then leaves the record unused (RFC 9460, section 9.1).
 func TestAnotherPortAsksTheUnderscoreName(t *testing.T) {
 	z := startZone(t, func(q dnsmessage.Question, b *dnsmessage.Builder) dnsmessage.RCode {
 		if q.Name.String() != "_8443._https.site.test." {
 			t.Errorf("asked %v", q.Name)
 		}
-		https(b, q.Name.String(), 60, 1, ".", dnsmessage.SVCParam{Key: dnsmessage.SVCParamALPN, Value: alpn("h2")})
+		https(b, q.Name.String(), 60, 1, "site.test.", dnsmessage.SVCParam{Key: dnsmessage.SVCParamALPN, Value: alpn("h2")})
+		https(b, q.Name.String(), 60, 2, ".", dnsmessage.SVCParam{Key: dnsmessage.SVCParamALPN, Value: alpn("h3")})
 		return dnsmessage.RCodeSuccess
 	})
-	if res := lookup(t, z, "site.test", 8443); res.Top() == nil {
-		t.Fatal("no service")
+	res := lookup(t, z, "site.test", 8443)
+	if len(res.Services) != 1 || !res.ALPN("h2") || res.ALPN("h3") {
+		t.Fatalf("%+v", res.Services)
 	}
 }
 
-func TestAliasAndCNAMEAreFollowed(t *testing.T) {
+// http/1.1 is the default ALPN every record carries unless it says
+// no-default-alpn; a port other than the request's leaves a record unused.
+func TestDefaultALPNAndPort(t *testing.T) {
+	z := startZone(t, func(q dnsmessage.Question, b *dnsmessage.Builder) dnsmessage.RCode {
+		https(b, "site.test.", 60, 1, ".", dnsmessage.SVCParam{Key: dnsmessage.SVCParamALPN, Value: alpn("h3")},
+			dnsmessage.SVCParam{Key: dnsmessage.SVCParamPort, Value: []byte{0x20, 0xfb}})
+		https(b, "site.test.", 60, 2, ".", dnsmessage.SVCParam{Key: dnsmessage.SVCParamALPN, Value: alpn("h2")})
+		return dnsmessage.RCodeSuccess
+	})
+	res := lookup(t, z, "site.test", 443)
+	if len(res.Services) != 1 || strings.Join(res.Top().ALPN, ",") != "h2,http/1.1" {
+		t.Fatalf("%+v", res.Services)
+	}
+}
+
+// A CNAME inside the answer is followed; an AliasMode record is not — Chrome
+// clears the answer when it holds one — and nothing more is asked for it.
+func TestCNAMEIsFollowedAndAliasModeIsNot(t *testing.T) {
 	z := startZone(t, func(q dnsmessage.Question, b *dnsmessage.Builder) dnsmessage.RCode {
 		switch q.Name.String() {
 		case "apex.test.":
 			https(b, "apex.test.", 300, 0, "cdn.test.")
-		case "cdn.test.":
-			b.CNAMEResource(dnsmessage.ResourceHeader{Name: name("cdn.test."), Class: dnsmessage.ClassINET, TTL: 300},
+		case "www.test.":
+			b.CNAMEResource(dnsmessage.ResourceHeader{Name: name("www.test."), Class: dnsmessage.ClassINET, TTL: 300},
 				dnsmessage.CNAMEResource{CNAME: name("edge.cdn.test.")})
 			https(b, "edge.cdn.test.", 120, 1, ".", dnsmessage.SVCParam{Key: dnsmessage.SVCParamALPN, Value: alpn("h3")})
+		default:
+			t.Errorf("asked %v", q.Name)
 		}
 		return dnsmessage.RCodeSuccess
 	})
-	res := lookup(t, z, "apex.test", 443)
-	if !res.ALPN("h3") {
-		t.Fatalf("%+v", res.Services)
+	if res := lookup(t, z, "www.test", 443); !res.ALPN("h3") {
+		t.Fatalf("www: %+v", res.Services)
+	}
+	if res := lookup(t, z, "apex.test", 443); res.Top() != nil {
+		t.Fatalf("apex: %+v", res.Services)
 	}
 }
 

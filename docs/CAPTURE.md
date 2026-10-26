@@ -484,3 +484,42 @@ The provider decides the ClientHello. On Android that is Conscrypt; on the JVM,
 SunJSSE unless Conscrypt is installed as a provider. Both were captured, and the
 profiles are named for the provider, not for a platform nobody measured on.
 
+## Firefox on the subresource and cache pages
+
+`cmd/hcapture` launches Chrome by itself. Firefox needs the stand's
+certificate trusted for every name the pages use and those names kept local:
+`scripts/ff-stand.py` writes both into a throwaway profile (`cert_override.txt`,
+one five-field line per name; `network.dns.localDomains`), starts `hcapture`
+without a browser, runs Firefox headless at the page and closes it after.
+Firefox 158's four runs (`capture/subres/firefox-158-*`,
+`capture/cache/firefox-158-*`) were taken that way on 2026-10-26.
+
+    go build -o hcapture.exe ./cmd/hcapture
+    python scripts/ff-stand.py subres h2 firefox-158-h2.json
+    python scripts/ff-stand.py cache h1 firefox-158-cache-h1.json 40
+
+## ECH: `cmd/echstand`
+
+What a browser sends with Encrypted Client Hello, outer and inner. The stand is
+a DNS-over-HTTPS server that publishes an HTTPS record for `ech-stand.test`
+(the name as an explicit target on its port, `alpn` h2 and an ECH configuration
+it generates) and a TLS server holding that configuration's key. It keeps the
+outer ClientHello of every connection, opens the inner one with HPKE over
+ClientHelloOuterAAD (RFC 9849, 5.2), expands what `ech_outer_extensions`
+compressed and writes outer, encoded inner and inner as hex.
+
+    go run ./cmd/echstand -auto -json ech-chrome.json [-netlog netlog.json]
+    go run ./cmd/echstand -json ech-ours.json   # then a client with dns= at -doh
+
+`-auto` points the installed Chrome at it through the throwaway profile's own
+Local State (`dns_over_https.mode: secure`, `templates`), so nothing about the
+system's DNS changes; `-netlog` keeps Chrome's net log, which shows what its
+resolver took from the record and the SSL configuration it connected with.
+Chrome 155.0.8059.85 there, 2026-10-26: outer SNI the public name, payload 144
+on a first connection and 304 on a resumed one (the PSK in the inner hello
+only), the inner hello BoringSSL's — and the client's matched it field for
+field. Two things the stand taught: a record on `_PORT._https.host` must name
+the host as its target, or Chrome leaves it unused; and Chrome's DoH request is
+`user-agent: Chrome`, `accept-language: *`, `accept-encoding: identity`,
+`priority: u=4, i`.
+

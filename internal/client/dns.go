@@ -16,6 +16,7 @@ import (
 
 	"github.com/curlpro/curlpro/internal/dnsrr"
 	"github.com/curlpro/curlpro/internal/profile"
+	utls "github.com/refraction-networking/utls"
 )
 
 // The session's DNS: what resolves the names it connects to, and the HTTPS
@@ -183,6 +184,45 @@ func (s *Session) httpsRecord(ctx context.Context, u *url.URL, proxy string, wai
 	}
 }
 
+// echConfig is the ECH configuration list a TLS connection uses: the one the
+// origin's HTTPS record carries, where the profile's browser would use it — a
+// Chromium whose hello carries ECH (its GREASE extension stands for exactly
+// that), on a direct connection. Elsewhere nil, and the hello keeps its GREASE.
+// Firefox builds its inner hello in NSS, which is not reproduced, so a Firefox
+// profile keeps GREASE too.
+func (s *Session) echConfig(ctx context.Context, u *url.URL, ds dialSpec) []byte {
+	if !s.echCapable || ds.plain || ds.proxy != "" {
+		return nil
+	}
+	return s.httpsRecord(ctx, u, ds.proxy, dnsRecordWait).ECH()
+}
+
+// echPinsTCP reports an origin known to publish ECH to an ECH-capable
+// session. Chrome reaches it over QUIC with ECH as well; the QUIC stack here
+// has no ECH, and QUIC without it would send in clear the very name ECH
+// hides — so such an origin is kept on TCP, Alt-Svc or HTTPS record h3 alike.
+func (s *Session) echPinsTCP(u *url.URL) bool {
+	if !s.echCapable || s.dns.rr == nil {
+		return false
+	}
+	port := 443
+	if p := u.Port(); p != "" {
+		port, _ = strconv.Atoi(p)
+	}
+	res, ok := s.dns.rr.Cached(strings.ToLower(u.Hostname()), port)
+	return ok && res.ECH() != nil
+}
+
+// sendsECH reports a hello that carries an ECH extension.
+func sendsECH(spec *utls.ClientHelloSpec) bool {
+	for _, e := range spec.Extensions {
+		if _, ok := e.(*utls.GREASEEncryptedClientHelloExtension); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveUDP is net.ResolveUDPAddr through the session's resolver: the first
 // address of the family the network asks for.
 func resolveUDP(ctx context.Context, r *net.Resolver, network, addr string) (*net.UDPAddr, error) {
@@ -257,13 +297,12 @@ func (s *Session) dohExchange(ctx context.Context, q []byte) ([]byte, error) {
 		timeout = min(timeout, time.Until(d))
 	}
 	off := false
+	headers, order := dohHeaders(s.profile)
 	resp, err := s.dns.doh.Do(&Request{
-		Method: "POST",
-		URL:    s.dns.dohURL,
-		Headers: map[string]string{
-			"accept":       "application/dns-message",
-			"content-type": "application/dns-message",
-		},
+		Method:         "POST",
+		URL:            s.dns.dohURL,
+		Headers:        headers,
+		HeaderOrder:    order,
 		Body:           q,
 		DefaultHeaders: &off,
 		Cookies:        &off,
@@ -277,6 +316,29 @@ func (s *Session) dohExchange(ctx context.Context, q []byte) ([]byte, error) {
 		return nil, fmt.Errorf("dns over https: the server answered %d", resp.Status)
 	}
 	return resp.Body, nil
+}
+
+// dohHeaders are the headers of a DoH request. Chrome's, read off its net log
+// (Chrome 155.0.8059.85, 2026-10-26, against cmd/echstand): a fixed set that
+// owes nothing to the page — "Chrome" for a User-Agent, "*" for languages,
+// identity for encodings, the lowest priority — in this order. Firefox's TRR
+// was not measured; it gets the two RFC 8484 asks.
+func dohHeaders(p *profile.Profile) (map[string]string, []string) {
+	if profile.Chromium(p.Family()) {
+		return map[string]string{
+			"accept":          "application/dns-message",
+			"accept-language": "*",
+			"user-agent":      "Chrome",
+			"accept-encoding": "identity",
+			"content-type":    "application/dns-message",
+			"priority":        "u=4, i",
+		}, []string{"content-length", "accept", "accept-language", "user-agent", "accept-encoding",
+			"content-type", "priority"}
+	}
+	return map[string]string{
+		"accept":       "application/dns-message",
+		"content-type": "application/dns-message",
+	}, []string{"content-length", "accept", "content-type"}
 }
 
 // dohConn carries Go's resolver over DoH: what it writes is a query, what it
