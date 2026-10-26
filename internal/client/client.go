@@ -1339,7 +1339,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if !plain && forced == "" && !s.opts.HTTP3 && !viaAltSvc && s.profile.HTTP3.Enabled() && !s.h3Broken(u) {
 		if px := s.proxyForHost(r, u.Scheme, u.Host); px == "" {
 			rec := s.httpsRecord(req.Context(), u, px, dnsRecordWait)
-			viaDNS = rec.ALPN("h3") && !(s.echCapable && rec.ECH() != nil)
+			viaDNS = rec.ALPN("h3") && !s.echUsable(rec.ECH())
 		}
 	}
 	if forced == ProtoH3 || (forced == "" && s.opts.HTTP3) || viaAltSvc || viaDNS {
@@ -1483,7 +1483,12 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 		if ds.plain {
 			return newH1Conn(raw, ds), nil
 		}
-		uconn, err = s.handshakeTLS(dialCtx, raw, u, ds, ech)
+		hsCtx, hsDone := dialCtx, context.CancelFunc(func() {})
+		if ech != nil {
+			hsCtx, hsDone = context.WithTimeout(dialCtx, echHandshakeWait)
+		}
+		uconn, err = s.handshakeTLS(hsCtx, raw, u, ds, ech)
+		hsDone()
 		if err == nil {
 			break
 		}
@@ -1497,6 +1502,15 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 			if len(rej.RetryConfigList) > 0 {
 				ech = rej.RetryConfigList
 			}
+			continue
+		}
+		// The network dropped the hello with ECH — as Russia's does to every
+		// Cloudflare site — and Chrome would fail here. The connection is made
+		// once more without ECH, as 0.17 made it, and the public name is
+		// marked so the process's next connections do not try again (dns.go).
+		if ech != nil && attempt == 0 && echDropped(err, dialCtx) {
+			markECHBroken(ech)
+			ech = nil
 			continue
 		}
 		return nil, err

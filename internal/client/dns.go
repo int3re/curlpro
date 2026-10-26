@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -194,7 +195,117 @@ func (s *Session) echConfig(ctx context.Context, u *url.URL, ds dialSpec) []byte
 	if !s.echCapable || ds.plain || ds.proxy != "" {
 		return nil
 	}
-	return s.httpsRecord(ctx, u, ds.proxy, dnsRecordWait).ECH()
+	if ech := s.httpsRecord(ctx, u, ds.proxy, dnsRecordWait).ECH(); s.echUsable(ech) {
+		return ech
+	}
+	return nil
+}
+
+// echHandshakeWait bounds a handshake with real ECH. A network that drops ECH
+// does it to the hello, after TCP: by a reset, a close, or by holding the
+// connection without an answer — and that last needs a limit of its own, or the
+// whole connect budget is gone before the connection without ECH can be tried.
+// A variable for the tests.
+var echHandshakeWait = 3 * time.Second
+
+// echUsable reports a configuration list this session would encrypt to: an
+// ECH-capable profile, and a public name the network has not been seen to
+// drop. An unusable list is as good as none — the origin gets GREASE ECH and
+// no TCP pin, as in 0.17.
+func (s *Session) echUsable(list []byte) bool {
+	if !s.echCapable || list == nil {
+		return false
+	}
+	name := echPublicName(list)
+	echDrops.Lock()
+	defer echDrops.Unlock()
+	return !time.Now().Before(echDrops.until[name])
+}
+
+// echDrops holds the ECH public names the network dropped a handshake to, and
+// until when they are left alone. Censoring middleboxes match the outer SNI,
+// the public name (cloudflare-ech.com for every Cloudflare site at once), and
+// they are the network's, not a session's: ECH is tried only on a direct
+// connection, and every session of the process shares that one. So the mark
+// is the process's — the next session does not pay the attempt again, nor
+// draw the penalty a middlebox may lay on the next connection to that address
+// — and lasts ten minutes, so that a network that changed (a VPN switched on)
+// is asked again. Chrome has no such fallback — it fails the connection —
+// which is faithful and useless to a client that has to get the page.
+var echDrops struct {
+	sync.Mutex
+	until map[string]time.Time
+}
+
+const echDropMemory = 10 * time.Minute
+
+// markECHBroken records that a handshake with ECH to this list's public name
+// failed on the network.
+func markECHBroken(list []byte) {
+	echDrops.Lock()
+	if echDrops.until == nil {
+		echDrops.until = make(map[string]time.Time)
+	}
+	echDrops.until[echPublicName(list)] = time.Now().Add(echDropMemory)
+	echDrops.Unlock()
+}
+
+// forgetECHDrops clears the process's marks (for the tests).
+func forgetECHDrops() {
+	echDrops.Lock()
+	echDrops.until = nil
+	echDrops.Unlock()
+}
+
+// echPublicName is the public_name of the first configuration in an
+// ECHConfigList this client can use (RFC 9849, 4), or the list itself when it
+// cannot be read: a mark then still covers exactly that list.
+func echPublicName(list []byte) string {
+	b := list
+	if len(b) < 2 {
+		return string(list)
+	}
+	b = b[2:]
+	for len(b) >= 4 {
+		version, n := binary.BigEndian.Uint16(b), int(binary.BigEndian.Uint16(b[2:]))
+		if len(b) < 4+n {
+			break
+		}
+		c := b[4 : 4+n]
+		b = b[4+n:]
+		if version != 0xfe0d {
+			continue
+		}
+		// config_id, kem_id, public_key, cipher_suites, maximum_name_length.
+		i := 1 + 2
+		if len(c) < i+2 {
+			break
+		}
+		i += 2 + int(binary.BigEndian.Uint16(c[i:]))
+		if len(c) < i+2 {
+			break
+		}
+		i += 2 + int(binary.BigEndian.Uint16(c[i:]))
+		i++
+		if len(c) < i+1 || len(c) < i+1+int(c[i]) {
+			break
+		}
+		return strings.ToLower(string(c[i+1 : i+1+int(c[i])]))
+	}
+	return string(list)
+}
+
+// echDropped reports a handshake with ECH that ended on the network rather
+// than in TLS: the connection closed or reset under it, or echHandshakeWait
+// ran out while the request still had time. A TLS alert is the server's answer
+// and is not retried — nor is a rejection, which has its own path.
+func echDropped(err error, dialCtx context.Context) bool {
+	if dialCtx.Err() != nil {
+		return false
+	}
+	var op *net.OpError
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, context.DeadlineExceeded) || errors.As(err, &op)
 }
 
 // echPinsTCP reports an origin known to publish ECH to an ECH-capable
@@ -210,7 +321,7 @@ func (s *Session) echPinsTCP(u *url.URL) bool {
 		port, _ = strconv.Atoi(p)
 	}
 	res, ok := s.dns.rr.Cached(strings.ToLower(u.Hostname()), port)
-	return ok && res.ECH() != nil
+	return ok && s.echUsable(res.ECH())
 }
 
 // sendsECH reports a hello that carries an ECH extension.

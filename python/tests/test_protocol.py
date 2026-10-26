@@ -129,13 +129,34 @@ online = pytest.mark.network(
 
 @online
 def test_forced_protocol_beats_alt_svc():
-    """The site advertised h3 and the client upgraded — but a request may stay on h2."""
-    with curlpro.Session("chrome-151-windows") as s:
+    """The site advertised h3 and the client upgraded — but a request may stay on h2.
+
+    dns="off": the site also publishes an HTTPS record with ECH, and with it the
+    session stays on TCP (the next test); without records Alt-Svc alone leads.
+    """
+    with curlpro.Session("chrome-151-windows", dns="off") as s:
         assert s.get(LIVE).proto == "HTTP/2.0"
         assert s.get(LIVE).proto == "HTTP/3.0", "the second request must go over QUIC"
         assert s.get(LIVE, protocol="h2").proto == "HTTP/2.0"
         assert s.get(LIVE, protocol=1.1).proto == "HTTP/1.1"
         assert s.get(LIVE, protocol=3).proto == "HTTP/3.0"
+
+
+@online
+def test_an_ech_origin_stays_on_tcp():
+    """cloudflare-quic.com publishes alpn=h3 and an ECH configuration in its
+    HTTPS record. A Chromium session takes ECH, which over QUIC is not
+    reproduced yet, so neither the record nor Alt-Svc moves it to HTTP/3 — QUIC
+    without ECH would show the name ECH hides.
+
+    Where the network drops ECH (Russia's does, to every Cloudflare site) the
+    session connects again without it, and with nothing left to hide Alt-Svc
+    may take the next request to HTTP/3: Python cannot tell the two networks
+    apart, so the second request may be either — but it must arrive."""
+    with curlpro.Session("chrome-151-windows") as s:
+        assert s.get(LIVE).proto == "HTTP/2.0", "the HTTPS record's h3 must not take an ECH origin to QUIC"
+        assert s.get(LIVE).proto in ("HTTP/2.0", "HTTP/3.0")
+        assert s.get(LIVE, protocol="h3").proto == "HTTP/3.0", "an explicit protocol still wins"
 
 
 @online

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -14,9 +15,11 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -258,5 +261,160 @@ func TestFirefoxKeepsGREASEOnAnECHSite(t *testing.T) {
 	defer srv.mu.Unlock()
 	if len(srv.accepted) != 1 || srv.accepted[0] || srv.inner[0].ServerName != "echsite.test" {
 		t.Fatalf("accepted %v, SNI %q", srv.accepted, srv.inner[0].ServerName)
+	}
+}
+
+// dpiProxy stands in front of an ECH server the way a censoring middlebox
+// does: a hello with the public name in clear — real ECH — is closed, or held
+// without an answer; any other passes through to the server.
+type dpiProxy struct {
+	port    string
+	dropped atomic.Int32
+	mu      sync.Mutex
+	held    []net.Conn
+}
+
+func startDPI(t *testing.T, backend, publicName string, hold bool) *dpiProxy {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &dpiProxy{}
+	_, d.port, _ = net.SplitHostPort(ln.Addr().String())
+	t.Cleanup(func() {
+		ln.Close()
+		d.mu.Lock()
+		for _, c := range d.held {
+			c.Close()
+		}
+		d.mu.Unlock()
+	})
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				rec, rest, err := firstTLSRecord(c)
+				if err != nil {
+					c.Close()
+					return
+				}
+				if bytes.Contains(rec, []byte(publicName)) {
+					d.dropped.Add(1)
+					if hold {
+						d.mu.Lock()
+						d.held = append(d.held, c)
+						d.mu.Unlock()
+						return
+					}
+					c.Close()
+					return
+				}
+				b, err := net.Dial("tcp", backend)
+				if err != nil {
+					c.Close()
+					return
+				}
+				go func() { io.Copy(b, rest); b.Close() }()
+				io.Copy(c, b)
+				c.Close()
+			}()
+		}
+	}()
+	return d
+}
+
+func droppedECHSession(t *testing.T, hold bool) (*Session, *echServer, *dpiProxy) {
+	t.Helper()
+	forgetECHDrops()
+	t.Cleanup(forgetECHDrops)
+	cfg, key := echConfigFor(t, 7, "public.echsite.test")
+	srv := startECHServer(t, cfg, key)
+	dpi := startDPI(t, srv.addr, "public.echsite.test", hold)
+	z := newTestZone(t)
+	q := "_" + dpi.port + "._https.echsite.test."
+	z.https[q], z.ech[q] = []string{"h2"}, echList(cfg)
+	return echSession(t, "chrome-155-windows", z, srv), srv, dpi
+}
+
+// A network that drops ECH — Russia's does it to every Cloudflare site — gets
+// one hello with it; the connection is made again without, and the next
+// connection to that public name does not try, the next session's neither.
+// Chrome would fail here.
+func TestADroppedECHHandshakeIsMadeAgainWithout(t *testing.T) {
+	s, srv, dpi := droppedECHSession(t, false)
+	url := "https://echsite.test:" + dpi.port + "/"
+	resp, err := s.Do(&Request{Method: "GET", URL: url})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(resp.Body) != "ok" {
+		t.Fatalf("%q", resp.Body)
+	}
+	// A connection of its own: HTTP/1.1 does not share the h2 one.
+	if _, err := s.Do(&Request{Method: "GET", URL: url, Protocol: ProtoHTTP1}); err != nil {
+		t.Fatal(err)
+	}
+	// The network is the process's: another session does not try either.
+	other, err := New(s.profile, s.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	if _, err := other.Do(&Request{Method: "GET", URL: url}); err != nil {
+		t.Fatal(err)
+	}
+	if n := dpi.dropped.Load(); n != 1 {
+		t.Fatalf("%d hellos with ECH, want one", n)
+	}
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if len(srv.accepted) != 3 || srv.accepted[0] || srv.accepted[1] || srv.accepted[2] {
+		t.Fatalf("ECH accepted: %v, want three connections without it", srv.accepted)
+	}
+}
+
+// Held without an answer, the hello with ECH costs echHandshakeWait, not the
+// whole connect budget.
+func TestAHeldECHHandshakeGivesWayInTime(t *testing.T) {
+	old := echHandshakeWait
+	echHandshakeWait = 300 * time.Millisecond
+	t.Cleanup(func() { echHandshakeWait = old })
+	s, _, dpi := droppedECHSession(t, true)
+	start := time.Now()
+	if _, err := s.Do(&Request{Method: "GET", URL: "https://echsite.test:" + dpi.port + "/"}); err != nil {
+		t.Fatal(err)
+	}
+	if el := time.Since(start); el > 3*time.Second {
+		t.Fatalf("took %v", el)
+	}
+	if n := dpi.dropped.Load(); n != 1 {
+		t.Fatalf("%d hellos with ECH, want one", n)
+	}
+}
+
+// With its public name dropped, the origin is no longer kept off HTTP/3: there
+// is no hidden name left for QUIC to show.
+func TestADroppedPublicNameNoLongerPinsTCP(t *testing.T) {
+	s, _, dpi := droppedECHSession(t, false)
+	u := &url.URL{Scheme: "https", Host: "echsite.test:" + dpi.port}
+	if _, err := s.Do(&Request{Method: "GET", URL: u.String() + "/"}); err != nil {
+		t.Fatal(err)
+	}
+	if s.echPinsTCP(u) {
+		t.Fatal("an origin whose ECH the network drops is still pinned to TCP")
+	}
+}
+
+func TestECHPublicName(t *testing.T) {
+	cfg, _ := echConfigFor(t, 7, "Public.Example.test")
+	if got := echPublicName(echList(cfg)); got != "public.example.test" {
+		t.Fatalf("%q", got)
+	}
+	if got := echPublicName([]byte{0, 3, 1, 2, 3}); got != "\x00\x03\x01\x02\x03" {
+		t.Fatalf("an unreadable list must stand for itself: %q", got)
 	}
 }

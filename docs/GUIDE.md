@@ -1073,6 +1073,13 @@ on it. From 0.18 a session does the same, on a direct connection to a name:
   the whole to a multiple of 32 (`scripts/patch-utls.py`). A server that
   rejects it with retry configurations gets one more connection with them, or
   without ECH when it sends none, as Chrome does.
+- A network that drops ECH — Russia's does it to every Cloudflare site, by the
+  public name `cloudflare-ech.com` — closes or resets the connection under the
+  hello, or holds it unanswered. Chrome fails there; a session connects once
+  more without ECH, as 0.17 did, after at most 3 seconds, and for ten minutes
+  the process's connections to that public name skip ECH, HTTP/3 allowed again
+  — every session's, since ECH is tried only on a direct connection and they
+  all share it. `dns="off"` skips the attempt from the start.
 - The record is read by Chrome's rules (`dns_response_result_extractor.cc`):
   AliasMode records are not followed, a record must point at the host — on
   another port, `_PORT._https.host` with the host as an explicit target — its

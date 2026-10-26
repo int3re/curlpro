@@ -13,7 +13,10 @@ record (RFC 9460) before it connects, as those browsers do, and acts on it — a
 `ech` record makes the ClientHello real ECH (RFC 9849), its inner hello
 BoringSSL's, measured against Chrome 155 on the new `cmd/echstand` and matched
 field for field (`scripts/patch-utls.py` carries it on the vendored uTLS); a
-rejection with retry configurations is retried once, as Chrome. `dns=` takes
+rejection with retry configurations is retried once, as Chrome; a network
+that drops ECH (Russia's does, to every Cloudflare site) gets one more
+connection without it, where Chrome would fail, and the process leaves that
+public name alone for ten minutes. `dns=` takes
 servers or DNS over HTTPS, with Chrome's own DoH request; behind a proxy nothing
 is resolved locally. Beside it: Firefox 158 captured; `image/jxl` in the Accept
 of Chrome 155's documents and images and Firefox 158's images, measured; the
