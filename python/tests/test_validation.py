@@ -68,3 +68,12 @@ def test_expect_status_takes_ints_only():
     with pytest.raises(TypeError, match="not_status"):
         curlpro.Expect(not_status=[200, "404"])
     assert curlpro.Expect(status=[200, 201]).status == [200, 201]
+
+
+def test_dns_takes_off_servers_or_a_doh_url_and_refuses_the_rest():
+    import curlpro
+    for spec in (None, "off", "1.1.1.1", "1.1.1.1, 8.8.8.8:53", "https://dns.example/dns-query"):
+        curlpro.Session("chrome-155-windows", dns=spec).close()
+    for bad in ("dns.google", "https://", "8.8.8.8:"):
+        with pytest.raises(curlpro.ConfigurationError):
+            curlpro.Session("chrome-155-windows", dns=bad)

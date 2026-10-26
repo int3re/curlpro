@@ -121,6 +121,11 @@ type Options struct {
 	// socket destination moves.
 	Resolve map[string]string
 
+	// DNS chooses what resolves names and whether HTTPS records are asked for
+	// first, as the browser asks (dns.go): "" the system's servers, "off" none,
+	// "1.1.1.1,8.8.8.8" those servers, "https://..." DNS over HTTPS.
+	DNS string
+
 	// IPVersion restricts the address family: "4", "6" or empty.
 	//
 	// Needed where a name has an AAAA record but there is no IPv6 route:
@@ -811,6 +816,9 @@ type Session struct {
 	// h2proxies are the HTTP/2 connections to https:// proxies that agreed
 	// to h2, shared by the tunnels on them (proxyh2.go).
 	h2proxies h2Proxies
+
+	// dns resolves names and asks for HTTPS records (dns.go).
+	dns dnsState
 }
 
 // New creates a session. The profile spec is checked right away so that a data
@@ -951,6 +959,9 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 			return nil, err
 		}
 	}
+	if err := s.setupDNS(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -980,6 +991,11 @@ func (s *Session) Close() {
 	s.closeH3()
 	s.closeMASQUE()
 	s.closeH2Proxies()
+	// Once with nothing to do waits out a DoH session being made right now.
+	s.dns.dohOnce.Do(func() {})
+	if s.dns.doh != nil {
+		s.dns.doh.Close()
+	}
 	for _, list := range conns {
 		closeAll(list)
 	}
@@ -1311,7 +1327,17 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// would cost a request to tell us what the scheme already says.
 	viaAltSvc := !plain && forced == "" && !s.opts.HTTP3 && s.altSvcH3(u) &&
 		masqueCarriesH3(s.proxyForHost(r, u.Scheme, u.Host)) == nil
-	if forced == ProtoH3 || (forced == "" && s.opts.HTTP3) || viaAltSvc {
+	// An HTTPS record naming h3 sends the browser to HTTP/3 on the first
+	// request, Alt-Svc or not: Chrome's DNS ALPN job, Firefox's
+	// network.dns.use_https_rr_as_altsvc. Only on a direct connection — behind
+	// a proxy nothing is resolved here at all.
+	viaDNS := false
+	if !plain && forced == "" && !s.opts.HTTP3 && !viaAltSvc && s.profile.HTTP3.Enabled() && !s.h3Broken(u) {
+		if px := s.proxyForHost(r, u.Scheme, u.Host); px == "" {
+			viaDNS = s.httpsRecord(req.Context(), u, px, dnsRecordWait).ALPN("h3")
+		}
+	}
+	if forced == ProtoH3 || (forced == "" && s.opts.HTTP3) || viaAltSvc || viaDNS {
 		// The session option was checked when it was created; a request's demand
 		// only here: before it the profile might never have been needed.
 		if !s.profile.HTTP3.Enabled() {
@@ -1337,7 +1363,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 			// HTTP/3 keeps its own connection inside the transport, nothing to release.
 			return fromStdResponse(resp), cancel, nil, nil
 		}
-		if !viaAltSvc {
+		if !viaAltSvc && !viaDNS {
 			return fail(err)
 		}
 		// The upgrade was our guess from the site's advertisement — fall back to

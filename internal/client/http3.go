@@ -59,7 +59,7 @@ func (u *udpTransports) closeAll() {
 
 func (s *Session) http3() (*h3.Transport, error) {
 	s.h3.once.Do(func() {
-		s.h3.tr, s.h3.err = buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts, nil)
+		s.h3.tr, s.h3.err = buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts, s.dns.resolver, nil)
 	})
 	if s.h3.tr == nil && s.h3.err == nil {
 		// once already ran in closeH3: the transport was never created and never will be.
@@ -80,7 +80,7 @@ type h3Dial func(ctx context.Context, addr string, cfg *utls.Config, qcfg *quic.
 // is the point: the connection to the target is the browser's whether it
 // travels over a socket or inside somebody else's QUIC connection.
 func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
-	roots *x509.CertPool, certs []utls.Certificate, dial h3Dial) (*h3.Transport, error) {
+	roots *x509.CertPool, certs []utls.Certificate, resolver *net.Resolver, dial h3Dial) (*h3.Transport, error) {
 	if !p.HTTP3.Enabled() {
 		return nil, capabilityErr("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
@@ -150,7 +150,7 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 			if err != nil {
 				return nil, err
 			}
-			ua, err := net.ResolveUDPAddr(network, resolveAddr(opts.Resolve, addr))
+			ua, err := resolveUDP(ctx, resolver, network, resolveAddr(opts.Resolve, addr))
 			if err != nil {
 				udpConn.Close()
 				return nil, err

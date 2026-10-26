@@ -266,6 +266,9 @@ type sessionConfig struct {
 	AltSvc    *bool             `json:"alt_svc"`
 	Resolve   map[string]string `json:"resolve"`
 	IPVersion string            `json:"ip_version"`
+	// DNS: "" the system's servers for HTTPS records, "off", servers, or a
+	// DoH URL (internal/client/dns.go).
+	DNS string `json:"dns"`
 	// KeepAlive is a pointer because a missing field means "enabled".
 	// An old Python with a fresh DLL must not silently end up reopening a
 	// connection for every request.
@@ -376,6 +379,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		DisableAltSvc:      c.AltSvc != nil && !*c.AltSvc,
 		Resolve:            c.Resolve,
 		IPVersion:          c.IPVersion,
+		DNS:                c.DNS,
 		DisableKeepAlive:   c.KeepAlive != nil && !*c.KeepAlive,
 		MaxIdleConns:       c.MaxIdleConns,
 		IdleConnTimeout:    time.Duration(c.IdleConnTimeoutMS) * time.Millisecond,

@@ -316,7 +316,7 @@ func (s *Session) ipPooled(ctx context.Context, u *url.URL, spec dialSpec) *conn
 	if len(cands) == 0 {
 		return nil
 	}
-	endpoints := resolveEndpoints(ctx, spec.target)
+	endpoints := resolveEndpoints(ctx, s.dns.resolver, spec.target)
 	if len(endpoints) == 0 {
 		return nil
 	}
@@ -332,7 +332,7 @@ func (s *Session) ipPooled(ctx context.Context, u *url.URL, spec dialSpec) *conn
 }
 
 // resolveEndpoints lists the ip:port endpoints a target resolves to.
-func resolveEndpoints(ctx context.Context, target string) []string {
+func resolveEndpoints(ctx context.Context, r *net.Resolver, target string) []string {
 	host, port, err := net.SplitHostPort(target)
 	if err != nil {
 		return nil
@@ -340,7 +340,10 @@ func resolveEndpoints(ctx context.Context, target string) []string {
 	if ip := net.ParseIP(host); ip != nil {
 		return []string{net.JoinHostPort(ip.String(), port)}
 	}
-	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if r == nil {
+		r = net.DefaultResolver
+	}
+	addrs, err := r.LookupIPAddr(ctx, host)
 	if err != nil {
 		return nil
 	}

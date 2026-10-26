@@ -895,6 +895,15 @@ class Session:
         resolves names itself
     :param ip_version: restrict the address family: ``"4"`` or ``"6"``. Needed
         where a name has an AAAA record but there is no IPv6 route
+    :param dns: what resolves names, and whether HTTPS records (RFC 9460) are
+        asked for first, as the browser asks: ``None`` — the system's servers
+        for the records, addresses as always; ``"off"`` — no records, the
+        client of 0.17; ``"1.1.1.1"`` or ``"1.1.1.1,8.8.8.8:53"`` — those
+        servers, for addresses and records alike; ``"https://…"`` — DNS over
+        HTTPS (RFC 8484) for both, through a session of the same profile.
+        Chromium 108+ and Firefox 133+ ask for the records on a direct
+        connection: an ``alpn=h3`` record sends the first request to HTTP/3, as
+        Chrome's does. Behind a proxy nothing is resolved here at all
     :param keep_alive: reuse the connection between requests. On by default:
         that is what a browser does, and the TLS handshake is not repeated per
         request. ``False`` closes the connection right after the response —
@@ -988,6 +997,7 @@ class Session:
         alt_svc: bool = True,
         resolve: Mapping[str, str] | None = None,
         ip_version: str | None = None,
+        dns: str | None = None,
         keep_alive: bool = True,
         hooks: Mapping[str, Iterable[Callable[..., Any]]] | None = None,
         device: str | None = None,
@@ -1050,6 +1060,7 @@ class Session:
                     "alt_svc": alt_svc,
                     "resolve": dict(resolve) if resolve else None,
                     "ip_version": ip_version or "",
+                    "dns": dns or "",
                     "keep_alive": keep_alive,
                     "device": device or "",
                     "devices": [dict(d) for d in devices] if devices else None,

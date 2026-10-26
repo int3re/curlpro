@@ -30,7 +30,9 @@ import (
 // tunnel to the target refused — so a pool can tell "drop this address" from
 // "rest it" from "the destination is at fault" without reading the text.
 func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, error) {
-	d := &net.Dialer{}
+	// The session's resolver, when Options.DNS names servers or DoH: the
+	// target on a direct connection and a proxy's own name alike.
+	d := &net.Dialer{Resolver: s.dns.resolver}
 	network := "tcp"
 	switch s.opts.IPVersion {
 	case "4", "ipv4":

@@ -806,7 +806,7 @@ func (s *Session) http3Via(proxy string) (*h3.Transport, error) {
 	// Built rather than copied from the direct one: an h3.Transport carries a
 	// mutex and its own map of connections, and a copy would share neither
 	// safely nor usefully.
-	tr, err := buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts,
+	tr, err := buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts, s.dns.resolver,
 		func(ctx context.Context, addr string, cfg *utls.Config, qcfg *quic.Config) (*quic.Conn, error) {
 			return s.dialH3ViaMasque(ctx, pu, key, addr, cfg, qcfg)
 		})

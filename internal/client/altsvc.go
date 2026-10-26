@@ -142,6 +142,15 @@ func (s *Session) altSvcH3(u *url.URL) bool {
 	return now.After(e.broken)
 }
 
+// h3Broken reports an HTTP/3 attempt to this address that failed recently,
+// whatever sent the session there: Alt-Svc or an HTTPS record.
+func (s *Session) h3Broken(u *url.URL) bool {
+	s.mu.Lock()
+	e, ok := s.altSvc[altSvcKey(u)]
+	s.mu.Unlock()
+	return ok && time.Now().Before(e.broken)
+}
+
 // markAltSvcBroken postpones the next HTTP/3 attempt to this address.
 func (s *Session) markAltSvcBroken(u *url.URL) {
 	key := altSvcKey(u)
