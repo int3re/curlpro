@@ -31,6 +31,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	nethttp "net/http"
 	"net/url"
@@ -116,7 +117,7 @@ type masqueProxy struct {
 
 type innerQUIC struct {
 	ut   *quic.Transport
-	flow *masqueFlow
+	flow io.Closer // a CONNECT-UDP flow, or a SOCKS5 UDP association
 }
 
 func (i *innerQUIC) close() {
@@ -785,7 +786,7 @@ func (s *Session) http3Via(proxy string) (*h3.Transport, error) {
 	if proxy == "" {
 		return s.http3()
 	}
-	if err := masqueCarriesH3(proxy); err != nil {
+	if err := proxyCarriesH3(proxy); err != nil {
 		return nil, err
 	}
 	pu, err := parseProxy(proxy)
@@ -806,10 +807,15 @@ func (s *Session) http3Via(proxy string) (*h3.Transport, error) {
 	// Built rather than copied from the direct one: an h3.Transport carries a
 	// mutex and its own map of connections, and a copy would share neither
 	// safely nor usefully.
-	tr, err := buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts, s.dns.resolver,
-		func(ctx context.Context, addr string, cfg *utls.Config, qcfg *quic.Config) (*quic.Conn, error) {
-			return s.dialH3ViaMasque(ctx, pu, key, addr, cfg, qcfg)
-		})
+	dial := func(ctx context.Context, addr string, cfg *utls.Config, qcfg *quic.Config) (*quic.Conn, error) {
+		return s.dialH3ViaMasque(ctx, pu, key, addr, cfg, qcfg)
+	}
+	if isSOCKS5(strings.ToLower(pu.Scheme)) {
+		dial = func(ctx context.Context, addr string, cfg *utls.Config, qcfg *quic.Config) (*quic.Conn, error) {
+			return s.dialH3ViaSOCKS5(ctx, pu, key, addr, cfg, qcfg)
+		}
+	}
+	tr, err := buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts, s.dns.resolver, dial)
 	if err != nil {
 		return nil, err
 	}
@@ -940,9 +946,30 @@ func masqueCarriesH3(proxy string) error {
 	if isMASQUE(pu.Scheme) {
 		return nil
 	}
+	return configErr("HTTP/3 through a %s:// proxy is not taken on a guess: a browser behind it "+
+		"stays on TCP", strings.ToLower(pu.Scheme))
+}
+
+// proxyCarriesH3 says whether HTTP/3 asked for outright can travel through
+// this proxy: a MASQUE one over CONNECT-UDP, a SOCKS5 one over UDP ASSOCIATE
+// (socks5udp.go). An HTTP proxy cannot — CONNECT gives a byte stream and QUIC
+// needs datagrams — and the one thing that must not happen is going direct
+// instead: that would reveal the address the proxy was there to hide.
+func proxyCarriesH3(proxy string) error {
+	if proxy == "" {
+		return nil
+	}
+	pu, err := parseProxy(proxy)
+	if err != nil {
+		return err
+	}
+	if isMASQUE(pu.Scheme) || isSOCKS5(strings.ToLower(pu.Scheme)) {
+		return nil
+	}
 	return configErr("HTTP/3 through a %s:// proxy is not possible: CONNECT gives a byte "+
 		"stream and QUIC needs datagrams. A masque:// proxy carries it (CONNECT-UDP, "+
-		"RFC 9298); otherwise drop either http3 or the proxy", strings.ToLower(pu.Scheme))
+		"RFC 9298), and so does a socks5:// one that relays UDP; otherwise drop either "+
+		"http3 or the proxy", strings.ToLower(pu.Scheme))
 }
 
 // masqueHandshakeContext bounds the handshake just inside the dial's own limit.

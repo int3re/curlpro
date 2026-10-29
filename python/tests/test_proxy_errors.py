@@ -68,9 +68,10 @@ def test_a_masque_proxy_is_a_scheme_we_speak():
 def test_http3_names_the_proxy_scheme_that_can_carry_it():
     """QUIC through a byte-stream tunnel is impossible, and saying so beats
     going direct: that would publish the address the proxy was hiding."""
-    for proxy in ("http://127.0.0.1:8080", "https://127.0.0.1:443", "socks5://127.0.0.1:1080"):
-        with pytest.raises(curlpro.ConfigurationError, match="masque://"):
+    for proxy in ("http://127.0.0.1:8080", "https://127.0.0.1:443"):
+        with pytest.raises(curlpro.ConfigurationError, match="masque://.*socks5://"):
             curlpro.Session("chrome-151-windows", http3=True, proxy=proxy)
-    # A MASQUE proxy is accepted: the session is built, and only the request
-    # that uses it can fail.
-    curlpro.Session("chrome-151-windows", http3=True, proxy="masque://127.0.0.1:443").close()
+    # A MASQUE proxy and a SOCKS5 one (UDP ASSOCIATE) are accepted: the session
+    # is built, and only the request that uses it can fail.
+    for proxy in ("masque://127.0.0.1:443", "socks5://127.0.0.1:1080", "socks5h://127.0.0.1:1080"):
+        curlpro.Session("chrome-151-windows", http3=True, proxy=proxy).close()

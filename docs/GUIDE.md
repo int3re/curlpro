@@ -96,7 +96,7 @@ touch it.
 | `timeout` | `30.0` | a limit on the **whole** request, redirects included; a `(connect, total)` pair bounds connecting separately. `float("inf")` means no limit |
 | `connect_timeout` | `None` | the connecting limit by name: resolution, TCP, TLS. Wins over the pair's first element |
 | `response_timeout` | `None` | how long to wait for the response **headers** after the request went out. Does not bound the body. Raises `Timeout` with "response headers" in the message |
-| `proxy` | `None` | `http://`, `https://`, `socks5://`, `socks5h://`, `user:pass@` allowed; a bare `host:port` is read as `http://`. The first CONNECT carries no credentials and adds them after a 407, as Chrome does; a proxy that hangs up instead gets a second CONNECT with them on a fresh connection; one that hangs up on that too raises with code `proxy_closed`. An `https://` proxy is greeted with the profile's own ClientHello, and the tunnel is an HTTP/2 CONNECT stream when the proxy offers `h2`. `masque://` is a proxy reached over HTTP/3, the only kind that can carry HTTP/3 to the target (section 12) |
+| `proxy` | `None` | `http://`, `https://`, `socks5://`, `socks5h://`, `user:pass@` allowed; a bare `host:port` is read as `http://`. The first CONNECT carries no credentials and adds them after a 407, as Chrome does; a proxy that hangs up instead gets a second CONNECT with them on a fresh connection; one that hangs up on that too raises with code `proxy_closed`. An `https://` proxy is greeted with the profile's own ClientHello, and the tunnel is an HTTP/2 CONNECT stream when the proxy offers `h2`. `masque://` is a proxy reached over HTTP/3, and carries HTTP/3 to the target; so does `socks5://` over UDP ASSOCIATE when HTTP/3 is asked for outright (section 12) |
 | `default_headers` | `True` | send the profile's headers. `False` sends only yours — and no `User-Agent` at all unless you pass one; the library never substitutes Go's |
 | `header_order` | `None` | the send order as a pattern with `...` for the profile's own order; section 6 |
 | `allow_redirects`, `max_redirects` | `True`, `20` | follow 3xx; the chain is in `r.history` |
@@ -104,8 +104,8 @@ touch it.
 | `force_http1` | `False` | offer `http/1.1` alone in ALPN. This changes JA4 (two characters of it), legitimately: a browser without h2 looks like that |
 | `post_quantum` | `True` | `False` drops X25519MLKEM768 and its 1216-byte key share: the hello of a browser with post-quantum key agreement off by policy. JA4 stays, JA3 and the size move, the hello fits one TCP segment |
 | `resume` | `True` | TLS session resumption with tickets, one cache per session, as a browser does. On since the resuming hello was measured (Chrome 153 and Firefox 156): the first hello plus `pre_shared_key` last, no early data, and for Firefox without `session_ticket` — which is what goes out. The first hello of a session is untouched, so every fingerprint stays what it was |
-| `http3` | `False` | go to QUIC at once. The profile needs an `http3` section (18 have one, every current Chromium build, section 12). Through a proxy only a `masque://` one; any other raises rather than going direct, which would publish the address the proxy was hiding |
-| `alt_svc` | `True` | move to HTTP/3 after an `Alt-Svc` header, as a browser does; a failed attempt falls back to TCP and is not retried for 5 minutes, doubling up to 24 hours. Needs an `http3` section. Behind a proxy it is taken only through a `masque://` one; behind any other the advertisement is left alone |
+| `http3` | `False` | go to QUIC at once. The profile needs an `http3` section (18 have one, every current Chromium build, section 12). Through a proxy a `masque://` one, or a `socks5://` one that relays UDP; any other raises rather than going direct, which would publish the address the proxy was hiding |
+| `alt_svc` | `True` | move to HTTP/3 after an `Alt-Svc` header, as a browser does; a failed attempt falls back to TCP and is not retried for 5 minutes, doubling up to 24 hours. Needs an `http3` section. Behind a proxy it is taken only through a `masque://` one; behind any other — SOCKS5 included, as Chrome and Firefox there stay on TCP — the advertisement is left alone |
 | `resolve` | `None` | `{"example.com:443": "10.0.0.7"}` — curl's `--resolve`; SNI and `Host` keep the name. Not through a proxy |
 | `ip_version` | `None` | `"4"` or `"6"` — one address family |
 | `dns` | `None` | what resolves names, and whether HTTPS records (RFC 9460) are asked for first, as the browser asks. `None`: the system's servers for the records, addresses as always; `"off"`: no records (0.17's client); `"1.1.1.1"` or a comma list with ports: those servers for addresses and records; `"https://…"`: DNS over HTTPS (RFC 8484) for both, through a session of the same profile. Chromium 108+ and Firefox 133+ ask on a direct connection, an `alpn=h3` record sends the first request to HTTP/3 (Chrome's DNS ALPN job), and an `ech` record encrypts the ClientHello on a Chromium profile, the inner hello Chrome's. Behind any proxy nothing is resolved locally — section 12 |
@@ -1017,7 +1017,8 @@ priority; other families keep their profile's. An `http://` proxy, and an
 before.
 
 **A proxy you reach over HTTP/3.** `masque://host:port` is a proxy spoken to
-over QUIC, and it is the only kind that can carry HTTP/3 to the target.
+over QUIC, and the one kind that carries HTTP/3 to the target as a browser
+would (a SOCKS5 proxy can too, below).
 Everything else about it is familiar: credentials in the URL, the same errors
 with the same stages, `https://` and `socks5://` untouched beside it. What
 changes is that one QUIC connection to the proxy carries every tunnel on it,
@@ -1033,7 +1034,7 @@ Two shapes, chosen by what the target needs:
 | QUIC — HTTP/3 | `CONNECT-UDP`: extended `CONNECT` with `:protocol: connect-udp`, the target's datagrams as HTTP datagrams | 9298, 9297, 9220 |
 
 So `Session("chrome-153-windows", proxy="masque://user:pw@host:443",
-http3=True)` is an HTTP/3 request through a proxy, which every other scheme
+http3=True)` is an HTTP/3 request through a proxy, which an HTTP proxy
 refuses outright — and refuses on purpose: a silent fall back to TCP would
 publish the address the proxy was there to hide.
 
@@ -1056,6 +1057,20 @@ the wire: a plain tunnel is `:method`, `:authority` (with the port), then
 puts `:scheme`, `:path` and `:protocol` before `:method`, sends
 `capsule-protocol: ?1`, names the proxy without port 443, and declares no
 priority.
+
+**HTTP/3 through a SOCKS5 proxy.** A `socks5://` or `socks5h://` proxy that
+relays UDP carries HTTP/3 asked for outright — `http3=True` or
+`protocol="h3"`: the session asks it for a UDP association (RFC 1928, section 7),
+with the same credentials as for a TCP tunnel, and sends the QUIC connection's
+datagrams through the relay, one association per connection, the target named
+in each datagram's header by its name — nothing is resolved here, as for
+`CONNECT`. The association lives as long as the TCP connection that asked for
+it. Many SOCKS5 proxies accept the request and relay nothing; one that refuses
+it is named in the error (`does not relay UDP`), and one that relays nothing is
+told apart from a dead target in the message. An `Alt-Svc` advertisement is
+still not taken behind a SOCKS proxy: Chrome and Firefox there stay on TCP,
+neither speaking UDP ASSOCIATE, so going to QUIC on a guess would be the
+client's own idea.
 
 ### DNS, HTTPS records and ECH
 

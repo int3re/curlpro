@@ -628,9 +628,11 @@ connection.
 
 `masque://host:port` is a proxy reached over HTTP/3 (RFC 9298): one QUIC
 connection carries every tunnel on it as a stream, and a QUIC target travels
-as `CONNECT-UDP` — so `http3=True` works through it, which no other scheme can
-offer. Through any other proxy HTTP/3 raises instead of quietly becoming TCP,
-because that would publish the address the proxy was hiding.
+as `CONNECT-UDP` — so `http3=True` works through it. A `socks5://` proxy that
+relays UDP carries `http3=True` too, over UDP ASSOCIATE (an `Alt-Svc` guess is
+not taken there: browsers behind SOCKS stay on TCP). Through an HTTP proxy
+HTTP/3 raises instead of quietly becoming TCP, because that would publish the
+address the proxy was hiding.
 
 ## Your own fingerprint, without a request
 

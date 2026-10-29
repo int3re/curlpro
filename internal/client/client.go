@@ -957,12 +957,13 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if opts.HTTP3 && !p.HTTP3.Enabled() {
 		return nil, capabilityErr("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
-	// QUIC is UDP, and an ordinary proxy's CONNECT gives a byte stream: only a
-	// MASQUE proxy can carry it (CONNECT-UDP, RFC 9298 — proxyh3.go). Going
-	// direct instead is not an option, silently or otherwise: that would reveal
-	// the very address the proxy was meant to hide.
+	// QUIC is UDP, and an ordinary proxy's CONNECT gives a byte stream: a
+	// MASQUE proxy carries it (CONNECT-UDP, RFC 9298 — proxyh3.go), and a SOCKS5
+	// one over UDP ASSOCIATE (socks5udp.go). Going direct instead is not an
+	// option, silently or otherwise: that would reveal the very address the
+	// proxy was meant to hide.
 	if opts.HTTP3 && opts.Proxy != "" {
-		if err := masqueCarriesH3(opts.Proxy); err != nil {
+		if err := proxyCarriesH3(opts.Proxy); err != nil {
 			return nil, err
 		}
 	}
@@ -1355,7 +1356,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		}
 		proxy := s.proxyForHost(r, u.Scheme, u.Host)
 		if proxy != "" {
-			if err := masqueCarriesH3(proxy); err != nil {
+			if err := proxyCarriesH3(proxy); err != nil {
 				return fail(&fatalError{err})
 			}
 		}

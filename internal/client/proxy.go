@@ -162,6 +162,7 @@ const (
 	socksUserPass     = 0x02
 	socksNoAcceptable = 0xff
 	socksConnect      = 0x01
+	socksUDPAssociate = 0x03
 	socksIPv4         = 0x01
 	socksDomain       = 0x03
 	socksIPv6         = 0x04
@@ -169,6 +170,16 @@ const (
 
 // socks5Tunnel negotiates authentication and asks the proxy to connect to addr.
 func socks5Tunnel(conn net.Conn, pu *url.URL, addr string) error {
+	if err := socks5Auth(conn, pu); err != nil {
+		return err
+	}
+	_, err := socks5Command(conn, pu, socksConnect, addr)
+	return err
+}
+
+// socks5Auth offers no authentication and, with credentials in the URL, a
+// username and password (RFC 1929), and goes through whichever the proxy picks.
+func socks5Auth(conn net.Conn, pu *url.URL) error {
 	dial := func(what string, err error) error {
 		return proxyFail(ProxyStageDial, 0, fmt.Errorf("socks5 %s: %w", what, err))
 	}
@@ -220,63 +231,96 @@ func socks5Tunnel(conn net.Conn, pu *url.URL, addr string) error {
 		return proxyFail(ProxyStageDial, 0, fmt.Errorf(
 			"socks5: the proxy chose authentication method %d, which this client does not speak", reply[1]))
 	}
+	return nil
+}
 
+// socksAddr is a SOCKS5 address — type, address, port (RFC 1928, section 5):
+// a name goes as a name, so nothing is looked up here.
+func socksAddr(addr string) ([]byte, error) {
 	host, portText, err := net.SplitHostPort(addr)
 	if err != nil {
-		return configErr("socks5: target address %q: %v", addr, err)
+		return nil, configErr("socks5: target address %q: %v", addr, err)
 	}
 	port, err := strconv.Atoi(portText)
 	if err != nil || port < 0 || port > 65535 {
-		return configErr("socks5: target address %q has no valid port", addr)
+		return nil, configErr("socks5: target address %q has no valid port", addr)
 	}
-	req := []byte{socksVersion, socksConnect, 0x00}
+	var b []byte
 	switch ip := net.ParseIP(host); {
 	case ip == nil:
 		if len(host) > 255 {
-			return configErr("socks5: host name %q is longer than 255 bytes", host)
+			return nil, configErr("socks5: host name %q is longer than 255 bytes", host)
 		}
-		req = append(req, socksDomain, byte(len(host)))
-		req = append(req, host...)
+		b = append(b, socksDomain, byte(len(host)))
+		b = append(b, host...)
 	case ip.To4() != nil:
-		req = append(req, socksIPv4)
-		req = append(req, ip.To4()...)
+		b = append(b, socksIPv4)
+		b = append(b, ip.To4()...)
 	default:
-		req = append(req, socksIPv6)
-		req = append(req, ip.To16()...)
+		b = append(b, socksIPv6)
+		b = append(b, ip.To16()...)
 	}
-	req = binary.BigEndian.AppendUint16(req, uint16(port))
+	return binary.BigEndian.AppendUint16(b, uint16(port)), nil
+}
+
+// socks5Command sends one request — CONNECT to addr, or UDP ASSOCIATE — and
+// reads the reply through to its end, returning the address the proxy bound:
+// nothing for a CONNECT, the relay for UDP.
+func socks5Command(conn net.Conn, pu *url.URL, cmd byte, addr string) (string, error) {
+	what := "connect"
+	if cmd == socksUDPAssociate {
+		what = "udp associate"
+	}
+	target, err := socksAddr(addr)
+	if err != nil {
+		return "", err
+	}
+	req := append([]byte{socksVersion, cmd, 0x00}, target...)
 	if _, err := conn.Write(req); err != nil {
-		return proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 connect: %w", err))
+		return "", proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 %s: %w", what, err))
 	}
 	var head [4]byte
 	if _, err := io.ReadFull(conn, head[:]); err != nil {
-		return proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 connect: reading the reply: %w", err))
+		return "", proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 %s: reading the reply: %w", what, err))
 	}
 	if head[1] != 0 {
-		return proxyFail(ProxyStageConnect, int(head[1]), fmt.Errorf(
+		if cmd == socksUDPAssociate {
+			return "", proxyFail(ProxyStageConnect, int(head[1]), fmt.Errorf(
+				"socks5: the proxy does not relay UDP, which HTTP/3 needs (UDP ASSOCIATE: %s)",
+				socksReplyText(head[1])))
+		}
+		return "", proxyFail(ProxyStageConnect, int(head[1]), fmt.Errorf(
 			"socks5: the proxy could not connect to %s: %s", addr, socksReplyText(head[1])))
 	}
-	// The bound address follows, in a size its type decides; nothing here
-	// needs it, but it has to leave the socket before TLS starts reading.
-	var rest int64
+	// The bound address follows, in a size its type decides; it has to leave
+	// the socket before TLS starts reading, and UDP is sent to it.
+	var host []byte
 	switch head[3] {
 	case socksIPv4:
-		rest = 4 + 2
+		host = make([]byte, 4)
 	case socksIPv6:
-		rest = 16 + 2
+		host = make([]byte, 16)
 	case socksDomain:
 		var n [1]byte
 		if _, err := io.ReadFull(conn, n[:]); err != nil {
-			return proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 connect: reading the reply: %w", err))
+			return "", proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 %s: reading the reply: %w", what, err))
 		}
-		rest = int64(n[0]) + 2
+		host = make([]byte, n[0])
 	default:
-		return proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5: address type %d in the reply is unknown", head[3]))
+		return "", proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5: address type %d in the reply is unknown", head[3]))
 	}
-	if _, err := io.CopyN(io.Discard, conn, rest); err != nil {
-		return proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 connect: reading the reply: %w", err))
+	var port [2]byte
+	if _, err := io.ReadFull(conn, host); err != nil {
+		return "", proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 %s: reading the reply: %w", what, err))
 	}
-	return nil
+	if _, err := io.ReadFull(conn, port[:]); err != nil {
+		return "", proxyFail(ProxyStageConnect, 0, fmt.Errorf("socks5 %s: reading the reply: %w", what, err))
+	}
+	h := string(host)
+	if head[3] != socksDomain {
+		h = net.IP(host).String()
+	}
+	return net.JoinHostPort(h, strconv.Itoa(int(binary.BigEndian.Uint16(port[:])))), nil
 }
 
 // socksReplyText names a SOCKS5 reply code (RFC 1928, section 6).

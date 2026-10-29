@@ -841,8 +841,10 @@ class Session:
         and then closes without saying so, gets the CONNECT with them on a
         fresh connection. An ``https://`` proxy is greeted with the profile's
         own ClientHello and tunnels over HTTP/2 when it offers ``h2``;
-        ``masque://`` is a proxy reached over HTTP/3, and the only kind that
-        can carry ``http3=True`` to the target
+        ``masque://`` is a proxy reached over HTTP/3 and carries ``http3=True``
+        to the target; a ``socks5://`` one carries it over UDP ASSOCIATE when it
+        relays UDP, and never takes an ``Alt-Svc`` guess, as browsers behind
+        SOCKS stay on TCP
     :param default_headers: send the profile's headers. Turn it off to control
         the set and the order yourself — anti-bot systems look at the order
         too. Without your own ``user-agent`` no such header is sent at all:

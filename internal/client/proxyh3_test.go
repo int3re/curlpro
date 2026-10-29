@@ -409,16 +409,16 @@ func TestHTTP3TravelsThroughAMasqueProxy(t *testing.T) {
 // Every other proxy scheme says so rather than quietly going direct: a silent
 // fallback would publish the address the proxy was there to hide.
 func TestHTTP3RefusesAProxyThatCannotCarryIt(t *testing.T) {
-	for _, proxy := range []string{"http://127.0.0.1:8080", "https://127.0.0.1:443",
-		"socks5://127.0.0.1:1080"} {
-		if err := masqueCarriesH3(proxy); err == nil {
+	for _, proxy := range []string{"http://127.0.0.1:8080", "https://127.0.0.1:443"} {
+		if err := proxyCarriesH3(proxy); err == nil {
 			t.Errorf("%s was accepted for HTTP/3", proxy)
-		} else if !strings.Contains(err.Error(), "masque://") {
-			t.Errorf("%s: the error does not name the scheme that works: %v", proxy, err)
+		} else if !strings.Contains(err.Error(), "masque://") || !strings.Contains(err.Error(), "socks5://") {
+			t.Errorf("%s: the error does not name the schemes that work: %v", proxy, err)
 		}
 	}
-	for _, proxy := range []string{"", "masque://127.0.0.1:443", "https3://127.0.0.1:443"} {
-		if err := masqueCarriesH3(proxy); err != nil {
+	for _, proxy := range []string{"", "masque://127.0.0.1:443", "https3://127.0.0.1:443",
+		"socks5://127.0.0.1:1080", "socks5h://127.0.0.1:1080"} {
+		if err := proxyCarriesH3(proxy); err != nil {
 			t.Errorf("%q was refused for HTTP/3: %v", proxy, err)
 		}
 	}
