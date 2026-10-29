@@ -142,7 +142,10 @@ jobs:
       fail-fast: false
       matrix:
         python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-    runs-on: ubuntu-latest
+    # ubuntu-latest became 26.04 in October 2026, and actions/python-versions
+    # builds no 3.9 for it (EOL since 2025-10); the package still promises 3.9,
+    # so that row runs on the last image that has it.
+    runs-on: ${{ matrix.python == '3.9' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
