@@ -105,7 +105,7 @@ touch it.
 | `post_quantum` | `True` | `False` drops X25519MLKEM768 and its 1216-byte key share: the hello of a browser with post-quantum key agreement off by policy. JA4 stays, JA3 and the size move, the hello fits one TCP segment |
 | `resume` | `True` | TLS session resumption with tickets, one cache per session, as a browser does. On since the resuming hello was measured (Chrome 153 and Firefox 156): the first hello plus `pre_shared_key` last, no early data, and for Firefox without `session_ticket` — which is what goes out. The first hello of a session is untouched, so every fingerprint stays what it was |
 | `http3` | `False` | go to QUIC at once. The profile needs an `http3` section (18 have one, every current Chromium build, section 12). Through a proxy a `masque://` one, or a `socks5://` one that relays UDP; any other raises rather than going direct, which would publish the address the proxy was hiding |
-| `alt_svc` | `True` | move to HTTP/3 after an `Alt-Svc` header, as a browser does; a failed attempt falls back to TCP and is not retried for 5 minutes, doubling up to 24 hours. Needs an `http3` section. Behind a proxy it is taken only through a `masque://` one; behind any other — SOCKS5 included, as Chrome and Firefox there stay on TCP — the advertisement is left alone |
+| `alt_svc` | `True` | move to HTTP/3 after an `Alt-Svc` header, as a browser does — racing the QUIC connection against a TCP one as Chrome races them, so a blocked UDP path costs the request nothing; a failed attempt is not retried for 5 minutes, doubling up to 24 hours. Needs an `http3` section. Behind a proxy it is taken only through a `masque://` one; behind any other — SOCKS5 included, as Chrome and Firefox there stay on TCP — the advertisement is left alone |
 | `resolve` | `None` | `{"example.com:443": "10.0.0.7"}` — curl's `--resolve`; SNI and `Host` keep the name. Not through a proxy |
 | `ip_version` | `None` | `"4"` or `"6"` — one address family |
 | `dns` | `None` | what resolves names, and whether HTTPS records (RFC 9460) are asked for first, as the browser asks. `None`: the system's servers for the records, addresses as always; `"off"`: no records (0.17's client); `"1.1.1.1"` or a comma list with ports: those servers for addresses and records; `"https://…"`: DNS over HTTPS (RFC 8484) for both, through a session of the same profile. Chromium 108+ and Firefox 133+ ask on a direct connection, an `alpn=h3` record sends the first request to HTTP/3 (Chrome's DNS ALPN job), and an `ech` record encrypts the ClientHello on a Chromium profile, the inner hello Chrome's. Behind any proxy nothing is resolved locally — section 12 |
@@ -1080,9 +1080,17 @@ A browser asks DNS for more than an address before it connects. Chrome (from
 record (RFC 9460) through the system's servers — plain DNS is enough — and act
 on it. From 0.18 a session does the same, on a direct connection to a name:
 
-- `alpn=h3` sends the first request to HTTP/3, with no Alt-Svc and no TCP
-  connection first (Chrome's DNS ALPN job); a failure falls back to TCP and is
-  remembered with Alt-Svc's failures.
+- `alpn=h3` sends the first request to HTTP/3, with no Alt-Svc first (Chrome's
+  DNS ALPN job); a failure is remembered with Alt-Svc's failures.
+
+A guessed QUIC connection — from Alt-Svc or an HTTPS record — is raced against
+TCP as Chrome races them (`HttpStreamFactory::JobController`): both are dialled,
+and the request goes over whichever is up first. For Alt-Svc the TCP job is held
+back while QUIC is known to work in the session — 1.5 times the origin's
+handshake time, 300 ms when unknown, three seconds at most — and starts at once
+before that; an HTTPS record's job holds nothing back. A QUIC connection that
+loses stays and serves the next request; one that fails marks the upgrade
+broken. Asked for outright — `http3=True`, `protocol="h3"` — HTTP/3 is not raced.
 - `ech` encrypts the ClientHello (RFC 9849) on a Chromium or Firefox profile
   whose hello carries ECH. The outer hello names the configuration's public
   name, the inner one the site, and the inner hello is the browser's own

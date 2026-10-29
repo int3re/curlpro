@@ -590,8 +590,9 @@ instead of hanging until its own timeout.
 
 It turns itself on the way a browser does: the first request goes over TCP, and
 after seeing `Alt-Svc` in the response the client moves to QUIC from the next one.
-If QUIC does not get through, the request falls back to TCP and the attempt is not
-repeated for a while.
+The QUIC connection is raced against a TCP one, as Chrome races them: the
+request goes over whichever is up first, so a blocked UDP path costs it nothing,
+and a QUIC attempt that fails is not repeated for a while.
 
 ```python
 with curlpro.Session("chrome-151-windows") as s:

@@ -136,7 +136,11 @@ def test_forced_protocol_beats_alt_svc():
     """
     with curlpro.Session("chrome-151-windows", dns="off") as s:
         assert s.get(LIVE).proto == "HTTP/2.0"
-        assert s.get(LIVE).proto == "HTTP/3.0", "the second request must go over QUIC"
+        # The QUIC connection races TCP as Chrome's does, and the HTTP/2 one is
+        # already open, so the next request may still go over it; the QUIC
+        # connection comes up beside it and carries the ones after.
+        protos = [s.get(LIVE).proto for _ in range(3)]
+        assert "HTTP/3.0" in protos, f"no request went over QUIC after Alt-Svc: {protos}"
         assert s.get(LIVE, protocol="h2").proto == "HTTP/2.0"
         assert s.get(LIVE, protocol=1.1).proto == "HTTP/1.1"
         assert s.get(LIVE, protocol=3).proto == "HTTP/3.0"

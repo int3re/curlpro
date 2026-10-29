@@ -306,6 +306,43 @@ func canRetryRequest(err error, req *http.Request) (*http.Request, error) {
 	return nil, fmt.Errorf("http3: Transport: cannot retry err [%w] after Request.Body was written; define Request.GetBody to avoid this error", err)
 }
 
+// Connect opens the connection to authority without a request, or finds the
+// one already open, and returns once its handshake is complete: the
+// alternative job of a browser racing QUIC against TCP. [curlPro]
+//
+// ctx bounds the wait and the dial alike, so a caller that wants the
+// connection to outlive a race it lost passes one the race does not cancel.
+func (t *Transport) Connect(ctx context.Context, authority string) error {
+	t.initOnce.Do(func() { t.initErr = t.init() })
+	if t.initErr != nil {
+		return t.initErr
+	}
+	hostname := authorityAddr(authority)
+	cl, _, err := t.getClient(ctx, hostname, false)
+	if err != nil {
+		return err
+	}
+	defer cl.useCount.Add(-1)
+	select {
+	case <-cl.dialing:
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	}
+	if cl.dialErr != nil {
+		t.removeClient(hostname)
+		return cl.dialErr
+	}
+	select {
+	case <-cl.conn.HandshakeComplete():
+		return nil
+	case <-cl.conn.Context().Done():
+		t.removeClient(hostname)
+		return context.Cause(cl.conn.Context())
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	}
+}
+
 // RoundTrip does a round trip.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.RoundTripOpt(req, RoundTripOpt{})

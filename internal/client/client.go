@@ -797,6 +797,11 @@ type Session struct {
 
 	// altSvc holds the HTTP/3 advertisements per origin along with the "broken" mark.
 	altSvc map[string]altSvcEntry
+	// quicWorks: a QUIC handshake has completed in this session, which is
+	// what lets a race hold its TCP job back; h3rtt is the handshake time per
+	// origin, the RTT the hold is measured by (race.go). h3rtt under mu.
+	quicWorks atomic.Bool
+	h3rtt     map[string]time.Duration
 
 	// tpl holds the header sets resolved once from the profile.
 	tpl templates
@@ -1346,6 +1351,20 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 			viaDNS = rec.ALPN("h3") && !s.echUsable(rec.ECH())
 		}
 	}
+	tcpSpec := func() dialSpec {
+		forceH1 := s.opts.ForceHTTP1
+		if forced != "" {
+			forceH1 = forced == ProtoHTTP1
+		}
+		spec := s.newDialSpec(u, s.proxyForHost(r, u.Scheme, u.Host), forceH1)
+		if plain {
+			spec.plain = true
+		}
+		return s.partition(spec, r, u)
+	}
+	// raced is the TCP connection a race with a guessed QUIC one left the
+	// request with (race.go).
+	var raced *conn
 	if forced == ProtoH3 || (forced == "" && s.opts.HTTP3) || viaAltSvc || viaDNS {
 		// The session option was checked when it was created; a request's demand
 		// only here: before it the profile might never have been needed.
@@ -1360,36 +1379,42 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 				return fail(&fatalError{err})
 			}
 		}
-		armHeaders()
-		resp, err := s.sendH3(req.Context(), r, u, proxy)
-		err = headersDone(err)
-		if err == nil {
-			// sendH3 opened its own copy of the body; this one would stay
-			// open (and a file locked on Windows) until collected.
-			if closer, ok := body.(io.Closer); ok {
-				closer.Close()
+		useH3 := true
+		if viaAltSvc || viaDNS {
+			// A guess is raced against TCP, as Chrome races it: whichever
+			// connection is up first carries the request.
+			var err error
+			useH3, raced, err = s.raceH3(req.Context(), u, proxy, tcpSpec(), r.freshConn, viaDNS)
+			if err != nil {
+				return fail(&unprocessedError{err})
 			}
-			// HTTP/3 keeps its own connection inside the transport, nothing to release.
-			return fromStdResponse(resp), cancel, nil, nil
 		}
-		if !viaAltSvc && !viaDNS {
-			return fail(err)
+		if useH3 {
+			armHeaders()
+			resp, err := s.sendH3(req.Context(), r, u, proxy)
+			err = headersDone(err)
+			if err == nil {
+				// sendH3 opened its own copy of the body; this one would stay
+				// open (and a file locked on Windows) until collected.
+				if closer, ok := body.(io.Closer); ok {
+					closer.Close()
+				}
+				// HTTP/3 keeps its own connection inside the transport, nothing to release.
+				return fromStdResponse(resp), cancel, nil, nil
+			}
+			if !viaAltSvc && !viaDNS {
+				return fail(err)
+			}
+			// The upgrade was our guess from the site's advertisement — fall back to
+			// TCP and stop trying for a while, as a browser does.
+			s.markAltSvcBroken(u)
 		}
-		// The upgrade was our guess from the site's advertisement — fall back to
-		// TCP and stop trying for a while, as a browser does.
-		s.markAltSvcBroken(u)
 	}
 
-	forceH1 := s.opts.ForceHTTP1
-	if forced != "" {
-		forceH1 = forced == ProtoHTTP1
+	c, reused, err := raced, false, error(nil)
+	if c == nil {
+		c, reused, err = s.conn(req.Context(), u, tcpSpec(), r.freshConn)
 	}
-	spec := s.newDialSpec(u, s.proxyForHost(r, u.Scheme, u.Host), forceH1)
-	if plain {
-		spec.plain = true
-	}
-	spec = s.partition(spec, r, u)
-	c, reused, err := s.conn(req.Context(), u, spec, r.freshConn)
 	if err != nil {
 		// No connection — the request never reached the server, a retry is safe.
 		return fail(&unprocessedError{err})
