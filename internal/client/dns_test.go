@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -203,6 +204,9 @@ func TestDNSOverHTTPSResolvesAndAsks(t *testing.T) {
 		}
 		posts.Add(1)
 		q, _ := io.ReadAll(r.Body)
+		if why := dohWireMismatch(q, false); why != "" {
+			badType.Store(why)
+		}
 		w.Header().Set("Content-Type", "application/dns-message")
 		w.Write(z.answer(q))
 	}))
@@ -232,6 +236,107 @@ func TestDNSOverHTTPSResolvesAndAsks(t *testing.T) {
 	}
 	if posts.Load() == 0 || !z.saw("TypeA dohsite.test.") || !z.saw("TypeHTTPS _"+port+"._https.dohsite.test.") {
 		t.Fatalf("%d posts, asked %v", posts.Load(), z.asked)
+	}
+}
+
+// dohWireMismatch checks a DoH query against the browsers' form (Chrome
+// 156.0.8078.73 and Firefox 159.0 on cmd/echstand, 2026-10-29): ID 0, RD, one
+// question, an OPT record of 4096 with padding to a multiple of 128 — and for
+// Firefox an ECS option with no address before it. "" when it matches.
+func dohWireMismatch(q []byte, firefox bool) string {
+	var p dnsmessage.Parser
+	h, err := p.Start(q)
+	if err != nil {
+		return err.Error()
+	}
+	if h.ID != 0 || !h.RecursionDesired || len(q)%128 != 0 {
+		return fmt.Sprintf("header %+v, %d bytes", h, len(q))
+	}
+	if err := p.SkipAllQuestions(); err != nil {
+		return err.Error()
+	}
+	if err := p.SkipAllAnswers(); err != nil {
+		return err.Error()
+	}
+	if err := p.SkipAllAuthorities(); err != nil {
+		return err.Error()
+	}
+	rh, err := p.AdditionalHeader()
+	if err != nil || rh.Type != dnsmessage.TypeOPT || rh.Class != 4096 {
+		return fmt.Sprintf("additional %+v %v", rh, err)
+	}
+	opt, err := p.OPTResource()
+	if err != nil {
+		return err.Error()
+	}
+	var codes []uint16
+	for _, o := range opt.Options {
+		codes = append(codes, o.Code)
+	}
+	want := "[12]"
+	if firefox {
+		want = "[8 12]"
+		if string(opt.Options[0].Data) != "\x00\x01\x00\x00" {
+			return fmt.Sprintf("ECS %x", opt.Options[0].Data)
+		}
+	}
+	if fmt.Sprint(codes) != want {
+		return fmt.Sprintf("EDNS options %v, want %s", codes, want)
+	}
+	return ""
+}
+
+// Firefox asks TRR its own way: a GET with the query in ?dns=, anonymous, an
+// empty Accept-Encoding, the no-cache pair, te: trailers (MOZ_LOG and the
+// stand, Firefox 159.0, 2026-10-29).
+func TestFirefoxAsksDNSOverHTTPSItsOwnWay(t *testing.T) {
+	z := newTestZone(t)
+	var gets atomic.Int32
+	var bad atomic.Value
+	doh := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q, err := base64.RawURLEncoding.DecodeString(r.URL.Query().Get("dns"))
+		ae, hasAE := r.Header["Accept-Encoding"]
+		switch {
+		case r.Method != "GET" || err != nil:
+			bad.Store(fmt.Sprint(r.Method, " ", r.URL, " ", err))
+		case r.Header.Get("Accept") != "application/dns-message" || !hasAE || ae[0] != "" ||
+			r.Header.Get("Pragma") != "no-cache" || r.Header.Get("Cache-Control") != "no-cache" ||
+			r.Header.Get("User-Agent") != "" || r.Header.Get("Accept-Language") != "":
+			bad.Store(fmt.Sprint(r.Header))
+		default:
+			if why := dohWireMismatch(q, true); why != "" {
+				bad.Store(why)
+			}
+		}
+		gets.Add(1)
+		w.Header().Set("Content-Type", "application/dns-message")
+		w.Write(z.answer(q))
+	}))
+	defer doh.Close()
+	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "ok")
+	}))
+	defer target.Close()
+	_, port, _ := net.SplitHostPort(target.Listener.Addr().String())
+
+	s, err := New(auditProfile(t, "firefox-159-windows"), Options{DNS: doh.URL + "/dns-query",
+		InsecureSkipVerify: true, DefaultHeaders: true, Timeout: 10 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	resp, err := s.Do(&Request{Method: "GET", URL: "https://dohsite.test:" + port + "/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(resp.Body) != "ok" {
+		t.Fatalf("body %q", resp.Body)
+	}
+	if v := bad.Load(); v != nil {
+		t.Fatalf("a DoH request went out as %v", v)
+	}
+	if gets.Load() == 0 || !z.saw("TypeA dohsite.test.") {
+		t.Fatalf("%d gets, asked %v", gets.Load(), z.asked)
 	}
 }
 

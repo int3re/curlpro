@@ -63,10 +63,11 @@ curlpro.register_profile({
 - **HTTP/3 with a verified fingerprint** and the `Alt-Svc` upgrade a browser performs.
 - **DNS as a browser asks it**: the HTTPS record (RFC 9460) is asked for first, as
   Chrome 108+ and Firefox do — `alpn=h3` takes the first request to HTTP/3, and an
-  `ech` record encrypts the ClientHello with **real ECH**, the inner hello
-  BoringSSL's, measured against Chrome 155 field for field — and where the
-  network drops ECH (Russia's does, to Cloudflare), one more connection without
-  it; `dns=` takes servers or DNS over HTTPS (with Chrome's own DoH request).
+  `ech` record encrypts the ClientHello with **real ECH**, the inner hello the
+  browser's own — BoringSSL's for Chrome, NSS's for Firefox — measured field for
+  field — and where the network drops ECH (Russia's does, to Cloudflare), one
+  more connection without it; `dns=` takes servers or DNS over HTTPS (with the
+  browser's own DoH request).
   Behind a proxy nothing is resolved locally.
 - **Native async**: a request becomes a goroutine, and the process keeps one thread;
   on free-threaded Python (3.14t) the GIL stays off and threads parse in parallel.

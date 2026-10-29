@@ -546,3 +546,20 @@ the host as its target, or Chrome leaves it unused; and Chrome's DoH request is
 `user-agent: Chrome`, `accept-language: *`, `accept-encoding: identity`,
 `priority: u=4, i`.
 
+Firefox asks DNS through TRR, not through a Local State: `scripts/ff-echstand.py`
+writes a throwaway profile with TRR in mode 3 on the stand's DoH server,
+`allow-rfc1918` (the stand answers 127.0.0.1), `confirmationNS: skip` (it does
+not answer the confirmation query) and `cert_override.txt` lines with flags `MU`
+for the stand's `.test` names and its DoH address — the certificate names
+`localhost`, and `.localhost` names never reach TRR. Firefox 159.0 there,
+2026-10-29: real ECH, accepted, the inner hello NSS's — the outer's every cipher
+suite, the inner marker first, the name and `supported_versions` with TLS 1.3
+alone, the rest in `ech_outer_extensions`; the PSK, on a resumed connection, last
+and in the inner hello only. The stand now also keeps every DoH query (`doh` in
+the JSON: method, query bytes, header names), which showed both browsers putting
+the query in one form — ID 0, OPT 4096, padding to 128, Firefox adding a no-address
+Client Subnet — and Firefox asking with a GET; the header order of its TRR request
+is in `MOZ_LOG=nsHttp:5` (`MOZ_LOG_FILE` beside it):
+
+    python scripts/ff-echstand.py ff-ech.json 40 [-max-name 64]
+

@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/curlpro/curlpro/internal/dnsrr"
 	"github.com/curlpro/curlpro/internal/profile"
 	utls "github.com/refraction-networking/utls"
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 // The session's DNS: what resolves the names it connects to, and the HTTPS
@@ -324,6 +326,15 @@ func (s *Session) echPinsTCP(u *url.URL) bool {
 	return ok && s.echUsable(res.ECH())
 }
 
+// echInnerStyle is how a family's TLS stack builds the inner hello: BoringSSL
+// for Chromium (measured against Chrome 155), NSS for Firefox (Firefox 159).
+func echInnerStyle(family string) utls.ECHInnerStyle {
+	if family == "firefox" {
+		return utls.ECHInnerNSS
+	}
+	return utls.ECHInnerBoringSSL
+}
+
 // sendsECH reports a hello that carries an ECH extension.
 func sendsECH(spec *utls.ClientHelloSpec) bool {
 	for _, e := range spec.Extensions {
@@ -408,35 +419,115 @@ func (s *Session) dohExchange(ctx context.Context, q []byte) ([]byte, error) {
 		timeout = min(timeout, time.Until(d))
 	}
 	off := false
-	headers, order := dohHeaders(s.profile)
-	resp, err := s.dns.doh.Do(&Request{
-		Method:         "POST",
+	family := s.profile.Family()
+	wire, err := dohQuery(q, family)
+	if err != nil {
+		return nil, fmt.Errorf("dns over https: %w", err)
+	}
+	method, headers, order := dohRequest(s.profile)
+	req := &Request{
+		Method:         method,
 		URL:            s.dns.dohURL,
 		Headers:        headers,
 		HeaderOrder:    order,
-		Body:           q,
 		DefaultHeaders: &off,
 		Cookies:        &off,
 		SessionHeaders: &off,
 		Timeout:        &timeout,
-	})
+	}
+	if method == "GET" {
+		sep := "?"
+		if strings.Contains(req.URL, "?") {
+			sep = "&"
+		}
+		req.URL += sep + "dns=" + base64.RawURLEncoding.EncodeToString(wire)
+	} else {
+		req.Body = wire
+	}
+	resp, err := s.dns.doh.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("dns over https: %w", err)
 	}
 	if resp.Status != 200 {
 		return nil, fmt.Errorf("dns over https: the server answered %d", resp.Status)
 	}
-	return resp.Body, nil
+	// The query went out with ID 0, as the browsers send it; the caller
+	// matches the answer by the ID it chose.
+	answer := resp.Body
+	if len(answer) >= 2 && len(q) >= 2 {
+		answer = append([]byte(nil), answer...)
+		copy(answer[:2], q[:2])
+	}
+	return answer, nil
 }
 
-// dohHeaders are the headers of a DoH request. Chrome's, read off its net log
-// (Chrome 155.0.8059.85, 2026-10-26, against cmd/echstand): a fixed set that
-// owes nothing to the page — "Chrome" for a User-Agent, "*" for languages,
-// identity for encodings, the lowest priority — in this order. Firefox's TRR
-// was not measured; it gets the two RFC 8484 asks.
-func dohHeaders(p *profile.Profile) (map[string]string, []string) {
-	if profile.Chromium(p.Family()) {
-		return map[string]string{
+// dohQuery is the DNS query as the profile's browser puts it into DoH,
+// measured against cmd/echstand on 2026-10-29 (Chrome 156.0.8078.73, Firefox
+// 159.0): ID 0 and recursion desired, one question, an OPT record offering
+// 4096 bytes, and an EDNS padding option that brings the message to a multiple
+// of 128 bytes (RFC 8467). Firefox puts an EDNS Client Subnet option before it,
+// family 1 with a zero-length prefix — "send none of my address". Another
+// profile's query goes as it came.
+func dohQuery(q []byte, family string) ([]byte, error) {
+	firefox := family == "firefox"
+	if !profile.Chromium(family) && !firefox {
+		return q, nil
+	}
+	var p dnsmessage.Parser
+	if _, err := p.Start(q); err != nil {
+		return nil, err
+	}
+	question, err := p.Question()
+	if err != nil {
+		return nil, err
+	}
+	build := func(pad int) ([]byte, error) {
+		b := dnsmessage.NewBuilder(make([]byte, 0, 128), dnsmessage.Header{RecursionDesired: true})
+		b.EnableCompression()
+		if err := b.StartQuestions(); err != nil {
+			return nil, err
+		}
+		if err := b.Question(question); err != nil {
+			return nil, err
+		}
+		if err := b.StartAdditionals(); err != nil {
+			return nil, err
+		}
+		var opt dnsmessage.ResourceHeader
+		if err := opt.SetEDNS0(4096, dnsmessage.RCodeSuccess, false); err != nil {
+			return nil, err
+		}
+		var options []dnsmessage.Option
+		if firefox {
+			options = append(options, dnsmessage.Option{Code: 8, Data: []byte{0, 1, 0, 0}})
+		}
+		if pad >= 0 {
+			options = append(options, dnsmessage.Option{Code: 12, Data: make([]byte, pad)})
+		}
+		if err := b.OPTResource(opt, dnsmessage.OPTResource{Options: options}); err != nil {
+			return nil, err
+		}
+		return b.Finish()
+	}
+	bare, err := build(-1)
+	if err != nil {
+		return nil, err
+	}
+	return build((128 - (len(bare)+4)%128) % 128)
+}
+
+// dohRequest is the method and headers of a DoH request. Chrome's, read off its
+// net log (Chrome 155.0.8059.85, 2026-10-26, against cmd/echstand): a POST with a
+// fixed set that owes nothing to the page — "Chrome" for a User-Agent, "*" for
+// languages, identity for encodings, the lowest priority — in this order.
+// Firefox's TRR, read off MOZ_LOG and the stand (Firefox 159.0, 2026-10-29): a
+// GET with the query in ?dns=, anonymous — no User-Agent, no languages — an
+// empty Accept-Encoding, the no-cache pair of a request that bypasses the cache,
+// and HTTP/2's te: trailers. Another profile asks with the two RFC 8484 headers.
+func dohRequest(p *profile.Profile) (string, map[string]string, []string) {
+	switch fam := p.Family(); {
+	case profile.Chromium(fam):
+		return "POST", map[string]string{
 			"accept":          "application/dns-message",
 			"accept-language": "*",
 			"user-agent":      "Chrome",
@@ -445,8 +536,16 @@ func dohHeaders(p *profile.Profile) (map[string]string, []string) {
 			"priority":        "u=4, i",
 		}, []string{"content-length", "accept", "accept-language", "user-agent", "accept-encoding",
 			"content-type", "priority"}
+	case fam == "firefox":
+		return "GET", map[string]string{
+			"accept":          "application/dns-message",
+			"accept-encoding": "",
+			"pragma":          "no-cache",
+			"cache-control":   "no-cache",
+			"te":              "trailers",
+		}, []string{"accept", "accept-encoding", "pragma", "cache-control", "te"}
 	}
-	return map[string]string{
+	return "POST", map[string]string{
 		"accept":       "application/dns-message",
 		"content-type": "application/dns-message",
 	}, []string{"content-length", "accept", "content-type"}

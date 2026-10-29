@@ -819,9 +819,11 @@ type Session struct {
 
 	// dns resolves names and asks for HTTPS records (dns.go).
 	dns dnsState
-	// echCapable: a Chromium profile whose hello carries ECH, which uses an
-	// origin's ECH configuration when DNS publishes one.
+	// echCapable: a Chromium or Firefox profile whose hello carries ECH, which
+	// uses an origin's ECH configuration when DNS publishes one; echInner is
+	// how that browser builds the inner hello (scripts/patch-utls.py).
 	echCapable bool
+	echInner   utls.ECHInnerStyle
 }
 
 // New creates a session. The profile spec is checked right away so that a data
@@ -901,7 +903,8 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	p = p.ForSession()
 
 	s := &Session{
-		echCapable: profile.Chromium(p.Family()) && sendsECH(helloSpec),
+		echCapable: (profile.Chromium(p.Family()) || p.Family() == "firefox") && sendsECH(helloSpec),
+		echInner:   echInnerStyle(p.Family()),
 		profile:    p,
 		opts:       opts,
 		alpn:       alpnFromProfile(p),
@@ -1624,7 +1627,7 @@ func (s *Session) handshakeTLS(dialCtx context.Context, raw net.Conn, u *url.URL
 
 	uconn := utls.UClient(raw, cfg, utls.HelloCustom)
 	if ech != nil {
-		uconn.ECHInner = utls.ECHInnerBoringSSL // the inner hello Chrome builds (scripts/patch-utls.py)
+		uconn.ECHInner = s.echInner // the inner hello the browser builds (scripts/patch-utls.py)
 	}
 	if err := uconn.ApplyPreset(spec); err != nil {
 		return nil, fmt.Errorf("ApplyPreset: %w", err)

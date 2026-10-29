@@ -1068,16 +1068,21 @@ on it. From 0.18 a session does the same, on a direct connection to a name:
 - `alpn=h3` sends the first request to HTTP/3, with no Alt-Svc and no TCP
   connection first (Chrome's DNS ALPN job); a failure falls back to TCP and is
   remembered with Alt-Svc's failures.
-- `ech` encrypts the ClientHello (RFC 9849) on a Chromium profile whose hello
-  carries ECH. The outer hello names the configuration's public name, the inner
-  one the site, and the inner hello is BoringSSL's, measured against Chrome 155
-  on `cmd/echstand` field for field: GREASE and the TLS 1.3 suites, the real
-  name, the inner marker, `supported_versions` with GREASE and TLS 1.3 alone,
-  every other TLS 1.3 extension compressed in the outer's order between two
-  GREASE ones, nothing of TLS 1.2, the name padded to `maximum_name_length` and
-  the whole to a multiple of 32 (`scripts/patch-utls.py`). A server that
+- `ech` encrypts the ClientHello (RFC 9849) on a Chromium or Firefox profile
+  whose hello carries ECH. The outer hello names the configuration's public
+  name, the inner one the site, and the inner hello is the browser's own
+  (`scripts/patch-utls.py`). A Chromium profile's is BoringSSL's, measured
+  against Chrome 155 and 156 on `cmd/echstand` field for field: GREASE and the
+  TLS 1.3 suites, the real name, the inner marker, `supported_versions` with
+  GREASE and TLS 1.3 alone, every other TLS 1.3 extension compressed in the
+  outer's order between two GREASE ones, nothing of TLS 1.2. A Firefox
+  profile's is NSS's, measured against Firefox 159 the same way
+  (`scripts/ff-echstand.py`): every cipher suite of the outer, the inner marker
+  first, then the real name and `supported_versions` with TLS 1.3 alone, then
+  the rest compressed in the outer's order, nothing of TLS 1.2. Both pad the
+  name to `maximum_name_length` and the whole to a multiple of 32. A server that
   rejects it with retry configurations gets one more connection with them, or
-  without ECH when it sends none, as Chrome does.
+  without ECH when it sends none, as the browsers do.
 - A network that drops ECH — Russia's does it to every Cloudflare site, by the
   public name `cloudflare-ech.com` — closes or resets the connection under the
   hello, or holds it unanswered. Chrome fails there; a session connects once
@@ -1094,16 +1099,21 @@ on it. From 0.18 a session does the same, on a direct connection to a name:
 Nothing is asked behind a proxy — the proxy resolves — nor for an address,
 `localhost` or a name pinned with `resolve=`. `dns=` picks the servers: the
 system's (the default), `"off"`, a list of servers, or DoH (`"https://…"`),
-whose requests are Chrome's own, read off its net log: a POST with
+whose requests are the browser's own, measured on `cmd/echstand`. Both put
+the query in the same form — ID 0, an OPT record offering 4096 bytes, EDNS
+padding to a multiple of 128 — Firefox with an EDNS Client Subnet option of no
+address before the padding. Chrome sends it as a POST with
 `accept`/`content-type: application/dns-message`, `accept-language: *`,
-`user-agent: Chrome`, `accept-encoding: identity`, `priority: u=4, i`.
+`user-agent: Chrome`, `accept-encoding: identity`, `priority: u=4, i` (its net
+log); Firefox as a GET with `?dns=`, anonymous — `accept:
+application/dns-message`, an empty `accept-encoding`, `pragma` and
+`cache-control: no-cache`, `te: trailers`, no User-Agent (MOZ_LOG).
 
 Not reproduced yet: ECH over QUIC — an origin with an ECH configuration stays
 on TCP, where Chrome would take HTTP/3 with ECH, because QUIC without it would
 send in clear the name ECH hides; resumption inside ECH — Chrome puts the PSK in
 the inner hello alone, and a connection with ECH here makes a full handshake;
-Firefox's inner hello, which NSS builds — a Firefox profile keeps its GREASE
-ECH on such a site; Firefox's DoH request, which is not measured.
+Firefox's handling of an HTTPS record, which is read by Chrome's rules.
 
 ## 13. Streaming, uploads, async
 

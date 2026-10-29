@@ -11,6 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/binary"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -246,21 +247,50 @@ func TestECHRetryConfigsAreTakenOnce(t *testing.T) {
 // Firefox builds its inner hello in NSS, not reproduced here: a Firefox
 // profile keeps its GREASE ECH on a site that publishes a configuration, and
 // still reaches it.
-func TestFirefoxKeepsGREASEOnAnECHSite(t *testing.T) {
+// Firefox takes the configuration too, and NSS builds its inner hello its own
+// way. Firefox 159.0 against cmd/echstand (scripts/ff-echstand.py, 2026-10-29):
+// every cipher suite of the outer, in its order; the inner marker first, then
+// server_name and supported_versions with TLS 1.3 alone, then
+// ech_outer_extensions naming the rest in the outer's order — groups, ALPN,
+// status_request, delegated_credentials, SCT, key_share, signature algorithms,
+// PSK modes, record_size_limit, certificate compression; nothing of TLS 1.2.
+func TestFirefoxECHInnerIsNSSs(t *testing.T) {
 	cfg, key := echConfigFor(t, 5, "public.echsite.test")
 	srv := startECHServer(t, cfg, key)
 	z := newTestZone(t)
 	q := "_" + srv.port + "._https.echsite.test."
 	z.https[q], z.ech[q] = []string{"h2"}, echList(cfg)
 
-	s := echSession(t, "firefox-157-windows", z, srv)
-	if _, err := s.Do(&Request{Method: "GET", URL: "https://echsite.test:" + srv.port + "/"}); err != nil {
+	s := echSession(t, "firefox-159-windows", z, srv)
+	resp, err := s.Do(&Request{Method: "GET", URL: "https://echsite.test:" + srv.port + "/"})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if resp.Proto != "HTTP/2.0" {
+		t.Fatalf("%s", resp.Proto)
 	}
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
-	if len(srv.accepted) != 1 || srv.accepted[0] || srv.inner[0].ServerName != "echsite.test" {
-		t.Fatalf("accepted %v, SNI %q", srv.accepted, srv.inner[0].ServerName)
+	if len(srv.accepted) != 1 || !srv.accepted[0] {
+		t.Fatalf("ECH accepted: %v", srv.accepted)
+	}
+	h := srv.inner[len(srv.inner)-1]
+	if h.ServerName != "echsite.test" {
+		t.Fatalf("inner SNI %q", h.ServerName)
+	}
+	want := []uint16{0x1301, 0x1303, 0x1302, 0xc02b, 0xc02f, 0xcca9, 0xcca8, 0xc02c, 0xc030,
+		0xc013, 0xc014, 0x9c, 0x9d, 0x2f, 0x35}
+	if fmt.Sprint(h.CipherSuites) != fmt.Sprint(want) {
+		t.Fatalf("inner ciphers %x, want the outer's %x", h.CipherSuites, want)
+	}
+	if fmt.Sprint(h.SupportedVersions) != fmt.Sprint([]uint16{tls.VersionTLS13}) {
+		t.Fatalf("inner versions %x", h.SupportedVersions)
+	}
+	// The server rebuilds the inner hello with the compressed ones expanded in
+	// place: the measured order, extension for extension.
+	exts := []uint16{0xfe0d, 0, 43, 10, 16, 5, 34, 18, 51, 13, 45, 28, 27}
+	if fmt.Sprint(h.Extensions) != fmt.Sprint(exts) {
+		t.Fatalf("inner extensions %v, want %v", h.Extensions, exts)
 	}
 }
 

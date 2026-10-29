@@ -38,6 +38,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -75,6 +76,7 @@ type result struct {
 	Config      string   `json:"ech_config_list"`
 	MaxNameLen  int      `json:"max_name_len"`
 	DNS         []string `json:"dns"`
+	DoH         []dohReq `json:"doh"` // every DoH request as it arrived
 	Connections []conn   `json:"connections"`
 	Accepted    []bool   `json:"ech_accepted"`
 	Requests    []string `json:"requests"`
@@ -84,6 +86,16 @@ var (
 	mu  sync.Mutex
 	res result
 )
+
+// dohReq is a DoH request: the browser's method, its query bytes (the ID, the
+// flags and the EDNS options are part of what it sends) and its header names,
+// sorted — Go's server keeps no order; the net log or MOZ_LOG has that.
+type dohReq struct {
+	Method  string   `json:"method"`
+	Proto   string   `json:"proto"`
+	Query   string   `json:"query"` // hex
+	Headers []string `json:"headers"`
+}
 
 func main() {
 	flag.Parse()
@@ -139,8 +151,14 @@ func main() {
 			q, _ = io.ReadAll(r.Body)
 		}
 		a, desc := answer(q, port, list)
+		var names []string
+		for k, v := range r.Header {
+			names = append(names, strings.ToLower(k)+": "+strings.Join(v, ","))
+		}
+		sort.Strings(names)
 		mu.Lock()
 		res.DNS = append(res.DNS, desc)
+		res.DoH = append(res.DoH, dohReq{Method: r.Method, Proto: r.Proto, Query: hex.EncodeToString(q), Headers: names})
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/dns-message")
 		w.Write(a)
