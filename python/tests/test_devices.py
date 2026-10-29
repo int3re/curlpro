@@ -33,11 +33,15 @@ def test_the_pool_is_large():
     assert len(SEED) >= 40
 
 
+def _identity(devices: list[dict], keys: tuple[str, ...]) -> list[dict]:
+    return [{k: d[k] for k in keys if k in d} for d in devices]
+
+
 def test_chrome_android_matches_the_seed():
     """gen-devices.py owns the list; a hand edit to the profile must be caught."""
     want = [{"name": d["name"], "model": d["model"],
              "platform_version": d["platform_version"]} for d in SEED]
-    assert _profile("chrome-152-android")["devices"] == want
+    assert _identity(_profile("chrome-152-android")["devices"], ("name", "model", "platform_version")) == want
 
 
 def test_yandex_android_matches_the_seed_with_arch():
@@ -45,7 +49,27 @@ def test_yandex_android_matches_the_seed_with_arch():
     modern phone in the pool is arm64."""
     want = [{"name": d["name"], "model": d["model"],
              "platform_version": d["platform_version"], "arch": "arm_64"} for d in SEED]
-    assert _profile("yandex-26.8-android")["devices"] == want
+    keys = ("name", "model", "platform_version", "arch")
+    assert _identity(_profile("yandex-26.8-android")["devices"], keys) == want
+
+
+def test_every_phone_names_its_screen():
+    """The hints a site may ask for besides the model come from the phone:
+    its scale factor, a viewport narrower than any desktop's, RAM as Chromium
+    reports it on Android (1 to 8), and Chromium's default network estimate."""
+    import subprocess
+    import sys
+    gen = subprocess.run([sys.executable, str(REPO / "scripts" / "gen-devices.py"), "--check"],
+                         capture_output=True, text=True)
+    assert gen.returncode == 0, gen.stderr
+    for d in _profile("chrome-152-android")["devices"]:
+        w, h = (int(x) for x in d["viewport"].split("x"))
+        assert 300 <= w <= 500 and 600 <= h <= 1000, d
+        assert float(d["dpr"]) in (1.875, 2.625, 2.75, 3, 3.5), d
+        assert d["device_memory"] in ("1", "2", "4", "8"), d
+        assert (d["rtt"], d["downlink"]) in (("116", "2.658"), ("137", "1.708")), d
+    seen = {(d["dpr"], d["viewport"]) for d in _profile("chrome-152-android")["devices"]}
+    assert len(seen) > 10, "the pool's screens are not varied"
 
 
 def test_models_look_like_real_ro_product_model():

@@ -112,8 +112,11 @@
       "sec-ch-device-memory": "16",
       "dpr": "1",
       "sec-ch-dpr": "1",
-      "rtt": "100",
-      "downlink": "1.6",
+      "viewport-width": "1920",
+      "sec-ch-viewport-width": "1920",
+      "sec-ch-viewport-height": "977",
+      "rtt": "90",
+      "downlink": "1.456",
       "ect": "4g",
       "sec-ch-prefers-color-scheme": "light",
       "sec-ch-prefers-reduced-motion": "no-preference",
@@ -342,7 +345,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x977",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Linux, Chrome 153.0.8010.27",
@@ -353,7 +360,11 @@
       "form_factors": "Desktop",
       "device_memory": "8",
       "dpr": "1",
-      "color_scheme": "dark"
+      "viewport": "1920x977",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Linux, Chrome 153.0.8010.36",
@@ -364,7 +375,11 @@
       "form_factors": "Desktop",
       "device_memory": "32",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "2560x1337",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Linux, Chrome 153.0.8010.37",
@@ -373,9 +388,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1366x665",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Linux, Chrome 153.0.8010.47",
@@ -384,9 +403,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "dark"
+      "viewport": "1920x977",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Linux, Chrome 153.0.8010.48",
@@ -395,9 +418,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x977",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Linux, Chrome 153.0.8010.49",
@@ -406,9 +433,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "32",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "2560x1337",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Linux, Chrome 153.0.8010.50",
@@ -419,7 +450,11 @@
       "form_factors": "Desktop",
       "device_memory": "8",
       "dpr": "1",
-      "color_scheme": "dark"
+      "viewport": "1366x665",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Linux, Chrome 153.0.8010.52",
@@ -428,9 +463,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x977",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Linux, Chrome 153.0.8010.53",
@@ -439,9 +478,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x977",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Linux, Chrome 153.0.8010.54",
@@ -450,9 +493,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "1",
-      "color_scheme": "dark"
+      "viewport": "2560x1337",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Linux, Chrome 153.0.8010.55",
@@ -461,9 +508,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1366x665",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     }
   ],
   "device_kind": "desktop"

@@ -334,8 +334,9 @@ def test_the_default_machine_is_the_capture_machine():
 
 
 def test_network_hints_are_rounded_and_noised_like_chromium():
-    """rtt in steps of 50 ms around the 100 ms estimate, downlink in steps of
-    50 kbps around 1.6 Mbps: Chromium multiplies by 0.90-1.10 per site."""
+    """rtt in steps of 50 ms, downlink in steps of 50 kbps, around Chromium's
+    default for Ethernet (90 ms, 1456 kbps): it multiplies by 0.90-1.10 per
+    site, so 90 ms always reads 100."""
     with HintServer("rtt, downlink") as srv:
         with curlpro.Session("chrome-156-windows", verify=False, force_http1=True) as s:
             for _ in range(3):
@@ -345,7 +346,7 @@ def test_network_hints_are_rounded_and_noised_like_chromium():
     assert rtts == {"100"}, rtts
     assert len(downs) == 1, f"the value moved within one session and site: {downs}"
     d = float(downs.pop())
-    assert 1.4 <= d <= 1.8 and round(d * 1000) % 50 == 0, d
+    assert 1.3 <= d <= 1.6 and round(d * 1000) % 50 == 0, d
 
 
 def test_critical_ch_for_the_colour_scheme_repeats_at_once():
@@ -388,7 +389,7 @@ def test_a_fetch_lays_its_cluster_out_as_chrome_156_did():
     with HintServer(MACHINE_HINTS) as srv:
         with curlpro.Session("chrome-156-windows", verify=False, force_http1=True, mode="fetch",
                              page=srv.url) as s:
-            s.get(srv.url)
+            s.get(srv.url, mode="navigate")
             s.get(srv.url + "f-get-b")
     got = [n.lower() for n in srv.names(1)]
     cluster = HINT_NAMES | {"user-agent"}
@@ -403,8 +404,49 @@ def test_a_fetch_puts_the_pages_own_header_where_chrome_does():
     with HintServer(MACHINE_HINTS) as srv:
         with curlpro.Session("chrome-156-windows", verify=False, force_http1=True, mode="fetch",
                              page=srv.url) as s:
-            s.get(srv.url)
+            s.get(srv.url, mode="navigate")
             s.get(srv.url + "f-key-b", headers={"X-Api-Key": "v1"})
     got = [n.lower() for n in srv.names(1)]
     cluster = HINT_NAMES | {"user-agent", "x-api-key"}
     assert [n for n in got if n in cluster] == [n for n in want if n in cluster], got
+
+
+def test_accept_ch_on_a_fetch_switches_nothing_on():
+    """Chromium persists the hints a top-level page asks for; an API that
+    answers a fetch with Accept-CH changes nothing."""
+    with HintServer(MACHINE_HINTS) as srv:
+        with curlpro.Session("chrome-156-windows", verify=False, force_http1=True, mode="fetch",
+                             page=srv.url) as s:
+            s.get(srv.url)
+            s.get(srv.url)
+    assert _hints_in(srv.names(1)) == ["sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile"], srv.names(1)
+
+
+def test_a_phone_sends_its_own_screen():
+    """A Galaxy S24 Ultra is not a Pixel: its scale factor, its viewport — 980
+    wide in a navigation, as Chrome on Android scales it — its memory."""
+    with HintServer(MACHINE_HINTS) as srv:
+        with curlpro.Session("chrome-152-android", verify=False, force_http1=True,
+                             device="Galaxy S24 Ultra") as s:
+            s.get(srv.url)
+            s.get(srv.url)
+            s.get(srv.url + "api", mode="fetch", page=srv.url)
+    nav = lambda n: srv.value(1, n)  # noqa: E731
+    page = lambda n: srv.value(2, n)  # noqa: E731
+    assert nav("sec-ch-ua-model") == '"SM-S928B"'
+    assert (nav("dpr"), nav("device-memory")) == ("3.5", "8")
+    assert (nav("viewport-width"), nav("sec-ch-viewport-height")) == ("980", str(round(787 * 980 / 412)))
+    assert (page("sec-ch-viewport-width"), page("sec-ch-viewport-height")) == ("412", "787")
+    assert nav("sec-ch-prefers-color-scheme") in ("light", "dark")
+
+
+def test_a_mac_and_a_linux_box_have_screens_of_their_own():
+    with HintServer(MACHINE_HINTS) as srv:
+        for name in ("chrome-156-macos", "chrome-156-linux"):
+            with curlpro.Session(name, verify=False, force_http1=True) as s:
+                s.get(srv.url)
+                s.get(srv.url)
+    mac, linux = 1, 3
+    assert (srv.value(mac, "dpr"), srv.value(mac, "viewport-width")) == ("2", "1470")
+    assert srv.value(mac, "sec-ch-ua-arch") == '"arm"'
+    assert (srv.value(linux, "dpr"), srv.value(linux, "sec-ch-viewport-height")) == ("1", "977")

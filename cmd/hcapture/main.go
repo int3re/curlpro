@@ -72,7 +72,8 @@ func main() {
 	flag.BoolVar(&closeAfter, "close", false, "close every connection after its first response, so later requests resume TLS on new ones")
 	flag.StringVar(&acceptCH, "accept-ch", acceptCH, "the hints the plain page asks for in Accept-CH")
 	flag.StringVar(&criticalCH, "critical-ch", "", "the hints named in Critical-CH; empty means those of -accept-ch")
-	flag.BoolVar(&hintsPage, "hintspage", false, "serve the hints page: fetch and XHR with and without the page's own headers, an image, a script and a stylesheet, then two navigations")
+	flag.BoolVar(&hintsPage, "hintspage", false, "serve the hints page: fetch and XHR with and without the page's own headers, an image, a script and a stylesheet, requests and frames to other origins, then two navigations")
+	flag.StringVar(&permissionsPolicy, "permissions-policy", "", "a Permissions-Policy header on every response, to delegate hints to other origins (ch-ua-model=(self \"https://d.localhost:8443\"))")
 	flag.Parse()
 	if criticalCH == "" {
 		criticalCH = acceptCH
@@ -233,6 +234,10 @@ const second = `<!doctype html><meta charset=utf-8><title>second</title><body>ok
 // steady-state navigation (/second), which does the same once more.
 var hintsPage bool
 
+// permissionsPolicy goes on every response when set: which origins the
+// page's hints may go to.
+var permissionsPolicy string
+
 const hintsScript = `<script>
 const log = m => { document.getElementById('out').textContent += m + String.fromCharCode(10); };
 const load =(tag, attrs) => new Promise(r => {
@@ -263,6 +268,15 @@ const load =(tag, attrs) => new Promise(r => {
     await load('img', {src: '/h/img.png?' + q});
     await load('script', {src: '/h/s.js?' + q});
     await load('link', {rel: 'stylesheet', href: '/h/s.css?' + q});
+    // Other origins: d.localhost is the one a Permissions-Policy may
+    // delegate to, e.localhost one it does not name. Chromium resolves
+    // *.localhost to loopback, and the stand's certificate covers it.
+    const d = 'https://d.localhost:' + location.port, e = 'https://e.localhost:' + location.port;
+    await fetch(d + '/x-cors-' + q).catch(() => {});
+    await load('img', {src: d + '/h/img.png?d' + q});
+    await load('img', {src: e + '/h/img.png?e' + q});
+    await load('iframe', {src: '/h/frame.html?' + q});
+    await load('iframe', {src: d + '/h/frame.html?d' + q});
     log('done ' + q);
     if (q === 'a') setTimeout(() => { location.href = '/second'; }, 300);
   } catch (e) { log('error ' + e); }
@@ -577,6 +591,8 @@ func route(path, host string) reply {
 		return reply{200, second, html, "", nil}
 	case "/h/img.png":
 		return reply{200, png1x1, "image/png", "", nil}
+	case "/h/frame.html":
+		return reply{200, "<!doctype html><title>frame</title>ok", html, "", nil}
 	case "/h/s.js":
 		return reply{200, "void 0;", "text/javascript", "", nil}
 	case "/h/s.css":
@@ -912,6 +928,9 @@ func answer(r record) (reply, [][2]string) {
 	if !subres && !chipsMode && !cacheMode {
 		add("accept-ch", acceptCH)
 		add("critical-ch", criticalCH)
+	}
+	if permissionsPolicy != "" {
+		add("permissions-policy", permissionsPolicy)
 	}
 	if altSvc != "" {
 		add("alt-svc", altSvc)

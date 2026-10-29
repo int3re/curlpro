@@ -136,8 +136,8 @@ func (s *Session) templateAt(r *Request, u *url.URL) headerTemplate {
 	}
 	if r != nil && r.Resource != "" {
 		tpl := s.resourceTemplate(r)
-		if u != nil && !tpl.frame && s.profile.ClientHints.Enabled() {
-			if want := s.hintsFor(u); len(want) > 0 {
+		if u != nil && s.profile.ClientHints.Enabled() {
+			if want := s.hintsForRequest(r, u); len(want) > 0 {
 				return s.resourceHintTemplate(r, tpl, want)
 			}
 		}
@@ -145,7 +145,11 @@ func (s *Session) templateAt(r *Request, u *url.URL) headerTemplate {
 	}
 	fetch := s.modeFor(r) == ModeFetch
 	if r != nil && u != nil && s.profile.ClientHints.Enabled() {
-		if want := s.hintsFor(u); len(want) > 0 {
+		want := s.hintsFor(u)
+		if fetch {
+			want = s.hintsForRequest(r, u)
+		}
+		if len(want) > 0 {
 			return s.hintTemplateFor(fetch, want)
 		}
 	}
@@ -191,7 +195,8 @@ func (s *Session) hintTemplateFor(fetch bool, want map[string]bool) headerTempla
 // resourceHintTemplate is a subresource's set with the hints the site asked
 // for: Blink sets them on an image, a script or a stylesheet as on a fetch
 // (measured on Chrome 155 and 156), and the header map lays the cluster out
-// (pageOrder). A frame is a navigation and goes without.
+// (pageOrder). A frame is navigated by the browser process, and its hints
+// come in the navigation sequence (frameHintPairs).
 func (s *Session) resourceHintTemplate(r *Request, base headerTemplate, want map[string]bool) headerTemplate {
 	names := make([]string, 0, len(want))
 	for k, v := range want {
@@ -211,14 +216,22 @@ func (s *Session) resourceHintTemplate(r *Request, base headerTemplate, want map
 	if tpl, ok := t.hints[key]; ok {
 		return tpl
 	}
-	var add []profile.HeaderPair
-	for _, n := range names {
-		if v := s.profile.HintValue(n, s.device, true); v != "" {
-			add = append(add, profile.HeaderPair{Key: n, Value: v})
-		}
-	}
 	tpl := base
-	tpl.pairs = insertPairs(append([]profile.HeaderPair(nil), base.pairs...), pairIndex(base.pairs, "user-agent")+1, add)
+	if base.frame {
+		key = "frame:" + key
+		if cached, ok := t.hints[key]; ok {
+			return cached
+		}
+		tpl.pairs = s.frameHintPairs(append([]profile.HeaderPair(nil), base.pairs...), want)
+	} else {
+		var add []profile.HeaderPair
+		for _, n := range names {
+			if v := s.profile.HintValue(n, s.device, true); v != "" {
+				add = append(add, profile.HeaderPair{Key: n, Value: v})
+			}
+		}
+		tpl.pairs = insertPairs(append([]profile.HeaderPair(nil), base.pairs...), pairIndex(base.pairs, "user-agent")+1, add)
+	}
 	if base.h1 != nil {
 		tpl.h1 = hintH1Order(tpl.pairs, base.h1)
 	}

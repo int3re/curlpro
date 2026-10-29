@@ -187,8 +187,8 @@
       "viewport-width": "1920",
       "sec-ch-viewport-width": "1920",
       "sec-ch-viewport-height": "969",
-      "rtt": "100",
-      "downlink": "1.6",
+      "rtt": "90",
+      "downlink": "1.456",
       "ect": "4g",
       "sec-ch-prefers-color-scheme": "dark",
       "sec-ch-prefers-reduced-motion": "no-preference",
@@ -521,7 +521,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1920x969",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.27",
@@ -534,7 +537,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1920x969",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.36",
@@ -547,7 +553,10 @@
       "device_memory": "16",
       "dpr": "1.25",
       "viewport": "1536x753",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.37",
@@ -560,7 +569,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1366x657",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.47",
@@ -573,7 +585,10 @@
       "device_memory": "32",
       "dpr": "1",
       "viewport": "2560x1329",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.48",
@@ -586,7 +601,10 @@
       "device_memory": "16",
       "dpr": "1.5",
       "viewport": "1280x609",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.49",
@@ -599,7 +617,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1440x789",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.50",
@@ -612,7 +633,10 @@
       "device_memory": "32",
       "dpr": "1.25",
       "viewport": "2048x1041",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.52",
@@ -625,7 +649,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1600x789",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.53",
@@ -638,7 +665,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1920x969",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.54",
@@ -651,7 +681,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1920x969",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, Chrome 153.0.8010.55",
@@ -664,7 +697,10 @@
       "device_memory": "16",
       "dpr": "1.25",
       "viewport": "1536x753",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.12",
@@ -677,7 +713,10 @@
       "device_memory": "32",
       "dpr": "1",
       "viewport": "2560x1329",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.27",
@@ -690,7 +729,10 @@
       "device_memory": "16",
       "dpr": "1.5",
       "viewport": "1280x609",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.36",
@@ -703,7 +745,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1440x789",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.37",
@@ -716,7 +761,10 @@
       "device_memory": "32",
       "dpr": "1.25",
       "viewport": "2048x1041",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.47",
@@ -729,7 +777,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1600x789",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.48",
@@ -742,7 +793,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1920x969",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.49",
@@ -755,7 +809,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1920x969",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.50",
@@ -768,7 +825,10 @@
       "device_memory": "16",
       "dpr": "1.25",
       "viewport": "1536x753",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.52",
@@ -781,7 +841,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1366x657",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.53",
@@ -794,7 +857,10 @@
       "device_memory": "32",
       "dpr": "1",
       "viewport": "2560x1329",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.54",
@@ -807,7 +873,10 @@
       "device_memory": "16",
       "dpr": "1.5",
       "viewport": "1280x609",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 153.0.8010.55",
@@ -820,7 +889,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1440x789",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.12",
@@ -833,7 +905,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1600x781",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.27",
@@ -846,7 +921,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1920x961",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.36",
@@ -859,7 +937,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1920x961",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.37",
@@ -872,7 +953,10 @@
       "device_memory": "16",
       "dpr": "1.25",
       "viewport": "1536x745",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.47",
@@ -885,7 +969,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1366x649",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.48",
@@ -898,7 +985,10 @@
       "device_memory": "32",
       "dpr": "1",
       "viewport": "2560x1321",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.49",
@@ -911,7 +1001,10 @@
       "device_memory": "16",
       "dpr": "1.5",
       "viewport": "1280x601",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.50",
@@ -924,7 +1017,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1440x781",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.52",
@@ -937,7 +1033,10 @@
       "device_memory": "32",
       "dpr": "1.25",
       "viewport": "2048x1033",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.53",
@@ -950,7 +1049,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1600x781",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.54",
@@ -963,7 +1065,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1920x961",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 22H2, Chrome 153.0.8010.55",
@@ -976,7 +1081,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1920x961",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.12",
@@ -989,7 +1097,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1366x649",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.27",
@@ -1002,7 +1113,10 @@
       "device_memory": "32",
       "dpr": "1",
       "viewport": "2560x1321",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.36",
@@ -1015,7 +1129,10 @@
       "device_memory": "16",
       "dpr": "1.5",
       "viewport": "1280x601",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.37",
@@ -1028,7 +1145,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1440x781",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.47",
@@ -1041,7 +1161,10 @@
       "device_memory": "32",
       "dpr": "1.25",
       "viewport": "2048x1033",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.48",
@@ -1054,7 +1177,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1600x781",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.49",
@@ -1067,7 +1193,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1920x961",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.50",
@@ -1080,7 +1209,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1920x961",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.52",
@@ -1093,7 +1225,10 @@
       "device_memory": "16",
       "dpr": "1.25",
       "viewport": "1536x745",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.53",
@@ -1106,7 +1241,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1366x649",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.54",
@@ -1119,7 +1257,10 @@
       "device_memory": "32",
       "dpr": "1",
       "viewport": "2560x1321",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 23H2, Chrome 153.0.8010.55",
@@ -1132,7 +1273,10 @@
       "device_memory": "16",
       "dpr": "1.5",
       "viewport": "1280x601",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.12",
@@ -1145,7 +1289,10 @@
       "device_memory": "32",
       "dpr": "1.25",
       "viewport": "2048x1033",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.27",
@@ -1158,7 +1305,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1600x781",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.36",
@@ -1171,7 +1321,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1920x961",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.37",
@@ -1184,7 +1337,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1920x961",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.47",
@@ -1197,7 +1353,10 @@
       "device_memory": "16",
       "dpr": "1.25",
       "viewport": "1536x745",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.48",
@@ -1210,7 +1369,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1366x649",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.49",
@@ -1223,7 +1385,10 @@
       "device_memory": "32",
       "dpr": "1",
       "viewport": "2560x1321",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.50",
@@ -1236,7 +1401,10 @@
       "device_memory": "16",
       "dpr": "1.5",
       "viewport": "1280x601",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.52",
@@ -1249,7 +1417,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1440x781",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.53",
@@ -1262,7 +1433,10 @@
       "device_memory": "32",
       "dpr": "1.25",
       "viewport": "2048x1033",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.54",
@@ -1275,7 +1449,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1600x781",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 24H2, Chrome 153.0.8010.55",
@@ -1288,7 +1465,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1920x961",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.12",
@@ -1301,7 +1481,10 @@
       "device_memory": "16",
       "dpr": "1.25",
       "viewport": "1536x745",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.27",
@@ -1314,7 +1497,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1366x649",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.36",
@@ -1327,7 +1513,10 @@
       "device_memory": "32",
       "dpr": "1",
       "viewport": "2560x1321",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.37",
@@ -1340,7 +1529,10 @@
       "device_memory": "16",
       "dpr": "1.5",
       "viewport": "1280x601",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.47",
@@ -1353,7 +1545,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1440x781",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.48",
@@ -1366,7 +1561,10 @@
       "device_memory": "32",
       "dpr": "1.25",
       "viewport": "2048x1033",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.49",
@@ -1379,7 +1577,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1600x781",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.50",
@@ -1392,7 +1593,10 @@
       "device_memory": "16",
       "dpr": "1",
       "viewport": "1920x961",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.52",
@@ -1405,7 +1609,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1920x961",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.53",
@@ -1418,7 +1625,10 @@
       "device_memory": "16",
       "dpr": "1.25",
       "viewport": "1536x745",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.54",
@@ -1431,7 +1641,10 @@
       "device_memory": "8",
       "dpr": "1",
       "viewport": "1366x649",
-      "color_scheme": "light"
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Windows 11 25H2, Chrome 153.0.8010.55",
@@ -1444,7 +1657,10 @@
       "device_memory": "32",
       "dpr": "1",
       "viewport": "2560x1321",
-      "color_scheme": "dark"
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     }
   ],
   "device_kind": "desktop",

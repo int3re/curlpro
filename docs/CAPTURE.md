@@ -111,9 +111,11 @@ Two traps, each of which cost a run:
 - **Any set of hints, and what a page sends with them.** `-accept-ch LIST`
   names the hints the plain page asks for (the eight high-entropy UA hints by
   default), `-critical-ch LIST` those in `Critical-CH` (the same unless
-  given), and `-hintspage` serves a page that makes fetch and XHR with and
-  without headers of its own, an image, a script and a stylesheet, then
-  navigates to `/second` and does it all again (STAGE45):
+  given), `-permissions-policy` puts a header of that name on every response,
+  and `-hintspage` serves a page that makes fetch and XHR with and without
+  headers of its own, an image, a script and a stylesheet, a fetch, images and
+  frames to d.localhost and e.localhost, then navigates to `/second` and does
+  it all again (STAGE45):
 
   ```bash
   go build -o hcapture.exe ./cmd/hcapture

@@ -145,7 +145,20 @@
       "sec-ch-ua-bitness": "\"\"",
       "sec-ch-ua-wow64": "?0",
       "sec-ch-ua-full-version-list": "\"Chromium\";v=\"152.0.7977.65\", \"Not?A_Brand\";v=\"24.0.0.0\", \"Google Chrome\";v=\"152.0.7977.65\"",
-      "sec-ch-ua-form-factors": "\"Mobile\""
+      "sec-ch-ua-form-factors": "\"Mobile\"",
+      "device-memory": "8",
+      "sec-ch-device-memory": "8",
+      "dpr": "2.625",
+      "sec-ch-dpr": "2.625",
+      "viewport-width": "412",
+      "sec-ch-viewport-width": "412",
+      "sec-ch-viewport-height": "811",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g",
+      "sec-ch-prefers-color-scheme": "light",
+      "sec-ch-prefers-reduced-motion": "no-preference",
+      "sec-ch-prefers-reduced-transparency": "no-preference"
     },
     "order": [
       {
@@ -340,232 +353,554 @@
     {
       "name": "Galaxy S24 Ultra",
       "model": "SM-S928B",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "8",
+      "dpr": "3.5",
+      "viewport": "412x787",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Galaxy S24",
       "model": "SM-S921B",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "8",
+      "dpr": "3",
+      "viewport": "360x676",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Galaxy S23 Ultra",
       "model": "SM-S918B",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "8",
+      "dpr": "3.5",
+      "viewport": "412x779",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Galaxy S23",
       "model": "SM-S911B",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "3",
+      "viewport": "360x676",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Galaxy S22 Ultra",
       "model": "SM-S908B",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "3.5",
+      "viewport": "412x779",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Galaxy S22",
       "model": "SM-S901B",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "3",
+      "viewport": "360x676",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Galaxy S21 FE 5G",
       "model": "SM-G990B",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "4",
+      "dpr": "3",
+      "viewport": "360x676",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Galaxy A55 5G",
       "model": "SM-A556B",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x788",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Galaxy A54 5G",
       "model": "SM-A546B",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x788",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Galaxy A34 5G",
       "model": "SM-A346B",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "4",
+      "dpr": "2.625",
+      "viewport": "412x788",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Galaxy A35 5G",
       "model": "SM-A356B",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "4",
+      "dpr": "2.625",
+      "viewport": "412x788",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Galaxy A15",
       "model": "SM-A155F",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "4",
+      "dpr": "2.625",
+      "viewport": "412x788",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Galaxy A14",
       "model": "SM-A145F",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "4",
+      "dpr": "2.625",
+      "viewport": "412x814",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Galaxy A05s",
       "model": "SM-A057F",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "4",
+      "dpr": "2.625",
+      "viewport": "412x811",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Xiaomi 14",
       "model": "23127PN0CG",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "8",
+      "dpr": "2.75",
+      "viewport": "437x867",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Xiaomi 13",
       "model": "2211133G",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "2.75",
+      "viewport": "393x769",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Xiaomi 13T",
       "model": "2306EPN60G",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "8",
+      "dpr": "2.75",
+      "viewport": "444x883",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Redmi Note 13 Pro",
       "model": "23117RA68G",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "2.75",
+      "viewport": "393x769",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Redmi Note 13",
       "model": "23129RAA4G",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "4",
+      "dpr": "2.75",
+      "viewport": "393x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Redmi Note 12",
       "model": "23021RAAEG",
-      "platform_version": "13.0.0"
+      "platform_version": "13.0.0",
+      "device_memory": "4",
+      "dpr": "2.75",
+      "viewport": "393x769",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Redmi Note 12 Pro",
       "model": "2209116AG",
-      "platform_version": "13.0.0"
+      "platform_version": "13.0.0",
+      "device_memory": "8",
+      "dpr": "2.75",
+      "viewport": "393x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Redmi 13C",
       "model": "23106RN0DA",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "4",
+      "dpr": "1.875",
+      "viewport": "384x750",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Redmi 12",
       "model": "23053RN02A",
-      "platform_version": "13.0.0"
+      "platform_version": "13.0.0",
+      "device_memory": "4",
+      "dpr": "2.75",
+      "viewport": "393x791",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "POCO X6 Pro 5G",
       "model": "2311DRK48G",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "2.75",
+      "viewport": "444x883",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "POCO X6 5G",
       "model": "23122PCD1G",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "2.75",
+      "viewport": "444x883",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Pixel 9 Pro",
       "model": "Pixel 9 Pro",
-      "platform_version": "16.0.0"
+      "platform_version": "16.0.0",
+      "device_memory": "8",
+      "dpr": "3",
+      "viewport": "427x848",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Pixel 9",
       "model": "Pixel 9",
-      "platform_version": "16.0.0"
+      "platform_version": "16.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x820",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Pixel 8 Pro",
       "model": "Pixel 8 Pro",
-      "platform_version": "16.0.0"
+      "platform_version": "16.0.0",
+      "device_memory": "8",
+      "dpr": "3",
+      "viewport": "448x893",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Pixel 8",
       "model": "Pixel 8",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x811",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Pixel 7 Pro",
       "model": "Pixel 7 Pro",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "8",
+      "dpr": "3.5",
+      "viewport": "412x788",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Pixel 7",
       "model": "Pixel 7",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x811",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Pixel 7a",
       "model": "Pixel 7a",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x811",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "Pixel 6a",
       "model": "Pixel 6a",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "4",
+      "dpr": "2.625",
+      "viewport": "412x811",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "HONOR 90",
       "model": "REA-NX9",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "3",
+      "viewport": "400x784",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "HONOR Magic6 Pro",
       "model": "BVL-N49",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "8",
+      "dpr": "3",
+      "viewport": "427x830",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "realme 12 Pro+ 5G",
       "model": "RMX3840",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x815",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "realme 12 Pro 5G",
       "model": "RMX3842",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x815",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "realme C55",
       "model": "RMX3710",
-      "platform_version": "13.0.0"
+      "platform_version": "13.0.0",
+      "device_memory": "4",
+      "dpr": "2.625",
+      "viewport": "412x811",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "OnePlus 12",
       "model": "CPH2573",
-      "platform_version": "15.0.0"
+      "platform_version": "15.0.0",
+      "device_memory": "8",
+      "dpr": "3.5",
+      "viewport": "412x801",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "OnePlus Nord 3 5G",
       "model": "CPH2491",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "3",
+      "viewport": "414x820",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "V30",
       "model": "V2318",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "3",
+      "viewport": "420x830",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "Y36",
       "model": "V2247",
-      "platform_version": "13.0.0"
+      "platform_version": "13.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x806",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "SPARK 20",
       "model": "TECNO KJ5",
-      "platform_version": "13.0.0"
+      "platform_version": "13.0.0",
+      "device_memory": "8",
+      "dpr": "1.875",
+      "viewport": "384x756",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "CAMON 30",
       "model": "TECNO CL6",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x824",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     },
     {
       "name": "HOT 40 Pro",
       "model": "Infinix X6837",
-      "platform_version": "13.0.0"
+      "platform_version": "13.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x834",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "NOTE 40",
       "model": "Infinix X6853",
-      "platform_version": "14.0.0"
+      "platform_version": "14.0.0",
+      "device_memory": "8",
+      "dpr": "2.625",
+      "viewport": "412x824",
+      "color_scheme": "dark",
+      "rtt": "137",
+      "downlink": "1.708",
+      "ect": "4g"
     }
   ],
   "device_kind": "phone"

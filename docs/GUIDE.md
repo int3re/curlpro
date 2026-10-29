@@ -972,9 +972,23 @@ capture machine — 16 GB, DPR 1, a maximized window's viewport of 1920×969, th
 dark theme, rtt 100 ms and downlink 1.6 Mbps before the noise — and every
 pooled identity names a machine of its own (`device_memory`, `dpr`,
 `viewport`, `color_scheme` in `devices=`; `reduced_motion`,
-`reduced_transparency`, `rtt`, `downlink`, `ect` too). macOS and Linux
-identities carry no viewport, and the viewport hints are not sent there, as
-Chromium does when it does not know the size.
+`reduced_transparency`, `rtt`, `downlink`, `ect` too). Phones carry their own
+screens — the scale factor and CSS size of each of the 46 (exact for twelve,
+from Chromium DevTools and a public viewport table, the rest by the maker's
+density for the panel), memory as Chromium reports it on Android (1–8) — and a
+navigation on a phone reports the viewport scaled to 980 wide, as Chrome on
+Android does; a Mac identity gets a Mac of its CPU. The network is Chromium's
+own default for the machine's connection: Ethernet 90 ms / 1456 kbps, Wi-Fi
+116 / 2658, 4G 137 / 1708.
+
+**Hints to other origins and frames.** As in Chromium, only a top-level
+navigation's `Accept-CH` and `Permissions-Policy` count — an API that answers
+a fetch with `Accept-CH` switches nothing on. Every other request carries what
+the top-level page's origin asked for, and to another origin only the hints
+its `Permissions-Policy` delegates (`ch-ua-model=(self "https://cdn.example")`,
+`ch-dpr=*`); the low-entropy three go everywhere. A frame gets its hints in
+the navigation sequence. Checked against Chrome 156 with a delegating policy
+(`capture/hints/chrome-156-policy.json`).
 
 **A page's request, header for header.** What a page sends — fetch, XHR, an
 image, a script, a stylesheet — Blink keeps in one hash map: the page's own
@@ -988,8 +1002,8 @@ headers included: `X-Api-Key` goes where Chrome puts it, between the hints,
 rather than before the service tail. All 88 requests of the measurement, with
 three different hint sets and headers of the page's own, came out in Chrome's
 order; so do the stored fetch orders of all 161 Chromium profiles from 129 on.
-An order of your own (`header_order=`) still wins. Subresources now carry the
-hints the site asked for too; a frame, which the browser navigates, does not.
+An order of your own (`header_order=`) still wins. Subresources carry the
+hints the page asked for too.
 
 **What a pool holds.** `capabilities(name)["device_kind"]` and
 `fingerprint().device_kind` say what the devices are: `"phone"` (a model and

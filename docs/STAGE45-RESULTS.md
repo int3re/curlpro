@@ -11,6 +11,7 @@ in `capture/hints/`:
 
 | File | Chrome | `Accept-CH` |
 |---|---|---|
+| `chrome-156-policy.json` | 156 | all 21 hints, and `Permissions-Policy: ch-ua-model=(self "https://d.localhost:8443"), ch-dpr=*, ch-rtt=(self)`; requests and frames to d.localhost and e.localhost |
 | `chrome-156-all.json` | 156 | all 21 hints |
 | `chrome-155-all.json` | 155 | all 21 hints |
 | `chrome-156-google.json` | 156 | a search engine's set: `sec-ch-prefers-color-scheme`, `downlink`, `rtt` and the UA hints; `Critical-CH` on the colour scheme alone |
@@ -108,6 +109,56 @@ A maximized window's viewport was not measured headless. The default,
 window's `outerHeight - innerHeight` of 95 (fpcapture on this machine) less
 the two 8 px frame borders and the 8 px the tab strip gives up when maximized.
 
+## Other origins and frames
+
+Only a top-level navigation's response counts: Chromium persists the main
+frame's `Accept-CH` (and keeps its permissions policy); what a fetch, a
+subresource or a frame answers with changes nothing. Every request that is not
+a top-level navigation goes with the hints the **top-level page's origin**
+asked for (`ClientHintsExtendedData`: the main frame's origin), and to another
+origin only those the page's `Permissions-Policy` delegates — every `ch-*`
+feature defaults to `self`, only `ch-ua`, `ch-ua-mobile`, `ch-ua-platform` and
+`ch-save-data` to `*` (`permissions_policy_features.json5`). With the policy
+above, Chrome 156 sent:
+
+| Request | Hints |
+|---|---|
+| a frame of its own origin | all 24, in the navigation sequence |
+| a frame on d.localhost | `dpr`, `sec-ch-dpr`, `sec-ch-ua`, `-mobile`, `-platform`, `sec-ch-ua-model` — the same sequence |
+| fetch and an image to d.localhost | the same six, laid out by the header map |
+| an image to e.localhost | `dpr`, `sec-ch-dpr` and the low-entropy three |
+
+A frame is navigated by the browser process, so its hints come in the
+navigation sequence in place of the low-entropy three; its viewport is the main
+frame's.
+
+## Devices
+
+The values belong to the device a session presents (`device=`, a pool entry
+or the caller's own `devices=`):
+
+- **Phones** (`scripts/android-devices.json`): each of the 46 carries its
+  panel, scale factor and RAM. The CSS screen is exact for 12 — Chromium
+  DevTools' emulated devices (Pixel 7, 8, 8 Pro, 9, 9 Pro) and the public
+  table at yesviz.com/viewport (Pixel 7 Pro, 7a, 6a, OnePlus 12, Galaxy A35,
+  A54, A55); 15 take the same maker's row with the same panel (the Galaxy S
+  line from the S25 and S25 Ultra, the A line from the A35 and A36, Xiaomi and
+  Redmi at 1080 px from the Mi 10T and Redmi Note 9 Pro); 19 the table's
+  density for the panel's width (2.625 at 1080 px, 1.875 at 720, 3 at
+  1200–1280, Xiaomi's 2.75). Memory is Chromium's rounding of what the phone
+  reports, 1 to 8 on Android. The viewport is the screen less a status bar,
+  Chrome's toolbar and the gesture bar (derived); a navigation reports it
+  **scaled to 980 wide**, as `GetScaledViewportSize` does on Android, a page's
+  request the layout viewport. Without a device: the Pixel 7 of Stage 16.
+- **Desktops**: Windows as above; macOS by CPU — Apple-silicon machines with
+  and without the camera notch, Intel ones — and Linux, their viewports
+  derived (menu bar or top bar, Chrome's UI, the Dock).
+- **The network** is Chromium's own default estimate for the connection
+  (`network_quality_estimator_params.cc`): Ethernet 90 ms and 1456 kbps, Wi-Fi
+  116 ms and 2658 kbps, cellular 4G 137 ms and 1708 kbps — what a browser
+  reports before its observations move it; Ethernet times the noise reads
+  `rtt: 100`, as measured here. Each pooled machine names its connection.
+
 ## What the library does now (0.20)
 
 - Every hint above is answered once the site asks (`Accept-CH`), at once on
@@ -116,16 +167,18 @@ the two 8 px frame borders and the 8 px the tab strip gives up when maximized.
   out by the model, the caller's own headers with them; subresources carry the
   asked-for hints too. An explicit `header_order` still wins.
 - `rtt` and `downlink` carry the noise per site and per side.
+- `Accept-CH`, `Critical-CH` and `Permissions-Policy` are taken from top-level
+  navigations only; other origins get what the policy delegates; frames get
+  their hints in the navigation sequence.
 - The values are the device's: Windows defaults to this machine (16, 1,
-  1920×969, dark, 100 ms, 1.6 Mbps, 4g); every pooled identity names a machine
-  from `scripts/identities.json` (`machines`); `devices=` takes the same fields.
+  1920×969, dark, Ethernet), macOS to an Apple-silicon MacBook Air, Linux to a
+  1080p box, Android to the Pixel 7; every pooled identity names a machine
+  (`machines` in `scripts/identities.json`, the phones' screens in
+  `scripts/android-devices.json`); `devices=` takes the same fields.
 
 ## Not done
 
-- Hints across origins: Chrome sends a page's high-entropy hints only to its
-  own origin unless a Permissions-Policy delegates them; the library keys them
-  by the request's origin.
-- Frames: a same-origin iframe gets the hints in the navigation sequence; a
-  frame request here carries none.
-- macOS and Linux viewports, and the Android values (Android scales the
-  viewport width to 980): not measured, not sent.
+- Delegation written into the page's HTML (`<meta name="accept-ch">`, an
+  iframe's `allow`): the library reads headers, not markup.
+- The derived values — phone screens outside the table, the bars of a phone
+  and a Mac, the Mac's and Linux's window — were not measured on a device.

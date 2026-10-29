@@ -1376,9 +1376,15 @@ asks for, and the library answered only the User-Agent ones.
 - **Subresources** carry the asked-for hints.
 - **The machine per identity:** `machines` in `scripts/identities.json`;
   Windows defaults to the capture machine.
-- `cmd/hcapture -accept-ch/-critical-ch/-hintspage`.
-- **Not yet:** cross-origin delegation of hints, frames, macOS/Linux/Android
-  viewports.
+- `cmd/hcapture -accept-ch/-critical-ch/-hintspage/-permissions-policy`.
+- **Other origins and frames:** `Accept-CH` and `Permissions-Policy` from
+  top-level navigations only; hints to another origin as the page's policy
+  delegates them; frames in the navigation sequence — matched against Chrome
+  156 with a delegating policy.
+- **Every device its own:** the 46 phones' screens, scale factors and memory
+  (Android's 980-wide navigation viewport), Macs per CPU, Linux boxes; the
+  network from Chromium's default per connection.
+- **Not yet:** delegation in HTML (`<meta name="accept-ch">`, `allow=`).
 
 ## A separate list: the accumulated debt
 

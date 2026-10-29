@@ -106,11 +106,23 @@ func (s *Session) noteAcceptCH(u *url.URL, resp map[string][]string) bool {
 	}
 	accept := hintList(resp, "Accept-CH")
 	critical := hintList(resp, "Critical-CH")
-	if len(accept) == 0 && len(critical) == 0 {
-		return false
-	}
+	policy := parsePermissionsPolicy(resp)
 
 	s.mu.Lock()
+	// A page without the header leaves every hint to its own origin; the
+	// next page's policy replaces the last one's.
+	if policy == nil {
+		delete(s.chPolicy, key)
+	} else {
+		if s.chPolicy == nil {
+			s.chPolicy = make(map[string]map[string]allowlist)
+		}
+		s.chPolicy[key] = policy
+	}
+	if len(accept) == 0 && len(critical) == 0 {
+		s.mu.Unlock()
+		return false
+	}
 	if s.acceptCH == nil {
 		s.acceptCH = make(map[string]map[string]bool)
 	}
@@ -374,4 +386,171 @@ func (s *Session) pageOrder(r *Request, built []headerKV, want []string) []strin
 		out = append(out, cluster...)
 	}
 	return out
+}
+
+// allowlist is one permissions-policy feature's list of origins.
+type allowlist struct {
+	all     bool
+	origins map[string]bool
+}
+
+// policyFeature is the permissions-policy feature that governs a hint
+// (network::GetClientHintToPolicyFeatureMap): ch-dpr for dpr and
+// sec-ch-dpr alike, ch-ua-model for sec-ch-ua-model.
+func policyFeature(hint string) string {
+	switch hint {
+	case "device-memory", "sec-ch-device-memory":
+		return "ch-device-memory"
+	case "dpr", "sec-ch-dpr":
+		return "ch-dpr"
+	case "viewport-width", "sec-ch-viewport-width":
+		return "ch-viewport-width"
+	case "rtt", "downlink", "ect":
+		return "ch-" + hint
+	}
+	return "ch-" + strings.TrimPrefix(hint, "sec-ch-")
+}
+
+// parsePermissionsPolicy reads the ch-* features of a Permissions-Policy
+// header — a structured dictionary, `ch-ua-model=(self "https://a.example")`,
+// `ch-dpr=*` — or nil when the response has none. The other features are
+// not the library's business.
+func parsePermissionsPolicy(resp map[string][]string) map[string]allowlist {
+	var raw []string
+	for k, vv := range resp {
+		if strings.EqualFold(k, "Permissions-Policy") {
+			raw = append(raw, vv...)
+		}
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	out := map[string]allowlist{}
+	for _, item := range splitTopLevel(strings.Join(raw, ",")) {
+		name, value, ok := strings.Cut(strings.TrimSpace(item), "=")
+		name = strings.ToLower(strings.TrimSpace(name))
+		if !ok || !strings.HasPrefix(name, "ch-") {
+			continue
+		}
+		al := allowlist{origins: map[string]bool{}}
+		value = strings.TrimSpace(value)
+		value = strings.TrimSuffix(strings.TrimPrefix(value, "("), ")")
+		for _, tok := range strings.Fields(value) {
+			if i := strings.Index(tok, ";"); i >= 0 {
+				tok = tok[:i] // parameters of the item
+			}
+			switch tok = strings.Trim(tok, `"`); tok {
+			case "*":
+				al.all = true
+			case "self", "":
+			default:
+				if o, err := url.Parse(tok); err == nil && o.Host != "" {
+					al.origins[originKey(o)] = true
+				}
+			}
+		}
+		out[name] = al
+	}
+	return out
+}
+
+// splitTopLevel splits a header list on the commas outside parentheses and
+// quotes.
+func splitTopLevel(s string) []string {
+	var out []string
+	depth, quoted, start := 0, false, 0
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '"':
+			quoted = !quoted
+		case quoted:
+		case c == '(':
+			depth++
+		case c == ')':
+			depth--
+		case c == ',' && depth == 0:
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	return append(out, s[start:])
+}
+
+// hintsForRequest is the set of hints a request carries, by Chromium's rule
+// (client_hints.cc ClientHintsExtendedData, FrameFetchContext): a top-level
+// navigation goes with what its own origin asked for; everything else —
+// a page's fetch or subresource, a frame — with what the top-level page's
+// origin asked for, and to another origin only the hints that page's
+// Permissions-Policy delegates to it (ch-* features default to self; the
+// low-entropy sec-ch-ua, -mobile and -platform go everywhere and are not in
+// the set).
+func (s *Session) hintsForRequest(r *Request, u *url.URL) map[string]bool {
+	top := s.topLevelFor(r, u)
+	want := s.hintsFor(top)
+	if len(want) == 0 || top == nil || u == nil || originKey(top) == originKey(u) {
+		return want
+	}
+	s.mu.Lock()
+	policy := s.chPolicy[originKey(top)]
+	s.mu.Unlock()
+	target := originKey(u)
+	out := make(map[string]bool, len(want))
+	for h, v := range want {
+		al, ok := policy[policyFeature(h)]
+		if v && ok && (al.all || al.origins[target]) {
+			out[h] = true
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// uaNavSequence is the User-Agent part of a navigation's hints, in the
+// browser process's order (UpdateNavigationRequestClientUaHeadersImpl).
+var uaNavSequence = []string{"sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-full-version", "sec-ch-ua-arch",
+	"sec-ch-ua-platform", "sec-ch-ua-platform-version", "sec-ch-ua-model", "sec-ch-ua-bitness",
+	"sec-ch-ua-wow64", "sec-ch-ua-full-version-list", "sec-ch-ua-form-factors"}
+
+// frameHintPairs puts a frame's hints into its set: the browser process
+// navigates a frame, so they come in the navigation sequence — the machine
+// and the network, the User-Agent hints, the preferences — in the place of
+// the low-entropy three the set already has.
+func (s *Session) frameHintPairs(pairs []profile.HeaderPair, want map[string]bool) []profile.HeaderPair {
+	low := map[string]string{}
+	at := -1
+	rest := make([]profile.HeaderPair, 0, len(pairs))
+	for _, h := range pairs {
+		switch l := strings.ToLower(h.Key); l {
+		case "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform":
+			if at < 0 {
+				at = len(rest)
+			}
+			low[l] = h.Value
+		default:
+			rest = append(rest, h)
+		}
+	}
+	if at < 0 {
+		at = pairIndex(rest, "upgrade-insecure-requests")
+	}
+	value := func(n string) string {
+		if v, ok := low[n]; ok {
+			return v
+		}
+		if !want[n] {
+			return ""
+		}
+		return s.profile.HintValue(n, s.device, false)
+	}
+	var block []profile.HeaderPair
+	for _, list := range [][]string{navHintsBefore, uaNavSequence, navHintsAfter} {
+		for _, n := range list {
+			if v := value(n); v != "" {
+				block = append(block, profile.HeaderPair{Key: n, Value: v})
+			}
+		}
+	}
+	return insertPairs(rest, at, block)
 }

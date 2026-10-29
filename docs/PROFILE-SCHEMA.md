@@ -392,11 +392,14 @@ identity has no `platform_version`, and the hint goes out as `""`, which is what
 Chromium on Linux sends. Since 0.20 a desktop identity also names its machine:
 `device_memory` (`"16"`: `device-memory` and `sec-ch-device-memory`), `dpr`
 (`"1.25"`: `dpr` and `sec-ch-dpr`), `viewport` (`"1536x753"`: the three
-viewport hints; absent on macOS and Linux, and then they are not sent) and
-`color_scheme` (`sec-ch-prefers-color-scheme`); `reduced_motion`,
+viewport hints, the page area in CSS pixels; on Android a navigation reports
+it scaled to 980 wide) and `color_scheme` (`sec-ch-prefers-color-scheme`); `reduced_motion`,
 `reduced_transparency`, `rtt` (ms), `downlink` (Mbps) and `ect` may be set as
-well, and otherwise come from `client_hints.values`, where the generator puts
-the defaults of the system — on Windows the capture machine's. `rtt` and
+well, and otherwise come from `client_hints.values`, where the generators put
+the defaults of the system — on Windows the capture machine's, on Android the
+Pixel 7's. The phones of `scripts/android-devices.json` carry `panel`, `dpr`,
+`screen`, `ram_gb` and `screen_source`, from which `gen-devices.py` writes
+these fields. `rtt` and
 `downlink` are the estimate before the noise the session adds per site. An
 iOS identity's `os_version` is what `iPhone OS`
 says — frozen at `18_7` by Safari 26 — and `version` what `Version/` says.

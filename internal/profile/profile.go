@@ -13,9 +13,11 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"math/big"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -175,7 +177,7 @@ func (p *Profile) ResolvedHints(fetch bool, dev Device) []HeaderPair {
 	out := make([]HeaderPair, 0, len(tpl))
 	for _, h := range tpl {
 		if h.Value == "" {
-			h.Value = p.hintValue(h.Key, dev, base)
+			h.Value = p.hintValue(h.Key, dev, base, fetch)
 		}
 		out = append(out, h)
 	}
@@ -189,11 +191,18 @@ func (p *Profile) HintValue(key string, dev Device, fetch bool) string {
 	if fetch {
 		base = p.ResolvedFetchHeaders()
 	}
-	return p.hintValue(key, dev, base)
+	return p.hintValue(key, dev, base, fetch)
 }
 
-// hintValue picks the value for a name in the hints template.
-func (p *Profile) hintValue(key string, dev Device, base []HeaderPair) string {
+// hintValue picks the value for a name in the hints template; fetch says a
+// page makes the request rather than the browser process.
+func (p *Profile) hintValue(key string, dev Device, base []HeaderPair, fetch bool) string {
+	switch l := strings.ToLower(key); l {
+	case "viewport-width", "sec-ch-viewport-width", "sec-ch-viewport-height":
+		if v := p.viewportHint(l, dev, fetch); v != "" {
+			return v
+		}
+	}
 	switch strings.ToLower(key) {
 	case "sec-ch-ua-model":
 		if dev.Model != "" {
@@ -240,14 +249,6 @@ func (p *Profile) hintValue(key string, dev Device, base []HeaderPair) string {
 		if dev.DPR != "" {
 			return dev.DPR
 		}
-	case "viewport-width", "sec-ch-viewport-width":
-		if w, _, ok := strings.Cut(dev.Viewport, "x"); ok {
-			return w
-		}
-	case "sec-ch-viewport-height":
-		if _, h, ok := strings.Cut(dev.Viewport, "x"); ok {
-			return h
-		}
 	case "sec-ch-prefers-color-scheme":
 		if dev.ColorScheme != "" {
 			return dev.ColorScheme
@@ -285,6 +286,35 @@ func (p *Profile) hintValue(key string, dev Device, base []HeaderPair) string {
 		return p.Headers.UserAgent
 	}
 	return ""
+}
+
+// viewportHint is a viewport hint: the device's page area, else the
+// profile's defaults. On Android the browser process scales the visible
+// viewport to a width of 980 before it writes a navigation's hints
+// (client_hints.cc GetScaledViewportSize; viewportAndroid.css), so a
+// navigation says 980 and the height in proportion, while a page's own
+// requests say the layout viewport — the device width on a page with
+// width=device-width, which a phone site has.
+func (p *Profile) viewportHint(name string, dev Device, fetch bool) string {
+	w, h := 0, 0
+	if a, b, ok := strings.Cut(dev.Viewport, "x"); ok {
+		w, _ = strconv.Atoi(a)
+		h, _ = strconv.Atoi(b)
+	} else {
+		w, _ = strconv.Atoi(p.ClientHints.Values["sec-ch-viewport-width"])
+		h, _ = strconv.Atoi(p.ClientHints.Values["sec-ch-viewport-height"])
+	}
+	if w <= 0 || h <= 0 {
+		return ""
+	}
+	if !fetch && strings.Contains(p.Headers.UserAgent, "Android") {
+		h = int(math.Round(float64(h) * 980 / float64(w)))
+		w = 980
+	}
+	if name == "sec-ch-viewport-height" {
+		return strconv.Itoa(h)
+	}
+	return strconv.Itoa(w)
 }
 
 // quoteHint wraps a value in structured-field quotes.

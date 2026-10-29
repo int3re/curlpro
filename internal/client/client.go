@@ -774,6 +774,10 @@ type Session struct {
 	// mutex as the pool: filled from responses, read while building headers.
 	acceptCH map[string]map[string]bool
 
+	// chPolicy is the ch-* part of the Permissions-Policy of each origin's
+	// last top-level page: which origins its hints may go to. Under mu.
+	chPolicy map[string]map[string]allowlist
+
 	// salts are the random numbers of the network hints' noise, the
 	// browser's and the renderer's (hintSalt), drawn on first use.
 	saltOnce sync.Once

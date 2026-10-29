@@ -117,12 +117,15 @@ func (s *Session) DoStream(r *Request) (st *Stream, err error) {
 	if u, uerr := url.Parse(stream.URL); uerr == nil {
 		s.noteAltSvc(u, stream.Headers)
 	}
-	// Chromium restarts a navigation on Critical-CH; a fetch or a POST is not
-	// repeated — the hints go out from the next request on. The retry's own
-	// failure is the caller's error (it used to be dropped, and a nil stream
-	// came back with a nil error).
-	if u, uerr := url.Parse(stream.URL); uerr == nil && s.noteAcceptCH(u, stream.Headers) &&
-		s.modeFor(r) == ModeNavigate && isIdempotent(r.Method) {
+	// Chromium takes Accept-CH, Critical-CH and the page's permissions
+	// policy from a top-level navigation's response only: what a fetch, a
+	// subresource or a frame answers with changes nothing (client_hints.cc
+	// persists the main frame's). It restarts the navigation on Critical-CH.
+	// The retry's own failure is the caller's error (it used to be dropped,
+	// and a nil stream came back with a nil error).
+	topNav := r.Resource == "" && s.modeFor(r) == ModeNavigate
+	if u, uerr := url.Parse(stream.URL); uerr == nil && topNav && s.noteAcceptCH(u, stream.Headers) &&
+		isIdempotent(r.Method) {
 		stream.Close()
 		retried, rerr := s.doStream(r)
 		if rerr != nil {

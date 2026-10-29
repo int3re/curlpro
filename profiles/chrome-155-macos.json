@@ -111,8 +111,11 @@
       "sec-ch-device-memory": "16",
       "dpr": "2",
       "sec-ch-dpr": "2",
-      "rtt": "100",
-      "downlink": "1.6",
+      "viewport-width": "1470",
+      "sec-ch-viewport-width": "1470",
+      "sec-ch-viewport-height": "769",
+      "rtt": "116",
+      "downlink": "2.658",
       "ect": "4g",
       "sec-ch-prefers-color-scheme": "light",
       "sec-ch-prefers-reduced-motion": "no-preference",
@@ -342,7 +345,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.26",
@@ -352,9 +359,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.27",
@@ -364,9 +375,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.39",
@@ -376,9 +391,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.40",
@@ -390,7 +409,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.41",
@@ -400,9 +423,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.79",
@@ -412,9 +439,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.80",
@@ -425,8 +456,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.81",
@@ -436,9 +471,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.82",
@@ -448,9 +487,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.84",
@@ -460,9 +503,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.85",
@@ -474,7 +521,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 155.0.8059.86",
@@ -486,7 +537,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.12",
@@ -496,9 +551,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.26",
@@ -508,9 +567,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.27",
@@ -522,7 +585,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.39",
@@ -532,9 +599,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.40",
@@ -544,9 +615,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.41",
@@ -557,8 +632,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.79",
@@ -568,9 +647,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.80",
@@ -580,9 +663,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.81",
@@ -592,9 +679,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.82",
@@ -606,7 +697,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.84",
@@ -618,7 +713,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.85",
@@ -628,9 +727,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 155.0.8059.86",
@@ -640,9 +743,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.12",
@@ -654,7 +761,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1680x876",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.26",
@@ -664,9 +775,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1266",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.27",
@@ -676,9 +791,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.39",
@@ -689,8 +808,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1680x876",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.40",
@@ -700,9 +823,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "2",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1266",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.41",
@@ -712,9 +839,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.79",
@@ -724,9 +855,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1680x876",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.80",
@@ -736,9 +871,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "32",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "2560x1266",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.81",
@@ -750,7 +889,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.82",
@@ -760,9 +903,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1680x876",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.84",
@@ -773,8 +920,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "32",
-      "dpr": "2",
-      "color_scheme": "light"
+      "dpr": "1",
+      "viewport": "2560x1266",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.85",
@@ -785,8 +936,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 155.0.8059.86",
@@ -798,7 +953,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1680x876",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.12",
@@ -808,9 +967,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.26",
@@ -821,8 +984,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.27",
@@ -832,9 +999,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.39",
@@ -844,9 +1015,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.40",
@@ -856,9 +1031,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.41",
@@ -870,7 +1049,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.79",
@@ -882,7 +1065,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.80",
@@ -892,9 +1079,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.81",
@@ -904,9 +1095,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.82",
@@ -916,9 +1111,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.84",
@@ -930,7 +1129,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.85",
@@ -940,9 +1143,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 155.0.8059.86",
@@ -952,9 +1159,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.12",
@@ -964,9 +1175,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "2",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1266",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.26",
@@ -976,9 +1191,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.27",
@@ -988,9 +1207,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1680x876",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.39",
@@ -1000,9 +1223,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "32",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "2560x1266",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.40",
@@ -1014,7 +1241,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.41",
@@ -1024,9 +1255,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1680x876",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.79",
@@ -1037,8 +1272,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "32",
-      "dpr": "2",
-      "color_scheme": "light"
+      "dpr": "1",
+      "viewport": "2560x1266",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.80",
@@ -1049,8 +1288,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.81",
@@ -1062,7 +1305,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1680x876",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.82",
@@ -1072,9 +1319,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1266",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.84",
@@ -1084,9 +1335,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.85",
@@ -1097,8 +1352,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1680x876",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 155.0.8059.86",
@@ -1108,9 +1367,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "2",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1266",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.12",
@@ -1120,9 +1383,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.26",
@@ -1134,7 +1401,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.27",
@@ -1146,7 +1417,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.39",
@@ -1156,9 +1431,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.40",
@@ -1168,9 +1447,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.41",
@@ -1180,9 +1463,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.79",
@@ -1194,7 +1481,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.80",
@@ -1204,9 +1495,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.81",
@@ -1216,9 +1511,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.82",
@@ -1229,8 +1528,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.84",
@@ -1240,9 +1543,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.85",
@@ -1252,9 +1559,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 155.0.8059.86",
@@ -1264,9 +1575,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.12",
@@ -1278,7 +1593,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.26",
@@ -1288,9 +1607,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.27",
@@ -1300,9 +1623,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.39",
@@ -1312,9 +1639,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.40",
@@ -1326,7 +1657,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.41",
@@ -1336,9 +1671,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.79",
@@ -1348,9 +1687,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.80",
@@ -1361,8 +1704,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.81",
@@ -1372,9 +1719,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.82",
@@ -1384,9 +1735,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.84",
@@ -1396,9 +1751,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.85",
@@ -1410,7 +1769,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 155.0.8059.86",
@@ -1422,7 +1785,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.12",
@@ -1432,9 +1799,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.26",
@@ -1444,9 +1815,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.27",
@@ -1458,7 +1833,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.39",
@@ -1468,9 +1847,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.40",
@@ -1480,9 +1863,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.41",
@@ -1493,8 +1880,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.79",
@@ -1504,9 +1895,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.80",
@@ -1516,9 +1911,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.81",
@@ -1528,9 +1927,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.82",
@@ -1542,7 +1945,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.84",
@@ -1554,7 +1961,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.85",
@@ -1564,9 +1975,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 155.0.8059.86",
@@ -1576,9 +1991,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.12",
@@ -1590,7 +2009,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.26",
@@ -1600,9 +2023,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.27",
@@ -1612,9 +2039,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.39",
@@ -1625,8 +2056,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.40",
@@ -1636,9 +2071,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.41",
@@ -1648,9 +2087,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.79",
@@ -1660,9 +2103,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.80",
@@ -1674,7 +2121,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.81",
@@ -1686,7 +2137,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.82",
@@ -1696,9 +2151,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.84",
@@ -1708,9 +2167,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.85",
@@ -1720,9 +2183,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 155.0.8059.86",
@@ -1734,7 +2201,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.12",
@@ -1744,9 +2215,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.26",
@@ -1757,8 +2232,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.27",
@@ -1768,9 +2247,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.39",
@@ -1780,9 +2263,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.40",
@@ -1792,9 +2279,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.41",
@@ -1806,7 +2297,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.79",
@@ -1818,7 +2313,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.80",
@@ -1828,9 +2327,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.81",
@@ -1840,9 +2343,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.82",
@@ -1852,9 +2359,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.84",
@@ -1866,7 +2377,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.85",
@@ -1876,9 +2391,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 155.0.8059.86",
@@ -1888,9 +2407,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.12",
@@ -1900,9 +2423,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.26",
@@ -1912,9 +2439,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.27",
@@ -1924,9 +2455,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.39",
@@ -1938,7 +2473,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.40",
@@ -1950,7 +2489,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.41",
@@ -1960,9 +2503,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.79",
@@ -1972,9 +2519,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.80",
@@ -1984,9 +2535,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.81",
@@ -1998,7 +2553,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.82",
@@ -2008,9 +2567,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.84",
@@ -2020,9 +2583,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.85",
@@ -2033,8 +2600,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 155.0.8059.86",
@@ -2044,9 +2615,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.12",
@@ -2056,9 +2631,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.26",
@@ -2070,7 +2649,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.27",
@@ -2082,7 +2665,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.39",
@@ -2092,9 +2679,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.40",
@@ -2104,9 +2695,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.41",
@@ -2116,9 +2711,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.79",
@@ -2130,7 +2729,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.80",
@@ -2140,9 +2743,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.81",
@@ -2152,9 +2759,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.82",
@@ -2165,8 +2776,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.84",
@@ -2176,9 +2791,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.85",
@@ -2188,9 +2807,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 155.0.8059.86",
@@ -2200,9 +2823,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.12",
@@ -2214,7 +2841,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.26",
@@ -2224,9 +2855,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.27",
@@ -2236,9 +2871,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.39",
@@ -2248,9 +2887,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.40",
@@ -2262,7 +2905,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.41",
@@ -2272,9 +2919,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.79",
@@ -2284,9 +2935,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.80",
@@ -2297,8 +2952,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.81",
@@ -2308,9 +2967,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.82",
@@ -2320,9 +2983,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.84",
@@ -2332,9 +2999,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.85",
@@ -2346,7 +3017,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 155.0.8059.86",
@@ -2358,7 +3033,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.12",
@@ -2368,9 +3047,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.26",
@@ -2380,9 +3063,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.27",
@@ -2394,7 +3081,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.39",
@@ -2404,9 +3095,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.40",
@@ -2416,9 +3111,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.41",
@@ -2429,8 +3128,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.79",
@@ -2440,9 +3143,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.80",
@@ -2452,9 +3159,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.81",
@@ -2464,9 +3175,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.82",
@@ -2478,7 +3193,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.84",
@@ -2490,7 +3209,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.85",
@@ -2500,9 +3223,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 155.0.8059.86",
@@ -2512,9 +3239,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.12",
@@ -2526,7 +3257,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.26",
@@ -2536,9 +3271,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
-      "dpr": "2",
-      "color_scheme": "dark"
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.27",
@@ -2548,9 +3287,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.39",
@@ -2561,8 +3304,12 @@
       "wow64": "?0",
       "form_factors": "Desktop",
       "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "dpr": "2",
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.40",
@@ -2572,9 +3319,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.41",
@@ -2584,9 +3335,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "32",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.79",
@@ -2596,9 +3351,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.80",
@@ -2610,7 +3369,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "1",
-      "color_scheme": "light"
+      "viewport": "1920x906",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.81",
@@ -2622,7 +3385,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1470x769",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.82",
@@ -2632,9 +3399,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "8",
+      "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "dark"
+      "viewport": "1512x795",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.84",
@@ -2644,9 +3415,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "32",
+      "device_memory": "8",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "1440x726",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.85",
@@ -2656,9 +3431,13 @@
       "bitness": "64",
       "wow64": "?0",
       "form_factors": "Desktop",
-      "device_memory": "16",
-      "dpr": "1",
-      "color_scheme": "light"
+      "device_memory": "32",
+      "dpr": "2",
+      "viewport": "1728x930",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 155.0.8059.86",
@@ -2670,7 +3449,11 @@
       "form_factors": "Desktop",
       "device_memory": "16",
       "dpr": "2",
-      "color_scheme": "light"
+      "viewport": "2240x1086",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
     }
   ],
   "device_kind": "desktop"

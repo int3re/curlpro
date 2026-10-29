@@ -35,9 +35,11 @@ updates itself, so the build a version's users run is mostly its last one, and
 the first build named a browser nobody had kept.
 
 Every desktop identity also names its machine (``machines`` in the seed):
-the RAM, the scale factor, on Windows the viewport of a maximized window, and
-the colour scheme — the device-memory, dpr, viewport and sec-ch-prefers-*
-hints a site may ask for (STAGE45). The machines are cycled over the pool, so
+the RAM, the scale factor, the viewport — a maximized window on Windows,
+derived on macOS and Linux — the colour scheme and the connection, whose
+Chromium default estimate gives rtt and downlink: the device-memory, dpr,
+viewport, network and sec-ch-prefers-* hints a site may ask for (STAGE45).
+Mac machines are listed per CPU. The machines are cycled over the pool, so
 each identity is one consistent computer; the defaults are the first machine
 of the system's list, on Windows the capture machine.
 
@@ -131,20 +133,29 @@ def full_version_list(brands: str, full: str) -> str:
     return ", ".join(parts)
 
 
-def machine(os_: str, i: int, s: dict, windows_name: str = "") -> dict:
-    """The i-th machine of the system's list as device fields: on Windows the
-    viewport of a maximized window — the screen in CSS pixels less the taskbar
-    (Windows 11 has a taller one) and Chrome's own UI."""
+def machine(os_: str, i: int, s: dict, windows_name: str = "", arch: str = "arm") -> dict:
+    """The i-th machine of the system's list as device fields. The viewport:
+    on Windows a maximized window — the screen in CSS pixels less the taskbar
+    (Windows 11 has a taller one) and Chrome's own UI; on a Mac the screen in
+    points less the menu bar, Chrome's UI and the Dock; on Linux less the top
+    bar and Chrome's UI. The network is Chromium's default for the
+    connection."""
     m = s["machines"]
-    spec = m[os_][i % len(m[os_])]
-    out = {"device_memory": spec["device_memory"], "dpr": spec["dpr"]}
-    if "screen" in spec:
-        w, h = (int(x) for x in spec["screen"].split("x"))
+    machines = m[os_][arch] if os_ == "macos" else m[os_]
+    spec = machines[i % len(machines)]
+    w, h = (int(x) for x in spec["screen"].split("x"))
+    if os_ == "windows":
         dpr = float(spec["dpr"])
         bar = m["taskbar"]["windows11" if "Windows 11" in windows_name else "windows10"]
-        out["viewport"] = f"{round(w / dpr)}x{round(h / dpr) - bar - m['chrome_ui']}"
-    out["color_scheme"] = spec["color_scheme"]
-    return out
+        w, h = round(w / dpr), round(h / dpr) - bar - m["chrome_ui"]
+    elif os_ == "macos":
+        h -= m["menu_bar"]["notch" if spec.get("notch") else "plain"] + m["chrome_ui_mac"] + m["dock"]
+    else:
+        h -= m["top_bar_linux"] + m["chrome_ui"]
+    net = m["networks"][spec["connection"]]
+    return {"device_memory": spec["device_memory"], "dpr": spec["dpr"], "viewport": f"{w}x{h}",
+            "color_scheme": spec["color_scheme"], "rtt": net["rtt"], "downlink": net["downlink"],
+            "ect": net["ect"]}
 
 
 def desktop_devices(os_: str, major: str, s: dict) -> list[dict]:
@@ -161,7 +172,8 @@ def desktop_devices(os_: str, major: str, s: dict) -> list[dict]:
             for b in builds:
                 out.append({"name": f"{m['name']} ({'Apple silicon' if m['arch'] == 'arm' else 'Intel'}), Chrome {b}",
                             "platform_version": m["platform_version"], "full_version": b, "hint_arch": m["arch"],
-                            "bitness": "64", "wow64": "?0", "form_factors": "Desktop", **machine(os_, len(out) + ri, s)})
+                            "bitness": "64", "wow64": "?0", "form_factors": "Desktop",
+                            **machine(os_, len(out) + ri, s, arch=m["arch"])})
     else:
         for b in builds:
             out.append({"name": f"Linux, Chrome {b}", "full_version": b, "hint_arch": "x86", "bitness": "64",
@@ -170,16 +182,14 @@ def desktop_devices(os_: str, major: str, s: dict) -> list[dict]:
 
 
 def machine_values(os_: str, s: dict) -> dict:
-    """The new hints' defaults: the first machine of the system, the capture
-    machine's network estimate, no preference for motion or transparency."""
+    """The new hints' defaults: the first machine of the system (on a Mac the
+    first Apple-silicon one), no preference for motion or transparency."""
     m = machine(os_, 0, s, "Windows 10")
     v = {"device-memory": m["device_memory"], "sec-ch-device-memory": m["device_memory"],
          "dpr": m["dpr"], "sec-ch-dpr": m["dpr"]}
-    if "viewport" in m:
-        w, h = m["viewport"].split("x")
-        v.update({"viewport-width": w, "sec-ch-viewport-width": w, "sec-ch-viewport-height": h})
-    net = s["machines"]["network"]
-    v.update({"rtt": net["rtt"], "downlink": net["downlink"], "ect": net["ect"],
+    w, h = m["viewport"].split("x")
+    v.update({"viewport-width": w, "sec-ch-viewport-width": w, "sec-ch-viewport-height": h})
+    v.update({"rtt": m["rtt"], "downlink": m["downlink"], "ect": m["ect"],
               "sec-ch-prefers-color-scheme": m["color_scheme"],
               "sec-ch-prefers-reduced-motion": "no-preference",
               "sec-ch-prefers-reduced-transparency": "no-preference"})
