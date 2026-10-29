@@ -35,6 +35,15 @@ def _online() -> bool:
 pytestmark = [pytest.mark.network, pytest.mark.skipif(not _online(), reason="no access to httpbin.org")]
 
 
+def _json(resp):
+    """httpbin's answer, or a skip when httpbin refused for its own reasons:
+    it rate-limits per address (RateLimit headers), and CI runners share
+    addresses — a 429 there says nothing about the client."""
+    if resp.status in (429, 502, 503, 504):
+        pytest.skip(f"httpbin.org answered {resp.status}: {resp.text[:120]}")
+    return resp.json()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _profiles():
     curlpro.load_profiles(REPO / "profiles")
@@ -42,13 +51,13 @@ def _profiles():
 
 def test_fields_only():
     with curlpro.Session() as s:
-        got = s.post(URL, fields={"a": "1", "b": "two"}).json()
+        got = _json(s.post(URL, fields={"a": "1", "b": "two"}))
     assert got["form"] == {"a": "1", "b": "two"}
 
 
 def test_file_upload():
     with curlpro.Session() as s:
-        got = s.post(URL, files={"doc": ("note.txt", b"hello")}).json()
+        got = _json(s.post(URL, files={"doc": ("note.txt", b"hello")}))
     assert got["files"]["doc"] == "hello"
 
 
@@ -56,7 +65,7 @@ def test_binary_file_survives_roundtrip():
     """Binary content must not be damaged on the way."""
     blob = bytes(range(256)) * 8
     with curlpro.Session() as s:
-        got = s.post(URL, files={"bin": ("blob.bin", blob)}).json()
+        got = _json(s.post(URL, files={"bin": ("blob.bin", blob)}))
     # httpbin returns binary as a data: URL, so the length is checked through the header.
     assert got["headers"]["Content-Type"].startswith("multipart/form-data; boundary=")
     assert got["files"]
@@ -64,25 +73,25 @@ def test_binary_file_survives_roundtrip():
 
 def test_fields_and_files_together():
     with curlpro.Session() as s:
-        got = s.post(
+        got = _json(s.post(
             URL,
             fields={"title": "report"},
             files={"doc": ("a.txt", b"body", "text/plain")},
-        ).json()
+        ))
     assert got["form"]["title"] == "report"
     assert got["files"]["doc"] == "body"
 
 
 def test_chrome_boundary_style():
     with curlpro.Session("chrome-151-windows") as s:
-        ct = s.post(URL, fields={"a": "1"}).json()["headers"]["Content-Type"]
+        ct = _json(s.post(URL, fields={"a": "1"}))["headers"]["Content-Type"]
     boundary = ct.split("boundary=")[1]
     assert re.fullmatch(r"----WebKitFormBoundary[A-Za-z0-9]{16}", boundary), boundary
 
 
 def test_firefox_boundary_style():
     with curlpro.Session("firefox-144-macos") as s:
-        got = s.post(URL, fields={"a": "1"}).json()
+        got = _json(s.post(URL, fields={"a": "1"}))
     boundary = got["headers"]["Content-Type"].split("boundary=")[1]
     assert re.fullmatch(r"----geckoformboundary[0-9a-f]{2,32}", boundary), boundary
     assert got["form"] == {"a": "1"}
@@ -90,7 +99,7 @@ def test_firefox_boundary_style():
 
 def test_firefox_before_135_boundary_style():
     with curlpro.Session("firefox-133-windows") as s:
-        got = s.post(URL, fields={"a": "1"}).json()
+        got = _json(s.post(URL, fields={"a": "1"}))
     boundary = got["headers"]["Content-Type"].split("boundary=")[1]
     assert re.fullmatch(r"-{27}\d{3,30}", boundary), boundary
     assert got["form"] == {"a": "1"}
@@ -98,8 +107,8 @@ def test_firefox_before_135_boundary_style():
 
 def test_boundary_is_unique_per_request():
     with curlpro.Session() as s:
-        first = s.post(URL, fields={"a": "1"}).json()["headers"]["Content-Type"]
-        second = s.post(URL, fields={"a": "1"}).json()["headers"]["Content-Type"]
+        first = _json(s.post(URL, fields={"a": "1"}))["headers"]["Content-Type"]
+        second = _json(s.post(URL, fields={"a": "1"}))["headers"]["Content-Type"]
     assert first != second, "the form boundary repeats between requests"
 
 

@@ -28,6 +28,15 @@ def _online() -> bool:
 pytestmark = [pytest.mark.network, pytest.mark.skipif(not _online(), reason="no access to httpbin.org")]
 
 
+def _json(resp):
+    """httpbin's answer, or a skip when httpbin refused for its own reasons:
+    it rate-limits per address (RateLimit headers), and CI runners share
+    addresses — a 429 there says nothing about the client."""
+    if resp.status in (429, 502, 503, 504):
+        pytest.skip(f"httpbin.org answered {resp.status}: {resp.text[:120]}")
+    return resp.json()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _profiles():
     curlpro.load_profiles(REPO / "profiles")
@@ -49,7 +58,7 @@ def test_file_upload_sets_content_length(big_file):
     # Over somebody else's network the default 30 s is not always enough, and
     # this test is about Content-Length, not about httpbin's throughput.
     with curlpro.Session(timeout=120) as s:
-        h = s.post("https://httpbin.org/post", body_file=big_file).json()["headers"]
+        h = _json(s.post("https://httpbin.org/post", body_file=big_file))["headers"]
     assert h.get("Content-Length") == str(big_file.stat().st_size)
     assert "Transfer-Encoding" not in h
 
@@ -60,7 +69,7 @@ def test_file_content_arrives_intact():
     path.write_bytes(payload)
     try:
         with curlpro.Session() as s:
-            got = s.post("https://httpbin.org/post", body_file=path).json()
+            got = _json(s.post("https://httpbin.org/post", body_file=path))
         # httpbin returns a binary body as a base64 data: URL.
         assert got["data"].startswith("data:application/octet-stream;base64,")
         import base64
