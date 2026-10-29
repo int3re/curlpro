@@ -23,6 +23,7 @@ package main
 import "C"
 
 import (
+	"crypto/ed25519"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -30,6 +31,7 @@ import (
 	"math"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -175,7 +177,9 @@ func curlpro_free(s *C.char) {
 // older library would ignore it and ask nothing), and the profile-level
 // tls.trust_anchors_order (a file carrying it does not load into an older
 // library); real ECH from an HTTPS record on Chromium profiles.
-const Version = "0.27.0"
+// 0.28.0: curlpro_profiles_load_bundle, the signed profile bundle published
+// between releases (a binding that calls it needs this library).
+const Version = "0.28.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -190,6 +194,55 @@ func curlpro_profiles_load_dir(dir *C.char) (out *C.char) {
 		return respond(nil, err)
 	}
 	return respond(map[string]any{"profiles": registry.Names()}, nil)
+}
+
+// curlpro_profiles_load_bundle loads a signed profile bundle (cmd/curlpro
+// bundle): path holds the gzip'd document, path+".sig" its Ed25519
+// signature. It loads when the signature verifies with a key the library
+// trusts — the project's, compiled in, or one of keys (base64,
+// comma-separated: a channel of one's own; the binding passes
+// CURLPRO_BUNDLE_KEYS, read when it calls, not when the library loaded) — and
+// when no profile in it asks for a newer library than this one. All of it
+// registers, or none.
+//
+//export curlpro_profiles_load_bundle
+func curlpro_profiles_load_bundle(path, keys *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	p := C.GoString(path)
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return respond(nil, err)
+	}
+	sig, err := os.ReadFile(p + ".sig")
+	if err != nil {
+		return respond(nil, fmt.Errorf("profile bundle: the signature: %w", err))
+	}
+	trusted := append([]ed25519.PublicKey(nil), profile.BundleKeys...)
+	for _, s := range strings.Split(C.GoString(keys), ",") {
+		if strings.TrimSpace(s) == "" {
+			continue
+		}
+		k, err := profile.ParseBundleKey(s)
+		if err != nil {
+			return respond(nil, fmt.Errorf("CURLPRO_BUNDLE_KEYS: %w", err))
+		}
+		trusted = append(trusted, k)
+	}
+	b, err := profile.OpenBundle(data, sig, trusted, Version)
+	if err != nil {
+		return respond(nil, err)
+	}
+	if err := registry.LoadBundle(b); err != nil {
+		return respond(nil, err)
+	}
+	return respond(map[string]any{
+		"profiles": registry.Names(),
+		"loaded":   len(b.Profiles),
+		"package":  b.Package,
+		"commit":   b.Commit,
+		"built":    b.Built,
+		"min_abi":  b.MinABI,
+	}, nil)
 }
 
 // curlpro_profile_register registers a profile from JSON at runtime.

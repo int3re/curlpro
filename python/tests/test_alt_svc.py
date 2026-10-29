@@ -104,22 +104,20 @@ def test_broken_quic_falls_back_to_tcp():
     assert srv.requests == 3, f"{srv.requests} of three requests reached the server"
 
 
-def test_second_attempt_is_not_repeated_every_time():
-    """After a failure the client does not try QUIC again for a while: otherwise
-    every request would pay for a handshake that will not happen."""
+def test_a_failing_quic_attempt_costs_the_requests_nothing():
+    """The site advertised HTTP/3 and QUIC does not answer. Until 0.19 the
+    request after the advertisement paid for the handshake that never came;
+    now the QUIC connection races TCP as Chrome's does, so no request waits
+    for it. That the address is then left alone for a while is held by the
+    Go tests of Alt-Svc."""
     with AltSvcServer() as srv:
         with curlpro.Session("chrome-151-windows", verify=False, timeout=20) as s:
             s.get(srv.url)
-            start = time.perf_counter()
-            s.get(srv.url)
-            with_attempt = time.perf_counter() - start
-
-            start = time.perf_counter()
-            s.get(srv.url)
-            after_broken = time.perf_counter() - start
-    assert after_broken < with_attempt, (
-        f"the repeat QUIC attempt took {after_broken:.2f} s against {with_attempt:.2f} s"
-    )
+            for i in range(3):
+                start = time.perf_counter()
+                assert s.get(srv.url).status == 200
+                spent = time.perf_counter() - start
+                assert spent < 1.0, f"request {i + 2} waited {spent:.2f} s for QUIC"
 
 
 def test_disabled_option_skips_quic_entirely():

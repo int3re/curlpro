@@ -263,6 +263,26 @@ The files are taken from the artefacts of the same run that was published: then
 the checksums agree with the index byte for byte, and that is worth verifying —
 `SHA256SUMS.txt` sits next to them for exactly that.
 
+## Profiles between releases
+
+Captures land more often than releases: browsers ship every two weeks. The
+corpus is published on its own as a signed bundle that
+`curlpro.update_profiles()` fetches:
+
+```bash
+python scripts/publish-profiles.py            # build, sign, replace the assets of the `profiles` release
+python scripts/publish-profiles.py --dry-run  # build and sign only
+```
+
+The bundle is every profile of the committed tree, stamped with the package
+version (a bundle older than an installed package is ignored by it), the native
+library version as the oldest one that reads it, and the commit; it is signed
+with the maintainer's Ed25519 key — `--key`, `CURLPRO_SIGNING_KEY`, or
+`%APPDATA%/curlpro/profile-signing.key` (`~/.config/curlpro/` elsewhere) —
+whose public half is compiled into the library (`internal/profile/bundle.go`).
+The private key never enters the repository; losing it means a new key in a new
+release, and the old bundles stop being trusted by it.
+
 ## The native part's version
 
 The library has an ABI version of its own (`Version` in

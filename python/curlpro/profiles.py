@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import gzip
 import json
+import os
+import shutil
+import sys
+import tempfile
 import threading
+import urllib.request
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +20,11 @@ from ._ffi import _call, encode
 _BUNDLED = Path(__file__).resolve().parent / "profiles"
 _autoloaded = False
 _load_lock = threading.Lock()
+
+#: Where the project publishes its signed profile bundle between releases: a
+#: GitHub release whose assets are replaced as profiles are captured.
+PROFILES_URL = "https://github.com/int3re/curlpro/releases/download/profiles/profiles.json.gz"
+_BUNDLE_FILE = "profiles.json.gz"
 
 
 def load_profiles(directory: str | Path) -> list[str]:
@@ -46,8 +58,127 @@ def ensure_loaded() -> list[str]:
         if not _autoloaded:
             if _BUNDLED.is_dir():
                 load_profiles(_BUNDLED)
+                _load_cached_bundle()
             _autoloaded = True
     return _registered()
+
+
+def _cache_dir() -> Path:
+    """Where update_profiles keeps the bundle: CURLPRO_CACHE_DIR, or the
+    platform's user cache directory."""
+    if os.environ.get("CURLPRO_CACHE_DIR"):
+        return Path(os.environ["CURLPRO_CACHE_DIR"])
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Caches"
+    else:
+        base = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+    return base / "curlpro"
+
+
+def _version_tuple(v: str) -> tuple[int, ...]:
+    out = []
+    for part in v.split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        out.append(int(digits) if digits else 0)
+    return tuple(out)
+
+
+def _bundle_package(path: Path) -> str:
+    """The curlpro version a bundle was built from, read without trusting it:
+    only to decide whether to offer it to the library, which checks the
+    signature before anything is registered."""
+    with gzip.open(path, "rb") as f:
+        return str(json.load(f).get("package", ""))
+
+
+def _not_older_than_installed(path: Path) -> bool:
+    from . import __version__
+    return _version_tuple(_bundle_package(path)) >= _version_tuple(__version__)
+
+
+def _load_cached_bundle() -> None:
+    """The bundle update_profiles fetched, over the wheel's profiles — unless
+    CURLPRO_PROFILE_UPDATES=0, or the bundle is older than the installed
+    package (a newer wheel carries newer profiles than an old bundle)."""
+    if os.environ.get("CURLPRO_PROFILE_UPDATES", "1").lower() in ("0", "off", "false", "no"):
+        return
+    path = _cache_dir() / _BUNDLE_FILE
+    if not path.is_file():
+        return
+    try:
+        if _not_older_than_installed(path):
+            load_profile_bundle(path)
+    except Exception as e:  # a bad cache must not cost the bundled profiles
+        warnings.warn(f"curlpro: the cached profile bundle {path} was not loaded: {e}", stacklevel=3)
+
+
+def load_profile_bundle(path: str | Path) -> dict[str, Any]:
+    """Loads a signed profile bundle: ``path`` and ``path + ".sig"``.
+
+    The native library checks the Ed25519 signature against the project's key
+    — or a key in ``CURLPRO_BUNDLE_KEYS`` (base64, comma-separated), for a
+    channel of one's own — and that no profile asks for a newer library, then
+    registers every profile of it, or none. Returns what it loaded:
+    ``profiles`` (every registered name), ``loaded``, ``package``, ``commit``,
+    ``built``, ``min_abi``.
+    """
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"profile bundle not found: {p}")
+    keys = os.environ.get("CURLPRO_BUNDLE_KEYS", "")
+    return _call("curlpro_profiles_load_bundle", str(p).encode("utf-8"), keys.encode("utf-8"))
+
+
+def _fetch(url: str, timeout: float) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "curlpro-update"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 — https only, below
+        return r.read()
+
+
+def update_profiles(url: str | None = None, *, timeout: float = 30.0) -> dict[str, Any]:
+    """Fetches the newest signed profile bundle and loads it.
+
+        info = curlpro.update_profiles()
+        info["new"]          # profiles the installed package did not have
+
+    Browsers ship every two weeks, a release of this package less often: the
+    project publishes the profile corpus between releases as a bundle signed
+    with Ed25519, and this fetches it (``url``, default :data:`PROFILES_URL`;
+    ``url + ".sig"`` beside it), lets the native library check the signature
+    and load it, and keeps it in the user cache directory
+    (``CURLPRO_CACHE_DIR`` overrides), from where every later import loads it
+    over the wheel's profiles. A bundle older than the installed package is
+    refused — a newer wheel carries newer profiles — and nothing is kept
+    unless it verified and loaded. ``CURLPRO_PROFILE_UPDATES=0`` turns the
+    loading at import off.
+    """
+    url = url or PROFILES_URL
+    if not url.startswith("https://"):
+        raise ValueError(f"the profile bundle is fetched over https only: {url}")
+    before = set(ensure_loaded())
+    dest = _cache_dir()
+    dest.mkdir(parents=True, exist_ok=True)
+    tmp = Path(tempfile.mkdtemp(prefix="bundle-", dir=dest))
+    try:
+        data = _fetch(url, timeout)
+        sig = _fetch(url + ".sig", timeout)
+        staged = tmp / _BUNDLE_FILE
+        staged.write_bytes(data)
+        (tmp / (_BUNDLE_FILE + ".sig")).write_bytes(sig)
+        if not _not_older_than_installed(staged):
+            from . import __version__
+            raise ValueError(f"the published bundle ({_bundle_package(staged)}) is older than "
+                             f"the installed curlpro {__version__}: nothing to update")
+        info = load_profile_bundle(staged)
+        os.replace(tmp / (_BUNDLE_FILE + ".sig"), dest / (_BUNDLE_FILE + ".sig"))
+        os.replace(staged, dest / _BUNDLE_FILE)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    info["new"] = sorted(set(info["profiles"]) - before)
+    info["path"] = str(dest / _BUNDLE_FILE)
+    return info
 
 
 def _registered() -> list[str]:

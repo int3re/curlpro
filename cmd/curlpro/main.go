@@ -3,6 +3,7 @@
 //	curlpro validate   run profiles through an oracle and compare fingerprints
 //	curlpro diff       compare two profiles field by field
 //	curlpro list       list the profiles
+//	curlpro bundle     build and sign the profile bundle
 package main
 
 import (
@@ -29,6 +30,8 @@ func main() {
 		err = runDiff(os.Args[2:])
 	case "list":
 		err = runList(os.Args[2:])
+	case "bundle":
+		err = runBundle(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -52,6 +55,7 @@ func usage() {
   validate   run profiles through an oracle and compare with the baseline
   diff       compare two profiles by extensions and settings
   list       list the profiles
+  bundle     build and sign the profile bundle published between releases
 
 Details: curlpro <command> -h
 `)

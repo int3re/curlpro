@@ -69,6 +69,10 @@ curlpro.register_profile({
   more connection without it; `dns=` takes servers or DNS over HTTPS (with the
   browser's own DoH request).
   Behind a proxy nothing is resolved locally.
+- **Profiles between releases**: `curlpro.update_profiles()` fetches the corpus
+  the project publishes as browsers are captured — signed with Ed25519, checked
+  by the native library, kept in the user cache and loaded over the wheel's
+  profiles from then on.
 - **Native async**: a request becomes a goroutine, and the process keeps one thread;
   on free-threaded Python (3.14t) the GIL stays off and threads parse in parallel.
 - **Page loads as a browser loads them**: `load_page()` fetches a document and the

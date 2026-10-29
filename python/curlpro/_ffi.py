@@ -109,6 +109,7 @@ for _name, _args in (
     ("curlpro_profile_capabilities", [ctypes.c_char_p]),
     ("curlpro_profile_get", [ctypes.c_char_p]),
     ("curlpro_profiles_load_dir", [ctypes.c_char_p]),
+    ("curlpro_profiles_load_bundle", [ctypes.c_char_p, ctypes.c_char_p]),
     ("curlpro_profile_register", [ctypes.c_char_p]),
     ("curlpro_session_new", [ctypes.c_char_p]),
     ("curlpro_session_close", [ctypes.c_longlong]),
@@ -218,7 +219,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Minimum version of the native part: major and minor. Raise it together
 # with lib/curlpro.go whenever Python starts depending on a new export or field.
-REQUIRED_VERSION = (0, 27)
+REQUIRED_VERSION = (0, 28)
 
 
 def _check_version() -> None:

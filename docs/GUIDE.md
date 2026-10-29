@@ -47,17 +47,29 @@ macOS 13+ on Intel and Apple Silicon, and Windows x64; Python 3.9 or newer.
 Anything else builds from the source archive with Go and a C compiler
 (`README.md`, "Install").
 
-Three ways profiles reach the library:
+Four ways profiles reach the library:
 
 - **From the wheel, automatically.** `ensure_loaded()` runs on the first
   `Session`; nothing to call.
+- **Between releases, signed.** `curlpro.update_profiles()` fetches the corpus
+  the project publishes as profiles are captured — every profile of one commit
+  in `profiles.json.gz`, signed with Ed25519, on the GitHub release tagged
+  `profiles` — lets the native library check the signature against the
+  project's key compiled into it and that no profile asks for a newer library,
+  loads it, and keeps it in the user cache directory (`CURLPRO_CACHE_DIR`
+  overrides); every later import loads it over the wheel's profiles. A bundle
+  older than the installed package is not taken — a newer wheel carries newer
+  profiles — and `CURLPRO_PROFILE_UPDATES=0` turns the loading off.
+  `load_profile_bundle(path)` loads one from a file (with `path + ".sig"`
+  beside it); `CURLPRO_BUNDLE_KEYS` (base64, comma-separated) trusts more keys,
+  for a channel of one's own built with `curlpro bundle`.
 - **From a directory.** `curlpro.load_profiles("profiles")` — this is what a
   checkout of the repository needs, because there the profiles live next to the
   package rather than inside it.
 - **At runtime.** `curlpro.register_profile(dict_or_json)` adds one profile
   without a release.
 
-The native library has an ABI version (`0.22` for this release) that the Python
+The native library has an ABI version (`0.28` for this release) that the Python
 side checks on import. A wheel always carries a matching pair; the check exists
 for source builds and for `CURLPRO_LIBRARY`, which points the package at a
 library of your own. A mismatch raises at import time with the rebuild command
@@ -1418,6 +1430,7 @@ Facts that are easy to doubt and are true:
 | `Persona`, `load_all(dir)` | class, function | an identity between runs; a folder of them |
 | `Profile` | class | a profile as an object: `from_file`, `derive`, `register`, `save` |
 | `load_profiles(dir)`, `register_profile(x)`, `list_profiles()`, `ensure_loaded()` | function | profile management |
+| `update_profiles(url=None)`, `load_profile_bundle(path)` | function | the signed profile bundle published between releases: fetch, verify, load, keep |
 | `capabilities(name)`, `get_profile(name)`, `library_version()` | function | what a profile can do (`measured` and `source` included), a profile as data, the native library's own version |
 | `list_profiles(measured=None)` | function | every profile; `True` the captured ones only, `False` the transcribed ones |
 | `s.headers_for(method, url, ...)` | method | the headers a request would carry, without sending it |

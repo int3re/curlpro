@@ -67,8 +67,10 @@ from .profiles import (
     get_profile,
     library_version,
     list_profiles,
+    load_profile_bundle,
     load_profiles,
     register_profile,
+    update_profiles,
 )
 from .page import Page, PageResource
 from .stream import StreamResponse
@@ -125,6 +127,7 @@ __all__ = [
     "library_version",
     "list_profiles",
     "load_all",
+    "load_profile_bundle",
     "load_profiles",
     "options",
     "patch",
@@ -132,6 +135,7 @@ __all__ = [
     "put",
     "register_profile",
     "request",
+    "update_profiles",
     "solvers",
 ]
 
