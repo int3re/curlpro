@@ -3,7 +3,9 @@ package client
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -23,46 +25,70 @@ type MultipartForm struct {
 	Files  []FormFile        `json:"files"`
 }
 
-// boundaryAlphabet repeats the Blink table from
-// platform/network/form_data_encoder.cc: 64 characters, as in base64.
-const boundaryAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+// boundaryAlphabet is Blink's kAlphaNumericEncodingMap from
+// platform/network/form_data_encoder.cc (WebKit's FormDataBuilder has the
+// same): 64 entries indexed by a random byte's low six bits — letters and
+// digits, with A and B twice to fill the table. It only looks like base64:
+// '+' and '/' never appear, and a '/' (a tspecial in RFC 2045) makes strict
+// parsers, Go's mime among them, refuse the unquoted boundary.
+const boundaryAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789AB"
 
 // generateBoundary builds a boundary in the given browser's style.
 //
-// The boundary shape is part of the fingerprint: Chrome sends "----WebKitFormBoundary"
-// plus 16 characters, Firefox a long run of dashes and digits. Using another
-// browser's style means a mismatch between the User-Agent and the request body.
+// The boundary shape is part of the fingerprint, measured against Chrome 156
+// and Firefox 159 and read in the source of older Firefox:
+//
+//   - webkit: "----WebKitFormBoundary" and 16 characters of the Blink table;
+//   - firefox: Firefox 135 and later, "----geckoformboundary" and two random
+//     64-bit numbers in hex without leading zeros (HTMLFormSubmission.cpp);
+//   - firefox-legacy: Firefox before 135 (Tor Browser 14 on ESR 128 too), 27
+//     dashes and three random 32-bit numbers in decimal.
+//
+// Using another browser's style means a mismatch between the User-Agent and
+// the request body.
 func generateBoundary(style string) (string, error) {
 	switch strings.ToLower(style) {
 	case "", "webkit", "chrome", "safari":
-		suffix, err := randomFrom(boundaryAlphabet, 16)
+		buf, err := randomBytes(16)
 		if err != nil {
 			return "", err
 		}
-		return "----WebKitFormBoundary" + suffix, nil
+		for i, b := range buf {
+			buf[i] = boundaryAlphabet[b&0x3f]
+		}
+		return "----WebKitFormBoundary" + string(buf), nil
 
 	case "firefox", "gecko":
-		suffix, err := randomFrom("0123456789", 30)
+		buf, err := randomBytes(16)
 		if err != nil {
 			return "", err
 		}
-		return "---------------------------" + suffix, nil
+		return "----geckoformboundary" +
+			strconv.FormatUint(binary.LittleEndian.Uint64(buf[:8]), 16) +
+			strconv.FormatUint(binary.LittleEndian.Uint64(buf[8:]), 16), nil
+
+	case "firefox-legacy":
+		buf, err := randomBytes(12)
+		if err != nil {
+			return "", err
+		}
+		out := "---------------------------"
+		for i := 0; i < 12; i += 4 {
+			out += strconv.FormatUint(uint64(binary.LittleEndian.Uint32(buf[i:])), 10)
+		}
+		return out, nil
 
 	default:
-		return "", fmt.Errorf("unknown multipart boundary style %q (expected webkit or firefox)", style)
+		return "", fmt.Errorf("unknown multipart boundary style %q (expected webkit, firefox or firefox-legacy)", style)
 	}
 }
 
-func randomFrom(alphabet string, n int) (string, error) {
+func randomBytes(n int) ([]byte, error) {
 	buf := make([]byte, n)
 	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("generating multipart boundary: %w", err)
+		return nil, fmt.Errorf("generating multipart boundary: %w", err)
 	}
-	out := make([]byte, n)
-	for i, b := range buf {
-		out[i] = alphabet[int(b)%len(alphabet)]
-	}
-	return string(out), nil
+	return buf, nil
 }
 
 // encodeMultipart builds the form body and returns it with its Content-Type.

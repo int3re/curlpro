@@ -1194,8 +1194,11 @@ func merge(dst, src *Profile) {
 }
 
 // FormBoundaryStyle returns the multipart boundary style.
-// When the profile does not set one it is derived from the browser family:
-// no guessing is involved, because there are only two styles.
+// When the profile does not set one it is derived from the browser family and,
+// for Gecko, its version: Firefox 135 replaced the run of dashes and decimal
+// digits with "----geckoformboundary" and hex (HTMLFormSubmission.cpp at
+// FIREFOX_134_0_RELEASE and FIREFOX_135_0_RELEASE). A Gecko UA without a
+// readable version gets the current style.
 func (p *Profile) FormBoundaryStyle() string {
 	if p.Headers.FormBoundary != "" {
 		return p.Headers.FormBoundary
@@ -1204,9 +1207,28 @@ func (p *Profile) FormBoundaryStyle() string {
 	ua := strings.ToLower(p.Headers.UserAgent)
 	if strings.HasPrefix(name, "firefox") || strings.HasPrefix(name, "tor") ||
 		strings.Contains(ua, "firefox/") {
+		if v := geckoMajor(ua); v > 0 && v < 135 {
+			return "firefox-legacy"
+		}
 		return "firefox"
 	}
 	return "webkit"
+}
+
+// geckoMajor is the major version after "firefox/" in a lowercased UA, or 0.
+func geckoMajor(ua string) int {
+	i := strings.Index(ua, "firefox/")
+	if i < 0 {
+		return 0
+	}
+	n := 0
+	for _, c := range ua[i+len("firefox/"):] {
+		if c < '0' || c > '9' {
+			break
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }
 
 // ResolvedHeaders returns the headers in send order, filling the User-Agent

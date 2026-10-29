@@ -166,7 +166,7 @@ the same way.
 | `data` | the body as bytes or str |
 | `json_body` | any JSON-serialisable value; sets `content-type: application/json` unless you did |
 | `fields` | a form; alone it is `application/x-www-form-urlencoded`, with `files` it is multipart |
-| `files` | multipart files; the boundary is generated in the profile's style (`----WebKitFormBoundary…` for Chrome, dashes for Firefox) |
+| `files` | multipart files; the boundary is generated in the profile's style (`----WebKitFormBoundary…` for Chrome, `----geckoformboundary…` for Firefox 135+, dashes and digits for older Firefox) |
 | `body_file` | a path streamed as the body with an explicit `Content-Length`; a browser never uploads a file chunked |
 | `headers` | your headers. A value of `None` **removes** a header the profile or the session would send; `""` sends it empty. Anything else than `str` or `None` is a `TypeError` naming the header |
 | `header_order` | the order pattern for this request, beating the session's (section 6) |

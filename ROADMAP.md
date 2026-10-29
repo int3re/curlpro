@@ -1354,6 +1354,9 @@ The owner's word after the list of what could come next: all of it.
 - **The driver (Stage 41, step 1):** `Page.fill`, `click_on`, `scroll`,
   `wait_for`, `text`, `evaluate` — trusted input, an isolated world, never
   `Runtime.enable`; `b.page` on `s.browser()`.
+- **The multipart boundary:** Blink's table (it ends with `AB`, not `+/`: a
+  `/` made go-httpbin see an empty form) and Firefox 135's
+  `----geckoformboundary` plus hex; older Firefox and Tor 14 keep the dashes.
 - **Not yet:** resumption inside ECH for Firefox (NSS's stand-in outer PSK),
   Firefox's own HTTPS-record rules.
 

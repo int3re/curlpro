@@ -1,8 +1,11 @@
 """Checking multipart forms.
 
 The form boundary is part of the fingerprint: Chrome sends ----WebKitFormBoundary
-plus 16 characters, Firefox a run of dashes with digits. A style that does not
-match the User-Agent is an anomaly in itself, so it is checked as well.
+plus 16 letters and digits, Firefox 135 and later ----geckoformboundary plus hex,
+older Firefox a run of dashes with digits. A style that does not match the
+User-Agent is an anomaly in itself, so it is checked as well. httpbin.org parses
+the form with Go's strict mime package: a boundary that is not a token (a '/' in
+it, as the old alphabet allowed) comes back as an empty form.
 """
 
 from __future__ import annotations
@@ -74,14 +77,23 @@ def test_chrome_boundary_style():
     with curlpro.Session("chrome-151-windows") as s:
         ct = s.post(URL, fields={"a": "1"}).json()["headers"]["Content-Type"]
     boundary = ct.split("boundary=")[1]
-    assert re.fullmatch(r"----WebKitFormBoundary[A-Za-z0-9+/]{16}", boundary), boundary
+    assert re.fullmatch(r"----WebKitFormBoundary[A-Za-z0-9]{16}", boundary), boundary
 
 
 def test_firefox_boundary_style():
     with curlpro.Session("firefox-144-macos") as s:
-        ct = s.post(URL, fields={"a": "1"}).json()["headers"]["Content-Type"]
-    boundary = ct.split("boundary=")[1]
-    assert re.fullmatch(r"-{27}\d{30}", boundary), boundary
+        got = s.post(URL, fields={"a": "1"}).json()
+    boundary = got["headers"]["Content-Type"].split("boundary=")[1]
+    assert re.fullmatch(r"----geckoformboundary[0-9a-f]{2,32}", boundary), boundary
+    assert got["form"] == {"a": "1"}
+
+
+def test_firefox_before_135_boundary_style():
+    with curlpro.Session("firefox-133-windows") as s:
+        got = s.post(URL, fields={"a": "1"}).json()
+    boundary = got["headers"]["Content-Type"].split("boundary=")[1]
+    assert re.fullmatch(r"-{27}\d{3,30}", boundary), boundary
+    assert got["form"] == {"a": "1"}
 
 
 def test_boundary_is_unique_per_request():

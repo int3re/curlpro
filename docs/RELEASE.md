@@ -19,7 +19,9 @@ JobController races them; HTTP/3 asked for outright travels through a SOCKS5
 proxy that relays UDP (UDP ASSOCIATE). The profile corpus is published between
 releases as a bundle signed with Ed25519 that `curlpro.update_profiles()`
 fetches, checks and loads; `s.browser()` acts on its tab through `b.page`
-without a trace (trusted input, an isolated world, never `Runtime.enable`).
+without a trace (trusted input, an isolated world, never `Runtime.enable`). The
+multipart boundary is Blink's table again (the `+` and `/` of the old one broke
+strict parsers) and Firefox 135's `----geckoformboundary` for Firefox 135+.
 Data: Chrome 156 (the default now), Firefox 159 and Opera 139 captured; Chrome
 157 and Edge 156 derived; 317 profiles, 48 captured. Wheels: Windows on ARM64
 added; no musl wheel (golang/go#54805). ABI 0.28.0: the bundle loader is a new

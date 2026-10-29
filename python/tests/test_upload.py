@@ -37,7 +37,8 @@ def _profiles():
 def big_file():
     """A file noticeably larger than one would keep in memory without need."""
     path = Path(tempfile.mkdtemp()) / "upload.bin"
-    path.write_bytes(os.urandom(4 * 1024 * 1024))
+    # httpbin.org runs go-httpbin now, which refuses bodies over 1 MiB.
+    path.write_bytes(os.urandom(768 * 1024))
     yield path
     path.unlink(missing_ok=True)
 
@@ -45,8 +46,8 @@ def big_file():
 def test_file_upload_sets_content_length(big_file):
     """Without an explicit length the transport would switch to chunked, which a
     browser does not do when uploading a file — and that would show on the wire."""
-    # 4 MiB over somebody else's network: the default 30 s is not always enough,
-    # and this test is about Content-Length, not about httpbin's throughput.
+    # Over somebody else's network the default 30 s is not always enough, and
+    # this test is about Content-Length, not about httpbin's throughput.
     with curlpro.Session(timeout=120) as s:
         h = s.post("https://httpbin.org/post", body_file=big_file).json()["headers"]
     assert h.get("Content-Length") == str(big_file.stat().st_size)

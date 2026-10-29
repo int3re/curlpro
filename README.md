@@ -129,7 +129,7 @@ What exactly is reproduced:
 | Connections | handshakes per burst, HTTP/2 pooling across names, the privacy-mode and top-level-site partitions |
 | Cache and cookies | what is revalidated and with which validators where, the reload header, partitions by top-level site |
 | WebSocket | the handshake header set and order, `permessage-deflate` |
-| Forms | the multipart boundary style: `----WebKitFormBoundary` in Chrome, dashes in Firefox |
+| Forms | the multipart boundary style: `----WebKitFormBoundary` in Chrome, `----geckoformboundary` in Firefox 135+, dashes and digits before it |
 
 ## How it compares
 

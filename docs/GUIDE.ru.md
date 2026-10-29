@@ -166,7 +166,7 @@ mypy, pyright и редакторы проверяют каждое имя и т
 | `data` | тело как bytes или str |
 | `json_body` | любое JSON-сериализуемое значение; ставит `content-type: application/json`, если вы не поставили |
 | `fields` | форма; одна — `application/x-www-form-urlencoded`, с `files` — multipart |
-| `files` | файлы multipart; граница генерируется в стиле профиля (`----WebKitFormBoundary…` у Chrome, дефисы у Firefox) |
+| `files` | файлы multipart; граница генерируется в стиле профиля (`----WebKitFormBoundary…` у Chrome, `----geckoformboundary…` у Firefox 135+, дефисы с цифрами у старых Firefox) |
 | `body_file` | путь, который потоком идёт телом с явным `Content-Length`; браузер никогда не грузит файл chunked |
 | `headers` | ваши заголовки. Значение `None` **убирает** заголовок, который послали бы профиль или сессия; `""` шлёт его пустым. Всё, кроме `str` и `None`, — `TypeError` с именем заголовка |
 | `header_order` | шаблон порядка для этого запроса, сильнее сессионного (раздел 6) |
