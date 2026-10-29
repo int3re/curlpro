@@ -49,11 +49,14 @@ def test_every_desktop_profile_is_quiet():
     # none chosen — a real thing to tell the caller about.
     assert all(c == {"mobile_no_device"} for c in noisy.values()), noisy
 
-    # A transcribed profile says exactly one thing about itself, always: that
-    # it is transcribed. Anything else would be the same noise as above.
+    # A transcribed or derived profile says exactly one thing about itself,
+    # always: that it was not captured — and a phone profile, as above, that
+    # no device was chosen. Anything else would be the same noise.
     for name in curlpro.list_profiles(measured=False):
         with curlpro.Session(name) as s:
-            assert codes(s.audit()) == {"transcribed_profile"}, name
+            got = codes(s.audit())
+        phone = curlpro.capabilities(name).get("device_kind") == "phone"
+        assert got == ({"transcribed_profile", "mobile_no_device"} if phone else {"transcribed_profile"}), name
 
 
 def test_safari_on_ios_is_not_asked_for_a_device():

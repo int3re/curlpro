@@ -54,9 +54,18 @@ SEED = ROOT / "scripts" / "android-devices.json"
 # profile name -> whether its devices carry arch (Yandex writes it into the UA)
 TARGETS = {
     "chrome-152-android": False,
+    "chrome-156-android": False,
     "yandex-26.8-android": True,
 }
 
+
+# The Chrome builds a derived profile's phones run, newest last: chromiumdash,
+# Stable, Android, read 2026-10-29. The phones cycle through them, as the
+# desktop identities cycle through theirs; the default is the newest.
+BUILDS = {"chrome-156-android": ["156.0.8078.47", "156.0.8078.48", "156.0.8078.49",
+                                 "156.0.8078.73", "156.0.8078.74"]}
+# The derived profile's brands (chromium_brands.py, as measured on Chrome 156).
+BRANDS = {"chrome-156-android": '"Not:A-Brand";v="8", "Chromium";v="156", "Google Chrome";v="156"'}
 
 # Chromium's default network estimate per connection type
 # (net/nqe/network_quality_estimator_params.cc): http RTT ms, downlink kbps.
@@ -91,8 +100,31 @@ def machine(d: dict, i: int) -> dict:
             "rtt": str(rtt), "downlink": str(kbps / 1000), "ect": "4g"}
 
 
+def full_version_list(brands: str, full: str) -> str:
+    major = full.split(".")[0]
+    out = []
+    for part in brands.split(", "):
+        name, _, v = part.partition(";v=")
+        v = v.strip('"')
+        out.append(f'{name};v="{full}"' if v == major else f'{name};v="{v}.0.0.0"')
+    return ", ".join(out)
+
+
+def ua_defaults(name: str) -> dict:
+    """A derived profile's User-Agent hints without a device: the newest
+    build; a phone has no arch or bitness to report (measured on the Pixel 7,
+    STAGE16)."""
+    if name not in BUILDS:
+        return {}
+    full = BUILDS[name][-1]
+    return {"sec-ch-ua-full-version": f'"{full}"', "sec-ch-ua-arch": '""', "sec-ch-ua-bitness": '""',
+            "sec-ch-ua-wow64": "?0", "sec-ch-ua-full-version-list": full_version_list(BRANDS[name], full),
+            "sec-ch-ua-form-factors": '"Mobile"'}
+
+
 def defaults() -> dict:
-    """The new hints' values without a device: the Pixel 7 of STAGE16, Wi-Fi."""
+    """The new hints' values without a device: the Pixel 7 of STAGE16 on
+    Android 17 (its model and version measured there), Wi-Fi."""
     pool = json.loads(SEED.read_text(encoding="utf-8"))
     m = machine(next(d for d in pool if d["name"] == "Pixel 7"), 0)
     w, h = m["viewport"].split("x")
@@ -100,10 +132,11 @@ def defaults() -> dict:
             "dpr": m["dpr"], "sec-ch-dpr": m["dpr"], "viewport-width": w, "sec-ch-viewport-width": w,
             "sec-ch-viewport-height": h, "rtt": m["rtt"], "downlink": m["downlink"], "ect": m["ect"],
             "sec-ch-prefers-color-scheme": "light", "sec-ch-prefers-reduced-motion": "no-preference",
-            "sec-ch-prefers-reduced-transparency": "no-preference"}
+            "sec-ch-prefers-reduced-transparency": "no-preference",
+            "sec-ch-ua-model": '"Pixel 7"', "sec-ch-ua-platform-version": '"17.0.0"'}
 
 
-def devices(with_arch: bool) -> list[dict]:
+def devices(with_arch: bool, builds: list[str] | None = None) -> list[dict]:
     pool = json.loads(SEED.read_text(encoding="utf-8"))
     out = []
     for i, d in enumerate(pool):
@@ -113,6 +146,8 @@ def devices(with_arch: bool) -> list[dict]:
             # Every phone in the pool is arm64; that is what a modern Android
             # device puts in ro.product.cpu.abilist, and Yandex writes arm_64.
             entry["arch"] = "arm_64"
+        if builds:
+            entry["full_version"] = builds[i % len(builds)]
         entry.update(machine(d, i))
         out.append(entry)
     return out
@@ -126,8 +161,9 @@ def main() -> int:
         raw = path.read_bytes()
         nl = "\r\n" if b"\r\n" in raw else "\n"
         profile = json.loads(raw.decode("utf-8"))
-        want = devices(with_arch)
+        want = devices(with_arch, BUILDS.get(name))
         values = dict((profile.get("client_hints") or {}).get("values") or {})
+        values.update(ua_defaults(name))
         values.update(defaults())
         if (profile.get("devices") == want and profile.get("device_kind") == "phone"
                 and (profile.get("client_hints") or {}).get("values") == values):

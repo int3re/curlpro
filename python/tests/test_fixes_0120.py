@@ -119,7 +119,7 @@ def test_a_phone_filter_written_for_0_10_has_a_field_to_read():
     """The code the report described: "profiles with devices are phones"."""
     phones = [n for n in curlpro.list_profiles()
               if curlpro.capabilities(n)["device_kind"] == "phone"]
-    assert sorted(phones) == ["chrome-152-android", "yandex-26.8-android"]
+    assert sorted(phones) == ["chrome-152-android", "chrome-156-android", "yandex-26.8-android"]
 
 
 # --- 3. errors -------------------------------------------------------------

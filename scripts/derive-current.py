@@ -70,7 +70,7 @@ DATE = "2026-09-26"
 DATE_1010 = "2026-10-10"
 DATE_1026 = "2026-10-26"
 DATE_1029 = "2026-10-29"
-PLATFORM = {"windows": '"Windows"', "macos": '"macOS"', "linux": '"Linux"'}
+PLATFORM = {"windows": '"Windows"', "macos": '"macOS"', "linux": '"Linux"', "android": '"Android"'}
 
 WIN = "Windows NT 10.0; Win64; x64"
 MAC = "Macintosh; Intel Mac OS X 10_15_7"
@@ -82,6 +82,12 @@ def chrome_ua(platform: str, major: int, extra: str = "") -> str:
             f"Chrome/{major}.0.0.0 Safari/537.36{extra}")
 
 
+def android_ua(major: int, device: str = "Android 10; K") -> str:
+    """Chrome on Android's reduced string: every phone says Android 10; K."""
+    return (f"Mozilla/5.0 (Linux; {device}) AppleWebKit/537.36 (KHTML, like Gecko) "
+            f"Chrome/{major}.0.0.0 Mobile Safari/537.36")
+
+
 CHROME_155_NOTE = ("Derived, not captured: Chrome 155 was captured on Windows (155.0.8059.39 and .40, "
                    "2026-10-10 and 2026-10-26), and this {os} twin stands on that capture — its "
                    "ClientHello, HTTP/2 frames, header sets and resources, image/jxl in Accept included — "
@@ -91,6 +97,16 @@ CHROME_156_NOTE = ("Derived, not captured: Chrome 156 was captured on Windows (1
                    "2026-10-29: the same hello, frames, header sets and resources as 155), and this {os} "
                    "twin stands on that capture with {os}'s sec-ch-ua-platform and User-Agent and 156's "
                    "brands, computed as Chromium computes them. Replace with a capture from {os}.")
+CHROME_156_ANDROID_NOTE = (
+    "Derived, not captured: Chrome 156 for Android went stable on 2026-10-07 (chromiumdash, Stable, "
+    "Android: 156.0.8078.25 to .74), and no phone is on the stand. Chrome 152 for Android, captured on a "
+    "Pixel 7 (STAGE16), sent Chrome 152 for Windows's hello — the same suites, extensions, groups, "
+    "signature algorithms and trust anchors — and the same frames and header sets but for the platform, "
+    "so this profile stands on the captured chrome-156-windows: its hello (28 trust anchors, sorted), "
+    "frames, header sets and resources, image/jxl in Accept included (kJXLImageFormat is enabled by "
+    "default from 155, and the decoder is built on every platform), with Android's reduced User-Agent, "
+    "sec-ch-ua-mobile ?1, sec-ch-ua-platform \"Android\" and 156's brands. The hints go out in the "
+    "steady-state order of the desktop capture. Replace with a capture from a phone.")
 CHROME_157_NOTE = ("Derived, not captured: Chrome 157 went stable on 2026-10-22 (chromiumdash, Stable: "
                    "157.0.8103.15), and the stand's Chrome is 156 — its updater rolls 157 out to this "
                    "machine later. The ClientHello, HTTP/2 frames, header sets and resources are the "
@@ -140,6 +156,8 @@ PLAN = [
     ("chrome-156-linux", "chrome-156-windows", chrome_ua(LINUX, 156), sec_ch_ua(156, "Google Chrome", 156),
      "https://chromiumdash.appspot.com/releases?platform=Linux",
      CHROME_156_NOTE.format(os="Linux"), DATE_1029),
+    ("chrome-156-android", "chrome-156-windows", android_ua(156), sec_ch_ua(156, "Google Chrome", 156),
+     "https://chromiumdash.appspot.com/releases?platform=Android", CHROME_156_ANDROID_NOTE, DATE_1029),
     ("chrome-157-windows", "chrome-156-windows", chrome_ua(WIN, 157), sec_ch_ua(157, "Google Chrome", 157),
      "https://chromiumdash.appspot.com/releases?platform=Windows",
      CHROME_157_NOTE.format(os=""), DATE_1029),
@@ -243,6 +261,8 @@ def main() -> int:
                 h["value"] = ua
             elif k == "sec-ch-ua-platform" and platform and h.get("value"):
                 h["value"] = platform
+            elif k == "sec-ch-ua-mobile" and name.endswith("-android") and h.get("value"):
+                h["value"] = "?1"
         want = {
             "name": name,
             "based_on": base,
@@ -251,6 +271,11 @@ def main() -> int:
                        "note": note},
             "headers": {"user_agent": ua, "order": order},
         }
+        if name.endswith("-android"):
+            # A chosen phone goes into the string, as on chrome-152-android
+            # (the owner's decision; a stock Chrome sends the reduced one).
+            want["headers"] = {"user_agent": ua, "user_agent_template": android_ua(
+                chrome_major(name), "Android {android}; {model}"), "order": order}
         major, base_major = chrome_major(name), chrome_major(base)
         if major and base_major and major >= 154 > base_major:
             ids = resolved_trust_anchors(base)

@@ -226,13 +226,16 @@ def test_a_chosen_device_goes_into_the_chrome_user_agent_too():
 
 
 def test_without_a_device_chrome_keeps_the_reduced_user_agent():
-    """No device chosen: the profile goes out as captured, reduced string included."""
+    """No device chosen: the profile goes out as captured — the reduced string,
+    and in the hints the phone it was captured on, a Pixel 7 on Android 17
+    (STAGE16), which a real Chrome names when asked."""
     with HintServer(ALL_HINTS) as srv:
         with curlpro.Session("chrome-152-android", verify=False, force_http1=True) as s:
             s.get(srv.url)
             s.get(srv.url)
     assert "Android 10; K" in srv.value(1, "user-agent")
-    assert srv.value(1, "sec-ch-ua-model") is None
+    assert srv.value(1, "sec-ch-ua-model") == '"Pixel 7"'
+    assert srv.value(1, "sec-ch-ua-platform-version") == '"17.0.0"'
 
 
 def test_random_devices_are_visible_in_the_chrome_user_agent():
@@ -272,13 +275,14 @@ def test_yandex_full_version_is_its_own():
 
 
 def test_without_device_nothing_is_substituted():
-    """Without device the profile stays exactly as it was captured."""
+    """Without device the profile stays exactly as it was captured: the
+    captured Pixel 7 in the string and, when asked, in the hints."""
     with HintServer(ALL_HINTS) as srv:
         with curlpro.Session("yandex-26.8-android", verify=False, force_http1=True) as s:
             s.get(srv.url)
             s.get(srv.url)
-    assert "Pixel 7" in srv.value(1, "user-agent")
-    assert srv.value(1, "sec-ch-ua-model") is None, "no model is substituted without a chosen device"
+    assert "Android 17; Pixel 7" in srv.value(1, "user-agent")
+    assert srv.value(1, "sec-ch-ua-model") == '"Pixel 7"', "the hints name another phone than the string"
 
 
 # The machine, network and preference hints (STAGE45): what a site such as a
@@ -450,3 +454,39 @@ def test_a_mac_and_a_linux_box_have_screens_of_their_own():
     assert (srv.value(mac, "dpr"), srv.value(mac, "viewport-width")) == ("2", "1470")
     assert srv.value(mac, "sec-ch-ua-arch") == '"arm"'
     assert (srv.value(linux, "dpr"), srv.value(linux, "sec-ch-viewport-height")) == ("1", "977")
+
+
+def test_chrome_156_for_android():
+    """Derived on the captured Chrome 156 (Chrome 152 for Android sent the
+    desktop's hello): the reduced string and the Pixel 7's hints without a
+    device; with one, its model and Android in the string and the hints, one
+    of Chrome's Android 156 builds, its screen."""
+    assert curlpro.get_profile("chrome-156-android").data.get("based_on") == "chrome-156-windows"
+    with HintServer(MACHINE_HINTS) as srv:
+        with curlpro.Session("chrome-156-android", verify=False, force_http1=True) as s:
+            s.get(srv.url)
+            s.get(srv.url)
+        with curlpro.Session("chrome-156-android", verify=False, force_http1=True,
+                             device="Galaxy S24 Ultra") as s:
+            s.get(srv.url)
+            s.get(srv.url)
+    v = lambda i, n: srv.value(i, n)  # noqa: E731
+    assert v(1, "user-agent") == ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
+                                  "(KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36")
+    assert (v(1, "sec-ch-ua-mobile"), v(1, "sec-ch-ua-platform")) == ("?1", '"Android"')
+    assert (v(1, "sec-ch-ua-model"), v(1, "sec-ch-ua-platform-version")) == ('"Pixel 7"', '"17.0.0"')
+    assert v(1, "sec-ch-ua-full-version") == '"156.0.8078.74"'
+    assert (v(1, "viewport-width"), v(1, "dpr")) == ("980", "2.625")
+    assert "Android 15; SM-S928B" in v(3, "user-agent")
+    assert v(3, "sec-ch-ua-model") == '"SM-S928B"'
+    assert v(3, "sec-ch-ua-full-version").startswith('"156.0.8078.')
+    assert v(3, "sec-ch-ua-form-factors") == '"Mobile"'
+    assert v(3, "dpr") == "3.5"
+    assert "image/jxl" in v(1, "accept")
+
+
+def test_chrome_156_for_android_shares_the_desktop_hello():
+    a = curlpro.Session("chrome-156-android").fingerprint()
+    w = curlpro.Session("chrome-156-windows").fingerprint()
+    # JA4 sorts the extensions; Chrome permutes them per connection.
+    assert a.ja4 == w.ja4

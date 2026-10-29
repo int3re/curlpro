@@ -54,7 +54,7 @@ curlpro.register_profile({
 
 ## Что умеет
 
-- **317 профилей**: 48 сняты целиком (Chrome 118–153, 155 и 156, Edge, Firefox 133–159, Opera 139, Safari, Tor, Яндекс.Браузер, okhttp 5.5), 14 сняты, кроме HTTP/2 SETTINGS, 238 транскрибированы из wreq-util и 17 выведены для версий, ещё не побывавших на стенде (Chrome 154 и 157, Chrome 155 и 156 для macOS и Linux, Edge 154 и 156, Opera 136 и 139 для macOS, Safari 27), — все помечены, и `list_profiles(measured=True)` даёт список снятых;
+- **318 профилей**: 48 сняты целиком (Chrome 118–153, 155 и 156, Edge, Firefox 133–159, Opera 139, Safari, Tor, Яндекс.Браузер, okhttp 5.5), 14 сняты, кроме HTTP/2 SETTINGS, 238 транскрибированы из wreq-util и 18 выведены для версий, ещё не побывавших на стенде (Chrome 154 и 157, Chrome 155 и 156 для macOS и Linux, Chrome 156 для Android, Edge 154 и 156, Opera 136 и 139 для macOS, Safari 27), — все помечены, и `list_profiles(measured=True)` даёт список снятых;
   мобильные — Chrome и Яндекс для Android, Safari для iOS.
 - **Все слои отпечатка сразу** — TLS, HTTP/2, HTTP/3, HTTP/1.1 и WebSocket
   (таблица ниже).
@@ -188,7 +188,7 @@ go build -tags nofoxio -buildmode=c-shared -o dist/libcurlpro.so ./lib
 pip install curlpro
 ```
 
-Ни Go, ни компилятора не нужно: нативная библиотека и все 317 профилей уже
+Ни Go, ни компилятора не нужно: нативная библиотека и все 318 профилей уже
 внутри колеса. Готовые колёса собраны для шести платформ:
 
 | Платформа | Колесо |
@@ -775,7 +775,7 @@ Chrome с версии 110 вырезал из `User-Agent` и модель, и 
 того, как сайт запросил их заголовком `Accept-CH`.
 
 ```python
-with curlpro.Session("chrome-152-android", device="random") as s:
+with curlpro.Session("chrome-156-android", device="random") as s:
     s.get(url)          # User-Agent: Android 15; SM-S911B — и sec-ch-ua-model:
                         # "SM-S911B", как только сайт запросил подсказки
 ```

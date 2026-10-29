@@ -102,7 +102,7 @@ touch it.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `impersonate` | `chrome-156-windows` | the profile name, the newest Chrome captured whole (`chrome-151-windows` through 0.16.0, `chrome-155-windows` in 0.17 and 0.18); `list_profiles()` has all 317 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 45 captured whole |
+| `impersonate` | `chrome-156-windows` | the profile name, the newest Chrome captured whole (`chrome-151-windows` through 0.16.0, `chrome-155-windows` in 0.17 and 0.18); `list_profiles()` has all 318 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 45 captured whole |
 | `verify` | `True` | `True` — system roots; a PEM path — trust only that root; `False` — no verification |
 | `cert` | `None` | `(certificate, key)` paths for mutual TLS |
 | `trust_env` | `True` | take the proxy from `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, honouring `NO_PROXY`; an explicit `proxy` always wins |
@@ -800,7 +800,7 @@ partitions, and a Firefox profile sent a captcha's frame no cookies at all.
 
 ## 11. Profiles, devices and mobile
 
-317 profiles ship in the wheel. 48 of them are captured whole — by this
+318 profiles ship in the wheel. 48 of them are captured whole — by this
 project's own runs of `curlpro capture` or by the curl-impersonate signatures
 it imported, each with the hashes to prove it: 22 Chrome (118 to 153, 155 and 156),
 4 Edge, 8 Firefox (133, 135, 144, 155 to 159), Opera 139, 9 Safari (15.6.1 to 26.0.1, macOS and
@@ -810,7 +810,7 @@ Conscrypt). 14 more are captured but for their HTTP/2 SETTINGS (Chrome 98 to
 signatures recorded no SETTINGS frame, and until 0.12 the profiles sent an
 empty one — a frame no browser sends; the values are now wreq-util's for each
 version, and the profile says so. 238 are transcribed from `0x676e67/wreq-util`
-(108 Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera), and 17 are derived here
+(108 Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera), and 18 are derived here
 for the versions current on 2026-09-26, 2026-10-10 and 2026-10-29 that were not on the stand — see the
 next paragraphs, and prefer `list_profiles(measured=True)` when drawing a
 profile at random. Many share a TLS fingerprint: all of them together form 18
@@ -835,7 +835,10 @@ Safari 26 capture) and `safari-27-macos`; and since 2026-10-10 `chrome-155-macos
 and `-linux` (Chrome 155 was captured on Windows and its hello, frames and
 header order are 153's); since 2026-10-29 `chrome-156-macos` and `-linux` on the
 captured Chrome 156 (156.0.8078.73: 155's hello, frames, header sets and resources),
-`chrome-157-windows`, `-macos` and `-linux` (Chrome 157 went stable on 2026-10-22,
+`chrome-156-android` on the same capture (Chrome 152 for Android, captured on a
+Pixel 7, had sent Chrome 152 for Windows's hello, frames and header sets but for
+the platform; Android's reduced User-Agent, `sec-ch-ua-mobile: ?1`, the 46 phones
+on Chrome's Android 156 builds), `chrome-157-windows`, `-macos` and `-linux` (Chrome 157 went stable on 2026-10-22,
 and the stand's updater had not rolled it out yet), `edge-156-windows` (on the
 captured Chrome 156; Edge updates are switched off on the stand's machine) and
 `opera-139-macos` (Opera 139 was captured on Windows: Chrome 155's hello to the
@@ -906,7 +909,7 @@ marked: `capabilities()["derived_fetch"]` is true, and `audit()` raises
 `derived_fetch_set` whenever such a set is actually in use. Replace it with a
 capture the day a Mac or an iPhone is at hand.
 
-**Mobile.** `chrome-152-android` and `yandex-26.8-android` carry a pool of 46
+**Mobile.** `chrome-156-android` (derived), `chrome-152-android` and `yandex-26.8-android` carry a pool of 46
 real phones — exact `ro.product.model` strings from Google's Play device
 catalogue, on plausible Android versions. `device="Pixel 8"` or
 `device="random"` picks one for the session. The model travels in the

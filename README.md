@@ -56,7 +56,7 @@ curlpro.register_profile({
 
 ## Features
 
-- **317 profiles**: 48 captured whole (Chrome 118-153, 155 and 156, Edge, Firefox 133-159, Opera 139, Safari, Tor, Yandex Browser, okhttp 5.5), 14 captured but for their HTTP/2 SETTINGS, 238 transcribed from wreq-util and 17 derived for the versions not yet on the stand (Chrome 154 and 157, Chrome 155 and 156 for macOS and Linux, Edge 154 and 156, Opera 136 and 139 for macOS, Safari 27) — each marked, and `list_profiles(measured=True)` is the captured list;
+- **318 profiles**: 48 captured whole (Chrome 118-153, 155 and 156, Edge, Firefox 133-159, Opera 139, Safari, Tor, Yandex Browser, okhttp 5.5), 14 captured but for their HTTP/2 SETTINGS, 238 transcribed from wreq-util and 18 derived for the versions not yet on the stand (Chrome 154 and 157, Chrome 155 and 156 for macOS and Linux, Chrome 156 for Android, Edge 154 and 156, Opera 136 and 139 for macOS, Safari 27) — each marked, and `list_profiles(measured=True)` is the captured list;
   mobile — Chrome and Yandex for Android, Safari for iOS.
 - **Every fingerprint layer at once** — TLS, HTTP/2, HTTP/3, HTTP/1.1 and WebSocket
   (table below).
@@ -192,7 +192,7 @@ The wheels on PyPI are built without the tag, so JA4H is present there.
 pip install curlpro
 ```
 
-Neither Go nor a compiler is needed: the native library and all 317 profiles are
+Neither Go nor a compiler is needed: the native library and all 318 profiles are
 already inside the wheel. Wheels are built for six platforms:
 
 | Platform | Wheel |
@@ -789,7 +789,7 @@ the `sec-ch-ua-model` and `sec-ch-ua-platform-version` hints, and the browser se
 them only after the site asked with an `Accept-CH` header.
 
 ```python
-with curlpro.Session("chrome-152-android", device="random") as s:
+with curlpro.Session("chrome-156-android", device="random") as s:
     s.get(url)          # User-Agent: Android 15; SM-S911B — and sec-ch-ua-model:
                         # "SM-S911B" once the site asked for the hints
 ```

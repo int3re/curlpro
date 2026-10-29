@@ -158,7 +158,9 @@
       "ect": "4g",
       "sec-ch-prefers-color-scheme": "light",
       "sec-ch-prefers-reduced-motion": "no-preference",
-      "sec-ch-prefers-reduced-transparency": "no-preference"
+      "sec-ch-prefers-reduced-transparency": "no-preference",
+      "sec-ch-ua-model": "\"Pixel 7\"",
+      "sec-ch-ua-platform-version": "\"17.0.0\""
     },
     "order": [
       {

@@ -1384,6 +1384,10 @@ asks for, and the library answered only the User-Agent ones.
 - **Every device its own:** the 46 phones' screens, scale factors and memory
   (Android's 980-wide navigation viewport), Macs per CPU, Linux boxes; the
   network from Chromium's default per connection.
+- **`chrome-156-android`**, derived on the captured Chrome 156: Chrome 152 for
+  Android had sent the desktop's hello, frames and header sets; Android's
+  reduced User-Agent, `?1`, the 46 phones on Chrome's Android 156 builds, the
+  captured Pixel 7 (Android 17) in the hints without a device.
 - **Not yet:** delegation in HTML (`<meta name="accept-ch">`, `allow=`).
 
 ## A separate list: the accumulated debt
