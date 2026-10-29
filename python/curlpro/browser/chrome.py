@@ -550,6 +550,121 @@ class Page:
                   buttons=0, clickCount=1, pointerType="mouse")
         self._x, self._y = x, y
 
+    # -- finding, reading, typing ------------------------------------------
+    #
+    # Everything below reads the page through the inspector (DOM.*) or an
+    # isolated world made for the one call, and acts through the Input domain:
+    # Runtime.enable is never sent — that is the switch the published
+    # automation probes (an Error's stack getter, a Proxy printed to the
+    # console) notice — and no script runs in the page's own world, where its
+    # scripts could see it.
+
+    def query(self, selector: str) -> int | None:
+        """The node id of the first element matching ``selector``, shadow
+        roots not entered; None when there is none."""
+        root = self.send("DOM.getDocument", depth=0)["root"]["nodeId"]
+        nid = self.send("DOM.querySelector", nodeId=root, selector=selector).get("nodeId", 0)
+        return nid or None
+
+    def wait_for(self, selector: str, timeout: float = 10.0) -> int:
+        """Waits until ``selector`` matches and returns its node id; raises
+        TimeoutError. The document is asked afresh each time: a navigation
+        invalidates every node id held before it."""
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                nid = self.query(selector)
+            except RuntimeError:
+                nid = None  # the document is being replaced
+            if nid:
+                return nid
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"nothing matched {selector!r} in {timeout:g} s")
+            time.sleep(0.1)
+
+    def box(self, selector: str) -> tuple[float, float, float, float]:
+        """The border box (left, top, width, height) of the element, in the
+        viewport, after scrolling it into view as a person would bring it."""
+        nid = self.wait_for(selector)
+        self.send("DOM.scrollIntoViewIfNeeded", nodeId=nid)
+        q = self.send("DOM.getBoxModel", nodeId=nid)["model"]["border"]
+        xs, ys = q[0::2], q[1::2]
+        return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
+
+    def click_on(self, selector: str) -> None:
+        """Clicks the element, somewhere off its exact centre, as a hand
+        would; see :meth:`click`."""
+        left, top, w, h = self.box(selector)
+        self.click(left + w / 2 + random.uniform(-w / 5, w / 5), top + h / 2 + random.uniform(-h / 5, h / 5))
+
+    def type(self, text: str) -> None:
+        """Types ``text`` into whatever has the focus, a key at a time at a
+        person's pace: keyDown with the character, then keyUp, through the
+        Input domain, so the page sees trusted keyboard events and an input
+        event per character."""
+        for ch in text:
+            if ch == "\n":
+                key = {"key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13, "text": "\r"}
+            else:
+                key = {"key": ch, "text": ch, "unmodifiedText": ch}
+                if ch.isascii() and ch.isalnum():
+                    key["code"] = ("Digit" if ch.isdigit() else "Key") + ch.upper()
+                    key["windowsVirtualKeyCode"] = ord(ch.upper())
+                elif ch == " ":
+                    key.update(code="Space", windowsVirtualKeyCode=32)
+            self.send("Input.dispatchKeyEvent", type="keyDown", **key)
+            time.sleep(random.uniform(0.03, 0.09))
+            up = {k: v for k, v in key.items() if k not in ("text", "unmodifiedText")}
+            self.send("Input.dispatchKeyEvent", type="keyUp", **up)
+            # Between keys: mostly quick, now and then a pause, as a person types.
+            time.sleep(random.uniform(0.05, 0.16) if random.random() > 0.08 else random.uniform(0.3, 0.7))
+
+    def fill(self, selector: str, text: str) -> None:
+        """Clicks the field and types ``text`` into it."""
+        self.click_on(selector)
+        time.sleep(random.uniform(0.15, 0.4))
+        self.type(text)
+
+    def scroll(self, dy: float, *, x: float | None = None, y: float | None = None) -> None:
+        """Scrolls by ``dy`` pixels with the wheel, in notches of a hundred or
+        so, where the pointer is (or at ``x``, ``y``)."""
+        px = self._x if x is None else x
+        py = self._y if y is None else y
+        left = dy
+        while abs(left) >= 1:
+            step = max(-120.0, min(120.0, left)) * random.uniform(0.85, 1.0)
+            self.send("Input.dispatchMouseEvent", type="mouseWheel", x=px, y=py, deltaX=0, deltaY=step,
+                      pointerType="mouse")
+            left -= step
+            time.sleep(random.uniform(0.03, 0.12))
+
+    def evaluate(self, expression: str) -> Any:
+        """The value of ``expression`` evaluated in an isolated world made for
+        this call: it sees the page's DOM, not its scripts, and the page's
+        scripts do not see it. Without Runtime.enable. Values come back as
+        JSON; an exception raises RuntimeError."""
+        frame = self.send("Page.getFrameTree")["frameTree"]["frame"]["id"]
+        ctx = self.send("Page.createIsolatedWorld", frameId=frame, worldName="",
+                        grantUniveralAccess=False)["executionContextId"]
+        r = self.send("Runtime.evaluate", expression=expression, contextId=ctx, returnByValue=True,
+                      awaitPromise=True)
+        if "exceptionDetails" in r:
+            d = r["exceptionDetails"]
+            raise RuntimeError(d.get("exception", {}).get("description") or d.get("text", "exception"))
+        return r.get("result", {}).get("value")
+
+    def text(self, selector: str = "body") -> str:
+        """The visible text of the element (``innerText``), read in an
+        isolated world."""
+        self.wait_for(selector)
+        return self.evaluate(f"document.querySelector({json.dumps(selector)}).innerText")
+
+    def navigate(self, url: str, *, wait_for: str = "", timeout: float = 30.0) -> None:
+        """Opens ``url`` in this tab, and waits for ``wait_for`` when given."""
+        self.send("Page.navigate", url=url)
+        if wait_for:
+            self.wait_for(wait_for, timeout)
+
     def click_check(self) -> bool:
         """Clicks the checkbox of the first interactive check on the page —
         Turnstile's sits at the left of its frame, a third of the way in —

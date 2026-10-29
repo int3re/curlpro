@@ -699,6 +699,25 @@ keeps there, through the inspector, without a script in the page. The session
 then goes on with the browser's own TLS and HTTP/2 fingerprint: a site that
 saw the browser sees the same client.
 
+`b.page` acts on the tab where a person would: `fill(selector, text)` clicks a
+field and types into it a key at a time at a person's pace, `click_on(selector)`
+moves the pointer there along a curve, `scroll(dy)` turns the wheel,
+`wait_for(selector)`, `text(selector)` and `evaluate(expression)` read the page.
+Every event arrives as a trusted one through the Input domain; reading goes
+through the inspector, or through an isolated world made for the one call —
+the page's scripts do not see it — and `Runtime.enable`, the switch the
+published automation probes catch, is never sent. A test holds it against a
+page that reports what it saw: trusted keys, no probe fired, no name leaked.
+
+```python
+with s.browser("https://example.com/login") as b:
+    b.page.fill("#email", "me@example.com")
+    b.page.fill("#password", secret)
+    b.page.click_on("button[type=submit]")
+    b.page.wait_for("#account")
+s.get("https://example.com/api/me")
+```
+
 ## 10. Cookies
 
 `s.cookies` is a mapping by name for reading, and a full jar underneath:

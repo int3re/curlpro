@@ -16,7 +16,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from .chrome import Chrome, same_browser
+from .chrome import Chrome, Page, same_browser
 from .forward import Forwarder
 
 
@@ -65,6 +65,19 @@ class Handoff:
         if self.chrome is None:
             raise RuntimeError("the browser of this handoff is closed")
         return self.chrome
+
+    @property
+    def page(self) -> Page:
+        """The tab, attached for acting on it — :meth:`Page.fill`,
+        :meth:`Page.click_on`, :meth:`Page.text`, :meth:`Page.evaluate` and
+        the rest, all without Runtime.enable and without a script in the
+        page's world. Attached on first use and kept until the block ends:
+        until then nothing is attached that the page could notice."""
+        if self._page is None:
+            chrome = self._live()
+            tab = next(p["targetId"] for p in chrome.pages() if p.get("type", "page") == "page")
+            self._page = chrome.page(tab)
+        return self._page
 
     def sync(self) -> int:
         """Loads the browser's cookies into the session; returns how many."""

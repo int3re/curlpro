@@ -5,11 +5,13 @@ the package's own browser driver.
 tabs and cookies through the browser's DevTools endpoint, without attaching to
 any page; :class:`~curlpro.browser.forward.Forwarder` gives it a proxy with
 credentials. :class:`curlpro.solvers.BrowserSolver` uses both to pass an
-anti-bot's check and hand the result to a session.
+anti-bot's check and hand the result to a session. A :class:`Page` acts on a
+tab — finds, clicks, types, scrolls, reads — through the inspector and the
+Input domain, without Runtime.enable and without a script in the page's world.
 """
 
-from .chrome import Chrome, find_chrome, profile_for
+from .chrome import Chrome, Page, find_chrome, profile_for
 from .forward import Forwarder
 from .handoff import Handoff
 
-__all__ = ["Chrome", "Forwarder", "Handoff", "find_chrome", "profile_for"]
+__all__ = ["Chrome", "Forwarder", "Handoff", "Page", "find_chrome", "profile_for"]
