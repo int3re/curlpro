@@ -6,7 +6,24 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.19.0** — a minor: what goes on the wire changed again, measured each time. A
+**0.20.0** — a minor: the client hints are Chrome's whole. A session answers
+every hint a desktop Chromium answers — the machine (`device-memory`, `dpr`,
+the viewport), the network (`rtt`, `downlink`, `ect`, with Chromium's per-site
+noise) and the preferences (`sec-ch-prefers-*`) — a navigation in the browser
+process's sequence, and a page's request (fetch, XHR, a subresource) laid out
+the way Blink's header map hands it to the network stack: rapidhash over the
+case-folded name, WTF's table, the caller's own headers placed where Chrome
+places them (88 requests of Chrome 155 and 156, all in the model's order).
+Hints come from a top-level navigation's `Accept-CH` only, go to other origins
+as the page's `Permissions-Policy` delegates them, and into frames in the
+navigation sequence (Chrome 156 with a delegating policy, matched). The values
+are the device's: every pooled identity names its machine — the 46 phones
+their screens, scale factors and memory, a navigation on a phone reporting the
+viewport scaled to 980 wide, Macs by CPU — and the network is Chromium's own
+default for the connection. `chrome-156-android` is derived on the captured
+Chrome 156 (Chrome 152 for Android had sent the desktop's hello). 318
+profiles, 48 captured. ABI 0.29.0: device fields an older library refuses.
+Before it, **0.19.0** — a minor: what goes on the wire changed again, measured each time. A
 Firefox profile now takes an origin's ECH configuration too, with NSS's inner
 hello (measured against Firefox 159 on `cmd/echstand`); HTTP/3 carries ECH, so an
 ECH origin with an h3 record goes to HTTP/3 (Chrome 156 over QUIC, matched — and

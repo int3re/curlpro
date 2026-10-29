@@ -179,7 +179,12 @@ func curlpro_free(s *C.char) {
 // library); real ECH from an HTTPS record on Chromium profiles.
 // 0.28.0: curlpro_profiles_load_bundle, the signed profile bundle published
 // between releases (a binding that calls it needs this library).
-const Version = "0.28.0"
+// 0.29.0: the machine a device names — device_memory, dpr, viewport,
+// color_scheme, reduced_motion, reduced_transparency, rtt, downlink, ect —
+// for the client hints a site asks for besides the User-Agent ones (a file
+// carrying them does not load into an older library, which decodes
+// strictly, so a profile bundle with them asks for this one).
+const Version = "0.29.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
