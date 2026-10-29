@@ -1328,6 +1328,35 @@ record by default (from 108) and acts on it; the client never asked.
 - **Not yet:** ECH over QUIC (an ECH origin stays on TCP), the PSK inside the
   inner hello (no resumption with ECH), Firefox's inner hello (NSS) and DoH.
 
+## Stage 44 — everything the review offered ✅ done 2026-10-29
+
+The owner's word after the list of what could come next: all of it.
+
+- **Data, measured:** Chrome 156 from the consumer build its updater had staged
+  beside the running 155 (`new_chrome.exe`; Chrome for Testing would add 0x12e0),
+  Firefox 159, and Opera 139 — the first Opera measured here, Chrome 155's hello
+  to the byte. Derived: Chrome 157, Edge 156 (Edge updates are off on the stand's
+  machine by policy), Opera 139 for macOS. The default profile is Chrome 156.
+- **Firefox's real ECH:** NSS's inner hello, measured with `scripts/ff-echstand.py`
+  (TRR in mode 3 on the stand's DoH); the `ECHInnerNSS` style in patch-utls.py.
+- **DoH as each browser sends it:** ID 0, EDNS 4096, padding to 128, Firefox's
+  no-address ECS and its anonymous GET, read off the stand and MOZ_LOG.
+- **HTTP/3 through SOCKS5:** UDP ASSOCIATE for HTTP/3 asked for outright; an
+  Alt-Svc guess is still not taken behind SOCKS.
+- **QUIC raced against TCP:** Chrome's JobController and the TCP job's hold.
+- **Profiles between releases:** the signed bundle, `curlpro bundle`,
+  `update_profiles()`, `scripts/publish-profiles.py`; ABI 0.28.0.
+- **ECH over QUIC** (Chrome 156 on `echstand -quic -own-cert`, matched;
+  `supported_versions` compressed in QUIC) and **resumption inside ECH**
+  (Chrome 156 on `echstand -close`, matched); a dropped QUIC ECH handshake
+  retried without ECH from a fresh UDP port.
+- **Wheels:** Windows on ARM64 (llvm-mingw); musl ruled out by golang/go#54805.
+- **The driver (Stage 41, step 1):** `Page.fill`, `click_on`, `scroll`,
+  `wait_for`, `text`, `evaluate` — trusted input, an isolated world, never
+  `Runtime.enable`; `b.page` on `s.browser()`.
+- **Not yet:** resumption inside ECH for Firefox (NSS's stand-in outer PSK),
+  Firefox's own HTTPS-record rules.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

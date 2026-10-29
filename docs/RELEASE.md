@@ -6,7 +6,24 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.18.0** — a minor, because what goes on the wire changed without anyone
+**0.19.0** — a minor: what goes on the wire changed again, measured each time. A
+Firefox profile now takes an origin's ECH configuration too, with NSS's inner
+hello (measured against Firefox 159 on `cmd/echstand`); HTTP/3 carries ECH, so an
+ECH origin with an h3 record goes to HTTP/3 (Chrome 156 over QUIC, matched — and
+`supported_versions` compressed there, as BoringSSL does for a TLS 1.3-only
+outer); a Chromium connection resumes inside ECH (the PSK in the inner hello
+alone, Chrome 156's resumed hello matched); DoH requests are each browser's own
+to the bytes of the query (ID 0, EDNS padding to 128, Firefox's no-address ECS,
+its anonymous GET). A guessed QUIC connection is raced against TCP as Chrome's
+JobController races them; HTTP/3 asked for outright travels through a SOCKS5
+proxy that relays UDP (UDP ASSOCIATE). The profile corpus is published between
+releases as a bundle signed with Ed25519 that `curlpro.update_profiles()`
+fetches, checks and loads; `s.browser()` acts on its tab through `b.page`
+without a trace (trusted input, an isolated world, never `Runtime.enable`).
+Data: Chrome 156 (the default now), Firefox 159 and Opera 139 captured; Chrome
+157 and Edge 156 derived; 317 profiles, 48 captured. Wheels: Windows on ARM64
+added; no musl wheel (golang/go#54805). ABI 0.28.0: the bundle loader is a new
+native function. Before it, **0.18.0** — a minor, because what goes on the wire changed without anyone
 asking: a Chromium 108+ or Firefox 133+ session asks DNS for the origin's HTTPS
 record (RFC 9460) before it connects, as those browsers do, and acts on it — an
 `alpn=h3` record sends the first request to HTTP/3, and on a Chromium profile an
