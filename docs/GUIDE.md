@@ -43,7 +43,8 @@ pip install curlpro
 
 The wheel carries the native library and all 52 profiles; neither Go nor a C
 compiler is needed. Wheels exist for Linux x86-64 and ARM64 (glibc 2.28+),
-macOS 13+ on Intel and Apple Silicon, and Windows x64; Python 3.9 or newer.
+macOS 13+ on Intel and Apple Silicon, and Windows x64 and ARM64 (not musl:
+golang/go#54805); Python 3.9 or newer.
 Anything else builds from the source archive with Go and a C compiler
 (`README.md`, "Install").
 

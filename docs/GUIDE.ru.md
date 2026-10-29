@@ -44,7 +44,8 @@ pip install curlpro
 
 Колесо несёт нативную библиотеку и все 56 профилей; ни Go, ни компилятор C не
 нужны. Колёса есть для Linux x86-64 и ARM64 (glibc 2.28+), macOS 13+ на Intel
-и Apple Silicon и Windows x64; Python 3.9 и новее. Всё остальное собирается из
+и Apple Silicon и Windows x64 и ARM64 (не musl: golang/go#54805); Python 3.9
+и новее. Всё остальное собирается из
 исходного архива с Go и компилятором C (`README.md`, «Install»).
 
 Профили попадают в библиотеку четырьмя путями:

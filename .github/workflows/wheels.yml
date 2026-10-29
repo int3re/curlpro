@@ -75,21 +75,13 @@ jobs:
             lib: curlpro.dll
             plat: win_arm64
             llvm_mingw: "20261020"
-          # Alpine and other musl systems cannot load a glibc library, and pip
-          # there takes no manylinux wheel. The library is built inside
-          # golang:alpine with `docker run` — JavaScript actions do not run in
-          # an Alpine job container, the runner's node being a glibc binary —
-          # and the wheel is checked inside python:alpine.
-          - os: ubuntu-latest
-            goarch: amd64
-            lib: libcurlpro.so
-            plat: musllinux_1_2_x86_64
-            musl: true
-          - os: ubuntu-24.04-arm
-            goarch: arm64
-            lib: libcurlpro.so
-            plat: musllinux_1_2_aarch64
-            musl: true
+          # No musllinux wheel: a Go c-shared library cannot be loaded with
+          # dlopen on musl. Go reaches its TLS by the initial-exec model, and
+          # musl's loader refuses that in a library opened at run time —
+          # "initial-exec TLS resolves to dynamic definition", measured in
+          # python:3.12-alpine on 2026-10-29 with Go 1.27, which has no flag
+          # for another model (golang/go#54805, open; the fix under #13492 is
+          # not merged). Alpine builds from the source archive need the same.
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -114,22 +106,12 @@ jobs:
           "CC=aarch64-w64-mingw32-clang" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: build native library
-        if: ${{ !matrix.musl }}
         shell: bash
         env:
           CGO_ENABLED: "1"
           GOARCH: ${{ matrix.goarch }}
         run: |
           go build -buildmode=c-shared -o "python/curlpro/lib/${{ matrix.lib }}" ./lib
-          ls -la python/curlpro/lib/
-
-      - name: build native library (musl)
-        if: matrix.musl
-        shell: bash
-        run: |
-          docker run --rm -v "$PWD:/src" -w /src -e CGO_ENABLED=1 golang:1.27-alpine \
-            sh -c "apk add --no-cache gcc musl-dev && go build -buildmode=c-shared -o python/curlpro/lib/${{ matrix.lib }} ./lib"
-          sudo chown -R "$(id -u):$(id -g)" python
           ls -la python/curlpro/lib/
 
       # The profiles travel inside the package: without them the library is
@@ -163,15 +145,7 @@ jobs:
       # that must hold is local — the native library loads, the profiles are
       # inside the package, a session starts — and the oracle is asked
       # afterwards, for information only.
-      - name: check the wheel installs and works (musl)
-        if: matrix.musl
-        shell: bash
-        run: |
-          docker run --rm -v "$PWD:/src" -w /src python:3.12-alpine \
-            sh -c "pip install --root-user-action=ignore python/dist/*.whl && python scripts/check-wheel.py"
-
       - name: check the wheel installs and works
-        if: ${{ !matrix.musl }}
         shell: bash
         run: |
           python -m pip install python/dist/*.whl
@@ -185,14 +159,14 @@ jobs:
           print('profiles:', len(names))
           "
       # The same wheel on a free-threaded interpreter: py3-none installs
-      # there as it is, and importing it must leave the GIL off. Not on musl
-      # (the host is glibc) nor on Windows ARM64 (no 3.14t build there yet).
+      # there as it is, and importing it must leave the GIL off. Not on
+      # Windows ARM64: setup-python has no 3.14t build there yet.
       - uses: actions/setup-python@v5
-        if: ${{ !matrix.musl && !matrix.llvm_mingw }}
+        if: ${{ !matrix.llvm_mingw }}
         with:
           python-version: "3.14t"
       - name: the wheel on free-threaded Python
-        if: ${{ !matrix.musl && !matrix.llvm_mingw }}
+        if: ${{ !matrix.llvm_mingw }}
         shell: bash
         run: |
           python -m pip install python/dist/*.whl
@@ -205,7 +179,6 @@ jobs:
           print(sys.version)
           "
       - name: ask the oracle (informational)
-        if: ${{ !matrix.musl }}
         shell: bash
         continue-on-error: true
         run: |

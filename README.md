@@ -193,7 +193,7 @@ pip install curlpro
 ```
 
 Neither Go nor a compiler is needed: the native library and all 317 profiles are
-already inside the wheel. Wheels are built for five platforms:
+already inside the wheel. Wheels are built for six platforms:
 
 | Platform | Wheel |
 |---|---|
@@ -202,9 +202,14 @@ already inside the wheel. Wheels are built for five platforms:
 | macOS 13+, Intel | `macosx_13_0_x86_64` |
 | macOS 13+, Apple Silicon | `macosx_13_0_arm64` |
 | Windows x64 | `win_amd64` |
+| Windows on ARM64 | `win_arm64` |
 
 The macOS 13 floor is not ours to choose: that is what Go 1.27 requires, and the
-native part is built with it.
+native part is built with it. Alpine and other musl systems get no wheel: a Go
+shared library cannot be loaded at run time there — Go reaches its thread-local
+storage by a model musl's loader refuses in a library it did not load at start
+([golang/go#54805](https://github.com/golang/go/issues/54805)), and Go 1.27 has
+no switch for another one.
 
 The same files are attached to the [release page](https://github.com/int3re/curlpro/releases/latest),
 for installing without reaching the index:
