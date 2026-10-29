@@ -1121,7 +1121,9 @@ broken. Asked for outright — `http3=True`, `protocol="h3"` — HTTP/3 is not r
 - A network that drops ECH — Russia's does it to every Cloudflare site, by the
   public name `cloudflare-ech.com` — closes or resets the connection under the
   hello, or holds it unanswered. Chrome fails there; a session connects once
-  more without ECH, as 0.17 did, after at most 3 seconds, and for ten minutes
+  more without ECH, as 0.17 did, after at most 3 seconds — over QUIC too, where
+  the public name is marked only when the attempt without ECH comes up, so
+  that UDP blocked altogether is not taken for ECH dropped — and for ten minutes
   the process's connections to that public name skip ECH, HTTP/3 allowed again
   — every session's, since ECH is tried only on a direct connection and they
   all share it. `dns="off"` skips the attempt from the start.
@@ -1144,11 +1146,19 @@ log); Firefox as a GET with `?dns=`, anonymous — `accept:
 application/dns-message`, an empty `accept-encoding`, `pragma` and
 `cache-control: no-cache`, `te: trailers`, no User-Agent (MOZ_LOG).
 
-Not reproduced yet: ECH over QUIC — an origin with an ECH configuration stays
-on TCP, where Chrome would take HTTP/3 with ECH, because QUIC without it would
-send in clear the name ECH hides; resumption inside ECH — Chrome puts the PSK in
-the inner hello alone, and a connection with ECH here makes a full handshake;
-Firefox's handling of an HTTPS record, which is read by Chrome's rules.
+HTTP/3 carries ECH as TCP does: the QUIC ClientHello to an origin that
+publishes a configuration is encrypted, with BoringSSL's inner hello, and an
+HTTPS record naming h3 takes such an origin to HTTP/3 like any other (until
+0.19 it was kept on TCP). Measured against Chrome 156 on `cmd/echstand -quic`:
+the same inner hello field for field — the three TLS 1.3 suites, TLS 1.3 alone,
+the twelve extensions, the name and the inner marker uncompressed in the outer's
+order and every other one compressed, `supported_versions` included, since a
+QUIC hello requires TLS 1.3 already (BoringSSL compresses it then). A rejection
+with retry configurations is retried once, as on TCP.
+
+Not reproduced yet: resumption inside ECH — Chrome puts the PSK in the inner
+hello alone, and a connection with ECH here makes a full handshake; Firefox's
+handling of an HTTPS record, which is read by Chrome's rules.
 
 ## 13. Streaming, uploads, async
 

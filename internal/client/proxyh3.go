@@ -815,7 +815,7 @@ func (s *Session) http3Via(proxy string) (*h3.Transport, error) {
 			return s.dialH3ViaSOCKS5(ctx, pu, key, addr, cfg, qcfg)
 		}
 	}
-	tr, err := buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts, s.dns.resolver, dial)
+	tr, err := buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts, s.dns.resolver, dial, nil)
 	if err != nil {
 		return nil, err
 	}

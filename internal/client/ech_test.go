@@ -16,7 +16,6 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -423,19 +422,6 @@ func TestAHeldECHHandshakeGivesWayInTime(t *testing.T) {
 	}
 	if n := dpi.dropped.Load(); n != 1 {
 		t.Fatalf("%d hellos with ECH, want one", n)
-	}
-}
-
-// With its public name dropped, the origin is no longer kept off HTTP/3: there
-// is no hidden name left for QUIC to show.
-func TestADroppedPublicNameNoLongerPinsTCP(t *testing.T) {
-	s, _, dpi := droppedECHSession(t, false)
-	u := &url.URL{Scheme: "https", Host: "echsite.test:" + dpi.port}
-	if _, err := s.Do(&Request{Method: "GET", URL: u.String() + "/"}); err != nil {
-		t.Fatal(err)
-	}
-	if s.echPinsTCP(u) {
-		t.Fatal("an origin whose ECH the network drops is still pinned to TCP")
 	}
 }
 

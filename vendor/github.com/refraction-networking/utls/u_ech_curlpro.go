@@ -26,7 +26,11 @@ const (
 // encodeInner is the EncodedClientHelloInner the outer hello carries, in the
 // style the connection asks for.
 func (uconn *UConn) encodeInner(inner *clientHelloMsg, maxNameLength int) ([]byte, error) {
-	switch uconn.ECHInner {
+	style := uconn.ECHInner
+	if style == ECHInnerGo && uconn.config != nil {
+		style = uconn.config.ECHInner
+	}
+	switch style {
 	case ECHInnerBoringSSL:
 		return uconn.boringEncodedInner(inner, maxNameLength)
 	case ECHInnerNSS:
@@ -63,10 +67,16 @@ func (uconn *UConn) outerExtensionTypes() []uint16 {
 func (uconn *UConn) boringEncodedInner(inner *clientHelloMsg, maxNameLength int) ([]byte, error) {
 	hello := uconn.HandshakeState.Hello
 	var greaseVersion uint16
+	only13 := true
 	for _, v := range hello.SupportedVersions {
 		if isGREASEUint16(v) {
-			greaseVersion = v
-			break
+			if greaseVersion == 0 {
+				greaseVersion = v
+			}
+			continue
+		}
+		if v < VersionTLS13 {
+			only13 = false
 		}
 	}
 	b := cryptobyte.NewBuilder(nil)
@@ -102,6 +112,14 @@ func (uconn *UConn) boringEncodedInner(inner *clientHelloMsg, maxNameLength int)
 				b.AddUint16(extensionEncryptedClientHello)
 				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) { b.AddUint8(1) }) // inner
 			case extensionSupportedVersions:
+				// Compressible when the outer hello already requires TLS 1.3,
+				// as in QUIC: the two lists are then the same
+				// (ext_supported_versions_add_clienthello; measured against
+				// Chrome 156's QUIC hello, 2026-10-29).
+				if only13 {
+					compressed = append(compressed, id)
+					continue
+				}
 				b.AddUint16(extensionSupportedVersions)
 				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 					b.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) {

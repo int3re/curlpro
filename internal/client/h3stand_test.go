@@ -54,6 +54,8 @@ type h3Stand struct {
 	// priorities are the PRIORITY_UPDATE frames the client sent on its
 	// control stream, by the stream they name.
 	priorities map[uint64]string
+	// ech is whether each connection's ECH was accepted, in order.
+	ech []bool
 }
 
 // h3Request is one request as it arrived, with the field order preserved.
@@ -79,6 +81,13 @@ func (r h3Request) names() []string {
 // startH3Stand raises the stand on the loopback and returns it.
 func startH3Stand(t *testing.T) *h3Stand {
 	t.Helper()
+	return startH3StandWith(t, nil)
+}
+
+// startH3StandWith raises the stand with its TLS configuration changed by
+// tweak first: ECH keys, a hook that sees the hello.
+func startH3StandWith(t *testing.T, tweak func(*utls.Config)) *h3Stand {
+	t.Helper()
 	cert, err := utls.LoadX509KeyPair("../../capture/certs/tls.crt", "../../capture/certs/tls.key")
 	if err != nil {
 		t.Skipf("no stand certificate (run scripts/gen-certs.sh): %v", err)
@@ -88,10 +97,14 @@ func startH3Stand(t *testing.T) *h3Stand {
 	if err != nil {
 		t.Fatalf("udp: %v", err)
 	}
-	ln, err := quic.Listen(udp, &utls.Config{
+	tlsCfg := &utls.Config{
 		Certificates: []utls.Certificate{cert},
 		NextProtos:   []string{"h3"},
-	}, &quic.Config{MaxIdleTimeout: 30 * time.Second})
+	}
+	if tweak != nil {
+		tweak(tlsCfg)
+	}
+	ln, err := quic.Listen(udp, tlsCfg, &quic.Config{MaxIdleTimeout: 30 * time.Second})
 	if err != nil {
 		udp.Close()
 		t.Fatalf("quic listen: %v", err)
@@ -155,6 +168,9 @@ func (s *h3Stand) last(t *testing.T) h3Request {
 }
 
 func (s *h3Stand) serveConn(conn *quic.Conn) {
+	s.mu.Lock()
+	s.ech = append(s.ech, conn.ConnectionState().TLS.ECHAccepted)
+	s.mu.Unlock()
 	// The decoder is per connection: the dynamic table belongs to the
 	// connection, and the encoder stream fills it.
 	dec := cqpack.NewDecoder(0)

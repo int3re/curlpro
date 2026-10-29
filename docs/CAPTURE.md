@@ -563,3 +563,15 @@ is in `MOZ_LOG=nsHttp:5` (`MOZ_LOG_FILE` beside it):
 
     python scripts/ff-echstand.py ff-ech.json 40 [-max-name 64]
 
+QUIC: `-quic` takes QUIC on the same port with the same ECH key, offers `h3` in
+the record, records the hello each handshake was answered with (the inner one,
+expanded, when ECH was accepted) and closes the connection, so that the
+browser falls back to TCP and the run ends. Chrome's QUIC takes a certificate of
+no known root only for a host in `--origin-to-force-quic-on`
+(`ProofVerifierChromium`), which the stand passes, and only when the name
+matches — `-own-cert` serves a certificate made for the stand's names. Chrome
+156.0.8078.73 there, 2026-10-29: ECH accepted on every QUIC connection, the inner
+hello BoringSSL's with `supported_versions` compressed:
+
+    go run ./cmd/echstand -quic -own-cert -browser .../new_chrome.exe -json ech-quic.json
+

@@ -147,19 +147,17 @@ def test_forced_protocol_beats_alt_svc():
 
 
 @online
-def test_an_ech_origin_stays_on_tcp():
+def test_an_ech_origin_takes_http3_with_ech():
     """cloudflare-quic.com publishes alpn=h3 and an ECH configuration in its
-    HTTPS record. A Chromium session takes ECH, which over QUIC is not
-    reproduced yet, so neither the record nor Alt-Svc moves it to HTTP/3 — QUIC
-    without ECH would show the name ECH hides.
-
-    Where the network drops ECH (Russia's does, to every Cloudflare site) the
-    session connects again without it, and with nothing left to hide Alt-Svc
-    may take the next request to HTTP/3: Python cannot tell the two networks
-    apart, so the second request may be either — but it must arrive."""
+    HTTPS record. Since 0.19 the record's QUIC connection carries ECH, as
+    Chrome's does, raced against TCP; where the network drops ECH (Russia's
+    does, to every Cloudflare site) both are made again without it. Python
+    cannot tell the networks apart, so which protocol carries a request may
+    differ — but every request must arrive, and HTTP/3 asked for outright
+    arrives over HTTP/3."""
     with curlpro.Session("chrome-151-windows") as s:
-        assert s.get(LIVE).proto == "HTTP/2.0", "the HTTPS record's h3 must not take an ECH origin to QUIC"
-        assert s.get(LIVE).proto in ("HTTP/2.0", "HTTP/3.0")
+        protos = [s.get(LIVE).proto for _ in range(3)]
+        assert set(protos) <= {"HTTP/2.0", "HTTP/3.0"}, protos
         assert s.get(LIVE, protocol="h3").proto == "HTTP/3.0", "an explicit protocol still wins"
 
 

@@ -1338,7 +1338,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// the target can carry QUIC: directly, or through a MASQUE proxy. Behind
 	// any other proxy the advertisement is left alone — guessing wrong there
 	// would cost a request to tell us what the scheme already says.
-	viaAltSvc := !plain && forced == "" && !s.opts.HTTP3 && s.altSvcH3(u) && !s.echPinsTCP(u) &&
+	viaAltSvc := !plain && forced == "" && !s.opts.HTTP3 && s.altSvcH3(u) &&
 		masqueCarriesH3(s.proxyForHost(r, u.Scheme, u.Host)) == nil
 	// An HTTPS record naming h3 sends the browser to HTTP/3 on the first
 	// request, Alt-Svc or not: Chrome's DNS ALPN job, Firefox's
@@ -1348,7 +1348,8 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if !plain && forced == "" && !s.opts.HTTP3 && !viaAltSvc && s.profile.HTTP3.Enabled() && !s.h3Broken(u) {
 		if px := s.proxyForHost(r, u.Scheme, u.Host); px == "" {
 			rec := s.httpsRecord(req.Context(), u, px, dnsRecordWait)
-			viaDNS = rec.ALPN("h3") && !s.echUsable(rec.ECH())
+			// An ECH configuration in the record goes with it into QUIC (h3ECH).
+			viaDNS = rec.ALPN("h3")
 		}
 	}
 	tcpSpec := func() dialSpec {

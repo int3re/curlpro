@@ -19,11 +19,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdh"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/hpke"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -33,6 +36,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -43,6 +47,8 @@ import (
 	"sync"
 	"time"
 
+	quic "github.com/refraction-networking/uquic"
+	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/dns/dnsmessage"
 )
 
@@ -52,6 +58,8 @@ var (
 	name    = flag.String("name", "ech-stand.test", "the name behind ECH (the inner SNI)")
 	public  = flag.String("public", "public.ech-stand.test", "the ECH configuration's public_name (the outer SNI)")
 	maxName = flag.Int("max-name", 0, "the configuration's maximum_name_length")
+	withH3  = flag.Bool("quic", false, "also take QUIC on the port, with the same ECH key, and offer h3 in the record")
+	ownCert = flag.Bool("own-cert", false, "serve a certificate made now for the stand's names and 127.0.0.1 (Chrome's QUIC wants the name to match)")
 	certs   = flag.String("certs", "capture/certs", "directory holding tls.crt and tls.key")
 	auto    = flag.Bool("auto", false, "launch the installed Chrome at the stand")
 	browser = flag.String("browser", "", "the Chrome to launch (found by -auto when empty)")
@@ -73,19 +81,31 @@ type conn struct {
 }
 
 type result struct {
-	Config      string   `json:"ech_config_list"`
-	MaxNameLen  int      `json:"max_name_len"`
-	DNS         []string `json:"dns"`
-	DoH         []dohReq `json:"doh"` // every DoH request as it arrived
-	Connections []conn   `json:"connections"`
-	Accepted    []bool   `json:"ech_accepted"`
-	Requests    []string `json:"requests"`
+	Config      string      `json:"ech_config_list"`
+	MaxNameLen  int         `json:"max_name_len"`
+	DNS         []string    `json:"dns"`
+	DoH         []dohReq    `json:"doh"` // every DoH request as it arrived
+	QUIC        []quicHello `json:"quic,omitempty"`
+	Connections []conn      `json:"connections"`
+	Accepted    []bool      `json:"ech_accepted"`
+	Requests    []string    `json:"requests"`
 }
 
 var (
 	mu  sync.Mutex
 	res result
 )
+
+// quicHello is a QUIC handshake the stand took: the hello the server answered
+// — the inner one when ECH was accepted, with the compressed extensions in
+// place — and whether it was.
+type quicHello struct {
+	Accepted   bool     `json:"ech_accepted"`
+	ServerName string   `json:"server_name"`
+	Ciphers    []uint16 `json:"ciphers"`
+	Versions   []uint16 `json:"versions"`
+	Extensions []uint16 `json:"extensions"`
+}
 
 // dohReq is a DoH request: the browser's method, its query bytes (the ID, the
 // flags and the EDNS options are part of what it sends) and its header names,
@@ -101,6 +121,9 @@ func main() {
 	flag.Parse()
 	log.SetFlags(0)
 	cert, err := tls.LoadX509KeyPair(filepath.Join(*certs, "tls.crt"), filepath.Join(*certs, "tls.key"))
+	if *ownCert {
+		cert, err = standCert(*name, *public)
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -140,6 +163,52 @@ func main() {
 		io.WriteString(w, "<!doctype html><title>ech</title>ok")
 	})}
 	go srv.Serve(tlsLn)
+
+	// QUIC on the same port: the handshake is all that is wanted. Each
+	// connection is closed once it is up, so that a browser that went there
+	// first (the record offers h3) falls back to TCP and the run ends as usual.
+	if *withH3 {
+		qcfg := &utls.Config{
+			Certificates:             []utls.Certificate{{Certificate: cert.Certificate, PrivateKey: cert.PrivateKey}},
+			NextProtos:               []string{"h3"},
+			EncryptedClientHelloKeys: []utls.EncryptedClientHelloKey{{Config: cfg, PrivateKey: key.Bytes(), SendAsRetry: true}},
+		}
+		var last *utls.ClientHelloInfo
+		var lmu sync.Mutex
+		qcfg.GetConfigForClient = func(h *utls.ClientHelloInfo) (*utls.Config, error) {
+			lmu.Lock()
+			last = h
+			lmu.Unlock()
+			return nil, nil
+		}
+		udp, err := net.ListenPacket("udp", *listen)
+		if err != nil {
+			log.Fatal(err)
+		}
+		ql, err := quic.Listen(udp, qcfg, &quic.Config{})
+		if err != nil {
+			log.Fatal(err)
+		}
+		go func() {
+			for {
+				c, err := ql.Accept(context.Background())
+				if err != nil {
+					return
+				}
+				lmu.Lock()
+				h := last
+				lmu.Unlock()
+				q := quicHello{Accepted: c.ConnectionState().TLS.ECHAccepted}
+				if h != nil {
+					q.ServerName, q.Ciphers, q.Versions, q.Extensions = h.ServerName, h.CipherSuites, h.SupportedVersions, h.Extensions
+				}
+				mu.Lock()
+				res.QUIC = append(res.QUIC, q)
+				mu.Unlock()
+				_ = c.CloseWithError(0x100, "") // H3_NO_ERROR: nothing is served here
+			}
+		}()
+	}
 
 	// The DoH server.
 	_, port, _ := net.SplitHostPort(*listen)
@@ -195,6 +264,9 @@ func main() {
 		log.Printf("connection %d: outer SNI %q, inner SNI %q, payload %d, padding %d, compressed %v %s",
 			i, c.OuterSNI, c.InnerSNI, c.PayloadLen, c.Padding, c.Compressed, c.Error)
 	}
+	for i, q := range res.QUIC {
+		log.Printf("quic %d: ECH accepted %v, SNI %q, extensions %v", i, q.Accepted, q.ServerName, q.Extensions)
+	}
 	log.Printf("requests %v, ECH accepted %v", res.Requests, res.Accepted)
 	if *out != "" {
 		b, _ := json.MarshalIndent(&res, "", " ")
@@ -203,6 +275,25 @@ func main() {
 		}
 		log.Printf("written to %s", *out)
 	}
+}
+
+// standCert is a self-signed certificate for the stand's names and 127.0.0.1.
+// Chrome takes the stand's own one on TCP with the SPKI flag whatever names it
+// carries; its QUIC stack does not forgive a name that does not match.
+func standCert(names ...string) (tls.Certificate, error) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	tpl := &x509.Certificate{SerialNumber: big.NewInt(time.Now().UnixNano()),
+		Subject: pkix.Name{CommonName: names[0]}, DNSNames: names, IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1)},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour),
+		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &priv.PublicKey, priv)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: priv}, nil
 }
 
 func echConfig(pub []byte, id uint8, publicName string, maxName uint8) []byte {
@@ -228,6 +319,10 @@ func echConfig(pub []byte, id uint8, publicName string, maxName uint8) []byte {
 // answer is the DoH reply: the stand's names at 127.0.0.1, its HTTPS record
 // with the ECH configuration, nothing for the rest.
 func answer(q []byte, port string, ech []byte) ([]byte, string) {
+	alpn := []byte("\x02h2\x08http/1.1")
+	if *withH3 {
+		alpn = []byte("\x02h3\x02h2\x08http/1.1")
+	}
 	var p dnsmessage.Parser
 	h, err := p.Start(q)
 	if err != nil {
@@ -260,7 +355,7 @@ func answer(q []byte, port string, ech []byte) ([]byte, string) {
 		b.HTTPSResource(rh, dnsmessage.HTTPSResource{SVCBResource: dnsmessage.SVCBResource{
 			Priority: 1, Target: dnsmessage.MustNewName(target),
 			Params: []dnsmessage.SVCParam{
-				{Key: dnsmessage.SVCParamALPN, Value: []byte("\x02h2\x08http/1.1")},
+				{Key: dnsmessage.SVCParamALPN, Value: alpn},
 				{Key: dnsmessage.SVCParamECH, Value: ech},
 			}}})
 	}
@@ -486,6 +581,13 @@ func launchChrome(ctx context.Context, cert tls.Certificate, url string) {
 		"--no-default-browser-check", "--ignore-certificate-errors-spki-list=" + base64.StdEncoding.EncodeToString(spki[:])}
 	if *netlog != "" {
 		args = append(args, "--log-net-log="+*netlog, "--net-log-capture-mode=Everything")
+	}
+	// Chrome's QUIC takes a certificate of no known root only for a host named
+	// here (ProofVerifierChromium, hostnames_to_allow_unknown_roots); the ECH
+	// configuration still comes from the HTTPS record.
+	if *withH3 {
+		host := strings.TrimPrefix(strings.SplitN(url, "/", 4)[2], "")
+		args = append(args, "--enable-quic", "--origin-to-force-quic-on="+host)
 	}
 	cmd := exec.CommandContext(ctx, path, append(args, url)...)
 	log.Printf("browser: %s", path)

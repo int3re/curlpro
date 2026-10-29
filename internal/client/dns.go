@@ -310,20 +310,17 @@ func echDropped(err error, dialCtx context.Context) bool {
 		errors.Is(err, context.DeadlineExceeded) || errors.As(err, &op)
 }
 
-// echPinsTCP reports an origin known to publish ECH to an ECH-capable
-// session. Chrome reaches it over QUIC with ECH as well; the QUIC stack here
-// has no ECH, and QUIC without it would send in clear the very name ECH
-// hides — so such an origin is kept on TCP, Alt-Svc or HTTPS record h3 alike.
-func (s *Session) echPinsTCP(u *url.URL) bool {
-	if !s.echCapable || s.dns.rr == nil {
-		return false
+// h3ECH is the ECH configuration a direct QUIC connection to addr takes: the
+// origin's, from its HTTPS record, when this session would encrypt to it.
+func (s *Session) h3ECH(ctx context.Context, addr string) ([]byte, utls.ECHInnerStyle) {
+	if !s.echCapable {
+		return nil, 0
 	}
-	port := 443
-	if p := u.Port(); p != "" {
-		port, _ = strconv.Atoi(p)
+	list := s.httpsRecord(ctx, &url.URL{Scheme: "https", Host: addr}, "", dnsRecordWait).ECH()
+	if !s.echUsable(list) {
+		return nil, 0
 	}
-	res, ok := s.dns.rr.Cached(strings.ToLower(u.Hostname()), port)
-	return ok && s.echUsable(res.ECH())
+	return list, s.echInner
 }
 
 // echInnerStyle is how a family's TLS stack builds the inner hello: BoringSSL

@@ -872,6 +872,11 @@ type Config struct {
 	// encoding described in the final Encrypted Client Hello RFC changes.
 	EncryptedClientHelloConfigList []byte
 
+	// ECHInner chooses how the inner hello is built when the UConn's own
+	// ECHInner says nothing (u_ech_curlpro.go). [curlPro] uquic builds its
+	// UConn from a clone of the config, and this is how the style reaches QUIC.
+	ECHInner ECHInnerStyle
+
 	// EncryptedClientHelloRejectionVerify, if not nil, is called when ECH is
 	// rejected by the remote server, in order to verify the ECH provider
 	// certificate in the outer ClientHello. If it returns a non-nil error, the
@@ -1014,6 +1019,7 @@ func (c *Config) Clone() *Config {
 		Renegotiation:                       c.Renegotiation,
 		KeyLogWriter:                        c.KeyLogWriter,
 		EncryptedClientHelloConfigList:      c.EncryptedClientHelloConfigList,
+		ECHInner:                            c.ECHInner, // [curlPro]
 		EncryptedClientHelloRejectionVerify: c.EncryptedClientHelloRejectionVerify,
 		EncryptedClientHelloKeys:            c.EncryptedClientHelloKeys,
 		sessionTicketKeys:                   c.sessionTicketKeys,

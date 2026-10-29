@@ -14,7 +14,8 @@ sent: GREASE and the TLS 1.3 suites; the uncompressed extensions in the outer's
 order — the real server_name, the inner ECH marker, supported_versions with
 GREASE and TLS 1.3 alone; every other extension the outer carries for TLS 1.3
 compressed into ech_outer_extensions in the outer's order, the GREASE ones
-around them; the TLS 1.2-only ones, padding and the PSK left out; the name padded
+around them — supported_versions as well when the outer hello requires TLS 1.3
+already, as a QUIC one does (Chrome 156 over QUIC, 2026-10-29); the TLS 1.2-only ones, padding and the PSK left out; the name padded
 to maximum_name_length and the whole to a multiple of 32. Measured against
 Chrome 155.0.8059.85 with cmd/echstand, 2026-10-26.
 
@@ -26,6 +27,10 @@ ech_outer_extensions naming every other extension the outer carries for TLS 1.3
 in the outer's order; the TLS 1.2-only ones, padding and the PSK left out; the
 padding as BoringSSL's. Measured against Firefox 159.0 with cmd/echstand and
 scripts/ff-echstand.py, 2026-10-29, with maximum_name_length 0 and 64.
+
+Edits (e) and (f) put the style into Config as well (and its Clone): uquic
+builds its UConn from a clone of the config it is given, so that is the one
+way the style reaches a QUIC handshake.
 
 Exact-anchor edits, idempotent, line endings preserved, loud when an anchor
 moved; the new file is written whole. Re-run after `go mod vendor`. Edit (d) lets the decoder that rebuilds the inner
@@ -70,6 +75,22 @@ EDITS = [
 		}
 	}
 	if len(innerVersions) != 1 || innerVersions[0] != VersionTLS13 {'''),
+('e', ROOT + 'common.go',
+'''	EncryptedClientHelloConfigList []byte
+''',
+'''	EncryptedClientHelloConfigList []byte
+
+	// ECHInner chooses how the inner hello is built when the UConn's own
+	// ECHInner says nothing (u_ech_curlpro.go). [curlPro] uquic builds its
+	// UConn from a clone of the config, and this is how the style reaches QUIC.
+	ECHInner ECHInnerStyle
+'''),
+('f', ROOT + 'common.go',
+'''		EncryptedClientHelloConfigList:      c.EncryptedClientHelloConfigList,
+''',
+'''		EncryptedClientHelloConfigList:      c.EncryptedClientHelloConfigList,
+		ECHInner:                            c.ECHInner, // [curlPro]
+'''),
 ]
 
 NEW_FILE = '''// [curlPro] Not part of uTLS: written by scripts/patch-utls.py.
@@ -100,7 +121,11 @@ const (
 // encodeInner is the EncodedClientHelloInner the outer hello carries, in the
 // style the connection asks for.
 func (uconn *UConn) encodeInner(inner *clientHelloMsg, maxNameLength int) ([]byte, error) {
-	switch uconn.ECHInner {
+	style := uconn.ECHInner
+	if style == ECHInnerGo && uconn.config != nil {
+		style = uconn.config.ECHInner
+	}
+	switch style {
 	case ECHInnerBoringSSL:
 		return uconn.boringEncodedInner(inner, maxNameLength)
 	case ECHInnerNSS:
@@ -137,10 +162,16 @@ func (uconn *UConn) outerExtensionTypes() []uint16 {
 func (uconn *UConn) boringEncodedInner(inner *clientHelloMsg, maxNameLength int) ([]byte, error) {
 	hello := uconn.HandshakeState.Hello
 	var greaseVersion uint16
+	only13 := true
 	for _, v := range hello.SupportedVersions {
 		if isGREASEUint16(v) {
-			greaseVersion = v
-			break
+			if greaseVersion == 0 {
+				greaseVersion = v
+			}
+			continue
+		}
+		if v < VersionTLS13 {
+			only13 = false
 		}
 	}
 	b := cryptobyte.NewBuilder(nil)
@@ -176,6 +207,14 @@ func (uconn *UConn) boringEncodedInner(inner *clientHelloMsg, maxNameLength int)
 				b.AddUint16(extensionEncryptedClientHello)
 				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) { b.AddUint8(1) }) // inner
 			case extensionSupportedVersions:
+				// Compressible when the outer hello already requires TLS 1.3,
+				// as in QUIC: the two lists are then the same
+				// (ext_supported_versions_add_clienthello; measured against
+				// Chrome 156's QUIC hello, 2026-10-29).
+				if only13 {
+					compressed = append(compressed, id)
+					continue
+				}
 				b.AddUint16(extensionSupportedVersions)
 				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 					b.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) {

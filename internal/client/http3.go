@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -59,7 +60,8 @@ func (u *udpTransports) closeAll() {
 
 func (s *Session) http3() (*h3.Transport, error) {
 	s.h3.once.Do(func() {
-		s.h3.tr, s.h3.err = buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts, s.dns.resolver, nil)
+		s.h3.tr, s.h3.err = buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts, s.dns.resolver, nil,
+			s.h3ECH)
 	})
 	if s.h3.tr == nil && s.h3.err == nil {
 		// once already ran in closeH3: the transport was never created and never will be.
@@ -73,14 +75,23 @@ func (s *Session) http3() (*h3.Transport, error) {
 // can be passed in (proxyh3.go, where the "socket" is a tunnel).
 type h3Dial func(ctx context.Context, addr string, cfg *utls.Config, qcfg *quic.Config) (*quic.Conn, error)
 
+// h3ECHFor names the ECH configuration list a QUIC connection to addr takes,
+// and how the inner hello is built; nil for none.
+type h3ECHFor func(ctx context.Context, addr string) ([]byte, utls.ECHInnerStyle)
+
 // buildH3Transport assembles the transport from the profile.
 //
 // dial nil is the direct path, a UDP socket of our own. A MASQUE proxy passes
 // its own and everything else about the transport stays the profile's — which
 // is the point: the connection to the target is the browser's whether it
 // travels over a socket or inside somebody else's QUIC connection.
+//
+// echFor, on the direct path, gives a connection the origin's ECH
+// configuration: Chrome and Firefox encrypt the QUIC ClientHello as they do the
+// TCP one. A rejection with retry configurations is retried once with them, or
+// without ECH when there are none, as on TCP.
 func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
-	roots *x509.CertPool, certs []utls.Certificate, resolver *net.Resolver, dial h3Dial) (*h3.Transport, error) {
+	roots *x509.CertPool, certs []utls.Certificate, resolver *net.Resolver, dial h3Dial, echFor h3ECHFor) (*h3.Transport, error) {
 	if !p.HTTP3.Enabled() {
 		return nil, capabilityErr("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
@@ -159,7 +170,57 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 				Transport: &quic.Transport{Conn: udpConn},
 				QUICSpec:  spec,
 			}
+			if echFor != nil {
+				if list, style := echFor(ctx, addr); list != nil {
+					cfg = cfg.Clone()
+					cfg.EncryptedClientHelloConfigList = list
+					cfg.ECHInner = style
+				}
+			}
 			conn, err := ut.DialEarly(ctx, ua, cfg, qcfg)
+			var rej *utls.ECHRejectionError
+			if err != nil && cfg.EncryptedClientHelloConfigList != nil && errors.As(err, &rej) {
+				// As on TCP (tls_stream_attempt.cc): once more, with the retry
+				// configurations or without ECH. A fresh spec: the first one
+				// was consumed by the attempt.
+				if spec, err = quicSpec(p); err != nil {
+					_ = ut.Close()
+					udpConn.Close()
+					return nil, err
+				}
+				ut.QUICSpec = spec
+				cfg = cfg.Clone()
+				cfg.EncryptedClientHelloConfigList = rej.RetryConfigList
+				conn, err = ut.DialEarly(ctx, ua, cfg, qcfg)
+			}
+			var hsTimeout *quic.HandshakeTimeoutError
+			var idle *quic.IdleTimeoutError
+			if err != nil && cfg.EncryptedClientHelloConfigList != nil && ctx.Err() == nil &&
+				(errors.As(err, &hsTimeout) || errors.As(err, &idle)) {
+				// A handshake with ECH that heard nothing back: the network may
+				// drop ECH (Russia's does, to Cloudflare's public name) or UDP
+				// altogether. Once more without ECH tells the two apart: only
+				// when that one comes up is the public name marked (dns.go),
+				// as on TCP.
+				// From a socket of its own: a middlebox that dropped the
+				// hello may hold that port pair a while longer (seen on the
+				// stand's network, 2026-10-29).
+				list := cfg.EncryptedClientHelloConfigList
+				_ = ut.Close()
+				udpConn.Close()
+				if spec, err = quicSpec(p); err != nil {
+					return nil, err
+				}
+				if udpConn, err = net.ListenUDP(network, nil); err != nil {
+					return nil, err
+				}
+				ut = &quic.UTransport{Transport: &quic.Transport{Conn: udpConn}, QUICSpec: spec}
+				cfg = cfg.Clone()
+				cfg.EncryptedClientHelloConfigList = nil
+				if conn, err = ut.DialEarly(ctx, ua, cfg, qcfg); err == nil {
+					markECHBroken(list)
+				}
+			}
 			if err != nil {
 				_ = ut.Close()
 				udpConn.Close()
