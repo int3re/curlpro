@@ -42,6 +42,8 @@ the Pixel 7 the Android capture was made on (STAGE16), on Wi-Fi.
 Run: ``python scripts/gen-devices.py`` (after editing the seed). The test
 ``python/tests/test_devices.py`` fails if a profile drifts from the seed.
 """
+from __future__ import annotations
+
 import io
 import json
 import math
