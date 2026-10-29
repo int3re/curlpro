@@ -1360,6 +1360,26 @@ The owner's word after the list of what could come next: all of it.
 - **Not yet:** resumption inside ECH for Firefox (NSS's stand-in outer PSK),
   Firefox's own HTTPS-record rules.
 
+## Stage 45 — every client hint, laid out as Blink lays it ✅ done 2026-10-29
+
+The owner's browser showed a fingerprinting page the hints a search engine
+asks for, and the library answered only the User-Agent ones.
+
+- **All 21 hints** a desktop Chromium answers: the machine (`device-memory`,
+  `dpr`, the viewport), the network (`rtt`, `downlink`, `ect`, with
+  Chromium's per-site noise) and the preferences (`sec-ch-prefers-*`); in a
+  navigation in the browser process's sequence.
+- **Blink's header map** (`internal/client/blinkmap.go`): rapidhash over the
+  case-folded name, WTF's table; a page's request on Chromium 129+ is laid
+  out by it, the caller's headers included. 88 Chrome 155/156 requests and
+  161 stored fetch orders agree ([STAGE45](docs/STAGE45-RESULTS.md)).
+- **Subresources** carry the asked-for hints.
+- **The machine per identity:** `machines` in `scripts/identities.json`;
+  Windows defaults to the capture machine.
+- `cmd/hcapture -accept-ch/-critical-ch/-hintspage`.
+- **Not yet:** cross-origin delegation of hints, frames, macOS/Linux/Android
+  viewports.
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

@@ -774,6 +774,16 @@ type Session struct {
 	// mutex as the pool: filled from responses, read while building headers.
 	acceptCH map[string]map[string]bool
 
+	// salts are the random numbers of the network hints' noise, the
+	// browser's and the renderer's (hintSalt), drawn on first use.
+	saltOnce sync.Once
+	salts    [2]uint32
+
+	// blinkMap says the profile is a Chromium whose pages' requests lay
+	// their headers out through Blink's rapidhash map (pageOrder): 129 and
+	// later. Set once in New.
+	blinkMap bool
+
 	// cookies is our own cookie record for export: the jar yields only the
 	// name-value pair for an address, and that is not enough to save a session.
 	cookies map[string]Cookie
@@ -921,6 +931,7 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 		device:     dev,
 		connPolicy: profile.ConnPolicyFor(p.Family()),
 		offersH2:   offersH2(helloSpec),
+		blinkMap:   blinkMapFor(p),
 	}
 	s.buildTemplates()
 	if opts.Resume {

@@ -953,6 +953,44 @@ stand. The macOS Safari profiles have none either: the desktop string says
 `10_15_7` on every Mac and Safari sends no hints, so in HTTP one Mac is every
 other.
 
+**The machine, the network and the preferences.** A site may ask for more
+than the User-Agent hints, and a search engine does: Chrome answers
+`Accept-CH` for `device-memory`/`sec-ch-device-memory` (the RAM, rounded to a
+power of two, 2–32 GB on a desktop), `dpr`/`sec-ch-dpr`,
+`viewport-width`/`sec-ch-viewport-width`/`sec-ch-viewport-height`, `rtt`,
+`downlink` and `ect` (the network estimate), and
+`sec-ch-prefers-color-scheme`, `-reduced-motion` and `-reduced-transparency`.
+Since 0.20 a session answers all of them, measured on Chrome 155 and 156
+(`docs/STAGE45-RESULTS.md`). In a navigation the browser process writes them
+in one fixed sequence — the machine's and the network's before `sec-ch-ua`,
+the preferences after the last User-Agent hint. `rtt` and `downlink` carry
+Chromium's noise: the estimate times one of 21 multipliers from 0.90 to 1.10,
+chosen per site by a salt drawn once per session (one for navigations, one for
+a page's requests, as in the browser), then rounded to 50 ms and 50 kbps. The
+values belong to the device: on a Windows desktop profile the default is the
+capture machine — 16 GB, DPR 1, a maximized window's viewport of 1920×969, the
+dark theme, rtt 100 ms and downlink 1.6 Mbps before the noise — and every
+pooled identity names a machine of its own (`device_memory`, `dpr`,
+`viewport`, `color_scheme` in `devices=`; `reduced_motion`,
+`reduced_transparency`, `rtt`, `downlink`, `ect` too). macOS and Linux
+identities carry no viewport, and the viewport hints are not sent there, as
+Chromium does when it does not know the size.
+
+**A page's request, header for header.** What a page sends — fetch, XHR, an
+image, a script, a stylesheet — Blink keeps in one hash map: the page's own
+headers, the hints, the User-Agent. The network stack takes them in bucket
+order, so the place of every one of them depends on the whole set: a hint the
+site asked for, or a header of yours, moves its neighbours. Since 0.20 the
+library computes that map for Chromium 129 and later — rapidhash over the
+case-folded name, as Blink hashes it since 129, eight buckets doubling at half
+load, triangular probing — and lays out every such request with it, your
+headers included: `X-Api-Key` goes where Chrome puts it, between the hints,
+rather than before the service tail. All 88 requests of the measurement, with
+three different hint sets and headers of the page's own, came out in Chrome's
+order; so do the stored fetch orders of all 161 Chromium profiles from 129 on.
+An order of your own (`header_order=`) still wins. Subresources now carry the
+hints the site asked for too; a frame, which the browser navigates, does not.
+
 **What a pool holds.** `capabilities(name)["device_kind"]` and
 `fingerprint().device_kind` say what the devices are: `"phone"` (a model and
 its Android), `"desktop"` (a Windows or macOS release, a CPU and a Chrome

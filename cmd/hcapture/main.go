@@ -70,7 +70,13 @@ func main() {
 	flag.BoolVar(&chipsMode, "chips", false, "serve the partitioned-cookie page: a cross-site frame's cookies, and where they come back")
 	flag.BoolVar(&h1Only, "h1", false, "offer only http/1.1 in ALPN and record HTTP/1.1 requests with their case and order")
 	flag.BoolVar(&closeAfter, "close", false, "close every connection after its first response, so later requests resume TLS on new ones")
+	flag.StringVar(&acceptCH, "accept-ch", acceptCH, "the hints the plain page asks for in Accept-CH")
+	flag.StringVar(&criticalCH, "critical-ch", "", "the hints named in Critical-CH; empty means those of -accept-ch")
+	flag.BoolVar(&hintsPage, "hintspage", false, "serve the hints page: fetch and XHR with and without the page's own headers, an image, a script and a stylesheet, then two navigations")
 	flag.Parse()
+	if criticalCH == "" {
+		criticalCH = acceptCH
+	}
 
 	certFile = *certs + "/tls.crt"
 	keyFile = *certs + "/tls.key"
@@ -219,6 +225,52 @@ const log = m => { document.getElementById('out').textContent += m + "\n"; };
 </script>`
 
 const second = `<!doctype html><meta charset=utf-8><title>second</title><body>ok`
+
+// hintsPage serves hintsHTML: what a page sends once the site asked for
+// hints — fetch and XHR with and without headers of the page's own (Blink
+// keeps those in one hash map with the hints, so they move each other), the
+// page's own Accept, an image, a script and a stylesheet — and then the
+// steady-state navigation (/second), which does the same once more.
+var hintsPage bool
+
+const hintsScript = `<script>
+const log = m => { document.getElementById('out').textContent += m + String.fromCharCode(10); };
+const load =(tag, attrs) => new Promise(r => {
+  const e = document.createElement(tag); Object.assign(e, attrs);
+  e.onload = e.onerror = r; document.body.appendChild(e);
+});
+(async () => {
+  try {
+    const q = location.pathname === '/' ? 'a' : 'b';
+    await fetch('/f-get-' + q);
+    await fetch('/f-key-' + q, {headers: {'X-Api-Key': 'v1'}});
+    await fetch('/f-accept-' + q, {headers: {'Accept': 'application/json, text/plain;q=0.9'}});
+    await fetch('/f-post-' + q, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{"a":1}'});
+    await fetch('/f-post-key-' + q, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Api-Key': 'v1'}, body: '{"a":1}'});
+    await new Promise(r => {
+      const x = new XMLHttpRequest();
+      x.open('GET', '/x-get-' + q);
+      x.onloadend = r;
+      x.send();
+    });
+    await new Promise(r => {
+      const x = new XMLHttpRequest();
+      x.open('POST', '/x-post-' + q);
+      x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+      x.onloadend = r;
+      x.send('a=1');
+    });
+    await load('img', {src: '/h/img.png?' + q});
+    await load('script', {src: '/h/s.js?' + q});
+    await load('link', {rel: 'stylesheet', href: '/h/s.css?' + q});
+    log('done ' + q);
+    if (q === 'a') setTimeout(() => { location.href = '/second'; }, 300);
+  } catch (e) { log('error ' + e); }
+})();
+</script>`
+
+const hintsHTML = `<!doctype html><meta charset=utf-8><title>hints</title><body><pre id=out></pre>` + hintsScript
+const hintsSecond = `<!doctype html><meta charset=utf-8><title>second</title><body><pre id=out></pre>` + hintsScript
 
 // The origins run: what a browser sends when a page on one origin talks to
 // its own origin, to a sibling of the same site and to another site — and
@@ -514,9 +566,21 @@ func route(path, host string) reply {
 	}
 	switch path {
 	case "/":
+		if hintsPage {
+			return reply{200, hintsHTML, html, "", []string{"hc=1; path=/"}}
+		}
 		return reply{200, page, html, "", []string{"hc=1; path=/"}}
 	case "/second":
+		if hintsPage {
+			return reply{200, hintsSecond, html, "", nil}
+		}
 		return reply{200, second, html, "", nil}
+	case "/h/img.png":
+		return reply{200, png1x1, "image/png", "", nil}
+	case "/h/s.js":
+		return reply{200, "void 0;", "text/javascript", "", nil}
+	case "/h/s.css":
+		return reply{200, "b{}", "text/css", "", nil}
 	default:
 		return reply{200, `{"ok":true}`, "application/json", "", nil}
 	}
@@ -539,9 +603,13 @@ var listenPort = "8443"
 // HTTP/2
 // ---------------------------------------------------------------------------
 
-// acceptCH are the high-entropy hints the stand asks for.
-// Critical-CH makes the browser repeat the request at once instead of the next one.
-const acceptCH = "sec-ch-ua-arch, sec-ch-ua-bitness, sec-ch-ua-full-version-list, sec-ch-ua-model, sec-ch-ua-platform-version, sec-ch-ua-wow64, sec-ch-ua-form-factors, sec-ch-ua-full-version"
+// acceptCH are the hints the stand asks for, the eight high-entropy UA hints
+// unless -accept-ch names others. Critical-CH makes the browser repeat the
+// request at once instead of the next one.
+var (
+	acceptCH   = "sec-ch-ua-arch, sec-ch-ua-bitness, sec-ch-ua-full-version-list, sec-ch-ua-model, sec-ch-ua-platform-version, sec-ch-ua-wow64, sec-ch-ua-form-factors, sec-ch-ua-full-version"
+	criticalCH string
+)
 
 var (
 	certFile = "capture/certs/tls.crt"
@@ -843,7 +911,7 @@ func answer(r record) (reply, [][2]string) {
 	// The subresource page measures an ordinary site, which asks for no hints.
 	if !subres && !chipsMode && !cacheMode {
 		add("accept-ch", acceptCH)
-		add("critical-ch", acceptCH)
+		add("critical-ch", criticalCH)
 	}
 	if altSvc != "" {
 		add("alt-svc", altSvc)
@@ -1216,7 +1284,7 @@ func (s *srv) serveH3Stream(str *quic.Stream, dec *cqpack.Decoder) {
 	}
 	_ = enc.WriteField(qpack.HeaderField{Name: "content-length", Value: fmt.Sprint(len(body))})
 	_ = enc.WriteField(qpack.HeaderField{Name: "accept-ch", Value: acceptCH})
-	_ = enc.WriteField(qpack.HeaderField{Name: "critical-ch", Value: acceptCH})
+	_ = enc.WriteField(qpack.HeaderField{Name: "critical-ch", Value: criticalCH})
 	for _, c := range rep.cookies {
 		_ = enc.WriteField(qpack.HeaderField{Name: "set-cookie", Value: c})
 	}

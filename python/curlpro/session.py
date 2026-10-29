@@ -919,7 +919,14 @@ class Session:
         ``sec-ch-ua-platform-version`` hints — and only after the site asked
         for them with ``Accept-CH``. Chosen once per session
     :param devices: your own device list instead of the profile's; each entry
-        is ``{"name": ..., "model": ..., "platform_version": ...}``
+        is ``{"name": ..., "model": ..., "platform_version": ...}``, and on a
+        desktop Chromium may name the machine for the hints a site asks for
+        besides the User-Agent ones: ``device_memory`` (``"8"``), ``dpr``
+        (``"1.25"``), ``viewport`` (``"1536x753"``), ``color_scheme``
+        (``"light"``/``"dark"``), ``reduced_motion`` and
+        ``reduced_transparency`` (``"no-preference"``/``"reduce"``), ``rtt``
+        (ms) and ``downlink`` (Mbps) — the network estimate, to which the
+        session adds Chromium's per-site noise — and ``ect`` (``"4g"``)
     :param retries: how many retries to make after the first attempt
     :param page: the page the requests are made from — the initiator. Sets
         ``Referer``, ``Origin`` and ``sec-fetch-site`` the way a browser does

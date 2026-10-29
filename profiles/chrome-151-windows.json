@@ -343,7 +343,20 @@
       "sec-ch-ua-bitness": "\"64\"",
       "sec-ch-ua-wow64": "?0",
       "sec-ch-ua-form-factors": "\"Desktop\"",
-      "sec-ch-ua-full-version-list": "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.176\", \"Chromium\";v=\"151.0.7922.176\""
+      "sec-ch-ua-full-version-list": "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.176\", \"Chromium\";v=\"151.0.7922.176\"",
+      "device-memory": "16",
+      "sec-ch-device-memory": "16",
+      "dpr": "1",
+      "sec-ch-dpr": "1",
+      "viewport-width": "1920",
+      "sec-ch-viewport-width": "1920",
+      "sec-ch-viewport-height": "969",
+      "rtt": "100",
+      "downlink": "1.6",
+      "ect": "4g",
+      "sec-ch-prefers-color-scheme": "dark",
+      "sec-ch-prefers-reduced-motion": "no-preference",
+      "sec-ch-prefers-reduced-transparency": "no-preference"
     },
     "order": [
       {
@@ -566,7 +579,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x969",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 10 22H2, Chrome 151.0.7922.137",
@@ -575,7 +592,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x969",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, Chrome 151.0.7922.139",
@@ -584,7 +605,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x753",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, Chrome 151.0.7922.140",
@@ -593,7 +618,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x657",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, Chrome 151.0.7922.169",
@@ -602,7 +631,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1329",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 10 22H2, Chrome 151.0.7922.171",
@@ -611,7 +644,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.5",
+      "viewport": "1280x609",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, Chrome 151.0.7922.173",
@@ -620,7 +657,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x789",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, Chrome 151.0.7922.175",
@@ -629,7 +670,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1.25",
+      "viewport": "2048x1041",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 10 22H2, Chrome 151.0.7922.176",
@@ -638,7 +683,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x789",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 151.0.7922.109",
@@ -647,7 +696,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?1",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x969",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 151.0.7922.137",
@@ -656,7 +709,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?1",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x753",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 151.0.7922.139",
@@ -665,7 +722,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?1",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x657",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 151.0.7922.140",
@@ -674,7 +735,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?1",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1329",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 151.0.7922.169",
@@ -683,7 +748,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?1",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.5",
+      "viewport": "1280x609",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 151.0.7922.171",
@@ -692,7 +761,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?1",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x789",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 151.0.7922.173",
@@ -701,7 +774,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?1",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1.25",
+      "viewport": "2048x1041",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 151.0.7922.175",
@@ -710,7 +787,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?1",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x789",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 10 22H2, 32-bit Chrome, Chrome 151.0.7922.176",
@@ -719,7 +800,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?1",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x969",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 22H2, Chrome 151.0.7922.109",
@@ -728,7 +813,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x745",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 22H2, Chrome 151.0.7922.137",
@@ -737,7 +826,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x649",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 22H2, Chrome 151.0.7922.139",
@@ -746,7 +839,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1321",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 22H2, Chrome 151.0.7922.140",
@@ -755,7 +852,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.5",
+      "viewport": "1280x601",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 22H2, Chrome 151.0.7922.169",
@@ -764,7 +865,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x781",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 22H2, Chrome 151.0.7922.171",
@@ -773,7 +878,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1.25",
+      "viewport": "2048x1033",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 22H2, Chrome 151.0.7922.173",
@@ -782,7 +891,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x781",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 22H2, Chrome 151.0.7922.175",
@@ -791,7 +904,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 22H2, Chrome 151.0.7922.176",
@@ -800,7 +917,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 23H2, Chrome 151.0.7922.109",
@@ -809,7 +930,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x649",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 23H2, Chrome 151.0.7922.137",
@@ -818,7 +943,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1321",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 23H2, Chrome 151.0.7922.139",
@@ -827,7 +956,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.5",
+      "viewport": "1280x601",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 23H2, Chrome 151.0.7922.140",
@@ -836,7 +969,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x781",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 23H2, Chrome 151.0.7922.169",
@@ -845,7 +982,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1.25",
+      "viewport": "2048x1033",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 23H2, Chrome 151.0.7922.171",
@@ -854,7 +995,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x781",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 23H2, Chrome 151.0.7922.173",
@@ -863,7 +1008,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 23H2, Chrome 151.0.7922.175",
@@ -872,7 +1021,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 23H2, Chrome 151.0.7922.176",
@@ -881,7 +1034,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x745",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 24H2, Chrome 151.0.7922.109",
@@ -890,7 +1047,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1321",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 24H2, Chrome 151.0.7922.137",
@@ -899,7 +1060,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.5",
+      "viewport": "1280x601",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 24H2, Chrome 151.0.7922.139",
@@ -908,7 +1073,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x781",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 24H2, Chrome 151.0.7922.140",
@@ -917,7 +1086,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1.25",
+      "viewport": "2048x1033",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 24H2, Chrome 151.0.7922.169",
@@ -926,7 +1099,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x781",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 24H2, Chrome 151.0.7922.171",
@@ -935,7 +1112,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 24H2, Chrome 151.0.7922.173",
@@ -944,7 +1125,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 24H2, Chrome 151.0.7922.175",
@@ -953,7 +1138,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x745",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 24H2, Chrome 151.0.7922.176",
@@ -962,7 +1151,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x649",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 25H2, Chrome 151.0.7922.109",
@@ -971,7 +1164,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.5",
+      "viewport": "1280x601",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 25H2, Chrome 151.0.7922.137",
@@ -980,7 +1177,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x781",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 25H2, Chrome 151.0.7922.139",
@@ -989,7 +1190,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1.25",
+      "viewport": "2048x1033",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 25H2, Chrome 151.0.7922.140",
@@ -998,7 +1203,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x781",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 25H2, Chrome 151.0.7922.169",
@@ -1007,7 +1216,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "dark"
     },
     {
       "name": "Windows 11 25H2, Chrome 151.0.7922.171",
@@ -1016,7 +1229,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 25H2, Chrome 151.0.7922.173",
@@ -1025,7 +1242,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x745",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 25H2, Chrome 151.0.7922.175",
@@ -1034,7 +1255,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x649",
+      "color_scheme": "light"
     },
     {
       "name": "Windows 11 25H2, Chrome 151.0.7922.176",
@@ -1043,7 +1268,11 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1321",
+      "color_scheme": "dark"
     }
   ],
   "device_kind": "desktop"

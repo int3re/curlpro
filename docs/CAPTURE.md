@@ -108,6 +108,17 @@ Two traps, each of which cost a run:
   otherwise answer Accept-CH with 153's build. Add the new version to
   `scripts/identities.json` and run `scripts/gen-identities.py`; for a
   profile `scripts/derive-current.py` wrote, the capture replaces it.
+- **Any set of hints, and what a page sends with them.** `-accept-ch LIST`
+  names the hints the plain page asks for (the eight high-entropy UA hints by
+  default), `-critical-ch LIST` those in `Critical-CH` (the same unless
+  given), and `-hintspage` serves a page that makes fetch and XHR with and
+  without headers of its own, an image, a script and a stylesheet, then
+  navigates to `/second` and does it all again (STAGE45):
+
+  ```bash
+  go build -o hcapture.exe ./cmd/hcapture
+  ./hcapture.exe -browser ".../new_chrome.exe" -hintspage -accept-ch "device-memory, dpr, rtt, sec-ch-prefers-color-scheme" -json out.json
+  ```
 - **Nor to the high-entropy client hints.** Chrome answers `Accept-CH` with
   `sec-ch-ua-full-version-list` and the rest only from a secure origin, and a
   certificate waved through by `--ignore-certificate-errors` does not make one:

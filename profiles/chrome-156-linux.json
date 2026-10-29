@@ -106,7 +106,17 @@
       "sec-ch-ua-bitness": "\"64\"",
       "sec-ch-ua-wow64": "?0",
       "sec-ch-ua-form-factors": "\"Desktop\"",
-      "sec-ch-ua-full-version-list": "\"Not:A-Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"156.0.8078.75\", \"Google Chrome\";v=\"156.0.8078.75\""
+      "sec-ch-ua-full-version-list": "\"Not:A-Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"156.0.8078.75\", \"Google Chrome\";v=\"156.0.8078.75\"",
+      "device-memory": "16",
+      "sec-ch-device-memory": "16",
+      "dpr": "1",
+      "sec-ch-dpr": "1",
+      "rtt": "100",
+      "downlink": "1.6",
+      "ect": "4g",
+      "sec-ch-prefers-color-scheme": "light",
+      "sec-ch-prefers-reduced-motion": "no-preference",
+      "sec-ch-prefers-reduced-transparency": "no-preference"
     },
     "order": [
       {
@@ -328,7 +338,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "Linux, Chrome 156.0.8078.35",
@@ -336,7 +349,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "color_scheme": "dark"
     },
     {
       "name": "Linux, Chrome 156.0.8078.36",
@@ -344,7 +360,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "Linux, Chrome 156.0.8078.47",
@@ -352,7 +371,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "Linux, Chrome 156.0.8078.48",
@@ -360,7 +382,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "color_scheme": "dark"
     },
     {
       "name": "Linux, Chrome 156.0.8078.49",
@@ -368,7 +393,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "Linux, Chrome 156.0.8078.73",
@@ -376,7 +404,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "Linux, Chrome 156.0.8078.74",
@@ -384,7 +415,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "color_scheme": "dark"
     },
     {
       "name": "Linux, Chrome 156.0.8078.75",
@@ -392,7 +426,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "color_scheme": "light"
     }
   ],
   "device_kind": "desktop"

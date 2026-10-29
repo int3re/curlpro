@@ -135,7 +135,13 @@ func (s *Session) templateAt(r *Request, u *url.URL) headerTemplate {
 		return s.tpl.preflight
 	}
 	if r != nil && r.Resource != "" {
-		return s.resourceTemplate(r)
+		tpl := s.resourceTemplate(r)
+		if u != nil && !tpl.frame && s.profile.ClientHints.Enabled() {
+			if want := s.hintsFor(u); len(want) > 0 {
+				return s.resourceHintTemplate(r, tpl, want)
+			}
+		}
+		return tpl
 	}
 	fetch := s.modeFor(r) == ModeFetch
 	if r != nil && u != nil && s.profile.ClientHints.Enabled() {
@@ -168,13 +174,55 @@ func (s *Session) hintTemplateFor(fetch bool, want map[string]bool) headerTempla
 	if tpl, ok := t.hints[key]; ok {
 		return tpl
 	}
-	pairs := s.hintTemplate(s.profile.ResolvedHints(fetch, s.device), want)
+	pairs := s.hintTemplate(s.profile.ResolvedHints(fetch, s.device), want, fetch)
 	base := s.profile.HTTP1.Order
 	anchor := s.profile.Headers.CustomAnchor
 	if fetch {
 		base, anchor = s.profile.Fetch.HTTP1Order, s.profile.Fetch.CustomAnchor
 	}
 	tpl := headerTemplate{pairs: pairs, h1: hintH1Order(pairs, base), anchor: anchor, fetch: fetch}.withOrder()
+	if t.hints == nil {
+		t.hints = make(map[string]headerTemplate)
+	}
+	t.hints[key] = tpl
+	return tpl
+}
+
+// resourceHintTemplate is a subresource's set with the hints the site asked
+// for: Blink sets them on an image, a script or a stylesheet as on a fetch
+// (measured on Chrome 155 and 156), and the header map lays the cluster out
+// (pageOrder). A frame is a navigation and goes without.
+func (s *Session) resourceHintTemplate(r *Request, base headerTemplate, want map[string]bool) headerTemplate {
+	names := make([]string, 0, len(want))
+	for k, v := range want {
+		if v && highEntropyHints[k] {
+			names = append(names, k)
+		}
+	}
+	sort.Slice(names, func(i, j int) bool { return rendererHintRank[names[i]] < rendererHintRank[names[j]] })
+	key := "res:" + r.Resource
+	if base.cors {
+		key += "|cors"
+	}
+	key += ":" + strings.Join(names, ",")
+	t := &s.tpl
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if tpl, ok := t.hints[key]; ok {
+		return tpl
+	}
+	var add []profile.HeaderPair
+	for _, n := range names {
+		if v := s.profile.HintValue(n, s.device, true); v != "" {
+			add = append(add, profile.HeaderPair{Key: n, Value: v})
+		}
+	}
+	tpl := base
+	tpl.pairs = insertPairs(append([]profile.HeaderPair(nil), base.pairs...), pairIndex(base.pairs, "user-agent")+1, add)
+	if base.h1 != nil {
+		tpl.h1 = hintH1Order(tpl.pairs, base.h1)
+	}
+	tpl = tpl.withOrder()
 	if t.hints == nil {
 		t.hints = make(map[string]headerTemplate)
 	}

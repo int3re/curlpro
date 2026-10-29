@@ -322,6 +322,37 @@ func requestSets(r *Request, name string) bool {
 	return false
 }
 
+// sessionSets reports whether the session's own headers, which this request
+// carries, set the name.
+func (s *Session) sessionSets(r *Request, name string) bool {
+	if !s.useSessionHeaders(r) {
+		return false
+	}
+	for _, h := range s.headers.All() {
+		if strings.EqualFold(h.Key, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// renderer says a page makes the request rather than the browser process: a
+// fetch or a subresource, not a navigation or a frame.
+func (t headerTemplate) renderer() bool {
+	return t.fetch || (t.resource && !t.frame)
+}
+
+// laysOutPage says the request's cluster is Blink's header map: a request a
+// page makes (fetch, XHR, a subresource; not a frame, which the browser
+// process navigates) on a Chromium of 129 or later, with no order of the
+// caller's own.
+func (s *Session) laysOutPage(r *Request, tpl headerTemplate) bool {
+	if !s.blinkMap || r == nil || r.preflight || !tpl.renderer() {
+		return false
+	}
+	return len(r.HeaderOrder) == 0 && len(s.opts.HeaderOrder) == 0
+}
+
 // wantOrder returns the desired order for a request: the request's explicit
 // order, the session's, the profile's HTTP/1.1 order or the profile's general one.
 //
@@ -590,6 +621,8 @@ func (s *Session) applyHeaders(req *http.Request, r *Request, u *url.URL, h1 boo
 	tpl := s.templateAt(r, u)
 	h1Order := s.http1Order(h1, tpl)
 	built := s.buildHeadersWith(r, u, host, h1Order, tpl)
+	page := s.laysOutPage(r, tpl)
+	s.noiseNetworkHints(built, u, tpl.renderer())
 
 	// The map is made at its final size, and every value slice is cut from one
 	// backing array: filling an empty map one header at a time grew it three
@@ -609,6 +642,12 @@ func (s *Session) applyHeaders(req *http.Request, r *Request, u *url.URL, h1 boo
 	// the order is passed lowercase. The case that reaches the wire comes from the
 	// map keys themselves and plays no part here.
 	want := s.wantOrder(r, h1Order, tpl)
+	if page {
+		// wireOrder reads built in want's order: the cluster moved, so built
+		// follows it.
+		want = s.pageOrder(r, built, want)
+		built = reorder(built, want, tpl.anchor)
+	}
 	req.Header[http.HeaderOrderKey] = wireOrder(built, want, tpl.lowerOf(want), tpl.anchor)
 	if len(s.profile.HTTP2.PseudoOrder) > 0 {
 		req.Header[http.PHeaderOrderKey] = s.profile.HTTP2.PseudoOrder

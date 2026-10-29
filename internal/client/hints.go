@@ -1,7 +1,11 @@
 package client
 
 import (
+	"crypto/rand"
+	"math"
 	"net/url"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/curlpro/curlpro/internal/profile"
@@ -19,7 +23,11 @@ import (
 // has no such string at all) but a consistent "device plus hints" pair,
 // handed over when the site asks.
 
-// highEntropyHints are the hints that never go out without Accept-CH.
+// highEntropyHints are the hints that never go out without Accept-CH: the
+// User-Agent ones of high entropy, and those of the machine, the network and
+// the user's preferences (network::GetClientHintToNameMap, every name Chromium
+// answers on a desktop; save-data goes out only with Data Saver on, and the
+// resource-width hints are gone).
 //
 // sec-ch-ua, sec-ch-ua-mobile and sec-ch-ua-platform are not among them: they
 // are low entropy and always sent, so they live in the profile's ordinary set.
@@ -32,7 +40,50 @@ var highEntropyHints = map[string]bool{
 	"sec-ch-ua-model":             true,
 	"sec-ch-ua-platform-version":  true,
 	"sec-ch-ua-wow64":             true,
+
+	"device-memory":                       true,
+	"sec-ch-device-memory":                true,
+	"dpr":                                 true,
+	"sec-ch-dpr":                          true,
+	"viewport-width":                      true,
+	"sec-ch-viewport-width":               true,
+	"sec-ch-viewport-height":              true,
+	"rtt":                                 true,
+	"downlink":                            true,
+	"ect":                                 true,
+	"sec-ch-prefers-color-scheme":         true,
+	"sec-ch-prefers-reduced-motion":       true,
+	"sec-ch-prefers-reduced-transparency": true,
 }
+
+// The browser process adds a navigation's hints in one fixed sequence
+// (content/browser/client_hints AddRequestClientHintsHeaders): the machine's
+// and the network's before the User-Agent hints, the preferences after them.
+// Measured on Chrome 155 and 156 with all of them asked for.
+var (
+	navHintsBefore = []string{"device-memory", "sec-ch-device-memory", "dpr", "sec-ch-dpr",
+		"viewport-width", "sec-ch-viewport-width", "sec-ch-viewport-height", "rtt", "downlink", "ect"}
+	navHintsAfter = []string{"sec-ch-prefers-color-scheme", "sec-ch-prefers-reduced-motion",
+		"sec-ch-prefers-reduced-transparency"}
+)
+
+// rendererHintRank is the order Blink sets the hints on a request a page makes
+// (FrameFetchContext::AddClientHintsIfNecessary). The wire does not keep it —
+// the header map decides — but it is the insertion order, and a collision in
+// the map goes to whichever name came first.
+var rendererHintRank = func() map[string]int {
+	order := []string{"device-memory", "sec-ch-device-memory", "rtt", "downlink", "ect",
+		"sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-arch", "sec-ch-ua-platform", "sec-ch-ua-platform-version",
+		"sec-ch-ua-model", "sec-ch-ua-full-version", "sec-ch-ua-full-version-list", "sec-ch-ua-bitness",
+		"sec-ch-ua-wow64", "sec-ch-ua-form-factors", "save-data",
+		"sec-ch-prefers-reduced-transparency", "sec-ch-prefers-reduced-motion", "sec-ch-prefers-color-scheme",
+		"dpr", "sec-ch-dpr", "viewport-width", "sec-ch-viewport-width", "sec-ch-viewport-height"}
+	m := make(map[string]int, len(order))
+	for i, n := range order {
+		m[n] = i
+	}
+	return m
+}()
 
 // originKey is the key of the hints memory. Chrome remembers Accept-CH per
 // origin rather than per URL: what a landing page asked for also covers subresources.
@@ -128,15 +179,199 @@ func hintList(resp map[string][]string, name string) []string {
 // hintTemplate builds the set with hints for a request.
 //
 // Hints the site did not ask for are dropped from the template, keeping the
-// relative order of the rest. Chromium's exact order depends on the full set of
-// names, so for a subset it is approximated — see docs/CAPTURE.md.
-func (s *Session) hintTemplate(pairs []profile.HeaderPair, want map[string]bool) []profile.HeaderPair {
-	out := make([]profile.HeaderPair, 0, len(pairs))
+// relative order of the rest. A hint asked for that the stored template has
+// no slot for (the machine, network and preference hints came after the
+// templates were captured) goes where Chromium puts it: in a navigation, the
+// machine and network ones before sec-ch-ua and the preferences after the
+// last User-Agent hint; in a request a page makes, after user-agent — the
+// header map lays that cluster out anyway (pageOrder).
+func (s *Session) hintTemplate(pairs []profile.HeaderPair, want map[string]bool, fetch bool) []profile.HeaderPair {
+	out := make([]profile.HeaderPair, 0, len(pairs)+len(navHintsBefore)+len(navHintsAfter))
+	have := make(map[string]bool, len(pairs))
 	for _, h := range pairs {
-		if highEntropyHints[strings.ToLower(h.Key)] && !want[strings.ToLower(h.Key)] {
+		l := strings.ToLower(h.Key)
+		have[l] = true
+		if highEntropyHints[l] && !want[l] {
 			continue
 		}
 		out = append(out, h)
+	}
+	extra := func(names []string) []profile.HeaderPair {
+		var add []profile.HeaderPair
+		for _, n := range names {
+			if !want[n] || have[n] {
+				continue
+			}
+			if v := s.profile.HintValue(n, s.device, fetch); v != "" {
+				add = append(add, profile.HeaderPair{Key: n, Value: v})
+			}
+		}
+		return add
+	}
+	before, after := extra(navHintsBefore), extra(navHintsAfter)
+	if len(before)+len(after) == 0 {
+		return out
+	}
+	if fetch {
+		at := pairIndex(out, "user-agent") + 1
+		return insertPairs(out, at, append(before, after...))
+	}
+	first, last := -1, -1
+	for i, h := range out {
+		if l := strings.ToLower(h.Key); strings.HasPrefix(l, "sec-ch-ua") {
+			if first < 0 {
+				first = i
+			}
+			last = i
+		}
+	}
+	if first < 0 {
+		first = pairIndex(out, "upgrade-insecure-requests")
+		last = first - 1
+	}
+	out = insertPairs(out, last+1, after)
+	return insertPairs(out, first, before)
+}
+
+// pairIndex is the place of a name in a set, or len(set) when it is absent.
+func pairIndex(set []profile.HeaderPair, name string) int {
+	for i, h := range set {
+		if strings.EqualFold(h.Key, name) {
+			return i
+		}
+	}
+	return len(set)
+}
+
+// insertPairs puts add into set before position at.
+func insertPairs(set []profile.HeaderPair, at int, add []profile.HeaderPair) []profile.HeaderPair {
+	if len(add) == 0 {
+		return set
+	}
+	if at < 0 {
+		at = 0
+	}
+	if at > len(set) {
+		at = len(set)
+	}
+	out := make([]profile.HeaderPair, 0, len(set)+len(add))
+	out = append(out, set[:at]...)
+	out = append(out, add...)
+	return append(out, set[at:]...)
+}
+
+// hintSalt is one of the two random numbers Chromium mixes into the network
+// hints: the browser process draws one for navigations (client_hints.cc
+// RandomizationSalt), a renderer one for the requests its pages make
+// (NetworkStateNotifier). Each is 1 to 21, drawn once per browser run — here
+// once per session.
+func (s *Session) hintSalt(renderer bool) uint32 {
+	s.saltOnce.Do(func() {
+		var b [2]byte
+		_, _ = rand.Read(b[:])
+		s.salts = [2]uint32{1 + uint32(b[0])%21, 1 + uint32(b[1])%21}
+	})
+	if renderer {
+		return s.salts[1]
+	}
+	return s.salts[0]
+}
+
+// networkHint is the value of rtt or downlink as Chromium reports it for host:
+// the estimate times a per-site multiplier between 0.90 and 1.10 — one of 21,
+// picked by the host's hash plus the salt — capped (3 s, 10 Mbps) and rounded
+// (50 ms, 50 kbps). Measured on Chrome 156: downlink 1.6 on a navigation and
+// 1.55 on a request of its page, same site, same moment. The hash is Blink's
+// on both sides here; the browser process uses std::hash, but with the salt
+// random either way a site sees the same spread of values.
+func (s *Session) networkHint(name, base, host string, renderer bool) string {
+	v, err := strconv.ParseFloat(base, 64)
+	if err != nil || v < 0 || host == "" {
+		return base
+	}
+	k := (blinkHash(strings.ToLower(host)) + s.hintSalt(renderer)) % 21
+	mult := 0.9 + float64(k)*0.01
+	switch name {
+	case "rtt":
+		ms := math.Min(v*mult, 3000)
+		return strconv.Itoa(int(math.Round(ms/50) * 50))
+	case "downlink":
+		kbps := math.Min(v*1000*mult, 10000)
+		return strconv.FormatFloat(math.Round(kbps/50)*50/1000, 'f', -1, 64)
+	}
+	return base
+}
+
+// noiseNetworkHints rewrites rtt and downlink in a built set for its site.
+func (s *Session) noiseNetworkHints(built []headerKV, u *url.URL, renderer bool) {
+	if u == nil {
+		return
+	}
+	for i := range built {
+		if l := strings.ToLower(built[i].Key); l == "rtt" || l == "downlink" {
+			built[i].Value = s.networkHint(l, built[i].Value, u.Hostname(), renderer)
+		}
+	}
+}
+
+// pageOrder lays out the cluster of a request a page makes the way Blink's
+// header map hands it to the network stack (blinkmap.go): the page's own
+// headers — those the caller added, Content-Type, an Accept it set itself —
+// then the hints in Blink's order, then User-Agent, all in one map. The rest
+// of want — Content-Length before, the default Accept, Origin, sec-fetch-*,
+// Referer and the tail after — stays where the profile has it, and the
+// cluster takes the place of its first member there.
+func (s *Session) pageOrder(r *Request, built []headerKV, want []string) []string {
+	if len(built) == 0 {
+		return want
+	}
+	known := make(map[string]bool, len(want))
+	for _, w := range want {
+		known[strings.ToLower(w)] = true
+	}
+	pageAccept := requestSets(r, "accept") || s.sessionSets(r, "accept")
+	var page, hints []string
+	ua := false
+	for _, h := range built {
+		l := strings.ToLower(h.Key)
+		_, hint := rendererHintRank[l]
+		switch {
+		case l == "host" || l == "connection" || l == "content-length":
+		case l == "content-type" || (l == "accept" && pageAccept) || !known[l]:
+			page = append(page, l)
+		case l == "user-agent":
+			ua = true
+		case hint:
+			hints = append(hints, l)
+		}
+	}
+	sort.SliceStable(hints, func(i, j int) bool { return rendererHintRank[hints[i]] < rendererHintRank[hints[j]] })
+	ins := append(page, hints...)
+	if ua {
+		ins = append(ins, "user-agent")
+	}
+	if len(ins) == 0 {
+		return want
+	}
+	cluster := cachedBlinkLayout(ins)
+	inCluster := make(map[string]bool, len(cluster))
+	for _, c := range cluster {
+		inCluster[c] = true
+	}
+	out := make([]string, 0, len(want)+len(page))
+	placed := false
+	for _, w := range want {
+		if inCluster[strings.ToLower(w)] {
+			if !placed {
+				out = append(out, cluster...)
+				placed = true
+			}
+			continue
+		}
+		out = append(out, w)
+	}
+	if !placed {
+		out = append(out, cluster...)
 	}
 	return out
 }

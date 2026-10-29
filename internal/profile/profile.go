@@ -182,6 +182,16 @@ func (p *Profile) ResolvedHints(fetch bool, dev Device) []HeaderPair {
 	return out
 }
 
+// HintValue is one hint's value for the device, picked as ResolvedHints fills
+// a slot: for a hint the stored template has no slot for.
+func (p *Profile) HintValue(key string, dev Device, fetch bool) string {
+	base := p.ResolvedHeaders()
+	if fetch {
+		base = p.ResolvedFetchHeaders()
+	}
+	return p.hintValue(key, dev, base)
+}
+
 // hintValue picks the value for a name in the hints template.
 func (p *Profile) hintValue(key string, dev Device, base []HeaderPair) string {
 	switch strings.ToLower(key) {
@@ -221,6 +231,46 @@ func (p *Profile) hintValue(key string, dev Device, base []HeaderPair) string {
 	case "sec-ch-ua-form-factors":
 		if dev.FormFactors != "" {
 			return quoteHint(dev.FormFactors)
+		}
+	case "device-memory", "sec-ch-device-memory":
+		if dev.DeviceMemory != "" {
+			return dev.DeviceMemory
+		}
+	case "dpr", "sec-ch-dpr":
+		if dev.DPR != "" {
+			return dev.DPR
+		}
+	case "viewport-width", "sec-ch-viewport-width":
+		if w, _, ok := strings.Cut(dev.Viewport, "x"); ok {
+			return w
+		}
+	case "sec-ch-viewport-height":
+		if _, h, ok := strings.Cut(dev.Viewport, "x"); ok {
+			return h
+		}
+	case "sec-ch-prefers-color-scheme":
+		if dev.ColorScheme != "" {
+			return dev.ColorScheme
+		}
+	case "sec-ch-prefers-reduced-motion":
+		if dev.ReducedMotion != "" {
+			return dev.ReducedMotion
+		}
+	case "sec-ch-prefers-reduced-transparency":
+		if dev.ReducedTransparency != "" {
+			return dev.ReducedTransparency
+		}
+	case "rtt":
+		if dev.RTT != "" {
+			return dev.RTT
+		}
+	case "downlink":
+		if dev.Downlink != "" {
+			return dev.Downlink
+		}
+	case "ect":
+		if dev.ECT != "" {
+			return dev.ECT
 		}
 	}
 	if v, ok := p.ClientHints.Values[strings.ToLower(key)]; ok {
@@ -662,6 +712,27 @@ type Device struct {
 	OSVersion   string `json:"os_version,omitempty"`
 	Version     string `json:"version,omitempty"`
 	Distro      string `json:"distro,omitempty"`
+
+	// The machine behind the browser, for the hints a site may ask for
+	// besides the User-Agent ones (measured on Chrome 155/156, STAGE45).
+	// DeviceMemory is the RAM as Chromium rounds it — the nearest power of
+	// two in GB, 2 to 32 on a desktop: device-memory and sec-ch-device-memory.
+	// DPR is the screen's scale factor ("1", "1.25"): dpr and sec-ch-dpr.
+	// Viewport is the page area in CSS pixels, "1920x969": viewport-width,
+	// sec-ch-viewport-width and sec-ch-viewport-height. ColorScheme ("light",
+	// "dark"), ReducedMotion and ReducedTransparency ("no-preference",
+	// "reduce") are the sec-ch-prefers-* hints. RTT (ms) and Downlink (Mbps)
+	// are the network estimate before Chromium's per-site noise and rounding,
+	// ECT its class ("4g").
+	DeviceMemory        string `json:"device_memory,omitempty"`
+	DPR                 string `json:"dpr,omitempty"`
+	Viewport            string `json:"viewport,omitempty"`
+	ColorScheme         string `json:"color_scheme,omitempty"`
+	ReducedMotion       string `json:"reduced_motion,omitempty"`
+	ReducedTransparency string `json:"reduced_transparency,omitempty"`
+	RTT                 string `json:"rtt,omitempty"`
+	Downlink            string `json:"downlink,omitempty"`
+	ECT                 string `json:"ect,omitempty"`
 }
 
 // findHeader returns a header's value from a resolved set, or "".

@@ -400,6 +400,7 @@ func (s *Session) applyH3Headers(req *nethttp.Request, r *Request, u *url.URL) {
 	tpl := s.templateAt(r, u)
 	built := s.buildHeadersWith(r, u, req.Host, nil, tpl)
 	s.noteMode(r)
+	s.noiseNetworkHints(built, u, tpl.renderer())
 
 	for _, h := range built {
 		// A direct write instead of Set: that one canonicalises the name, while the
@@ -408,7 +409,12 @@ func (s *Session) applyH3Headers(req *nethttp.Request, r *Request, u *url.URL) {
 		req.Header[h.Key] = []string{h.Value}
 	}
 	suppressDefaultUA(req.Header, built, false)
-	req.Header[h3.HeaderOrderKey] = wireOrder(built, s.wantOrder(r, nil, tpl), nil, tpl.anchor)
+	want := s.wantOrder(r, nil, tpl)
+	if s.laysOutPage(r, tpl) {
+		want = s.pageOrder(r, built, want)
+		built = reorder(built, want, tpl.anchor)
+	}
+	req.Header[h3.HeaderOrderKey] = wireOrder(built, want, nil, tpl.anchor)
 
 	pseudo := s.profile.HTTP3.PseudoOrder
 	if len(pseudo) == 0 {

@@ -279,3 +279,132 @@ def test_without_device_nothing_is_substituted():
             s.get(srv.url)
     assert "Pixel 7" in srv.value(1, "user-agent")
     assert srv.value(1, "sec-ch-ua-model") is None, "no model is substituted without a chosen device"
+
+
+# The machine, network and preference hints (STAGE45): what a site such as a
+# search engine asks for besides the User-Agent ones. Measured on Chrome 155
+# and 156 with all of them asked for (capture/hints).
+MACHINE_HINTS = (
+    "device-memory, sec-ch-device-memory, dpr, sec-ch-dpr, viewport-width, "
+    "sec-ch-viewport-width, sec-ch-viewport-height, rtt, downlink, ect, "
+    "sec-ch-prefers-color-scheme, sec-ch-prefers-reduced-motion, "
+    "sec-ch-prefers-reduced-transparency, " + ALL_HINTS
+)
+HINT_NAMES = {n.strip() for n in MACHINE_HINTS.split(",")} | {
+    "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform"}
+
+
+def _hints_in(names: list[str]) -> list[str]:
+    return [n.lower() for n in names if n.lower() in HINT_NAMES]
+
+
+def test_a_navigation_lays_every_hint_out_as_chromium_does():
+    """The browser process adds them in one fixed sequence: the machine's and
+    the network's before sec-ch-ua, the preferences after the last UA hint."""
+    with HintServer(MACHINE_HINTS) as srv:
+        with curlpro.Session("chrome-156-windows", verify=False, force_http1=True) as s:
+            s.get(srv.url)
+            s.get(srv.url)
+    assert _hints_in(srv.names(1)) == [
+        "device-memory", "sec-ch-device-memory", "dpr", "sec-ch-dpr", "viewport-width",
+        "sec-ch-viewport-width", "sec-ch-viewport-height", "rtt", "downlink", "ect",
+        "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-full-version", "sec-ch-ua-arch",
+        "sec-ch-ua-platform", "sec-ch-ua-platform-version", "sec-ch-ua-model",
+        "sec-ch-ua-bitness", "sec-ch-ua-wow64", "sec-ch-ua-full-version-list",
+        "sec-ch-ua-form-factors", "sec-ch-prefers-color-scheme",
+        "sec-ch-prefers-reduced-motion", "sec-ch-prefers-reduced-transparency",
+    ], srv.names(1)
+    assert _hints_in(srv.names(0)) == ["sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform"], (
+        "the first request carried hints the site had not asked for yet")
+
+
+def test_the_default_machine_is_the_capture_machine():
+    with HintServer(MACHINE_HINTS) as srv:
+        with curlpro.Session("chrome-156-windows", verify=False, force_http1=True) as s:
+            s.get(srv.url)
+            s.get(srv.url)
+    v = lambda n: srv.value(1, n)  # noqa: E731
+    assert (v("device-memory"), v("sec-ch-device-memory")) == ("16", "16")
+    assert (v("dpr"), v("sec-ch-dpr")) == ("1", "1")
+    assert (v("viewport-width"), v("sec-ch-viewport-width"), v("sec-ch-viewport-height")) == ("1920", "1920", "969")
+    assert v("ect") == "4g"
+    assert v("sec-ch-prefers-color-scheme") == "dark"
+    assert v("sec-ch-prefers-reduced-motion") == "no-preference"
+    assert v("sec-ch-prefers-reduced-transparency") == "no-preference"
+
+
+def test_network_hints_are_rounded_and_noised_like_chromium():
+    """rtt in steps of 50 ms around the 100 ms estimate, downlink in steps of
+    50 kbps around 1.6 Mbps: Chromium multiplies by 0.90-1.10 per site."""
+    with HintServer("rtt, downlink") as srv:
+        with curlpro.Session("chrome-156-windows", verify=False, force_http1=True) as s:
+            for _ in range(3):
+                s.get(srv.url)
+    rtts = {srv.value(i, "rtt") for i in (1, 2)}
+    downs = {srv.value(i, "downlink") for i in (1, 2)}
+    assert rtts == {"100"}, rtts
+    assert len(downs) == 1, f"the value moved within one session and site: {downs}"
+    d = float(downs.pop())
+    assert 1.4 <= d <= 1.8 and round(d * 1000) % 50 == 0, d
+
+
+def test_critical_ch_for_the_colour_scheme_repeats_at_once():
+    """What a search engine asks: Critical-CH on sec-ch-prefers-color-scheme."""
+    with HintServer("sec-ch-prefers-color-scheme", critical=True) as srv:
+        with curlpro.Session("chrome-156-windows", verify=False, force_http1=True) as s:
+            s.get(srv.url)
+    assert len(srv.requests) == 2, "Critical-CH must trigger an immediate repeat"
+    assert srv.value(0, "sec-ch-prefers-color-scheme") is None
+    assert srv.value(1, "sec-ch-prefers-color-scheme") == "dark"
+
+
+def test_own_device_names_the_machine():
+    devices = [{"name": "laptop", "full_version": "156.0.8078.73", "platform_version": "15.0.0",
+                "hint_arch": "x86", "bitness": "64", "wow64": "?0", "form_factors": "Desktop",
+                "device_memory": "8", "dpr": "1.5", "viewport": "1280x601", "color_scheme": "light",
+                "rtt": "250", "downlink": "10", "ect": "3g"}]
+    with HintServer(MACHINE_HINTS) as srv:
+        with curlpro.Session("chrome-156-windows", verify=False, force_http1=True,
+                             device="laptop", devices=devices) as s:
+            s.get(srv.url)
+            s.get(srv.url)
+    v = lambda n: srv.value(1, n)  # noqa: E731
+    assert (v("device-memory"), v("dpr"), v("sec-ch-dpr")) == ("8", "1.5", "1.5")
+    assert (v("viewport-width"), v("sec-ch-viewport-height")) == ("1280", "601")
+    assert v("sec-ch-prefers-color-scheme") == "light"
+    assert v("ect") == "3g"
+    assert int(v("rtt")) in range(200, 301, 50)
+    assert 9.0 <= float(v("downlink")) <= 10.0, v("downlink")  # 10 Mbps, capped at 10
+    assert v("sec-ch-ua-platform-version") == '"15.0.0"'
+
+
+def test_a_fetch_lays_its_cluster_out_as_chrome_156_did():
+    """Blink keeps a page's headers, the hints and User-Agent in one hash map
+    and the wire follows its buckets: the same names come out in Chrome's
+    order — here against the fetch Chrome 156 made with all hints asked for."""
+    capture = _json.loads((REPO / "capture" / "hints" / "chrome-156-all.json").read_text(encoding="utf-8"))
+    chrome = next(r for r in capture if r["path"] == "/f-get-b")
+    want = [h.split(": ", 1)[0] for h in chrome["headers"] if not h.startswith(":")]
+    with HintServer(MACHINE_HINTS) as srv:
+        with curlpro.Session("chrome-156-windows", verify=False, force_http1=True, mode="fetch",
+                             page=srv.url) as s:
+            s.get(srv.url)
+            s.get(srv.url + "f-get-b")
+    got = [n.lower() for n in srv.names(1)]
+    cluster = HINT_NAMES | {"user-agent"}
+    assert [n for n in got if n in cluster] == [n for n in want if n in cluster], got
+
+
+def test_a_fetch_puts_the_pages_own_header_where_chrome_does():
+    """X-Api-Key goes into the same map: bucket 13, before sec-ch-ua-mobile."""
+    capture = _json.loads((REPO / "capture" / "hints" / "chrome-156-all.json").read_text(encoding="utf-8"))
+    chrome = next(r for r in capture if r["path"] == "/f-key-b")
+    want = [h.split(": ", 1)[0] for h in chrome["headers"] if not h.startswith(":")]
+    with HintServer(MACHINE_HINTS) as srv:
+        with curlpro.Session("chrome-156-windows", verify=False, force_http1=True, mode="fetch",
+                             page=srv.url) as s:
+            s.get(srv.url)
+            s.get(srv.url + "f-key-b", headers={"X-Api-Key": "v1"})
+    got = [n.lower() for n in srv.names(1)]
+    cluster = HINT_NAMES | {"user-agent", "x-api-key"}
+    assert [n for n in got if n in cluster] == [n for n in want if n in cluster], got

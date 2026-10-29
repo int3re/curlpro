@@ -99,7 +99,17 @@
       "sec-ch-ua-bitness": "\"64\"",
       "sec-ch-ua-wow64": "?0",
       "sec-ch-ua-form-factors": "\"Desktop\"",
-      "sec-ch-ua-full-version-list": "\"Google Chrome\";v=\"153.0.8010.55\", \"Not_A Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"153.0.8010.55\""
+      "sec-ch-ua-full-version-list": "\"Google Chrome\";v=\"153.0.8010.55\", \"Not_A Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"153.0.8010.55\"",
+      "device-memory": "16",
+      "sec-ch-device-memory": "16",
+      "dpr": "2",
+      "sec-ch-dpr": "2",
+      "rtt": "100",
+      "downlink": "1.6",
+      "ect": "4g",
+      "sec-ch-prefers-color-scheme": "light",
+      "sec-ch-prefers-reduced-motion": "no-preference",
+      "sec-ch-prefers-reduced-transparency": "no-preference"
     },
     "order": [
       {
@@ -322,7 +332,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.27",
@@ -331,7 +344,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.36",
@@ -340,7 +356,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.37",
@@ -349,7 +368,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.47",
@@ -358,7 +380,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.48",
@@ -367,7 +392,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.49",
@@ -376,7 +404,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.50",
@@ -385,7 +416,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.52",
@@ -394,7 +428,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.53",
@@ -403,7 +440,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.54",
@@ -412,7 +452,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.6.1 (Apple silicon), Chrome 153.0.8010.55",
@@ -421,7 +464,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.12",
@@ -430,7 +476,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.27",
@@ -439,7 +488,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.36",
@@ -448,7 +500,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.37",
@@ -457,7 +512,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.47",
@@ -466,7 +524,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.48",
@@ -475,7 +536,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.49",
@@ -484,7 +548,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.50",
@@ -493,7 +560,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.52",
@@ -502,7 +572,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.53",
@@ -511,7 +584,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.54",
@@ -520,7 +596,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7 (Apple silicon), Chrome 153.0.8010.55",
@@ -529,7 +608,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.12",
@@ -538,7 +620,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.27",
@@ -547,7 +632,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.36",
@@ -556,7 +644,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.37",
@@ -565,7 +656,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.47",
@@ -574,7 +668,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.48",
@@ -583,7 +680,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.49",
@@ -592,7 +692,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.50",
@@ -601,7 +704,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.52",
@@ -610,7 +716,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.53",
@@ -619,7 +728,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.54",
@@ -628,7 +740,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.1 (Intel), Chrome 153.0.8010.55",
@@ -637,7 +752,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.12",
@@ -646,7 +764,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.27",
@@ -655,7 +776,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.36",
@@ -664,7 +788,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.37",
@@ -673,7 +800,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.47",
@@ -682,7 +812,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.48",
@@ -691,7 +824,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.49",
@@ -700,7 +836,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.50",
@@ -709,7 +848,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.52",
@@ -718,7 +860,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.53",
@@ -727,7 +872,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.54",
@@ -736,7 +884,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7.5 (Apple silicon), Chrome 153.0.8010.55",
@@ -745,7 +896,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.12",
@@ -754,7 +908,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.27",
@@ -763,7 +920,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.36",
@@ -772,7 +932,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.37",
@@ -781,7 +944,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.47",
@@ -790,7 +956,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.48",
@@ -799,7 +968,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.49",
@@ -808,7 +980,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.50",
@@ -817,7 +992,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.52",
@@ -826,7 +1004,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.53",
@@ -835,7 +1016,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.54",
@@ -844,7 +1028,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.7.9 (Intel), Chrome 153.0.8010.55",
@@ -853,7 +1040,10 @@
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.12",
@@ -862,7 +1052,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.27",
@@ -871,7 +1064,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.36",
@@ -880,7 +1076,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.37",
@@ -889,7 +1088,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.47",
@@ -898,7 +1100,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.48",
@@ -907,7 +1112,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.49",
@@ -916,7 +1124,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.50",
@@ -925,7 +1136,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.52",
@@ -934,7 +1148,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.53",
@@ -943,7 +1160,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.54",
@@ -952,7 +1172,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 15.8 (Apple silicon), Chrome 153.0.8010.55",
@@ -961,7 +1184,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.12",
@@ -970,7 +1196,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.27",
@@ -979,7 +1208,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.36",
@@ -988,7 +1220,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.37",
@@ -997,7 +1232,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.47",
@@ -1006,7 +1244,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.48",
@@ -1015,7 +1256,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.49",
@@ -1024,7 +1268,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.50",
@@ -1033,7 +1280,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.52",
@@ -1042,7 +1292,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.53",
@@ -1051,7 +1304,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.54",
@@ -1060,7 +1316,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.0.1 (Apple silicon), Chrome 153.0.8010.55",
@@ -1069,7 +1328,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.12",
@@ -1078,7 +1340,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.27",
@@ -1087,7 +1352,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.36",
@@ -1096,7 +1364,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.37",
@@ -1105,7 +1376,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.47",
@@ -1114,7 +1388,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.48",
@@ -1123,7 +1400,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.49",
@@ -1132,7 +1412,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.50",
@@ -1141,7 +1424,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.52",
@@ -1150,7 +1436,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.53",
@@ -1159,7 +1448,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.54",
@@ -1168,7 +1460,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.1 (Apple silicon), Chrome 153.0.8010.55",
@@ -1177,7 +1472,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.12",
@@ -1186,7 +1484,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.27",
@@ -1195,7 +1496,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.36",
@@ -1204,7 +1508,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.37",
@@ -1213,7 +1520,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.47",
@@ -1222,7 +1532,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.48",
@@ -1231,7 +1544,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.49",
@@ -1240,7 +1556,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.50",
@@ -1249,7 +1568,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.52",
@@ -1258,7 +1580,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.53",
@@ -1267,7 +1592,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.54",
@@ -1276,7 +1604,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.2 (Apple silicon), Chrome 153.0.8010.55",
@@ -1285,7 +1616,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.12",
@@ -1294,7 +1628,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.27",
@@ -1303,7 +1640,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.36",
@@ -1312,7 +1652,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.37",
@@ -1321,7 +1664,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.47",
@@ -1330,7 +1676,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.48",
@@ -1339,7 +1688,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.49",
@@ -1348,7 +1700,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.50",
@@ -1357,7 +1712,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.52",
@@ -1366,7 +1724,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.53",
@@ -1375,7 +1736,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.54",
@@ -1384,7 +1748,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.3.2 (Apple silicon), Chrome 153.0.8010.55",
@@ -1393,7 +1760,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.12",
@@ -1402,7 +1772,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.27",
@@ -1411,7 +1784,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.36",
@@ -1420,7 +1796,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.37",
@@ -1429,7 +1808,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.47",
@@ -1438,7 +1820,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.48",
@@ -1447,7 +1832,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.49",
@@ -1456,7 +1844,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.50",
@@ -1465,7 +1856,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.52",
@@ -1474,7 +1868,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.53",
@@ -1483,7 +1880,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.54",
@@ -1492,7 +1892,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.4.1 (Apple silicon), Chrome 153.0.8010.55",
@@ -1501,7 +1904,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.12",
@@ -1510,7 +1916,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.27",
@@ -1519,7 +1928,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.36",
@@ -1528,7 +1940,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.37",
@@ -1537,7 +1952,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.47",
@@ -1546,7 +1964,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.48",
@@ -1555,7 +1976,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.49",
@@ -1564,7 +1988,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.50",
@@ -1573,7 +2000,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.52",
@@ -1582,7 +2012,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.53",
@@ -1591,7 +2024,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.54",
@@ -1600,7 +2036,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.5.2 (Apple silicon), Chrome 153.0.8010.55",
@@ -1609,7 +2048,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.12",
@@ -1618,7 +2060,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.27",
@@ -1627,7 +2072,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.36",
@@ -1636,7 +2084,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.37",
@@ -1645,7 +2096,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.47",
@@ -1654,7 +2108,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.48",
@@ -1663,7 +2120,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.49",
@@ -1672,7 +2132,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.50",
@@ -1681,7 +2144,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.52",
@@ -1690,7 +2156,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.53",
@@ -1699,7 +2168,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.54",
@@ -1708,7 +2180,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.6.2 (Apple silicon), Chrome 153.0.8010.55",
@@ -1717,7 +2192,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.12",
@@ -1726,7 +2204,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.27",
@@ -1735,7 +2216,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.36",
@@ -1744,7 +2228,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.37",
@@ -1753,7 +2240,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.47",
@@ -1762,7 +2252,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.48",
@@ -1771,7 +2264,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.49",
@@ -1780,7 +2276,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.50",
@@ -1789,7 +2288,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.52",
@@ -1798,7 +2300,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.53",
@@ -1807,7 +2312,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.54",
@@ -1816,7 +2324,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 26.7 (Apple silicon), Chrome 153.0.8010.55",
@@ -1825,7 +2336,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.12",
@@ -1834,7 +2348,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.27",
@@ -1843,7 +2360,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.36",
@@ -1852,7 +2372,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.37",
@@ -1861,7 +2384,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.47",
@@ -1870,7 +2396,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.48",
@@ -1879,7 +2408,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.49",
@@ -1888,7 +2420,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.50",
@@ -1897,7 +2432,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.52",
@@ -1906,7 +2444,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.53",
@@ -1915,7 +2456,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.54",
@@ -1924,7 +2468,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "2",
+      "color_scheme": "light"
     },
     {
       "name": "macOS 27.0 (Apple silicon), Chrome 153.0.8010.55",
@@ -1933,7 +2480,10 @@
       "hint_arch": "arm",
       "bitness": "64",
       "wow64": "?0",
-      "form_factors": "Desktop"
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "2",
+      "color_scheme": "dark"
     }
   ],
   "device_kind": "desktop"

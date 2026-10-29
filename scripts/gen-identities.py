@@ -34,6 +34,13 @@ are the first release of the pool on the newest build of the version: Chrome
 updates itself, so the build a version's users run is mostly its last one, and
 the first build named a browser nobody had kept.
 
+Every desktop identity also names its machine (``machines`` in the seed):
+the RAM, the scale factor, on Windows the viewport of a maximized window, and
+the colour scheme — the device-memory, dpr, viewport and sec-ch-prefers-*
+hints a site may ask for (STAGE45). The machines are cycled over the pool, so
+each identity is one consistent computer; the defaults are the first machine
+of the system's list, on Windows the capture machine.
+
 Without ``device=`` a session sends the defaults, a real machine; with
 ``device="random"`` it draws one identity from the pool for its lifetime, as
 ``chrome-152-android`` draws a phone. The TLS never changes: that is the point.
@@ -124,26 +131,59 @@ def full_version_list(brands: str, full: str) -> str:
     return ", ".join(parts)
 
 
+def machine(os_: str, i: int, s: dict, windows_name: str = "") -> dict:
+    """The i-th machine of the system's list as device fields: on Windows the
+    viewport of a maximized window — the screen in CSS pixels less the taskbar
+    (Windows 11 has a taller one) and Chrome's own UI."""
+    m = s["machines"]
+    spec = m[os_][i % len(m[os_])]
+    out = {"device_memory": spec["device_memory"], "dpr": spec["dpr"]}
+    if "screen" in spec:
+        w, h = (int(x) for x in spec["screen"].split("x"))
+        dpr = float(spec["dpr"])
+        bar = m["taskbar"]["windows11" if "Windows 11" in windows_name else "windows10"]
+        out["viewport"] = f"{round(w / dpr)}x{round(h / dpr) - bar - m['chrome_ui']}"
+    out["color_scheme"] = spec["color_scheme"]
+    return out
+
+
 def desktop_devices(os_: str, major: str, s: dict) -> list[dict]:
     builds = s["chrome_builds"][major]
     out = []
     if os_ == "windows":
-        for w in s["windows"]:
+        for ri, w in enumerate(s["windows"]):
             for b in builds:
                 out.append({"name": f"{w['name']}, Chrome {b}", "platform_version": w["platform_version"],
                             "full_version": b, "hint_arch": "x86", "bitness": "64", "wow64": w["wow64"],
-                            "form_factors": "Desktop"})
+                            "form_factors": "Desktop", **machine(os_, len(out) + ri, s, w["name"])})
     elif os_ == "macos":
-        for m in s["macos"]:
+        for ri, m in enumerate(s["macos"]):
             for b in builds:
                 out.append({"name": f"{m['name']} ({'Apple silicon' if m['arch'] == 'arm' else 'Intel'}), Chrome {b}",
                             "platform_version": m["platform_version"], "full_version": b, "hint_arch": m["arch"],
-                            "bitness": "64", "wow64": "?0", "form_factors": "Desktop"})
+                            "bitness": "64", "wow64": "?0", "form_factors": "Desktop", **machine(os_, len(out) + ri, s)})
     else:
         for b in builds:
             out.append({"name": f"Linux, Chrome {b}", "full_version": b, "hint_arch": "x86", "bitness": "64",
-                        "wow64": "?0", "form_factors": "Desktop"})
+                        "wow64": "?0", "form_factors": "Desktop", **machine(os_, len(out), s)})
     return out
+
+
+def machine_values(os_: str, s: dict) -> dict:
+    """The new hints' defaults: the first machine of the system, the capture
+    machine's network estimate, no preference for motion or transparency."""
+    m = machine(os_, 0, s, "Windows 10")
+    v = {"device-memory": m["device_memory"], "sec-ch-device-memory": m["device_memory"],
+         "dpr": m["dpr"], "sec-ch-dpr": m["dpr"]}
+    if "viewport" in m:
+        w, h = m["viewport"].split("x")
+        v.update({"viewport-width": w, "sec-ch-viewport-width": w, "sec-ch-viewport-height": h})
+    net = s["machines"]["network"]
+    v.update({"rtt": net["rtt"], "downlink": net["downlink"], "ect": net["ect"],
+              "sec-ch-prefers-color-scheme": m["color_scheme"],
+              "sec-ch-prefers-reduced-motion": "no-preference",
+              "sec-ch-prefers-reduced-transparency": "no-preference"})
+    return v
 
 
 def desktop_values(os_: str, major: str, brands: str, s: dict) -> dict:
@@ -160,6 +200,7 @@ def desktop_values(os_: str, major: str, brands: str, s: dict) -> dict:
              "sec-ch-ua-platform-version": f'"{d.get("platform_version", "")}"', "sec-ch-ua-model": '""',
              "sec-ch-ua-bitness": '"64"', "sec-ch-ua-wow64": d["wow64"], "sec-ch-ua-form-factors": '"Desktop"'}
     v["sec-ch-ua-full-version-list"] = full_version_list(brands, v["sec-ch-ua-full-version"].strip('"'))
+    v.update(machine_values(os_, s))
     return v
 
 

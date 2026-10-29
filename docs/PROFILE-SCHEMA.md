@@ -389,7 +389,16 @@ padded to `N.0.0.0`, as Chromium pads it; `hint_arch` is the `sec-ch-ua-arch`
 value (the Android pool's `arch` is Yandex's User-Agent token, a different
 thing); `bitness`, `wow64` and `form_factors` are their hints verbatim. A Linux
 identity has no `platform_version`, and the hint goes out as `""`, which is what
-Chromium on Linux sends. An iOS identity's `os_version` is what `iPhone OS`
+Chromium on Linux sends. Since 0.20 a desktop identity also names its machine:
+`device_memory` (`"16"`: `device-memory` and `sec-ch-device-memory`), `dpr`
+(`"1.25"`: `dpr` and `sec-ch-dpr`), `viewport` (`"1536x753"`: the three
+viewport hints; absent on macOS and Linux, and then they are not sent) and
+`color_scheme` (`sec-ch-prefers-color-scheme`); `reduced_motion`,
+`reduced_transparency`, `rtt` (ms), `downlink` (Mbps) and `ect` may be set as
+well, and otherwise come from `client_hints.values`, where the generator puts
+the defaults of the system — on Windows the capture machine's. `rtt` and
+`downlink` are the estimate before the noise the session adds per site. An
+iOS identity's `os_version` is what `iPhone OS`
 says — frozen at `18_7` by Safari 26 — and `version` what `Version/` says.
 
 A delta inherits its parent's pool, template and hint values like any other
@@ -409,12 +418,16 @@ such delta, and a profile without devices never reports `user_agent_varies`.
 }
 ```
 
-`order` is stored whole rather than as positions: once the hints appear Chromium
-rebuilds the **entire** header cluster, and the order turns out to be a function
-of the set of names. Two independent runs gave the same sequence, so it is a
-measurement. If a site asks for a subset of the hints, the library keeps their
-relative order — an approximation; the exact order for every subset would have to
-be captured separately.
+`order` is stored whole rather than as positions. A hint asked for that it
+has no slot for — the machine, network and preference hints — goes where the
+browser process puts it: the machine's and the network's before `sec-ch-ua`,
+the preferences after the last User-Agent hint (STAGE45). `fetch_order` is a
+starting point only on Chromium 129 and later: there the cluster of a page's
+request — its own headers, the hints, User-Agent — is laid out the way Blink's
+header map hands it to the network stack, computed per request from the names
+it carries (rapidhash, as Blink hashes since 129; STAGE45 checked it against
+88 requests of Chrome 155 and 156). On older profiles a subset of the hints
+keeps the stored relative order.
 
 Browsers that did **not** cut the device out of the string get it substituted
 there too. Such a profile declares a template:
