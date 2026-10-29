@@ -286,6 +286,29 @@ Two practical notes from the same session, both of which cost a run:
   window stays open; the default of 4 s is enough for an installed browser and
   too short for one just unpacked.
 
+### A consumer Chrome its updater has already fetched — measured 2026-10-29
+
+Chrome's updater downloads a new version while the browser runs and leaves it
+beside the old one: `Application\<new version>\` and `new_chrome.exe`, swapped
+in when every Chrome window closes. That staged build is the consumer browser,
+not Chrome for Testing, and it runs on its own: `-browser
+".../Application/new_chrome.exe"` with the throwaway profile `capture` makes
+captured Chrome 156.0.8078.73 while the machine's Chrome 155 stayed open and
+untouched. The updater hands out only what the machine's rollout cohort has
+reached (`Cohort values` in `GoogleUpdater\updater.log`): on that day 156,
+while 157 had been stable for a week. `updater.exe --wake --system` asks it at
+once; it skips the check when the last one is under its delay.
+
+Edge on the stand's machine does not update: `HKLM\SOFTWARE\Policies\Microsoft\EdgeUpdate`
+holds `Update{56EB18F8-…} = 2` (manual only), and the services and tasks that
+would do the manual update are disabled — neither `/ua` nor `edge://settings/help`
+moves it off 139. That is the machine's setting and stays; Edge profiles past
+153 are derived. Opera installs per user from Opera's own mirror
+(`get.geo.opera.com/pub/opera/desktop/<version>/win/`, a `.sha256sum` beside
+each installer, signed by Opera Norway AS) with `--silent --allusers=0
+--installfolder=...` and the switches that keep it from becoming the default,
+pinning itself or importing anything; `opera-139-windows` was captured from it.
+
 `curlpro capture` picks the browser from the family in `-name`, so
 `-name firefox-154-windows` looks for Firefox and starts it with Firefox's own
 switches. An explicit `-browser` still has to agree with the name: a profile

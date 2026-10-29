@@ -30,7 +30,7 @@ from .timeouts import split_timeout as _split_timeout
 from .websocket import WebSocket, connect as ws_connect
 
 # The newest Chrome captured whole (155.0.8059.39, 2026-10-10).
-DEFAULT_PROFILE = "chrome-155-windows"
+DEFAULT_PROFILE = "chrome-156-windows"
 
 
 def _ms(value: float | None, name: str) -> int | None:

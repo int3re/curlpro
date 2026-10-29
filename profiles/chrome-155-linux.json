@@ -99,14 +99,14 @@
   },
   "client_hints": {
     "values": {
-      "sec-ch-ua-full-version": "\"155.0.8059.40\"",
+      "sec-ch-ua-full-version": "\"155.0.8059.86\"",
       "sec-ch-ua-arch": "\"x86\"",
       "sec-ch-ua-platform-version": "\"\"",
       "sec-ch-ua-model": "\"\"",
       "sec-ch-ua-bitness": "\"64\"",
       "sec-ch-ua-wow64": "?0",
       "sec-ch-ua-form-factors": "\"Desktop\"",
-      "sec-ch-ua-full-version-list": "\"Google Chrome\";v=\"155.0.8059.40\", \"Chromium\";v=\"155.0.8059.40\", \"Not(A:Brand\";v=\"24.0.0.0\""
+      "sec-ch-ua-full-version-list": "\"Google Chrome\";v=\"155.0.8059.86\", \"Chromium\";v=\"155.0.8059.86\", \"Not(A:Brand\";v=\"24.0.0.0\""
     },
     "order": [
       {
@@ -357,6 +357,70 @@
     {
       "name": "Linux, Chrome 155.0.8059.40",
       "full_version": "155.0.8059.40",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Linux, Chrome 155.0.8059.41",
+      "full_version": "155.0.8059.41",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Linux, Chrome 155.0.8059.79",
+      "full_version": "155.0.8059.79",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Linux, Chrome 155.0.8059.80",
+      "full_version": "155.0.8059.80",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Linux, Chrome 155.0.8059.81",
+      "full_version": "155.0.8059.81",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Linux, Chrome 155.0.8059.82",
+      "full_version": "155.0.8059.82",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Linux, Chrome 155.0.8059.84",
+      "full_version": "155.0.8059.84",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Linux, Chrome 155.0.8059.85",
+      "full_version": "155.0.8059.85",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop"
+    },
+    {
+      "name": "Linux, Chrome 155.0.8059.86",
+      "full_version": "155.0.8059.86",
       "hint_arch": "x86",
       "bitness": "64",
       "wow64": "?0",

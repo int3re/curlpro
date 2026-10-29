@@ -83,13 +83,13 @@ assembly serves HTTP/1.1, HTTP/2 and HTTP/3 — there is one copy of the rules.
 
 ## 4. Sessions: every parameter
 
-`curlpro.Session(impersonate="chrome-155-windows", **options)`. Every option
+`curlpro.Session(impersonate="chrome-156-windows", **options)`. Every option
 has a default that reproduces a browser; the table says what changes when you
 touch it.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `impersonate` | `chrome-155-windows` | the profile name, the newest Chrome captured whole (`chrome-151-windows` through 0.16.0); `list_profiles()` has all 310 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 45 captured whole |
+| `impersonate` | `chrome-156-windows` | the profile name, the newest Chrome captured whole (`chrome-151-windows` through 0.16.0, `chrome-155-windows` in 0.17 and 0.18); `list_profiles()` has all 317 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 45 captured whole |
 | `verify` | `True` | `True` — system roots; a PEM path — trust only that root; `False` — no verification |
 | `cert` | `None` | `(certificate, key)` paths for mutual TLS |
 | `trust_env` | `True` | take the proxy from `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, honouring `NO_PROXY`; an explicit `proxy` always wins |
@@ -768,18 +768,18 @@ partitions, and a Firefox profile sent a captcha's frame no cookies at all.
 
 ## 11. Profiles, devices and mobile
 
-310 profiles ship in the wheel. 45 of them are captured whole — by this
+317 profiles ship in the wheel. 48 of them are captured whole — by this
 project's own runs of `curlpro capture` or by the curl-impersonate signatures
-it imported, each with the hashes to prove it: 21 Chrome (118 to 153, and 155),
-4 Edge, 7 Firefox (133, 135, 144, 155, 156, 157, 158), 9 Safari (15.6.1 to 26.0.1, macOS and
+it imported, each with the hashes to prove it: 22 Chrome (118 to 153, 155 and 156),
+4 Edge, 8 Firefox (133, 135, 144, 155 to 159), Opera 139, 9 Safari (15.6.1 to 26.0.1, macOS and
 iOS), Tor 14, Yandex Browser 26.8 for Android, and two okhttp 5.5 (JVM and
 Conscrypt). 14 more are captured but for their HTTP/2 SETTINGS (Chrome 98 to
 116, Chrome 99 for Android, Edge 98 to 101, Safari 15.3 and 15.5): those
 signatures recorded no SETTINGS frame, and until 0.12 the profiles sent an
 empty one — a frame no browser sends; the values are now wreq-util's for each
 version, and the profile says so. 238 are transcribed from `0x676e67/wreq-util`
-(108 Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera), and 13 are derived here
-for the versions current on 2026-09-26 and 2026-10-10 that were not on the stand — see the
+(108 Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera), and 17 are derived here
+for the versions current on 2026-09-26, 2026-10-10 and 2026-10-29 that were not on the stand — see the
 next paragraphs, and prefer `list_profiles(measured=True)` when drawing a
 profile at random. Many share a TLS fingerprint: all of them together form 18
 distinct JA4 values, because a transcribed or derived profile replays a
@@ -801,8 +801,13 @@ on this project's stand, as deltas on captured twins: `chrome-154-windows`,
 capture it replays), `safari-27-ios` (a real iOS 27.0 Safari User-Agent on the
 Safari 26 capture) and `safari-27-macos`; and since 2026-10-10 `chrome-155-macos`
 and `-linux` (Chrome 155 was captured on Windows and its hello, frames and
-header order are 153's) and `chrome-156-windows`, `-macos` and `-linux` (Chrome
-156 went stable on 2026-10-07 while the stand had 155). Their `source` block has kind
+header order are 153's); since 2026-10-29 `chrome-156-macos` and `-linux` on the
+captured Chrome 156 (156.0.8078.73: 155's hello, frames, header sets and resources),
+`chrome-157-windows`, `-macos` and `-linux` (Chrome 157 went stable on 2026-10-22,
+and the stand's updater had not rolled it out yet), `edge-156-windows` (on the
+captured Chrome 156; Edge updates are switched off on the stand's machine) and
+`opera-139-macos` (Opera 139 was captured on Windows: Chrome 155's hello to the
+byte, which settles for one version what wreq-util claims for every Opera). Their `source` block has kind
 `derived` and names the published fact each rests on; like a transcription
 they report `measured: False` and raise `transcribed_profile`, and a live
 capture replaces each the day its browser is on the stand. A mark may also

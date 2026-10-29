@@ -1,0 +1,155 @@
+{
+  "name": "opera-139-windows",
+  "based_on": "chrome-155-windows",
+  "tls": {
+    "raw_client_hello": "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",
+    "signature_algorithms": [
+      23130,
+      2308,
+      2309,
+      2310,
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537
+    ],
+    "trust_anchors": [
+      "44947.2.1",
+      "44947.2.6",
+      "44947.2.13",
+      "44947.2.14",
+      "44947.2.15",
+      "44947.2.18",
+      "44947.2.19",
+      "44947.2.20",
+      "52580.200109.1.7",
+      "52580.200109.1.8",
+      "52580.200109.1.9",
+      "52580.200109.1.10",
+      "52580.200109.1.11",
+      "52580.200109.1.12",
+      "52580.200109.1.13",
+      "52580.200109.1.18",
+      "52580.200109.1.19",
+      "11129.9.1",
+      "11129.9.4",
+      "11129.9.5",
+      "11129.9.6",
+      "11129.9.7",
+      "11129.9.8",
+      "11129.9.10",
+      "11129.9.11",
+      "11129.9.12",
+      "11129.9.13",
+      "11129.9.15"
+    ],
+    "permute_extensions": true,
+    "allow_blunt_mimicry": true
+  },
+  "http1": {},
+  "http2": {},
+  "http3": {},
+  "quic": {},
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36 OPR/139.0.0.0",
+    "order": [
+      {
+        "key": "cache-control",
+        "value": ""
+      },
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": "\"Opera\";v=\"139\", \"Chromium\";v=\"155\", \"Not(A:Brand\";v=\"24\""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": "?0"
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": "\"Windows\""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      },
+      {
+        "key": "accept-language",
+        "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      }
+    ]
+  },
+  "websocket": {},
+  "fetch": {},
+  "resources": {},
+  "devices": [],
+  "client_hints": {
+    "values": {},
+    "order": [],
+    "fetch_order": []
+  }
+}

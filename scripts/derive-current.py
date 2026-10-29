@@ -69,6 +69,7 @@ from chromium_brands import sec_ch_ua  # noqa: E402
 DATE = "2026-09-26"
 DATE_1010 = "2026-10-10"
 DATE_1026 = "2026-10-26"
+DATE_1029 = "2026-10-29"
 PLATFORM = {"windows": '"Windows"', "macos": '"macOS"', "linux": '"Linux"'}
 
 WIN = "Windows NT 10.0; Win64; x64"
@@ -86,12 +87,16 @@ CHROME_155_NOTE = ("Derived, not captured: Chrome 155 was captured on Windows (1
                    "ClientHello, HTTP/2 frames, header sets and resources, image/jxl in Accept included — "
                    "with {os}'s sec-ch-ua-platform and User-Agent and 155's brands, computed as Chromium "
                    "computes them. Replace with a capture from {os}.")
-CHROME_156_NOTE = ("Derived, not captured: Chrome 156 went stable on 2026-10-07 (chromiumdash, Stable: "
-                   "156.0.8078.12), and the Chrome on this project's stand is 155. The ClientHello, "
-                   "HTTP/2 frames, header sets and resources are the captured chrome-155-windows's{os}; the "
-                   "User-Agent and the brand list are 156's, the brands computed as Chromium computes them. "
-                   "Chrome 153, 154 and 155 sent the same hello, which is evidence, not a measurement: "
-                   "replace with a capture when Chrome 156 is on the stand.")
+CHROME_156_NOTE = ("Derived, not captured: Chrome 156 was captured on Windows (156.0.8078.73, "
+                   "2026-10-29: the same hello, frames, header sets and resources as 155), and this {os} "
+                   "twin stands on that capture with {os}'s sec-ch-ua-platform and User-Agent and 156's "
+                   "brands, computed as Chromium computes them. Replace with a capture from {os}.")
+CHROME_157_NOTE = ("Derived, not captured: Chrome 157 went stable on 2026-10-22 (chromiumdash, Stable: "
+                   "157.0.8103.15), and the stand's Chrome is 156 — its updater rolls 157 out to this "
+                   "machine later. The ClientHello, HTTP/2 frames, header sets and resources are the "
+                   "captured chrome-156-windows's{os}; the User-Agent and the brand list are 157's, the "
+                   "brands computed as Chromium computes them. Chrome 153 to 156 sent the same hello, which "
+                   "is evidence, not a measurement: replace with a capture when Chrome 157 is on the stand.")
 
 CHROME_NOTE = ("Derived, not captured: Chrome 154 went stable on 2026-09-22 (chromiumdash, Stable: "
                "154.0.8037.57/.58), and the Chrome on this project's stand is still 153. The ClientHello, "
@@ -129,15 +134,34 @@ PLAN = [
     ("chrome-155-linux", "chrome-155-windows", chrome_ua(LINUX, 155), sec_ch_ua(155, "Google Chrome", 155),
      "https://chromiumdash.appspot.com/releases?platform=Linux",
      CHROME_155_NOTE.format(os="Linux"), DATE_1026),
-    ("chrome-156-windows", "chrome-155-windows", chrome_ua(WIN, 156), sec_ch_ua(156, "Google Chrome", 156),
-     "https://chromiumdash.appspot.com/releases?platform=Windows",
-     CHROME_156_NOTE.format(os=""), DATE_1010),
-    ("chrome-156-macos", "chrome-155-windows", chrome_ua(MAC, 156), sec_ch_ua(156, "Google Chrome", 156),
+    ("chrome-156-macos", "chrome-156-windows", chrome_ua(MAC, 156), sec_ch_ua(156, "Google Chrome", 156),
      "https://chromiumdash.appspot.com/releases?platform=Mac",
-     CHROME_156_NOTE.format(os=", with macOS's sec-ch-ua-platform"), DATE_1026),
-    ("chrome-156-linux", "chrome-155-windows", chrome_ua(LINUX, 156), sec_ch_ua(156, "Google Chrome", 156),
+     CHROME_156_NOTE.format(os="macOS"), DATE_1029),
+    ("chrome-156-linux", "chrome-156-windows", chrome_ua(LINUX, 156), sec_ch_ua(156, "Google Chrome", 156),
      "https://chromiumdash.appspot.com/releases?platform=Linux",
-     CHROME_156_NOTE.format(os=", with Linux's sec-ch-ua-platform"), DATE_1026),
+     CHROME_156_NOTE.format(os="Linux"), DATE_1029),
+    ("chrome-157-windows", "chrome-156-windows", chrome_ua(WIN, 157), sec_ch_ua(157, "Google Chrome", 157),
+     "https://chromiumdash.appspot.com/releases?platform=Windows",
+     CHROME_157_NOTE.format(os=""), DATE_1029),
+    ("chrome-157-macos", "chrome-156-windows", chrome_ua(MAC, 157), sec_ch_ua(157, "Google Chrome", 157),
+     "https://chromiumdash.appspot.com/releases?platform=Mac",
+     CHROME_157_NOTE.format(os=", with macOS's sec-ch-ua-platform"), DATE_1029),
+    ("chrome-157-linux", "chrome-156-windows", chrome_ua(LINUX, 157), sec_ch_ua(157, "Google Chrome", 157),
+     "https://chromiumdash.appspot.com/releases?platform=Linux",
+     CHROME_157_NOTE.format(os=", with Linux's sec-ch-ua-platform"), DATE_1029),
+    ("edge-156-windows", "chrome-156-windows", chrome_ua(WIN, 156, " Edg/156.0.0.0"),
+     sec_ch_ua(156, "Microsoft Edge", 156), "https://edgeupdates.microsoft.com/api/products",
+     "Derived, not captured: Edge 156.0.4314.50 is the stable release of 2026-10-28, on Chromium 156. "
+     "It stands on the captured chrome-156-windows as edge-153-windows stands on chrome-153-windows: "
+     "Chrome's hello and frames, Edge's User-Agent and brands. The stand's Edge is 139 and its updates "
+     "are switched off on that machine by policy. No identity pool: Edge writes its own build next to "
+     "Chromium's in the full-version list.", DATE_1029),
+    ("opera-139-macos", "chrome-155-macos", chrome_ua(MAC, 155, " OPR/139.0.0.0"),
+     sec_ch_ua(155, "Opera", 139), "https://get.geo.opera.com/pub/opera/desktop/139.0.6053.15/",
+     "Derived, not captured: Opera 139.0.6053.15 (2026-10-27) was captured on Windows "
+     "(opera-139-windows, 2026-10-29) and sent Chrome 155's hello, frames, header sets and resources "
+     "to the byte but for its User-Agent and brands; this macOS twin stands on Chrome 155 for macOS "
+     "with Opera's User-Agent and brands.", DATE_1029),
     ("safari-27-ios", "safari-26-ios",
      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) "
      "Version/27.0 Mobile/15E148 Safari/604.1", None, "https://github.com/openwrt/uhttpd/issues/42",

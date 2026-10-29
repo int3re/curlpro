@@ -32,7 +32,7 @@ def _profiles():
 
 def test_the_profile_count_and_families():
     names = NAMES
-    assert len(names) == 310
+    assert len(names) == 317
     assert set(names) <= set(curlpro.list_profiles())
     # By the resolved profile, not the file: a captured delta inherits nothing
     # from a base whose mark covers a part it brings itself (source.covers).
@@ -53,15 +53,15 @@ def test_the_profile_count_and_families():
             out[n.split("-")[0]] = out.get(n.split("-")[0], 0) + 1
         return out
 
-    assert families("captured") == {"chrome": 21, "edge": 4, "firefox": 7, "safari": 9,
+    assert families("captured") == {"chrome": 22, "edge": 4, "firefox": 8, "opera": 1, "safari": 9,
                                     "tor": 1, "yandex": 1, "okhttp": 2}
     assert families("settings") == {"chrome": 9, "edge": 3, "safari": 2}
     assert families("transcribed") == {"chrome": 108, "edge": 37, "firefox": 39, "safari": 22, "opera": 32}
-    assert families("derived") == {"chrome": 8, "edge": 1, "opera": 2, "safari": 2}
-    assert "310 profiles" in TEXT and "45 of them are captured whole" in TEXT and "21 Chrome" in TEXT
+    assert families("derived") == {"chrome": 10, "edge": 2, "opera": 3, "safari": 2}
+    assert "317 profiles" in TEXT and "48 of them are captured whole" in TEXT and "22 Chrome" in TEXT
     assert "14 more are captured but for their HTTP/2 SETTINGS" in TEXT
-    assert "238 are transcribed" in TEXT and "13 are derived" in TEXT
-    assert "238" in LLMS and "310" in LLMS
+    assert "238 are transcribed" in TEXT and "17 are derived" in TEXT
+    assert "238" in LLMS and "317" in LLMS
 
 
 def test_the_number_of_distinct_ja4_values():
