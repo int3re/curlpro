@@ -575,3 +575,7 @@ hello BoringSSL's with `supported_versions` compressed:
 
     go run ./cmd/echstand -quic -own-cert -browser .../new_chrome.exe -json ech-quic.json
 
+`-close` closes the connection after every response, so the favicon comes on a
+new connection that resumes — how the resumed inner hello (the PSK last, the
+outer without one) was measured on Chrome 156.
+

@@ -61,6 +61,10 @@ type UConn struct {
 	// [curlPro] ECHInner chooses how the ClientHelloInner is built when real
 	// ECH is used (u_ech_curlpro.go).
 	ECHInner ECHInnerStyle
+
+	// [curlPro] echPSK is the PSK moved from the outer hello into the inner
+	// one, with what its binder is computed from (u_ech_curlpro.go).
+	echPSK *echInnerPSK
 }
 
 // UClient returns a new uTLS client, with behavior depending on clientHelloID.
@@ -198,7 +202,11 @@ func (uconn *UConn) uLoadSession() error {
 func (uconn *UConn) uApplyPatch() {
 	helloLen := len(uconn.HandshakeState.Hello.Raw)
 	if uconn.sessionController.shouldUpdateBinders() {
-		uconn.sessionController.updateBinders()
+		// [curlPro] With the PSK moved into the inner hello the outer carries
+		// none: its binder was computed with the inner (u_ech_curlpro.go).
+		if uconn.echPSK == nil {
+			uconn.sessionController.updateBinders()
+		}
 		uconn.sessionController.setPskToUConn()
 	}
 	uAssert(helloLen == len(uconn.HandshakeState.Hello.Raw), "tls: uApplyPatch Failed: the patch should never change the length of the marshaled clientHello")
@@ -582,6 +590,7 @@ func (uconn *UConn) MarshalClientHello() error {
 		inner.supportedCurves = uconn.HandshakeState.Hello.SupportedCurves
 
 		ech.innerHello = inner
+		uconn.echMovePSKInner(inner) // [curlPro]
 
 		uconn.computeAndUpdateOuterECHExtension(inner, ech, true)
 

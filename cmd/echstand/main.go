@@ -53,19 +53,20 @@ import (
 )
 
 var (
-	listen  = flag.String("listen", "127.0.0.1:8444", "the ECH-capable TLS server")
-	dohAddr = flag.String("doh", "127.0.0.1:8053", "the DNS-over-HTTPS server")
-	name    = flag.String("name", "ech-stand.test", "the name behind ECH (the inner SNI)")
-	public  = flag.String("public", "public.ech-stand.test", "the ECH configuration's public_name (the outer SNI)")
-	maxName = flag.Int("max-name", 0, "the configuration's maximum_name_length")
-	withH3  = flag.Bool("quic", false, "also take QUIC on the port, with the same ECH key, and offer h3 in the record")
-	ownCert = flag.Bool("own-cert", false, "serve a certificate made now for the stand's names and 127.0.0.1 (Chrome's QUIC wants the name to match)")
-	certs   = flag.String("certs", "capture/certs", "directory holding tls.crt and tls.key")
-	auto    = flag.Bool("auto", false, "launch the installed Chrome at the stand")
-	browser = flag.String("browser", "", "the Chrome to launch (found by -auto when empty)")
-	timeout = flag.Duration("timeout", 20*time.Second, "how long to wait")
-	out     = flag.String("json", "", "where to write the measurement")
-	netlog  = flag.String("netlog", "", "where Chrome writes its net log (--log-net-log)")
+	listen    = flag.String("listen", "127.0.0.1:8444", "the ECH-capable TLS server")
+	dohAddr   = flag.String("doh", "127.0.0.1:8053", "the DNS-over-HTTPS server")
+	name      = flag.String("name", "ech-stand.test", "the name behind ECH (the inner SNI)")
+	public    = flag.String("public", "public.ech-stand.test", "the ECH configuration's public_name (the outer SNI)")
+	maxName   = flag.Int("max-name", 0, "the configuration's maximum_name_length")
+	withH3    = flag.Bool("quic", false, "also take QUIC on the port, with the same ECH key, and offer h3 in the record")
+	closeEach = flag.Bool("close", false, "close the connection after every response, so the next one resumes")
+	ownCert   = flag.Bool("own-cert", false, "serve a certificate made now for the stand's names and 127.0.0.1 (Chrome's QUIC wants the name to match)")
+	certs     = flag.String("certs", "capture/certs", "directory holding tls.crt and tls.key")
+	auto      = flag.Bool("auto", false, "launch the installed Chrome at the stand")
+	browser   = flag.String("browser", "", "the Chrome to launch (found by -auto when empty)")
+	timeout   = flag.Duration("timeout", 20*time.Second, "how long to wait")
+	out       = flag.String("json", "", "where to write the measurement")
+	netlog    = flag.String("netlog", "", "where Chrome writes its net log (--log-net-log)")
 )
 
 type conn struct {
@@ -160,6 +161,9 @@ func main() {
 			res.Accepted = append(res.Accepted, r.TLS.ECHAccepted)
 		}
 		mu.Unlock()
+		if *closeEach {
+			w.Header().Set("Connection", "close") // HTTP/2: a GOAWAY after the response
+		}
 		io.WriteString(w, "<!doctype html><title>ech</title>ok")
 	})}
 	go srv.Serve(tlsLn)

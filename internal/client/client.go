@@ -1586,9 +1586,11 @@ func (s *Session) handshakeTLS(dialCtx context.Context, raw net.Conn, u *url.URL
 	// appended here, last, exactly where a browser puts it. With OmitEmptyPsk
 	// it stays off the wire until a ticket exists, so the first handshake is
 	// byte-for-byte what it was.
-	// With ECH Chrome carries the PSK inside the inner hello alone; that is not
-	// reproduced yet, so a connection with ECH does not resume.
-	resume := s.opts.Resume && ech == nil
+	// With ECH Chrome carries the PSK inside the inner hello alone, its binder
+	// over the inner hello; the patched uTLS does the same for the BoringSSL
+	// style (u_ech_curlpro.go). NSS puts a stand-in PSK in the outer hello,
+	// which is not reproduced, so a Firefox connection with ECH does not resume.
+	resume := s.opts.Resume && (ech == nil || s.echInner == utls.ECHInnerBoringSSL)
 	if resume {
 		spec.Extensions = append(spec.Extensions, &utls.UtlsPreSharedKeyExtension{})
 		// Firefox's resuming hello has no session_ticket extension: NSS offers

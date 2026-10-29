@@ -1176,9 +1176,15 @@ order and every other one compressed, `supported_versions` included, since a
 QUIC hello requires TLS 1.3 already (BoringSSL compresses it then). A rejection
 with retry configurations is retried once, as on TCP.
 
-Not reproduced yet: resumption inside ECH — Chrome puts the PSK in the inner
-hello alone, and a connection with ECH here makes a full handshake; Firefox's
-handling of an HTTPS record, which is read by Chrome's rules.
+A connection that resumes does it inside ECH, as Chrome's does: the outer
+hello carries no `pre_shared_key`, the inner one carries it last, its binder
+computed over the inner hello as the server rebuilds it. Chrome 156 and
+`chrome-156-windows` on `cmd/echstand -close`, the resumed connection: payload
+304, padding 21, the same extensions in the same places.
+
+Not reproduced yet: resumption inside ECH for a Firefox profile — NSS puts a
+stand-in PSK in the outer hello, and such a connection makes a full handshake
+here; Firefox's handling of an HTTPS record, which is read by Chrome's rules.
 
 ## 13. Streaming, uploads, async
 

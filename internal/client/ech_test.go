@@ -40,6 +40,7 @@ type echServer struct {
 	mu       sync.Mutex
 	inner    []*tls.ClientHelloInfo
 	accepted []bool
+	resumed  []bool
 }
 
 func echConfigFor(t *testing.T, id uint8, publicName string) ([]byte, *ecdh.PrivateKey) {
@@ -106,6 +107,7 @@ func startECHServer(t *testing.T, cfg []byte, key *ecdh.PrivateKey) *echServer {
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		e.mu.Lock()
 		e.accepted = append(e.accepted, r.TLS.ECHAccepted)
+		e.resumed = append(e.resumed, r.TLS.DidResume)
 		e.mu.Unlock()
 		io.WriteString(w, "ok")
 	})}
@@ -432,5 +434,43 @@ func TestECHPublicName(t *testing.T) {
 	}
 	if got := echPublicName([]byte{0, 3, 1, 2, 3}); got != "\x00\x03\x01\x02\x03" {
 		t.Fatalf("an unreadable list must stand for itself: %q", got)
+	}
+}
+
+// A second connection to an ECH site resumes inside ECH, as Chrome's does: the
+// PSK in the inner hello alone, last, its binder over the inner hello the
+// server rebuilds — which the server checks before it resumes.
+func TestASecondECHConnectionResumesInside(t *testing.T) {
+	cfg, key := echConfigFor(t, 7, "public.echsite.test")
+	srv := startECHServer(t, cfg, key)
+	z := newTestZone(t)
+	q := "_" + srv.port + "._https.echsite.test."
+	z.https[q], z.ech[q] = []string{"h2"}, echList(cfg)
+
+	s, err := New(auditProfile(t, "chrome-155-windows"), Options{DNS: z.addr, CACert: srv.caFile,
+		DefaultHeaders: true, Timeout: 10 * time.Second, Resume: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	url := "https://echsite.test:" + srv.port + "/"
+	if _, err := s.Do(&Request{Method: "GET", URL: url}); err != nil {
+		t.Fatal(err)
+	}
+	// A connection of its own: HTTP/1.1 does not share the h2 one.
+	if _, err := s.Do(&Request{Method: "GET", URL: url, Protocol: ProtoHTTP1}); err != nil {
+		t.Fatal(err)
+	}
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if len(srv.accepted) != 2 || !srv.accepted[0] || !srv.accepted[1] {
+		t.Fatalf("ECH accepted: %v", srv.accepted)
+	}
+	if len(srv.resumed) != 2 || srv.resumed[0] || !srv.resumed[1] {
+		t.Fatalf("resumed: %v, want the second", srv.resumed)
+	}
+	h := srv.inner[len(srv.inner)-1]
+	if last := h.Extensions[len(h.Extensions)-1]; last != 41 {
+		t.Fatalf("the inner hello ends with %d, not the PSK: %v", last, h.Extensions)
 	}
 }
