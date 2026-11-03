@@ -284,6 +284,13 @@ PAIRS = [
     ("firefox-156-windows", "firefox-156", "firefox-156"),
     # Firefox 158 put image/jxl after image/avif in every image Accept (2026-10-26).
     ("firefox-158-windows", "firefox-158", "firefox-158"),
+    # Yandex Browser 26.10 on Chromium 152, captured 2026-11-03 through its
+    # certificate warning's proceed link (no image/jxl: Chromium 152). Its
+    # cache slots are Chromium 154's run, as Chrome 153's are.
+    ("yandex-26.10-windows", "yandex-26.10", "chrome-154"),
+    # Brave 1.98 on Chromium 156, 2026-11-03: Sec-GPC after Accept on every
+    # request; Chrome 156's cache run for the slots.
+    ("brave-1.98-windows", "brave-1.98", "chrome-156"),
 ]
 
 # The -cache page's resources, by path, for the revalidation priorities.

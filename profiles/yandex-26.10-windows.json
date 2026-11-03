@@ -1,0 +1,1411 @@
+{
+  "name": "yandex-26.10-windows",
+  "based_on": "chrome-152-windows",
+  "tls": {
+    "raw_client_hello": "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",
+    "signature_algorithms": [
+      51914,
+      2308,
+      2309,
+      2310,
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537
+    ],
+    "trust_anchors": [
+      "52580.200109.1.19",
+      "44947.2.19",
+      "44947.2.6",
+      "11129.9.1",
+      "11129.9.13",
+      "52580.200109.1.10",
+      "44947.2.1",
+      "52580.200109.1.11",
+      "11129.9.6",
+      "11129.9.12",
+      "11129.9.11",
+      "52580.200109.1.9",
+      "44947.2.20",
+      "11129.9.5",
+      "52580.200109.1.8",
+      "11129.9.8",
+      "11129.9.10",
+      "11129.9.7",
+      "11129.9.4",
+      "52580.200109.1.7",
+      "11129.9.15",
+      "44947.2.14",
+      "52580.200109.1.13",
+      "44947.2.13",
+      "11129.9.3",
+      "44947.2.15",
+      "11129.9.9",
+      "44947.2.18",
+      "52580.200109.1.12",
+      "11129.9.14",
+      "52580.200109.1.18",
+      "11129.9.2"
+    ],
+    "permute_extensions": true,
+    "allow_blunt_mimicry": true
+  },
+  "http1": {
+    "order": [
+      "Host",
+      "Connection",
+      "Cache-Control",
+      "Content-Length",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "Upgrade-Insecure-Requests",
+      "Content-Type",
+      "User-Agent",
+      "Origin",
+      "Accept",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-User",
+      "Sec-Fetch-Dest",
+      "Referer",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie",
+      "If-None-Match",
+      "If-Modified-Since"
+    ]
+  },
+  "http2": {},
+  "http3": {},
+  "quic": {},
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 YaBrowser/26.10.0.0 Safari/537.36",
+    "order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "cache-control",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": "\"Chromium\";v=\"152\", \"Not?A_Brand\";v=\"24\", \"YaBrowser\";v=\"26.10\", \"Yowser\";v=\"2.5\""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": "?0"
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": "\"Windows\""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      },
+      {
+        "key": "accept-language",
+        "value": "ru,en;q=0.9"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      }
+    ]
+  },
+  "websocket": {},
+  "fetch": {
+    "order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "*/*"
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "same-origin"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "cors"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "empty"
+      },
+      {
+        "key": "sec-fetch-storage-access",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=1, i"
+      }
+    ],
+    "http1_order": [
+      "Host",
+      "Connection",
+      "Content-Length",
+      "sec-ch-ua-platform",
+      "User-Agent",
+      "sec-ch-ua",
+      "Content-Type",
+      "sec-ch-ua-mobile",
+      "Accept",
+      "Origin",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Dest",
+      "Sec-Fetch-Storage-Access",
+      "Referer",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie",
+      "If-None-Match",
+      "If-Modified-Since"
+    ]
+  },
+  "devices": [
+    {
+      "name": "Windows 10 22H2, 1920x1080 at 1x, 16 GB",
+      "platform_version": "10.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x969",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 10 22H2, 1920x1080 at 1x, 8 GB",
+      "platform_version": "10.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x969",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 10 22H2, 1920x1080 at 1.25x, 16 GB",
+      "platform_version": "10.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x753",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 10 22H2, 1366x768 at 1x, 8 GB",
+      "platform_version": "10.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x657",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 10 22H2, 2560x1440 at 1x, 32 GB",
+      "platform_version": "10.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1329",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 10 22H2, 1920x1080 at 1.5x, 16 GB",
+      "platform_version": "10.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.5",
+      "viewport": "1280x609",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 10 22H2, 1440x900 at 1x, 8 GB",
+      "platform_version": "10.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x789",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 10 22H2, 2560x1440 at 1.25x, 32 GB",
+      "platform_version": "10.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1.25",
+      "viewport": "2048x1041",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 10 22H2, 1600x900 at 1x, 16 GB",
+      "platform_version": "10.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x789",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 22H2, 1920x1080 at 1x, 16 GB",
+      "platform_version": "14.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 22H2, 1920x1080 at 1x, 8 GB",
+      "platform_version": "14.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 22H2, 1920x1080 at 1.25x, 16 GB",
+      "platform_version": "14.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x745",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 22H2, 1366x768 at 1x, 8 GB",
+      "platform_version": "14.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x649",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 22H2, 2560x1440 at 1x, 32 GB",
+      "platform_version": "14.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1321",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 22H2, 1920x1080 at 1.5x, 16 GB",
+      "platform_version": "14.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.5",
+      "viewport": "1280x601",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 22H2, 1440x900 at 1x, 8 GB",
+      "platform_version": "14.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x781",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 22H2, 2560x1440 at 1.25x, 32 GB",
+      "platform_version": "14.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1.25",
+      "viewport": "2048x1033",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 22H2, 1600x900 at 1x, 16 GB",
+      "platform_version": "14.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x781",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 23H2, 1920x1080 at 1x, 16 GB",
+      "platform_version": "15.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 23H2, 1920x1080 at 1x, 8 GB",
+      "platform_version": "15.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 23H2, 1920x1080 at 1.25x, 16 GB",
+      "platform_version": "15.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x745",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 23H2, 1366x768 at 1x, 8 GB",
+      "platform_version": "15.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x649",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 23H2, 2560x1440 at 1x, 32 GB",
+      "platform_version": "15.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1321",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 23H2, 1920x1080 at 1.5x, 16 GB",
+      "platform_version": "15.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.5",
+      "viewport": "1280x601",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 23H2, 1440x900 at 1x, 8 GB",
+      "platform_version": "15.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x781",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 23H2, 2560x1440 at 1.25x, 32 GB",
+      "platform_version": "15.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1.25",
+      "viewport": "2048x1033",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 23H2, 1600x900 at 1x, 16 GB",
+      "platform_version": "15.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x781",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 24H2, 1920x1080 at 1x, 16 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 24H2, 1920x1080 at 1x, 8 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 24H2, 1920x1080 at 1.25x, 16 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x745",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 24H2, 1366x768 at 1x, 8 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x649",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 24H2, 2560x1440 at 1x, 32 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1321",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 24H2, 1920x1080 at 1.5x, 16 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.5",
+      "viewport": "1280x601",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 24H2, 1440x900 at 1x, 8 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x781",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 24H2, 2560x1440 at 1.25x, 32 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1.25",
+      "viewport": "2048x1033",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 24H2, 1600x900 at 1x, 16 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x781",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 25H2, 1920x1080 at 1x, 16 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 25H2, 1920x1080 at 1x, 8 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 25H2, 1920x1080 at 1.25x, 16 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x745",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 25H2, 1366x768 at 1x, 8 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x649",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 25H2, 2560x1440 at 1x, 32 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1321",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 25H2, 1920x1080 at 1.5x, 16 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.5",
+      "viewport": "1280x601",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 25H2, 1440x900 at 1x, 8 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x781",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 25H2, 2560x1440 at 1.25x, 32 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1.25",
+      "viewport": "2048x1033",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 25H2, 1600x900 at 1x, 16 GB",
+      "platform_version": "19.0.0",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x781",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    }
+  ],
+  "client_hints": {
+    "values": {
+      "sec-ch-ua-full-version": "\"26.10.3.771\"",
+      "sec-ch-ua-arch": "\"x86\"",
+      "sec-ch-ua-platform-version": "\"10.0.0\"",
+      "sec-ch-ua-model": "\"\"",
+      "sec-ch-ua-bitness": "\"64\"",
+      "sec-ch-ua-wow64": "?0",
+      "sec-ch-ua-form-factors": "\"Desktop\"",
+      "sec-ch-ua-full-version-list": "\"Chromium\";v=\"152.0.7977.771\", \"Not?A_Brand\";v=\"24.0.0.0\", \"YaBrowser\";v=\"26.10.3.771\", \"Yowser\";v=\"2.5\"",
+      "device-memory": "16",
+      "sec-ch-device-memory": "16",
+      "dpr": "1",
+      "sec-ch-dpr": "1",
+      "viewport-width": "1920",
+      "sec-ch-viewport-width": "1920",
+      "sec-ch-viewport-height": "969",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g",
+      "sec-ch-prefers-color-scheme": "dark",
+      "sec-ch-prefers-reduced-motion": "no-preference",
+      "sec-ch-prefers-reduced-transparency": "no-preference"
+    },
+    "order": [
+      {
+        "key": "cache-control",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ],
+    "fetch_order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ]
+  },
+  "device_kind": "desktop",
+  "resources": {
+    "orders": {
+      "cors": [
+        "origin",
+        "sec-ch-ua-platform",
+        "user-agent",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "accept",
+        "if-none-match",
+        "if-modified-since",
+        "sec-fetch-site",
+        "sec-fetch-mode",
+        "sec-fetch-dest",
+        "sec-fetch-storage-access",
+        "referer",
+        "accept-encoding",
+        "accept-language",
+        "cookie",
+        "priority"
+      ],
+      "navigate": [
+        "cache-control",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+        "upgrade-insecure-requests",
+        "user-agent",
+        "accept",
+        "sec-fetch-site",
+        "sec-fetch-mode",
+        "sec-fetch-dest",
+        "sec-fetch-storage-access",
+        "referer",
+        "accept-encoding",
+        "accept-language",
+        "cookie",
+        "if-none-match",
+        "if-modified-since",
+        "priority"
+      ],
+      "no-cors": [
+        "content-length",
+        "sec-ch-ua-platform",
+        "user-agent",
+        "sec-ch-ua",
+        "content-type",
+        "sec-purpose",
+        "sec-ch-ua-mobile",
+        "accept",
+        "if-none-match",
+        "if-modified-since",
+        "origin",
+        "sec-fetch-site",
+        "sec-fetch-mode",
+        "sec-fetch-dest",
+        "sec-fetch-storage-access",
+        "referer",
+        "accept-encoding",
+        "accept-language",
+        "cookie",
+        "priority"
+      ]
+    },
+    "http1_orders": {
+      "cors": [
+        "Host",
+        "Connection",
+        "Origin",
+        "sec-ch-ua-platform",
+        "User-Agent",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "Accept",
+        "If-None-Match",
+        "If-Modified-Since",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Sec-Fetch-Storage-Access",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "Cookie"
+      ],
+      "navigate": [
+        "Host",
+        "Connection",
+        "Cache-Control",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+        "Upgrade-Insecure-Requests",
+        "User-Agent",
+        "Accept",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Sec-Fetch-Storage-Access",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "Cookie",
+        "If-None-Match",
+        "If-Modified-Since"
+      ],
+      "no-cors": [
+        "Host",
+        "Connection",
+        "Content-Length",
+        "sec-ch-ua-platform",
+        "User-Agent",
+        "sec-ch-ua",
+        "Content-Type",
+        "Sec-Purpose",
+        "sec-ch-ua-mobile",
+        "Accept",
+        "If-None-Match",
+        "If-Modified-Since",
+        "Origin",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Sec-Fetch-Storage-Access",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "Cookie"
+      ]
+    },
+    "kinds": {
+      "beacon": {
+        "dest": "empty",
+        "accept": "*/*",
+        "priority": "u=4, i"
+      },
+      "font": {
+        "dest": "font",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=0"
+      },
+      "font-preload": {
+        "dest": "font",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "icon": {
+        "dest": "image",
+        "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "priority": "u=1, i"
+      },
+      "iframe": {
+        "dest": "iframe",
+        "mode": "navigate",
+        "priority": "u=0, i"
+      },
+      "image": {
+        "dest": "image",
+        "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "priority": "i"
+      },
+      "image-css": {
+        "dest": "image",
+        "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "priority": "i"
+      },
+      "module": {
+        "dest": "script",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "module-preload": {
+        "dest": "script",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "prefetch": {
+        "dest": "empty",
+        "priority": "u=4, i",
+        "purpose": "prefetch"
+      },
+      "script": {
+        "dest": "script",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "script-async": {
+        "dest": "script",
+        "accept": "*/*"
+      },
+      "script-body": {
+        "dest": "script",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "script-defer": {
+        "dest": "script",
+        "accept": "*/*"
+      },
+      "script-preload": {
+        "dest": "script",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "style": {
+        "dest": "style",
+        "accept": "text/css,*/*;q=0.1",
+        "priority": "u=0"
+      },
+      "style-preload": {
+        "dest": "style",
+        "accept": "text/css,*/*;q=0.1",
+        "priority": "u=0"
+      }
+    },
+    "storage_access": "active",
+    "cors_origin": "always"
+  }
+}

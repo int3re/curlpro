@@ -1,0 +1,180 @@
+{
+  "name": "yandex-26.10-linux",
+  "based_on": "yandex-26.10-windows",
+  "source": {
+    "kind": "derived",
+    "from": "https://useragents.io/explore/browsers/types/browser/maker/yandex-llc-0b6",
+    "date": "2026-11-03",
+    "path": "scripts/derive-current.py",
+    "note": "Derived, not captured: Yandex Browser 26.10 runs on Chromium 152 on Linux as on Windows — a real Linux string of it seen in traffic (useragents.io, 2026-11-03) says Chrome/152.0.0.0 YaBrowser/26.10.0.0 — and this twin stands on the captured yandex-26.10-windows (26.10.3.771, 2026-11-03): its ClientHello (Chrome 152's, the 32 trust anchors), HTTP/2 frames, header sets and resources, with Linux's User-Agent and sec-ch-ua-platform. The hints are the Windows capture's but for the platform, the architecture and the machine (gen-identities.py): the build and the brands are Yandex's on Windows, 26.10.3.771, and whether Linux runs the same build number is not known here. Replace with a capture from Linux."
+  },
+  "headers": {
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 YaBrowser/26.10.0.0 Safari/537.36",
+    "order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "cache-control",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": "\"Chromium\";v=\"152\", \"Not?A_Brand\";v=\"24\", \"YaBrowser\";v=\"26.10\", \"Yowser\";v=\"2.5\""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": "?0"
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": "\"Linux\""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      },
+      {
+        "key": "accept-language",
+        "value": "ru,en;q=0.9"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      }
+    ]
+  },
+  "devices": [
+    {
+      "name": "Linux, 1920x1080 at 1x, 16 GB",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x977",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Linux, 1920x1080 at 1x, 8 GB",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x977",
+      "color_scheme": "dark",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Linux, 2560x1440 at 1x, 32 GB",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1337",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Linux, 1366x768 at 1x, 8 GB",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1366x665",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    }
+  ],
+  "device_kind": "desktop",
+  "client_hints": {
+    "values": {
+      "sec-ch-ua-full-version": "\"26.10.3.771\"",
+      "sec-ch-ua-arch": "\"x86\"",
+      "sec-ch-ua-platform-version": "\"\"",
+      "sec-ch-ua-model": "\"\"",
+      "sec-ch-ua-bitness": "\"64\"",
+      "sec-ch-ua-wow64": "?0",
+      "sec-ch-ua-form-factors": "\"Desktop\"",
+      "sec-ch-ua-full-version-list": "\"Chromium\";v=\"152.0.7977.771\", \"Not?A_Brand\";v=\"24.0.0.0\", \"YaBrowser\";v=\"26.10.3.771\", \"Yowser\";v=\"2.5\"",
+      "device-memory": "16",
+      "sec-ch-device-memory": "16",
+      "dpr": "1",
+      "sec-ch-dpr": "1",
+      "viewport-width": "1920",
+      "sec-ch-viewport-width": "1920",
+      "sec-ch-viewport-height": "977",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g",
+      "sec-ch-prefers-color-scheme": "light",
+      "sec-ch-prefers-reduced-motion": "no-preference",
+      "sec-ch-prefers-reduced-transparency": "no-preference"
+    }
+  }
+}

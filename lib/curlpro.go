@@ -184,7 +184,11 @@ func curlpro_free(s *C.char) {
 // for the client hints a site asks for besides the User-Agent ones (a file
 // carrying them does not load into an older library, which decodes
 // strictly, so a profile bundle with them asks for this one).
-const Version = "0.29.0"
+// 0.30.0: hellos in field form a source describes and no browser here sends
+// — "always" on padding, an explicit empty ALPS list — and {full_version} in
+// a User-Agent template (Yandex on iPhone writes its build); the profiles
+// carrying them do not load into an older library.
+const Version = "0.30.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {

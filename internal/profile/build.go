@@ -28,6 +28,10 @@ type Extension struct {
 	Formats    []uint8  `json:"formats,omitempty"`    // ec_point_formats
 	ALPN       []string `json:"alpn,omitempty"`       // ALPN, application_settings
 	Limit      uint16   `json:"limit,omitempty"`      // record_size_limit
+	// Always (padding): the extension is sent on every hello, empty where
+	// BoringSSL's rule would leave it out (an unpadded hello outside 256–511
+	// bytes). tls-client's ConfirmedAndroid2 sends it so (WillPad: true).
+	Always bool `json:"always,omitempty"`
 }
 
 // extensionIDs maps a type name to an extension number.
@@ -178,7 +182,10 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 		return &utls.ALPNExtension{AlpnProtocols: clone(e.ALPN)}, nil
 
 	case "application_settings":
-		if len(e.ALPN) == 0 {
+		// An explicit empty list ("alpn": []) is an ALPS that names no
+		// protocol — tls-client's MeshAndroid sends one; a missing list is
+		// an error.
+		if e.ALPN == nil {
 			return nil, errMissing("alpn")
 		}
 		return &utls.ApplicationSettingsExtension{SupportedProtocols: clone(e.ALPN)}, nil
@@ -196,6 +203,9 @@ func buildExtension(e Extension) (utls.TLSExtension, error) {
 		return &utls.FakeRecordSizeLimitExtension{Limit: e.Limit}, nil
 
 	case "padding":
+		if e.Always {
+			return &utls.UtlsPaddingExtension{GetPaddingLen: alwaysPad}, nil
+		}
 		return &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle}, nil
 
 	case "encrypted_client_hello":
@@ -259,6 +269,14 @@ func toSigSchemes(in []uint16) []utls.SignatureScheme {
 		out[i] = utls.SignatureScheme(a)
 	}
 	return out
+}
+
+// alwaysPad is BoringSSL's padding length, with the extension kept (empty)
+// where BoringSSL would drop it. uTLS's Update takes WillPad from this
+// function, so a WillPad set on the literal would not survive.
+func alwaysPad(unpadded int) (int, bool) {
+	n, _ := utls.BoringPaddingStyle(unpadded)
+	return n, true
 }
 
 func errMissing(field string) error {

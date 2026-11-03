@@ -49,19 +49,35 @@ def test_every_transcribed_profile_is_a_delta_with_a_note():
         # A transcription names the commit it read; a derived profile names
         # the published fact it rests on (source.from) instead.
         assert d["source"]["note"] and (d["source"].get("ref") or d["source"]["kind"] == "derived"), p.name
+        tlsclient = d["source"].get("from") == "github.com/bogdanfinn/tls-client"
         # devices and client_hints are what gen-identities.py adds on top (an
         # empty pool, on a delta of a pooled profile); fetch is the derived
         # Safari set gen-safari-fetch.py writes from the delta's own navigation order.
-        assert set(d) <= {"name", "based_on", "source", "headers", "http2", "devices", "device_kind", "client_hints",
-                          "fetch", "tls"}, f"{p.name}: a transcribed delta carries {set(d)}"
-        if "fetch" in d:
+        allowed = {"name", "based_on", "source", "headers", "http2", "devices", "device_kind", "client_hints",
+                   "fetch", "tls"}
+        if p.stem == "brave-1.88-windows":
+            # Sec-GPC, which Brave sends on every request, in the HTTP/1.1
+            # and fetch orders of the Chrome 146 it stands beside.
+            allowed |= {"http1"}
+        assert set(d) <= allowed, f"{p.name}: a transcribed delta carries {set(d)}"
+        if "fetch" in d and p.stem != "brave-1.88-windows":
             assert p.name.startswith("safari-") and d["fetch"]["derived"] is True, p.name
         # The one TLS a transcription may carry: Firefox 151 to 153 without 0xc009,
         # which Firefox itself turned off in 151 while wreq-util declares 150's
         # list (test_firefox_defaults.py). Everything else of the hello is captured.
         # And a derived Chrome 154+ on a 153 capture: the capture's trust_anchors
         # list sorted bytewise, as Chromium sends it from 154.
-        if "tls" in d and p.name.startswith("firefox-"):
+        # tls-client's hellos have no captured twin and are written field for
+        # field, with their HTTP/2; Brave 1.88's is Chrome 146's and replayed.
+        if tlsclient:
+            if p.stem == "brave-1.88-windows":
+                assert "tls" not in d and "http2" not in d, p.name
+            else:
+                assert set(d["tls"]) <= {"cipher_suites", "compression_methods", "extensions",
+                                         "permute_extensions", "signature_algorithms"}, p.name
+                assert d["tls"]["extensions"] and d["http2"]["settings"], p.name
+                assert "tls-client's" in d["source"]["note"], p.name
+        elif "tls" in d and p.name.startswith("firefox-"):
             assert re.fullmatch(r"firefox-15[123]-\w+\.json", p.name) and set(d["tls"]) == {"cipher_suites"}, p.name
             assert 0xC009 not in d["tls"]["cipher_suites"] and "FIREFOX_151_0_RELEASE" in d["source"]["note"], p.name
         elif "tls" in d:

@@ -115,6 +115,29 @@ DESKTOP = [
 # without a real Edge on the stand. It keeps the pre-0.11 behaviour: no pool,
 # no high-entropy hints.
 
+# Deltas on a pooled desktop that carry hint values of their own, measured:
+# Brave answers six hints, its builds zeroed, which no pool of Chrome builds
+# could. They keep their values and the parent's order; only the pool is
+# emptied.
+OWN_HINTS = {"brave-1.98-windows"}
+
+# Yandex Browser 26.10 (STAGE46): the Windows capture, its macOS and Linux
+# twins (derive-current.py) and the iPhone on WebKit. Yandex writes its own
+# build and brands into the hints, so a desktop pool varies the system and
+# the machine and not the build: no full_version on its identities, and the
+# measured values stand. Windows: the 64-bit build, which Yandex's installer
+# puts on 64-bit Windows (wow64 ?0, measured), on every release and machine.
+YANDEX_DESKTOP = [("yandex-26.10-windows", "windows"), ("yandex-26.10-macos", "macos"),
+                  ("yandex-26.10-linux", "linux")]
+# The iPhone builds of 26.10 seen in traffic (useragents.io, 2026-11-03), and
+# the string they write: the real iOS version in three parts, Version/ the
+# major with .0.
+YANDEX_IOS = "yandex-26.10-ios"
+YANDEX_IOS_BUILDS = ["26.10.0.1738", "26.10.1.984", "26.10.3.674", "26.10.4.504"]
+YANDEX_IOS_TEMPLATE = ("Mozilla/5.0 (iPhone; CPU iPhone OS {os_version} like Mac OS X) AppleWebKit/605.1.15 "
+                       "(KHTML, like Gecko) Version/{version} YaBrowser/{full_version}.10 SA/3 Mobile/15E148 "
+                       "Safari/604.1")
+
 IOS_TEMPLATE = ("Mozilla/5.0 (iPhone; CPU iPhone OS {os_version} like Mac OS X) AppleWebKit/605.1.15 "
                 "(KHTML, like Gecko) Version/{version} Mobile/15E148 Safari/604.1")
 
@@ -227,6 +250,60 @@ def resolved_header(name: str, key: str) -> str:
     return ""
 
 
+def machine_name(os_: str, i: int, s: dict, arch: str = "arm") -> str:
+    m = s["machines"]
+    spec = (m[os_][arch] if os_ == "macos" else m[os_])[i]
+    return f"{spec['screen']} at {spec['dpr']}x, {spec['device_memory']} GB"
+
+
+def yandex_desktop_devices(os_: str, s: dict) -> list[dict]:
+    """Every release of the system on every machine of its list."""
+    out = []
+    machines = s["machines"]
+    if os_ == "windows":
+        for w in (w for w in s["windows"] if w["wow64"] == "?0"):
+            for i in range(len(machines["windows"])):
+                out.append({"name": f"{w['name']}, {machine_name(os_, i, s)}",
+                            "platform_version": w["platform_version"], "hint_arch": "x86", "bitness": "64",
+                            "wow64": "?0", "form_factors": "Desktop", **machine(os_, i, s, w["name"])})
+    elif os_ == "macos":
+        for m in s["macos"]:
+            for i in range(len(machines["macos"][m["arch"]])):
+                out.append({"name": f"{m['name']} ({'Apple silicon' if m['arch'] == 'arm' else 'Intel'}), "
+                                    f"{machine_name(os_, i, s, m['arch'])}",
+                            "platform_version": m["platform_version"], "hint_arch": m["arch"], "bitness": "64",
+                            "wow64": "?0", "form_factors": "Desktop", **machine(os_, i, s, arch=m["arch"])})
+    else:
+        for i in range(len(machines["linux"])):
+            out.append({"name": f"Linux, {machine_name(os_, i, s)}", "hint_arch": "x86", "bitness": "64",
+                        "wow64": "?0", "form_factors": "Desktop", **machine(os_, i, s)})
+    return out
+
+
+def yandex_values(os_: str, s: dict) -> dict:
+    """A twin's defaults: the Windows capture's values — Yandex's build and
+    brands — with the platform, the architecture and the machine of the
+    system's first identity."""
+    v = dict(json.loads((PROFILES / "yandex-26.10-windows.json").read_text(encoding="utf-8"))
+             ["client_hints"]["values"])
+    d = yandex_desktop_devices(os_, s)[0]
+    v.update({"sec-ch-ua-arch": f'"{d["hint_arch"]}"', "sec-ch-ua-platform-version": f'"{d.get("platform_version", "")}"',
+              "sec-ch-ua-bitness": '"64"', "sec-ch-ua-wow64": "?0"})
+    v.update(machine_values(os_, s))
+    return v
+
+
+def yandex_ios_devices(s: dict) -> list[dict]:
+    """The iOS 26 versions of the Safari line under each 26.10 build."""
+    out = []
+    for v in s["ios"]["safari-26-ios"]["versions"]:
+        parts = v.split(".") + ["0"] * (3 - len(v.split(".")))
+        for b in YANDEX_IOS_BUILDS:
+            out.append({"name": f"iPhone, iOS {v}, Yandex {b}", "os_version": "_".join(parts),
+                        "version": f"{parts[0]}.0", "full_version": b})
+    return out
+
+
 def ios_devices(spec: dict) -> list[dict]:
     """One identity per iOS version of the line; ``frozen_os`` is the OS token
     Safari 26 pins the string to while ``Version/`` keeps the real one."""
@@ -255,6 +332,12 @@ def wanted() -> dict[str, dict]:
     for name, spec in s["ios"].items():
         out[name] = {"devices": ios_devices(spec), "device_kind": "iphone",
                      "user_agent_template": IOS_TEMPLATE}
+    for name, os_ in YANDEX_DESKTOP:
+        out[name] = {"devices": yandex_desktop_devices(os_, s), "device_kind": "desktop"}
+        if os_ != "windows":
+            out[name]["client_hints"] = {"values": yandex_values(os_, s)}
+    out[YANDEX_IOS] = {"devices": yandex_ios_devices(s), "device_kind": "iphone",
+                       "user_agent_template": YANDEX_IOS_TEMPLATE}
     for p in sorted(PROFILES.glob("firefox-*-linux.json")):
         d = json.loads(p.read_text(encoding="utf-8"))
         ua = d["headers"]["user_agent"]
@@ -278,7 +361,7 @@ def wanted() -> dict[str, dict]:
         if not pooled:
             continue
         want = {"devices": []}
-        if any(a in desktop for a in pooled):
+        if any(a in desktop for a in pooled) and p.stem not in OWN_HINTS:
             want["client_hints"] = {"values": {}, "order": [], "fetch_order": []}
         out[p.stem] = want
     return out

@@ -1,0 +1,710 @@
+{
+  "name": "brave-1.98-windows",
+  "based_on": "chrome-156-windows",
+  "tls": {
+    "raw_client_hello": "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",
+    "signature_algorithms": [
+      6682,
+      2308,
+      2309,
+      2310,
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537
+    ],
+    "permute_extensions": true,
+    "trust_anchors": []
+  },
+  "http1": {
+    "order": [
+      "Host",
+      "Connection",
+      "Cache-Control",
+      "Content-Length",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "Upgrade-Insecure-Requests",
+      "Content-Type",
+      "User-Agent",
+      "Origin",
+      "Accept",
+      "Sec-GPC",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-User",
+      "Sec-Fetch-Dest",
+      "Referer",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie",
+      "If-None-Match",
+      "If-Modified-Since"
+    ]
+  },
+  "http2": {},
+  "http3": {},
+  "quic": {},
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+    "order": [
+      {
+        "key": "cache-control",
+        "value": ""
+      },
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": "\"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"156\", \"Brave\";v=\"156\""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": "?0"
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": "\"Windows\""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8"
+      },
+      {
+        "key": "sec-gpc",
+        "value": "1"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      },
+      {
+        "key": "accept-language",
+        "value": "ru-RU,ru;q=0.5"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      }
+    ]
+  },
+  "websocket": {},
+  "fetch": {
+    "order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "*/*"
+      },
+      {
+        "key": "sec-gpc",
+        "value": "1"
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "same-origin"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "cors"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "empty"
+      },
+      {
+        "key": "sec-fetch-storage-access",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=1, i"
+      }
+    ],
+    "http1_order": [
+      "Host",
+      "Connection",
+      "Content-Length",
+      "sec-ch-ua-platform",
+      "User-Agent",
+      "sec-ch-ua",
+      "Content-Type",
+      "sec-ch-ua-mobile",
+      "Accept",
+      "Sec-GPC",
+      "Origin",
+      "Sec-Fetch-Site",
+      "Sec-Fetch-Mode",
+      "Sec-Fetch-Dest",
+      "Sec-Fetch-Storage-Access",
+      "Referer",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Cookie",
+      "If-None-Match",
+      "If-Modified-Since"
+    ]
+  },
+  "devices": [],
+  "client_hints": {
+    "values": {
+      "sec-ch-ua-arch": "\"x86\"",
+      "sec-ch-ua-platform-version": "\"10.0.0\"",
+      "sec-ch-ua-model": "\"\"",
+      "sec-ch-ua-bitness": "\"64\"",
+      "sec-ch-ua-wow64": "?0",
+      "sec-ch-ua-full-version-list": "\"Not:A-Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"156.0.0.0\", \"Brave\";v=\"156.0.0.0\""
+    },
+    "order": [
+      {
+        "key": "cache-control",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "sec-gpc",
+        "value": "1"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ],
+    "fetch_order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "sec-gpc",
+        "value": "1"
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ]
+  },
+  "resources": {
+    "orders": {
+      "cors": [
+        "origin",
+        "sec-ch-ua-platform",
+        "user-agent",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "accept",
+        "if-none-match",
+        "if-modified-since",
+        "sec-gpc",
+        "sec-fetch-site",
+        "sec-fetch-mode",
+        "sec-fetch-dest",
+        "sec-fetch-storage-access",
+        "referer",
+        "accept-encoding",
+        "accept-language",
+        "cookie",
+        "priority"
+      ],
+      "navigate": [
+        "cache-control",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+        "upgrade-insecure-requests",
+        "user-agent",
+        "accept",
+        "sec-gpc",
+        "sec-fetch-site",
+        "sec-fetch-mode",
+        "sec-fetch-dest",
+        "sec-fetch-storage-access",
+        "referer",
+        "accept-encoding",
+        "accept-language",
+        "cookie",
+        "if-none-match",
+        "if-modified-since",
+        "priority"
+      ],
+      "no-cors": [
+        "content-length",
+        "sec-ch-ua-platform",
+        "user-agent",
+        "sec-ch-ua",
+        "content-type",
+        "sec-purpose",
+        "sec-ch-ua-mobile",
+        "accept",
+        "if-none-match",
+        "if-modified-since",
+        "sec-gpc",
+        "origin",
+        "sec-fetch-site",
+        "sec-fetch-mode",
+        "sec-fetch-dest",
+        "sec-fetch-storage-access",
+        "referer",
+        "accept-encoding",
+        "accept-language",
+        "cookie",
+        "priority"
+      ]
+    },
+    "http1_orders": {
+      "cors": [
+        "Host",
+        "Connection",
+        "Origin",
+        "sec-ch-ua-platform",
+        "User-Agent",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "Accept",
+        "If-None-Match",
+        "If-Modified-Since",
+        "Sec-GPC",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Sec-Fetch-Storage-Access",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "Cookie"
+      ],
+      "navigate": [
+        "Host",
+        "Connection",
+        "Cache-Control",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+        "Upgrade-Insecure-Requests",
+        "User-Agent",
+        "Accept",
+        "Sec-GPC",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Sec-Fetch-Storage-Access",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "Cookie",
+        "If-None-Match",
+        "If-Modified-Since"
+      ],
+      "no-cors": [
+        "Host",
+        "Connection",
+        "Content-Length",
+        "sec-ch-ua-platform",
+        "User-Agent",
+        "sec-ch-ua",
+        "Content-Type",
+        "Sec-Purpose",
+        "sec-ch-ua-mobile",
+        "Accept",
+        "If-None-Match",
+        "If-Modified-Since",
+        "Sec-GPC",
+        "Origin",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Sec-Fetch-Storage-Access",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "Cookie"
+      ]
+    },
+    "kinds": {
+      "beacon": {
+        "dest": "empty",
+        "accept": "*/*",
+        "priority": "u=4, i"
+      },
+      "font": {
+        "dest": "font",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=0"
+      },
+      "font-preload": {
+        "dest": "font",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "icon": {
+        "dest": "image",
+        "accept": "image/jxl,image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "priority": "u=1, i"
+      },
+      "iframe": {
+        "dest": "iframe",
+        "mode": "navigate",
+        "priority": "u=0, i"
+      },
+      "image": {
+        "dest": "image",
+        "accept": "image/jxl,image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "priority": "i"
+      },
+      "image-css": {
+        "dest": "image",
+        "accept": "image/jxl,image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "priority": "i"
+      },
+      "module": {
+        "dest": "script",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "module-preload": {
+        "dest": "script",
+        "mode": "cors",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "prefetch": {
+        "dest": "empty",
+        "accept": "*/*",
+        "priority": "u=4, i",
+        "purpose": "prefetch"
+      },
+      "script": {
+        "dest": "script",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "script-async": {
+        "dest": "script",
+        "accept": "*/*"
+      },
+      "script-body": {
+        "dest": "script",
+        "accept": "*/*",
+        "priority": "u=2"
+      },
+      "script-defer": {
+        "dest": "script",
+        "accept": "*/*"
+      },
+      "script-preload": {
+        "dest": "script",
+        "accept": "*/*",
+        "priority": "u=1"
+      },
+      "style": {
+        "dest": "style",
+        "accept": "text/css,*/*;q=0.1",
+        "priority": "u=0"
+      },
+      "style-preload": {
+        "dest": "style",
+        "accept": "text/css,*/*;q=0.1",
+        "priority": "u=0"
+      }
+    },
+    "storage_access": "none",
+    "cors_origin": "always"
+  }
+}

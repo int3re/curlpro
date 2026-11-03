@@ -1,0 +1,464 @@
+{
+  "name": "yandex-26.10-ios",
+  "based_on": "safari-26-ios",
+  "source": {
+    "kind": "derived",
+    "from": "https://useragents.io/explore/browsers/types/browser/maker/yandex-llc-0b6",
+    "date": "2026-11-03",
+    "path": "scripts/derive-current.py",
+    "note": "Derived, not captured: Yandex Browser for iPhone is built on WebKit — its string carries Safari's AppleWebKit/605.1.15 and Version/ tokens — so the ClientHello, HTTP/2 frames and header sets are those of the captured safari-26-ios, iOS's own network stack: taken on that evidence, not measured. The User-Agent is Yandex's own, as seen in traffic (useragents.io, 2026-11-03): the real iOS version in three parts (iPhone OS 26_6_2, where Safari freezes 18_7), Version/ the major with .0, then YaBrowser/<build>.10 SA/3. The pool (gen-identities.py) draws an iOS 26 version and one of the four 26.10 builds seen (26.10.0.1738, 26.10.1.984, 26.10.3.674, 26.10.4.504); about four in ten of the strings seen also carry CriOS/152.0.7977.<build> before YaBrowser, which the pool leaves out. Yandex on iOS 18 sends iOS 18's hello and is not this profile. Replace with a capture from an iPhone."
+  },
+  "headers": {
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 YaBrowser/26.10.3.674.10 SA/3 Mobile/15E148 Safari/604.1",
+    "order": [
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "accept-language",
+        "value": "ru-RU,ru;q=0.9"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      }
+    ],
+    "user_agent_template": "Mozilla/5.0 (iPhone; CPU iPhone OS {os_version} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{version} YaBrowser/{full_version}.10 SA/3 Mobile/15E148 Safari/604.1"
+  },
+  "devices": [
+    {
+      "name": "iPhone, iOS 26.0, Yandex 26.10.0.1738",
+      "os_version": "26_0_0",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.0, Yandex 26.10.1.984",
+      "os_version": "26_0_0",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.0, Yandex 26.10.3.674",
+      "os_version": "26_0_0",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.0, Yandex 26.10.4.504",
+      "os_version": "26_0_0",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.0.1, Yandex 26.10.0.1738",
+      "os_version": "26_0_1",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.0.1, Yandex 26.10.1.984",
+      "os_version": "26_0_1",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.0.1, Yandex 26.10.3.674",
+      "os_version": "26_0_1",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.0.1, Yandex 26.10.4.504",
+      "os_version": "26_0_1",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.1, Yandex 26.10.0.1738",
+      "os_version": "26_1_0",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.1, Yandex 26.10.1.984",
+      "os_version": "26_1_0",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.1, Yandex 26.10.3.674",
+      "os_version": "26_1_0",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.1, Yandex 26.10.4.504",
+      "os_version": "26_1_0",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.2, Yandex 26.10.0.1738",
+      "os_version": "26_2_0",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.2, Yandex 26.10.1.984",
+      "os_version": "26_2_0",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.2, Yandex 26.10.3.674",
+      "os_version": "26_2_0",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.2, Yandex 26.10.4.504",
+      "os_version": "26_2_0",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.2.1, Yandex 26.10.0.1738",
+      "os_version": "26_2_1",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.2.1, Yandex 26.10.1.984",
+      "os_version": "26_2_1",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.2.1, Yandex 26.10.3.674",
+      "os_version": "26_2_1",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.2.1, Yandex 26.10.4.504",
+      "os_version": "26_2_1",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.3, Yandex 26.10.0.1738",
+      "os_version": "26_3_0",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.3, Yandex 26.10.1.984",
+      "os_version": "26_3_0",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.3, Yandex 26.10.3.674",
+      "os_version": "26_3_0",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.3, Yandex 26.10.4.504",
+      "os_version": "26_3_0",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.3.1, Yandex 26.10.0.1738",
+      "os_version": "26_3_1",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.3.1, Yandex 26.10.1.984",
+      "os_version": "26_3_1",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.3.1, Yandex 26.10.3.674",
+      "os_version": "26_3_1",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.3.1, Yandex 26.10.4.504",
+      "os_version": "26_3_1",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.4, Yandex 26.10.0.1738",
+      "os_version": "26_4_0",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.4, Yandex 26.10.1.984",
+      "os_version": "26_4_0",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.4, Yandex 26.10.3.674",
+      "os_version": "26_4_0",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.4, Yandex 26.10.4.504",
+      "os_version": "26_4_0",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.4.1, Yandex 26.10.0.1738",
+      "os_version": "26_4_1",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.4.1, Yandex 26.10.1.984",
+      "os_version": "26_4_1",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.4.1, Yandex 26.10.3.674",
+      "os_version": "26_4_1",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.4.1, Yandex 26.10.4.504",
+      "os_version": "26_4_1",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.4.2, Yandex 26.10.0.1738",
+      "os_version": "26_4_2",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.4.2, Yandex 26.10.1.984",
+      "os_version": "26_4_2",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.4.2, Yandex 26.10.3.674",
+      "os_version": "26_4_2",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.4.2, Yandex 26.10.4.504",
+      "os_version": "26_4_2",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.5, Yandex 26.10.0.1738",
+      "os_version": "26_5_0",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.5, Yandex 26.10.1.984",
+      "os_version": "26_5_0",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.5, Yandex 26.10.3.674",
+      "os_version": "26_5_0",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.5, Yandex 26.10.4.504",
+      "os_version": "26_5_0",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.5.1, Yandex 26.10.0.1738",
+      "os_version": "26_5_1",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.5.1, Yandex 26.10.1.984",
+      "os_version": "26_5_1",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.5.1, Yandex 26.10.3.674",
+      "os_version": "26_5_1",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.5.1, Yandex 26.10.4.504",
+      "os_version": "26_5_1",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.5.2, Yandex 26.10.0.1738",
+      "os_version": "26_5_2",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.5.2, Yandex 26.10.1.984",
+      "os_version": "26_5_2",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.5.2, Yandex 26.10.3.674",
+      "os_version": "26_5_2",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.5.2, Yandex 26.10.4.504",
+      "os_version": "26_5_2",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.6, Yandex 26.10.0.1738",
+      "os_version": "26_6_0",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.6, Yandex 26.10.1.984",
+      "os_version": "26_6_0",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.6, Yandex 26.10.3.674",
+      "os_version": "26_6_0",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.6, Yandex 26.10.4.504",
+      "os_version": "26_6_0",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.6.1, Yandex 26.10.0.1738",
+      "os_version": "26_6_1",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.6.1, Yandex 26.10.1.984",
+      "os_version": "26_6_1",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.6.1, Yandex 26.10.3.674",
+      "os_version": "26_6_1",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.6.1, Yandex 26.10.4.504",
+      "os_version": "26_6_1",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.6.2, Yandex 26.10.0.1738",
+      "os_version": "26_6_2",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.6.2, Yandex 26.10.1.984",
+      "os_version": "26_6_2",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.6.2, Yandex 26.10.3.674",
+      "os_version": "26_6_2",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.6.2, Yandex 26.10.4.504",
+      "os_version": "26_6_2",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    },
+    {
+      "name": "iPhone, iOS 26.7, Yandex 26.10.0.1738",
+      "os_version": "26_7_0",
+      "version": "26.0",
+      "full_version": "26.10.0.1738"
+    },
+    {
+      "name": "iPhone, iOS 26.7, Yandex 26.10.1.984",
+      "os_version": "26_7_0",
+      "version": "26.0",
+      "full_version": "26.10.1.984"
+    },
+    {
+      "name": "iPhone, iOS 26.7, Yandex 26.10.3.674",
+      "os_version": "26_7_0",
+      "version": "26.0",
+      "full_version": "26.10.3.674"
+    },
+    {
+      "name": "iPhone, iOS 26.7, Yandex 26.10.4.504",
+      "os_version": "26_7_0",
+      "version": "26.0",
+      "full_version": "26.10.4.504"
+    }
+  ],
+  "device_kind": "iphone"
+}

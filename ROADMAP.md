@@ -1390,6 +1390,30 @@ asks for, and the library answered only the User-Agent ones.
   captured Pixel 7 (Android 17) in the hints without a device.
 - **Not yet:** delegation in HTML (`<meta name="accept-ch">`, `allow=`).
 
+## Stage 46 — the fingerprints the corpus did not have ✅ done 2026-11-03
+
+The owner asked for fingerprints found elsewhere, Yandex Browser above all
+([STAGE46](docs/STAGE46-RESULTS.md)).
+
+- **`yandex-26.10-windows`**, captured: Chrome 152's hello, Yandex's brands
+  and full version; the capture clicks the browser's own certificate
+  exception over DevTools (`scripts/capture-proceed.py`).
+- **`brave-1.98-windows`**, captured: no trust anchors, `Sec-GPC` on every
+  request, no SXG, the `Accept-Language` weight farbled per site and session
+  (`internal/client/farble.go`), six client hints.
+- **20 from tls-client** (`scripts/transcribe-tlsclient.py`): OkHttp 4.10 on
+  Android 7–13 and the Zalando, Nike, Mesh, Confirmed and MMS apps, field for
+  field, each checked against tls-client's own build; `brave-1.88-windows` on
+  the captured Chrome 146 hello.
+- Schema: `"always": true` on `padding`, `"alpn": []` on ALPS,
+  `{full_version}` in a User-Agent template.
+- **Yandex on every system:** pools on Windows (45), and `yandex-26.10-macos`
+  (84), `-linux` (4) and `-ios` (68, WebKit on Safari 26's hello, Yandex's
+  own string) derived from real 26.10 strings; Android keeps 26.8's 46 phones.
+- **Not yet:** Yandex with CryptoPro's GOST suites (needs a machine with it);
+  Yandex 26.10 for Android (needs a phone); the apps' own headers (in no
+  source).
+
 ## A separate list: the accumulated debt
 
 None of this blocked release 0.2.0 and none of it blocks the work. The list is live:

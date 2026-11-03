@@ -94,10 +94,17 @@ def test_an_explicit_fetch_on_a_profile_without_a_set_is_refused(server):
 def test_every_browser_profile_has_an_http1_set():
     """A profile without http1.order sends its HTTP/2 set over HTTP/1.1 with
     the case approximated and no Connection header — the gap Firefox 155 had."""
+    def on_okhttp(name: str) -> bool:
+        while name:
+            if name.startswith("okhttp"):
+                return True
+            name = curlpro.get_profile(name).based_on
+        return False
+
     missing = []
     for name in curlpro.list_profiles():
-        if name.startswith("okhttp"):
-            continue  # a library, measured over HTTP/2 only
+        if on_okhttp(name):
+            continue  # a library, measured over HTTP/2 only, and the apps on it
         with curlpro.Session(name) as s:
             h1 = [n.lower() for n in s.fingerprint().headers_http1]
         if "connection" not in h1:

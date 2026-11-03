@@ -244,7 +244,11 @@ parts only and the delta brings its own of every one of them. Reported by `capab
 
 `scripts/transcribe-wreq.py` writes these; a transcribed profile is always a
 delta on a captured one and carries only `headers` (and, for four Safari
-versions, one `http2` setting) besides the mark.
+versions, one `http2` setting) besides the mark. `scripts/transcribe-tlsclient.py`
+writes those from `bogdanfinn/tls-client`: deltas on a captured one too, but
+carrying a `tls` of their own in field form (below) and their `http2`, since
+those hellos have no captured twin — except `brave-1.88-windows`, whose hello
+is Chrome 146's and which carries headers and orders only.
 
 ### `tls`
 | Field | Purpose |
@@ -443,9 +447,10 @@ there too. Such a profile declares a template:
 ```
 
 `{model}`, `{android}` (the major version), `{platform_version}`, `{arch}`,
-`{os_version}`, `{version}` and `{distro}` are understood; a placeholder whose
-field the identity leaves empty becomes empty text, which is how the generic
-Firefox Linux build loses the `Ubuntu; ` token. Without a `device=` the string
+`{os_version}`, `{version}`, `{distro}` and `{full_version}` (the build,
+which Yandex on iPhone writes: `YaBrowser/{full_version}.10 SA/3`) are
+understood; a placeholder whose field the identity leaves empty becomes empty
+text, which is how the generic Firefox Linux build loses the `Ubuntu; ` token. Without a `device=` the string
 stays exactly as captured.
 
 The library will not substitute a model into a `User-Agent` where there is no
@@ -516,6 +521,28 @@ list replaces the captured bytes — which is how Chrome 153 and 155 went out wi
 152's 32. A derived Chrome 154+ standing on a 153 capture carries that list
 sorted (`scripts/derive-current.py`). The list is updated by editing data,
 without a rebuild.
+
+## Extensions in field form
+
+`tls.cipher_suites`, `tls.compression_methods` (base64) and `tls.extensions`
+describe a hello field by field instead of replaying its bytes — the form
+`scripts/transcribe-tlsclient.py` writes. An extension is `{"type": ...}` with
+the parameters its type takes: `groups` (supported_groups, key_share),
+`algorithms` (signature_algorithms, compress_certificate,
+delegated_credentials), `versions`, `modes` and `formats` (base64), `alpn`
+(ALPN, application_settings, application_settings_new), `limit`
+(record_size_limit). Two forms exist for what a source describes and no
+browser captured here sends:
+
+- `"alpn": []` on `application_settings` — an ALPS extension that names no
+  protocol (tls-client's MeshAndroid); a missing `alpn` is still an error;
+- `"always": true` on `padding` — the extension on every hello, empty where
+  BoringSSL's rule (pad an unpadded hello of 256 to 511 bytes) would leave it
+  out (tls-client's ConfirmedAndroid2, `WillPad: true`).
+
+A top-level `tls.signature_algorithms` overrides the extension's list on every
+build, and a parent's is inherited: a delta in field form standing on a parent
+that has one writes its own, or the parent's list goes out.
 
 ## What must break the loading of a profile
 

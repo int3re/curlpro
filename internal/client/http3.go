@@ -401,6 +401,7 @@ func (s *Session) applyH3Headers(req *nethttp.Request, r *Request, u *url.URL) {
 	built := s.buildHeadersWith(r, u, req.Host, nil, tpl)
 	s.noteMode(r)
 	s.noiseNetworkHints(built, u, tpl.renderer())
+	s.farbleAcceptLanguage(built, r, u)
 
 	for _, h := range built {
 		// A direct write instead of Set: that one canonicalises the name, while the

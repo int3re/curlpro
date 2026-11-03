@@ -623,6 +623,7 @@ func (s *Session) applyHeaders(req *http.Request, r *Request, u *url.URL, h1 boo
 	built := s.buildHeadersWith(r, u, host, h1Order, tpl)
 	page := s.laysOutPage(r, tpl)
 	s.noiseNetworkHints(built, u, tpl.renderer())
+	s.farbleAcceptLanguage(built, r, u)
 
 	// The map is made at its final size, and every value slice is cut from one
 	// backing array: filling an empty map one header at a time grew it three

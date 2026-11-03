@@ -6,7 +6,20 @@ The package is built and published by the
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.20.0** — a minor: the client hints are Chrome's whole. A session answers
+**0.21.0** — a minor: the fingerprints the corpus did not have. Yandex Browser
+26.10 and Brave 1.98 are captured on Windows — Yandex's Chrome 152 hello with
+its own brands and build (the capture clicks the browser's own certificate
+exception over DevTools), Brave's hello without trust anchors, `Sec-GPC` on
+every request and an `Accept-Language` weight farbled per site and session as
+Brave does it — and Yandex has a pool on every system: Windows releases and
+machines, and macOS, Linux and iPhone twins derived from real 26.10 strings
+(on iPhone WebKit, on Safari 26's hello, with Yandex's own string). Twenty
+profiles are transcribed from tls-client — OkHttp 4.10 on Android 7 to 13
+and the TLS of the Zalando, Nike, Mesh, Confirmed and MMS apps, field for
+field and each checked against tls-client's own build of the spec, and Brave
+1.88 on the captured Chrome 146 hello. 343 profiles, 50 captured, 28 distinct
+JA4 values. ABI 0.30.0: profile fields an older library refuses.
+Before it, **0.20.0** — a minor: the client hints are Chrome's whole. A session answers
 every hint a desktop Chromium answers — the machine (`device-memory`, `dpr`,
 the viewport), the network (`rtt`, `downlink`, `ect`, with Chromium's per-site
 noise) and the preferences (`sec-ch-prefers-*`) — a navigation in the browser

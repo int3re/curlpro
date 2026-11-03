@@ -333,6 +333,50 @@ five-field line Firefox writes itself when "Accept the Risk" is clicked; a
 three-field one is ignored). Firefox 157 was captured that way, TLS and headers
 in one unattended run; before, the headers needed a click per window.
 
+### Yandex Browser and Brave on the desktop — measured 2026-11-03
+
+**Yandex Browser 26.10** (26.10.3.771, Chromium 152.0.7977.771) installs per
+user from its own installer and does not take the stand's certificate from
+the command line: `--ignore-certificate-errors`, the SPKI list and DevTools'
+`Security.setIgnoreCertificateErrors` all leave its own "security threat" page
+up, and headless it ignores the URL it is given. What works is the page's own
+proceed link ("make an exception for this site", `#proceed-link`), clicked over
+DevTools in a throwaway profile — headed, once per host the stand's pages
+reach. `scripts/capture-proceed.py` does it: `headers BROWSER OUT.json
+[hcapture flags]` builds `cmd/hcapture`, starts it as the stand and drives the
+browser to it; `open BROWSER https://localhost:8443/json/detail 5` gives
+`curlpro capture -manual` its samples. Nothing outside the throwaway profile is
+touched; the machine's certificate store is not a place for a capture to
+write. The reload after the exception sends `cache-control: max-age=0`, which
+the profile keeps as a slot with no value. The installer adds an autostart
+entry (`HKCU\...\Run`, `YandexBrowserAutoLaunch_…`) and a desktop shortcut;
+it leaves the default browser as it was.
+
+Yandex's hello is Chrome 152's to the byte. On a machine with CryptoPro CSP it
+adds the GOST suites (0xc100–0xc106, 0x0081, 0xff85): a published JA4 of
+Yandex has a cipher hash only that set gives, `d95c37398e29`. The stand has no
+CryptoPro and will not get one for this, so the GOST variant is not captured;
+its order on the wire is not known here.
+
+**Brave 1.98** (1.98.63, Chromium 156.0.8078.80) runs from its portable
+archive (`brave-v1.98.63-win32-x64.zip` from the release on GitHub) with a
+throwaway profile, and takes the usual flags, so `hcapture -browser` and
+`curlpro capture` drive it like Chrome, headless included (`hcapture -headed`
+is there for a browser that needs a window, as Yandex does). What sets it
+apart from the Chrome it is built on:
+
+- no trust anchors (extension 0xCA34): a delta on Chrome 156 says
+  `"trust_anchors": []`, which `curlpro capture` now writes when the hello has
+  none and the parent has some;
+- `Sec-GPC: 1` right after `Accept`, on every request;
+- no `application/signed-exchange;v=b3;q=0.7` in the navigation `Accept`;
+- `Accept-Language` farbled: the first language and its base, then a weight
+  from `;q=0.5` to `;q=0.9` drawn per site and session
+  (`brave_reduce_language_network_delegate_helper.cc`) — two runs of the stand
+  showed `ru-RU,ru;q=0.5` and `;q=0.6`; the session writes the site's own;
+- to `Accept-CH` six hints of the 21 — arch, platform version, model,
+  bitness, WoW64 and the full version list with the builds zeroed.
+
 A delta keeps its parent's header order when the capture agrees with it. The
 stand sees one navigation — no cookie, no referer, no revalidation — while the
 parent's order was measured on richer pages (STAGE17, STAGE18); writing the

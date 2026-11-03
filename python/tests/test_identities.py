@@ -125,6 +125,7 @@ def test_a_delta_on_a_pooled_profile_has_no_pool_unless_it_says_so():
               for o in ("windows", "macos", "linux")} | set(SEED["ios"]) | {
         p.stem for p in (REPO / "profiles").glob("firefox-*-linux.json")}
     pooled |= {"chrome-152-android", "chrome-156-android", "yandex-26.8-android"}
+    pooled |= {f"yandex-26.10-{o}" for o in ("windows", "macos", "linux", "ios")}
     # The files on disk, not the registry: another test may register a delta on
     # a pooled profile, and that one inherits the pool by design.
     for name in sorted(p.stem for p in (REPO / "profiles").glob("*.json")):
@@ -155,3 +156,48 @@ def test_windows_platform_versions_are_the_documented_contract_versions():
     # Windows 11 contract versions Microsoft documents and Chromium knows.
     assert {w["platform_version"] for w in SEED["windows"]} <= {"10.0.0", "13.0.0", "14.0.0", "15.0.0", "19.0.0"}
     assert all(re.fullmatch(r"\d+\.0\.0", w["platform_version"]) for w in SEED["windows"])
+
+
+def test_yandex_pools_vary_the_machine_and_keep_yandex_build():
+    """Yandex writes its own build and brands into the hints: a desktop
+    identity varies the system and the machine, never the build."""
+    for name, platforms in (("yandex-26.10-windows", {"10.0.0", "14.0.0", "15.0.0", "19.0.0"}),
+                            ("yandex-26.10-macos", None), ("yandex-26.10-linux", None)):
+        devs = _profile(name)["devices"]
+        assert devs and all("full_version" not in d for d in devs), name
+        assert len({(d["dpr"], d["viewport"], d["device_memory"]) for d in devs}) > 1 or name.endswith("linux"), name
+        if platforms:
+            assert {d["platform_version"] for d in devs} == platforms
+            assert {d["wow64"] for d in devs} == {"?0"}  # the 64-bit build on 64-bit Windows
+        seen = set()
+        for _ in range(12):
+            with curlpro.Session(name, device="random") as s:
+                fp = s.fingerprint()
+                seen.add(fp.device)
+                assert "YaBrowser/26.10.0.0" in fp.user_agent, name
+        assert len(seen) > 1, name
+    caps = curlpro.capabilities("yandex-26.10-macos")
+    assert caps["source"]["kind"] == "derived" and caps["based_on"] == "yandex-26.10-windows"
+    values = _profile("yandex-26.10-macos")["client_hints"]["values"]
+    assert values["sec-ch-ua-full-version"] == '"26.10.3.771"' and values["sec-ch-ua-arch"] == '"arm"'
+    assert '"YaBrowser";v="26.10.3.771"' in values["sec-ch-ua-full-version-list"]
+
+
+def test_yandex_on_iphone_writes_the_real_ios_and_its_build():
+    """Yandex's iPhone string, as seen in traffic: the real iOS version in
+    three parts (where Safari freezes 18_7), Version/ the major, the build."""
+    with curlpro.Session("yandex-26.10-ios", device="iPhone, iOS 26.6, Yandex 26.10.1.984") as s:
+        ua = s.fingerprint().user_agent
+        assert ua == ("Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_0 like Mac OS X) AppleWebKit/605.1.15 "
+                      "(KHTML, like Gecko) Version/26.0 YaBrowser/26.10.1.984.10 SA/3 Mobile/15E148 "
+                      "Safari/604.1")
+    uas = set()
+    for _ in range(30):
+        with curlpro.Session("yandex-26.10-ios", device="random") as s:
+            ua = s.fingerprint().user_agent
+            assert re.search(r"iPhone OS 26_\d+_\d+ like Mac OS X\).*Version/26\.0 YaBrowser/26\.10\.\d+\.\d+\.10 SA/3 ", ua), ua
+            uas.add(ua)
+    assert len(uas) >= 8
+    # The hello is Safari 26's on iOS: Yandex on iPhone is WebKit.
+    with curlpro.Session("yandex-26.10-ios") as y, curlpro.Session("safari-26-ios") as s:
+        assert y.fingerprint().ja4 == s.fingerprint().ja4

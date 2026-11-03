@@ -1,0 +1,119 @@
+{
+  "name": "mesh-app-android-2",
+  "based_on": "okhttp-5.5-conscrypt",
+  "source": {
+    "kind": "transcribed",
+    "from": "github.com/bogdanfinn/tls-client",
+    "ref": "9e4b45ec70e1293e8c88a80fa02a25a10ab1efd8",
+    "path": "profiles/contributed_custom_profiles.go",
+    "date": "2026-11-03",
+    "note": "Transcribed, not captured: the TLS ClientHello (cipher suites and extensions with their parameters, in tls-client's order) and the HTTP/2 SETTINGS, window increment, pseudo-header order and priority are tls-client's MeshAndroid2. Everything else stands on the captured okhttp-5.5-conscrypt: OkHttp's header set (OkHttp, measured over HTTP/2 only, has no HTTP/1.1 set). An app sends its own User-Agent and headers, which tls-client does not describe: set them on the session."
+  },
+  "tls": {
+    "cipher_suites": [
+      49195,
+      49196,
+      52393,
+      49199,
+      49200,
+      52392,
+      49161,
+      49162,
+      49171,
+      49172,
+      156,
+      157,
+      47,
+      53
+    ],
+    "compression_methods": "AA==",
+    "extensions": [
+      {
+        "type": "renegotiation_info"
+      },
+      {
+        "type": "server_name"
+      },
+      {
+        "type": "extended_master_secret"
+      },
+      {
+        "type": "session_ticket"
+      },
+      {
+        "type": "signature_algorithms",
+        "algorithms": [
+          1027,
+          2052,
+          1025,
+          1283,
+          2053,
+          1281,
+          2054,
+          1537,
+          513
+        ]
+      },
+      {
+        "type": "status_request"
+      },
+      {
+        "type": "application_layer_protocol_negotiation",
+        "alpn": [
+          "http/1.1"
+        ]
+      },
+      {
+        "type": "ec_point_formats",
+        "formats": "AA=="
+      },
+      {
+        "type": "supported_groups",
+        "groups": [
+          29,
+          23,
+          24
+        ]
+      }
+    ],
+    "permute_extensions": false,
+    "signature_algorithms": [
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537,
+      513
+    ]
+  },
+  "http2": {
+    "settings": [
+      {
+        "id": 1,
+        "value": 65536
+      },
+      {
+        "id": 3,
+        "value": 1000
+      },
+      {
+        "id": 4,
+        "value": 6291456
+      },
+      {
+        "id": 6,
+        "value": 262144
+      }
+    ],
+    "connection_window_update": 15663105,
+    "pseudo_order": [
+      ":method",
+      ":authority",
+      ":scheme",
+      ":path"
+    ]
+  }
+}

@@ -73,6 +73,7 @@ func main() {
 	flag.StringVar(&acceptCH, "accept-ch", acceptCH, "the hints the plain page asks for in Accept-CH")
 	flag.StringVar(&criticalCH, "critical-ch", "", "the hints named in Critical-CH; empty means those of -accept-ch")
 	flag.BoolVar(&hintsPage, "hintspage", false, "serve the hints page: fetch and XHR with and without the page's own headers, an image, a script and a stylesheet, requests and frames to other origins, then two navigations")
+	flag.BoolVar(&headed, "headed", false, "start the browser with a window: a Chromium that ignores the address in headless mode (Yandex Browser) needs one")
 	flag.StringVar(&permissionsPolicy, "permissions-policy", "", "a Permissions-Policy header on every response, to delegate hints to other origins (ch-ua-model=(self \"https://d.localhost:8443\"))")
 	flag.Parse()
 	if criticalCH == "" {
@@ -237,6 +238,10 @@ var hintsPage bool
 // permissionsPolicy goes on every response when set: which origins the
 // page's hints may go to.
 var permissionsPolicy string
+
+// headed starts the browser with a window. Yandex Browser 26.10 started
+// headless opens its own pages and never the address it was given.
+var headed bool
 
 const hintsScript = `<script>
 const log = m => { document.getElementById('out').textContent += m + String.fromCharCode(10); };
@@ -1366,11 +1371,13 @@ func launch(browser, origin string, h3 bool) func() {
 		return func() {}
 	}
 	args := []string{
-		"--headless=new",
 		"--user-data-dir=" + dir,
 		"--no-first-run",
 		"--no-default-browser-check",
 		"--ignore-certificate-errors",
+	}
+	if !headed {
+		args = append([]string{"--headless=new"}, args...)
 	}
 	if origins || subres || cacheMode || chipsMode {
 		// Chromium resolves *.localhost to loopback on its own; the rule makes

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	http "github.com/bogdanfinn/fhttp"
+	"golang.org/x/net/publicsuffix"
 )
 
 // Buckets the Chrome captures pin down: with these hashes the model put all
@@ -143,6 +144,10 @@ var captureAcceptCH = map[string]string{
 		"sec-ch-ua-model, sec-ch-ua-bitness, sec-ch-ua-full-version-list, sec-ch-ua-wow64",
 	"chrome-156-ua8.json": "sec-ch-ua-arch, sec-ch-ua-bitness, sec-ch-ua-full-version-list, sec-ch-ua-model, " +
 		"sec-ch-ua-platform-version, sec-ch-ua-wow64, sec-ch-ua-form-factors, sec-ch-ua-full-version",
+	// Yandex Browser 26.10 on Chromium 152, its own brands and build.
+	"yandex-26.10-all.json": allHintsCH,
+	// Brave 1.98 on Chromium 156: six hints of the 21, Sec-GPC after Accept.
+	"brave-1.98-all.json": allHintsCH,
 }
 
 const allHintsCH = "device-memory, sec-ch-device-memory, dpr, sec-ch-dpr, viewport-width, " +
@@ -175,8 +180,13 @@ func TestPageRequestsLikeChrome(t *testing.T) {
 	}
 	for file, acceptCH := range captureAcceptCH {
 		profileName := "chrome-156-windows"
-		if strings.HasPrefix(file, "chrome-155") {
+		switch {
+		case strings.HasPrefix(file, "chrome-155"):
 			profileName = "chrome-155-windows"
+		case strings.HasPrefix(file, "yandex-26.10"):
+			profileName = "yandex-26.10-windows"
+		case strings.HasPrefix(file, "brave-1.98"):
+			profileName = "brave-1.98-windows"
 		}
 		byPath := map[string]chromeCapture{}
 		for _, c := range loadCapture(t, file) {
@@ -291,4 +301,41 @@ func orderDiff(got, want []string) string {
 		return "different order"
 	}
 	return ""
+}
+
+// Brave writes one Accept-Language weight per site for a session, one of
+// ;q=0.5 to ;q=0.9 (brave_reduce_language_network_delegate_helper.cc).
+func TestBraveFarblesAcceptLanguagePerSite(t *testing.T) {
+	weights := map[string]bool{}
+	for session := 0; session < 8; session++ {
+		s := auditSessionProfile(t, "brave-1.98-windows", Options{DefaultHeaders: true})
+		perSite := map[string]string{}
+		for _, raw := range []string{"https://a.example/", "https://www.a.example/x", "https://b.example/"} {
+			r := &Request{Method: "GET", URL: raw, Mode: ModeNavigate}
+			names := map[string]string{}
+			u, _ := url.Parse(raw)
+			req, _ := http.NewRequest("GET", raw, nil)
+			s.applyHeaders(req, r, u, false)
+			for k, v := range req.Header {
+				names[strings.ToLower(k)] = v[0]
+			}
+			al := names["accept-language"]
+			if !braveWeight.MatchString(al) || !strings.HasPrefix(al, "ru-RU,ru;q=0.") {
+				t.Fatalf("accept-language %q", al)
+			}
+			site, _ := publicsuffixSite(u.Hostname())
+			if prev, ok := perSite[site]; ok && prev != al {
+				t.Errorf("%s: %q then %q in one session", site, prev, al)
+			}
+			perSite[site] = al
+			weights[al] = true
+		}
+	}
+	if len(weights) < 3 {
+		t.Errorf("eight sessions over two sites gave only %v", weights)
+	}
+}
+
+func publicsuffixSite(host string) (string, error) {
+	return publicsuffix.EffectiveTLDPlusOne(host)
 }

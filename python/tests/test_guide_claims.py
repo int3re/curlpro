@@ -32,7 +32,7 @@ def _profiles():
 
 def test_the_profile_count_and_families():
     names = NAMES
-    assert len(names) == 318
+    assert len(names) == 343
     assert set(names) <= set(curlpro.list_profiles())
     # By the resolved profile, not the file: a captured delta inherits nothing
     # from a base whose mark covers a part it brings itself (source.covers).
@@ -54,14 +54,24 @@ def test_the_profile_count_and_families():
         return out
 
     assert families("captured") == {"chrome": 22, "edge": 4, "firefox": 8, "opera": 1, "safari": 9,
-                                    "tor": 1, "yandex": 1, "okhttp": 2}
+                                    "tor": 1, "yandex": 2, "brave": 1, "okhttp": 2}
     assert families("settings") == {"chrome": 9, "edge": 3, "safari": 2}
-    assert families("transcribed") == {"chrome": 108, "edge": 37, "firefox": 39, "safari": 22, "opera": 32}
-    assert families("derived") == {"chrome": 11, "edge": 2, "opera": 3, "safari": 2}
-    assert "318 profiles" in TEXT and "48 of them are captured whole" in TEXT and "22 Chrome" in TEXT
+    assert families("transcribed") == {"chrome": 108, "edge": 37, "firefox": 39, "safari": 22, "opera": 32,
+                                       "brave": 1, "okhttp": 7, "zalando": 2, "nike": 2, "mesh": 4,
+                                       "confirmed": 3, "mms": 1}
+    assert families("derived") == {"chrome": 11, "edge": 2, "opera": 3, "safari": 2, "yandex": 3}
+    # The transcriptions by source: wreq-util's replay a captured twin;
+    # tls-client's carry its hello field for field (Brave 1.88 aside).
+    by_source: dict[str, int] = {}
+    for n in classes["transcribed"]:
+        src = curlpro.capabilities(n)["source"]["from"]
+        by_source[src] = by_source.get(src, 0) + 1
+    assert by_source == {"github.com/0x676e67/wreq-util": 238, "github.com/bogdanfinn/tls-client": 20}
+    assert "343 profiles" in TEXT and "50 of them are captured whole" in TEXT and "22 Chrome" in TEXT
     assert "14 more are captured but for their HTTP/2 SETTINGS" in TEXT
-    assert "238 are transcribed" in TEXT and "18 are derived" in TEXT
-    assert "238" in LLMS and "318" in LLMS
+    assert "238 are transcribed" in TEXT and "20 from `bogdanfinn/tls-client`" in TEXT
+    assert "21 are derived" in TEXT
+    assert "238" in LLMS and "343" in LLMS and "20 from `bogdanfinn/tls-client`" in LLMS
 
 
 def test_the_number_of_distinct_ja4_values():
@@ -95,8 +105,8 @@ def test_the_number_of_distinct_ja4_values():
             assert root(n) in pre_kyber, f"{n} showed the padding variant {ja4}"
             ja4 = flip[ja4]
         groups.setdefault(ja4, []).append(n)
-    assert len(groups) == 18, "\n".join(f"{k}: {v}" for k, v in sorted(groups.items()))
-    assert "18 distinct JA4" in TEXT and "18 distinct JA4" in LLMS
+    assert len(groups) == 28, "\n".join(f"{k}: {v}" for k, v in sorted(groups.items()))
+    assert "28 distinct JA4" in TEXT and "28 distinct JA4" in LLMS
 
 
 def test_which_profiles_have_http3_and_fetch_sets():
@@ -108,9 +118,17 @@ def test_which_profiles_have_http3_and_fetch_sets():
     for n in ("firefox-155-windows", "safari-26.0-macos"):
         with pytest.raises(curlpro.CurlProError):
             curlpro.Session(n, http3=True)
+    def on_okhttp(name: str) -> bool:
+        while name:
+            if name.startswith("okhttp-"):
+                return True
+            name = curlpro.get_profile(name).based_on
+        return False
+
     for n in NAMES:
-        # Every browser profile has a fetch set; okhttp, a library, has none.
-        has_fetch = not n.startswith("okhttp-")
+        # Every browser profile has a fetch set; okhttp, a library, has none,
+        # nor do the Android apps transcribed on it.
+        has_fetch = not on_okhttp(n)
         if has_fetch:
             curlpro.Session(n, mode="fetch").close()
         else:

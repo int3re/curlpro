@@ -51,6 +51,19 @@ Revised on 2026-10-26:
   BoringSSL and the network stack, not from the OS: every Chrome/Edge and
   Linux/macOS pair the corpus holds agrees).
 
+Added on 2026-11-03:
+
+- Yandex Browser 26.10 for Windows is captured (26.10.3.771 on Chromium
+  152.0.7977.771: Chrome 152's hello to the byte, Yandex's brands and build).
+  Real strings of 26.10 seen in traffic (useragents.io) put it on Chromium 152
+  on macOS and Linux as well (``Chrome/152.0.0.0 YaBrowser/26.10.0.0``), so
+  its macOS and Linux twins stand on the Windows capture with their own
+  platform and User-Agent. Yandex for iPhone is WebKit — the string carries
+  Safari's AppleWebKit/605.1.15 and Version/ tokens — so it stands on the
+  captured Safari 26 for iOS with Yandex's own User-Agent, whose shape the
+  same traffic shows: the real iOS version in three parts, not Safari's
+  frozen 18_7, and YaBrowser/<build>.10 SA/3.
+
 Run: ``python scripts/derive-current.py`` then ``python scripts/gen-identities.py``
 and ``python scripts/gen-safari-fetch.py``.
 """
@@ -70,6 +83,7 @@ DATE = "2026-09-26"
 DATE_1010 = "2026-10-10"
 DATE_1026 = "2026-10-26"
 DATE_1029 = "2026-10-29"
+DATE_1103 = "2026-11-03"
 PLATFORM = {"windows": '"Windows"', "macos": '"macOS"', "linux": '"Linux"', "android": '"Android"'}
 
 WIN = "Windows NT 10.0; Win64; x64"
@@ -119,6 +133,25 @@ CHROME_NOTE = ("Derived, not captured: Chrome 154 went stable on 2026-09-22 (chr
                "HTTP/2 frames and header sets are {base}'s; the User-Agent and the brand list are 154's, the "
                "brands computed as Chromium computes them. Chrome 153 added a TLS extension 152 lacked, so a "
                "major can change the hello: replace with a capture when Chrome 154 is on the stand.")
+
+YANDEX_NOTE = ("Derived, not captured: Yandex Browser 26.10 runs on Chromium 152 on {os} as on Windows — a "
+               "real {os} string of it seen in traffic (useragents.io, 2026-11-03) says Chrome/152.0.0.0 "
+               "YaBrowser/26.10.0.0 — and this twin stands on the captured yandex-26.10-windows (26.10.3.771, "
+               "2026-11-03): its ClientHello (Chrome 152's, the 32 trust anchors), HTTP/2 frames, header sets "
+               "and resources, with {os}'s User-Agent and sec-ch-ua-platform. The hints are the Windows "
+               "capture's but for the platform, the architecture and the machine (gen-identities.py): the "
+               "build and the brands are Yandex's on Windows, 26.10.3.771, and whether {os} runs the same "
+               "build number is not known here. Replace with a capture from {os}.")
+YANDEX_IOS_NOTE = (
+    "Derived, not captured: Yandex Browser for iPhone is built on WebKit — its string carries Safari's "
+    "AppleWebKit/605.1.15 and Version/ tokens — so the ClientHello, HTTP/2 frames and header sets are "
+    "those of the captured safari-26-ios, iOS's own network stack: taken on that evidence, not measured. "
+    "The User-Agent is Yandex's own, as seen in traffic (useragents.io, 2026-11-03): the real iOS version "
+    "in three parts (iPhone OS 26_6_2, where Safari freezes 18_7), Version/ the major with .0, then "
+    "YaBrowser/<build>.10 SA/3. The pool (gen-identities.py) draws an iOS 26 version and one of the four "
+    "26.10 builds seen (26.10.0.1738, 26.10.1.984, 26.10.3.674, 26.10.4.504); about four in ten of the "
+    "strings seen also carry CriOS/152.0.7977.<build> before YaBrowser, which the pool leaves out. Yandex "
+    "on iOS 18 sends iOS 18's hello and is not this profile. Replace with a capture from an iPhone.")
 
 PLAN = [
     # (name, based_on, user agent, sec-ch-ua or None, source from, note)
@@ -194,6 +227,18 @@ PLAN = [
      "takes the form every Safari since 14 sends on a Mac (the OS frozen at Intel Mac OS X 10_15_7) "
      "with Version/27.0 — assumed, not seen; the ClientHello, HTTP/2 frames and header sets are the "
      "captured safari-26.0-macos's."),
+    ("yandex-26.10-macos", "yandex-26.10-windows",
+     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+     "Chrome/152.0.0.0 YaBrowser/26.10.0.0 Safari/537.36", None,
+     "https://useragents.io/explore/browsers/types/browser/maker/yandex-llc-0b6", YANDEX_NOTE.format(os="macOS"), DATE_1103),
+    ("yandex-26.10-linux", "yandex-26.10-windows",
+     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+     "Chrome/152.0.0.0 YaBrowser/26.10.0.0 Safari/537.36", None,
+     "https://useragents.io/explore/browsers/types/browser/maker/yandex-llc-0b6", YANDEX_NOTE.format(os="Linux"), DATE_1103),
+    ("yandex-26.10-ios", "safari-26-ios",
+     "Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) "
+     "Version/26.0 YaBrowser/26.10.3.674.10 SA/3 Mobile/15E148 Safari/604.1", None,
+     "https://useragents.io/explore/browsers/types/browser/maker/yandex-llc-0b6", YANDEX_IOS_NOTE, DATE_1103),
 ]
 
 
@@ -252,7 +297,7 @@ def main() -> int:
     drift = False
     for name, base, ua, brands, src, note, *date in PLAN:
         order = resolved_order(base)
-        platform = PLATFORM.get(name.rsplit("-", 1)[-1]) if name.startswith("chrome-") else None
+        platform = PLATFORM.get(name.rsplit("-", 1)[-1]) if name.startswith(("chrome-", "yandex-")) else None
         for h in order:
             k = h["key"].lower()
             if k == "sec-ch-ua" and brands:
@@ -289,6 +334,10 @@ def main() -> int:
             # The generators own devices, client hints and fetch sets.
             kept = {k: v for k, v in have.items() if k in ("devices", "device_kind", "client_hints", "fetch")}
             want.update(kept)
+            # ... and the User-Agent template of an iOS pool.
+            tpl = (have.get("headers") or {}).get("user_agent_template")
+            if tpl and "user_agent_template" not in want["headers"]:
+                want["headers"]["user_agent_template"] = tpl
             if have == want:
                 continue
             if check:

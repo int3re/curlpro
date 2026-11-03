@@ -1,0 +1,132 @@
+{
+  "name": "okhttp-4.10-android11",
+  "based_on": "okhttp-5.5-conscrypt",
+  "source": {
+    "kind": "transcribed",
+    "from": "github.com/bogdanfinn/tls-client",
+    "ref": "9e4b45ec70e1293e8c88a80fa02a25a10ab1efd8",
+    "path": "profiles/contributed_custom_profiles.go",
+    "date": "2026-11-03",
+    "note": "Transcribed, not captured: the TLS ClientHello (cipher suites and extensions with their parameters, in tls-client's order) and the HTTP/2 SETTINGS, window increment, pseudo-header order and priority are tls-client's Okhttp4Android11 (its ClientHello is Okhttp4Android10's). Everything else stands on the captured okhttp-5.5-conscrypt: OkHttp's header set (OkHttp, measured over HTTP/2 only, has no HTTP/1.1 set). The User-Agent is OkHttp 4.10's, the version tls-client names."
+  },
+  "tls": {
+    "cipher_suites": [
+      4865,
+      4866,
+      4867,
+      49195,
+      49196,
+      52393,
+      49199,
+      49200,
+      52392,
+      49171,
+      49172,
+      156,
+      157,
+      47,
+      53
+    ],
+    "compression_methods": "AA==",
+    "extensions": [
+      {
+        "type": "server_name"
+      },
+      {
+        "type": "extended_master_secret"
+      },
+      {
+        "type": "renegotiation_info"
+      },
+      {
+        "type": "supported_groups",
+        "groups": [
+          29,
+          23,
+          24
+        ]
+      },
+      {
+        "type": "ec_point_formats",
+        "formats": "AA=="
+      },
+      {
+        "type": "session_ticket"
+      },
+      {
+        "type": "application_layer_protocol_negotiation",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ]
+      },
+      {
+        "type": "status_request"
+      },
+      {
+        "type": "signature_algorithms",
+        "algorithms": [
+          1027,
+          2052,
+          1025,
+          1283,
+          2053,
+          1281,
+          2054,
+          1537,
+          513
+        ]
+      },
+      {
+        "type": "key_share",
+        "groups": [
+          29
+        ]
+      },
+      {
+        "type": "psk_key_exchange_modes",
+        "modes": "AQ=="
+      },
+      {
+        "type": "supported_versions",
+        "versions": [
+          772,
+          771
+        ]
+      },
+      {
+        "type": "padding"
+      }
+    ],
+    "permute_extensions": false,
+    "signature_algorithms": [
+      1027,
+      2052,
+      1025,
+      1283,
+      2053,
+      1281,
+      2054,
+      1537,
+      513
+    ]
+  },
+  "http2": {
+    "settings": [
+      {
+        "id": 4,
+        "value": 16777216
+      }
+    ],
+    "connection_window_update": 16711681,
+    "pseudo_order": [
+      ":method",
+      ":path",
+      ":authority",
+      ":scheme"
+    ]
+  },
+  "headers": {
+    "user_agent": "okhttp/4.10.0"
+  }
+}

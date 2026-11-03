@@ -70,7 +70,7 @@ Four ways profiles reach the library:
 - **At runtime.** `curlpro.register_profile(dict_or_json)` adds one profile
   without a release.
 
-The native library has an ABI version (`0.29` for this release) that the Python
+The native library has an ABI version (`0.30` for this release) that the Python
 side checks on import. A wheel always carries a matching pair; the check exists
 for source builds and for `CURLPRO_LIBRARY`, which points the package at a
 library of your own. A mismatch raises at import time with the rebuild command
@@ -102,7 +102,7 @@ touch it.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `impersonate` | `chrome-156-windows` | the profile name, the newest Chrome captured whole (`chrome-151-windows` through 0.16.0, `chrome-155-windows` in 0.17 and 0.18); `list_profiles()` has all 318 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 45 captured whole |
+| `impersonate` | `chrome-156-windows` | the profile name, the newest Chrome captured whole (`chrome-151-windows` through 0.16.0, `chrome-155-windows` in 0.17 and 0.18); `list_profiles()` has all 343 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 50 captured whole |
 | `verify` | `True` | `True` — system roots; a PEM path — trust only that root; `False` — no verification |
 | `cert` | `None` | `(certificate, key)` paths for mutual TLS |
 | `trust_env` | `True` | take the proxy from `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, honouring `NO_PROXY`; an explicit `proxy` always wins |
@@ -800,23 +800,27 @@ partitions, and a Firefox profile sent a captcha's frame no cookies at all.
 
 ## 11. Profiles, devices and mobile
 
-318 profiles ship in the wheel. 48 of them are captured whole — by this
+343 profiles ship in the wheel. 50 of them are captured whole — by this
 project's own runs of `curlpro capture` or by the curl-impersonate signatures
 it imported, each with the hashes to prove it: 22 Chrome (118 to 153, 155 and 156),
 4 Edge, 8 Firefox (133, 135, 144, 155 to 159), Opera 139, 9 Safari (15.6.1 to 26.0.1, macOS and
-iOS), Tor 14, Yandex Browser 26.8 for Android, and two okhttp 5.5 (JVM and
-Conscrypt). 14 more are captured but for their HTTP/2 SETTINGS (Chrome 98 to
+iOS), Tor 14, Yandex Browser 26.8 for Android and 26.10 for Windows, Brave 1.98
+for Windows, and two okhttp 5.5 (JVM and Conscrypt). 14 more are captured but for their HTTP/2 SETTINGS (Chrome 98 to
 116, Chrome 99 for Android, Edge 98 to 101, Safari 15.3 and 15.5): those
 signatures recorded no SETTINGS frame, and until 0.12 the profiles sent an
 empty one — a frame no browser sends; the values are now wreq-util's for each
 version, and the profile says so. 238 are transcribed from `0x676e67/wreq-util`
-(108 Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera), and 18 are derived here
-for the versions current on 2026-09-26, 2026-10-10 and 2026-10-29 that were not on the stand — see the
+(108 Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera) and 20 from `bogdanfinn/tls-client`
+(Brave 1.88, OkHttp 4.10 on Android 7 to 13, and the TLS of the Zalando, Nike,
+Mesh, Confirmed and MMS apps on Android and iOS), and 21 are derived here
+for the versions current on 2026-09-26, 2026-10-10, 2026-10-29 and 2026-11-03 that were not on the stand — see the
 next paragraphs, and prefer `list_profiles(measured=True)` when drawing a
-profile at random. Many share a TLS fingerprint: all of them together form 18
-distinct JA4 values, because a transcribed or derived profile replays a
-captured hello, so the count barely grows — the one exception is Firefox 151,
-whose cipher list is corrected from Firefox's own source (below). A browser family keeps its ClientHello across several versions
+profile at random. Many share a TLS fingerprint: all of them together form 28
+distinct JA4 values, because a transcribed or derived profile mostly replays a
+captured hello, so the count barely grows — the exceptions are Firefox 151,
+whose cipher list is corrected from Firefox's own source (below), and the
+tls-client transcriptions of OkHttp 4 and the apps, whose hellos are
+tls-client's own descriptions with no captured twin (ten values of their own). A browser family keeps its ClientHello across several versions
 and differs in the User-Agent and headers. One group — Chrome 119 to 131 and
 Edge 119/120, the last Chromium hellos before the post-quantum key share —
 shows a second JA4 spelling on some connections (`…1517…` beside `…1516…`):
@@ -842,7 +846,8 @@ on Chrome's Android 156 builds), `chrome-157-windows`, `-macos` and `-linux` (Ch
 and the stand's updater had not rolled it out yet), `edge-156-windows` (on the
 captured Chrome 156; Edge updates are switched off on the stand's machine) and
 `opera-139-macos` (Opera 139 was captured on Windows: Chrome 155's hello to the
-byte, which settles for one version what wreq-util claims for every Opera). Their `source` block has kind
+byte, which settles for one version what wreq-util claims for every Opera); and since
+2026-11-03 `yandex-26.10-macos`, `-linux` and `-ios` (below). Their `source` block has kind
 `derived` and names the published fact each rests on; like a transcription
 they report `measured: False` and raise `transcribed_profile`, and a live
 capture replaces each the day its browser is on the stand. A mark may also
@@ -881,14 +886,72 @@ Safari 26.1–26.4 declared equal to 18.5, without the post-quantum key share
 Captured profiles are never overwritten by the transcription: a version this
 project has measured keeps its measurement.
 
+**Transcribed from tls-client.** `bogdanfinn/tls-client` describes each client
+as a uTLS `ClientHelloSpec` literal in Go — cipher suites, extensions with
+their parameters — with its HTTP/2 SETTINGS, window increment, pseudo-header
+order and priority. Some of them are clients no capture here covers: OkHttp 4
+on the Android platform's TLS (Android 7 to 13; 7 to 9 offer TLS 1.2 only, 10
+to 13 share one hello) and the TLS of a few shopping apps (Zalando, Nike, Mesh
+and Confirmed on Android and iOS, MMS on iOS). `scripts/transcribe-tlsclient.py`
+writes them field for field — `tls.cipher_suites` and `tls.extensions` in
+tls-client's order — as deltas on the nearest captured client of the platform
+for everything tls-client does not describe: `okhttp-5.5-conscrypt` on Android,
+`safari-26-ios` on iOS. An app's own User-Agent and headers are not in
+tls-client: the Android apps carry OkHttp's header set and the iOS ones
+Safari's, and the caller sets the app's. Unlike wreq-util's, these hellos
+replay no captured twin, so they were checked another way: tls-client's own
+spec, built through its own uTLS fork, gives the same JA4, JA4_r, JA3N and
+Akamai string as the profile, for all nineteen. Two quirks are kept as
+tls-client has them, and the note says so: MeshAndroid's ALPS extension names
+no protocol (`"alpn": []`), and ConfirmedAndroid2 pads every hello, empty
+below 256 bytes (`"always": true` on `padding`). The twentieth,
+`brave-1.88-windows` (Brave 1.88 is the release on Chromium 146), is tls-client's
+Brave_146, whose hello and frames are Chrome 146's byte for byte — so it stands
+on the captured `chrome-142-macos`, as `chrome-146-windows` does, with
+chrome-146-windows's header set and the traits measured on Brave 1.98 below.
+
+**Yandex Browser and Brave on the desktop.** `yandex-26.10-windows` (Yandex
+26.10.3.771, Chromium 152.0.7977.771) and `brave-1.98-windows` (Brave 1.98.63,
+Chromium 156.0.8078.80) were captured on the stand on 2026-11-03. Yandex sends
+Chrome 152's hello to the byte, the 32 trust anchors included, its own brands
+(`"YaBrowser";v="26.10"`, `"Yowser";v="2.5"`) and full version
+(`26.10.3.771`), and `accept-language: ru,en;q=0.9`. On a machine with
+CryptoPro CSP, Yandex adds the GOST suites to its hello (seen in a published
+JA4 whose cipher hash only that set gives); the stand has no CryptoPro, so the
+profile is the hello of the machines without it. Brave sends no trust anchors —
+its JA4 is Chrome 150's and 151's —, `Sec-GPC: 1` after `Accept` on every
+request, no `application/signed-exchange` in `Accept`, and an `Accept-Language`
+reduced to the first language and its base with a weight from `;q=0.5` to
+`;q=0.9` drawn per site and session (Brave's farbling): the session writes the
+site's weight, so one site keeps one value and another site sees another. To
+`Accept-CH` Brave answers six hints of the 21 — architecture, platform version,
+model, bitness, WoW64 and the full version list with its builds zeroed
+(`156.0.0.0`) — and nothing of the machine, the network or the preferences.
+
+**Yandex on every system.** Yandex 26.10 has a pool everywhere it runs: on
+Windows the five 64-bit releases (Yandex's installer puts the 64-bit build on
+64-bit Windows; the capture measured `wow64 ?0`) on each of the seed's nine
+machines, 45 identities; `yandex-26.10-macos` (84: every macOS version on the
+machines of its CPU) and `yandex-26.10-linux` (4), both derived on the Windows
+capture from real 26.10 strings seen in traffic (`Chrome/152.0.0.0
+YaBrowser/26.10.0.0` on a Mac and on Linux); and `yandex-26.10-ios` (68),
+derived on the captured Safari 26 for iOS, because Yandex on iPhone is WebKit.
+A desktop identity varies the system and the machine, never the build:
+Yandex writes its own build and brands into the hints, so they stay the
+measured `26.10.3.771`. The iPhone string is Yandex's own — the real iOS
+version in three parts (`iPhone OS 26_6_0`, where Safari freezes `18_7`),
+`Version/26.0`, `YaBrowser/<build>.10 SA/3` — and the pool draws the iOS 26
+version and one of the four 26.10 builds seen (`{full_version}` in the
+template). Android has its 46 phones on the captured 26.8.
+
 What each family carries, resolved through inheritance:
 
 | Family | Navigation set | Fetch set | HTTP/1.1 set | WebSocket | HTTP/3 |
 |---|---|---|---|---|---|
-| Chrome, Edge, Yandex | yes | measured | yes | yes | chrome-151-windows, chrome-152-windows, chrome-152-android, yandex-26.8-android |
+| Chrome, Edge, Yandex, Brave | yes | measured | yes | yes | chrome-151-windows, chrome-152-windows, chrome-152-android, yandex-26.8-android |
 | Firefox, Tor | yes | measured | yes | yes | no |
-| Safari | yes | **derived** | yes | no | no |
-| okhttp | yes | none — a library has no fetch | no | no | no |
+| Safari, and the iOS apps on it | yes | **derived** | yes | no | no |
+| okhttp, and the Android apps on it | yes | none — a library has no fetch | no | no | no |
 
 `curlpro.capabilities(name)` answers all of this for one profile without
 opening a session: the modes it carries, the protocols it can speak, its
@@ -1422,6 +1485,12 @@ Facts that are easy to doubt and are true:
   at a captured twin the source names. It is the first data in the corpus
   that this project did not see on the wire, and `list_profiles(measured=True)`
   is the list without it.
+- 20 more are transcribed from tls-client (section 11), and nineteen of them
+  do build a hello of their own: OkHttp 4 on Android 7 to 13 and the apps'
+  TLS are tls-client's specs field for field, with no captured twin — checked
+  against tls-client's own build of the same spec, not against a wire. The
+  apps' headers are not in tls-client: the session must set the app's
+  User-Agent and headers itself.
 - Four profiles are derived from live Windows captures rather than captured
   themselves: `edge-153-windows` is `chrome-153-windows` with Edge's User-Agent
   and brand list, and `chrome-151-macos`, `chrome-152-macos`, `chrome-153-macos`

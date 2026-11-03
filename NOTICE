@@ -34,5 +34,10 @@ changes. JA4 for TLS, computed elsewhere in the same package, is BSD-3.
 
 Dependencies are vendored in vendor/ and carry their own licence files there.
 
-The browser profiles in profiles/ were obtained two ways: by our own measurements
-of live browsers and by importing the curl-impersonate signatures (MIT) — see docs/.
+The browser profiles in profiles/ were obtained by our own measurements of live
+browsers and by importing the curl-impersonate signatures (MIT) — see docs/. Some
+are transcribed from other projects' descriptions, and each of those names its
+source, commit and file in its `source` block:
+  github.com/0x676e67/wreq-util          — Apache-2.0
+  github.com/bogdanfinn/tls-client       — BSD-3-Clause, Copyright (c) 2023 Bogdan Finn
+      (OkHttp 4 on Android and the app profiles, scripts/transcribe-tlsclient.py)

@@ -808,12 +808,13 @@ func fullVersionList(brands, full string) string {
 // writes "Linux; arm_64; Android 17; Pixel 7", while Chrome since version 110
 // writes the placeholder "Android 10; K", the same for everyone, leaving
 // nothing to substitute; iOS Safari writes the OS version and its own; a
-// Linux Firefox may carry a distribution token. The template comes from the
-// profile, so the code never decides on the browser's behalf.
+// Linux Firefox may carry a distribution token; Yandex on iPhone writes its
+// build ("YaBrowser/26.10.3.674.10"). The template comes from the profile, so
+// the code never decides on the browser's behalf.
 //
 // Supported: {model}, {android} (major version), {platform_version}, {arch},
-// {os_version}, {version} and {distro}. Without a device chosen the plain
-// User-Agent goes out, template or not.
+// {os_version}, {version}, {distro} and {full_version}. Without a device
+// chosen the plain User-Agent goes out, template or not.
 func (p *Profile) UserAgentFor(dev Device) string {
 	tpl := p.Headers.UserAgentTemplate
 	if tpl == "" || dev.Name == "" {
@@ -831,6 +832,7 @@ func (p *Profile) UserAgentFor(dev Device) string {
 		"{os_version}", dev.OSVersion,
 		"{version}", dev.Version,
 		"{distro}", dev.Distro,
+		"{full_version}", dev.FullVersion,
 	)
 	return r.Replace(tpl)
 }

@@ -423,6 +423,7 @@ func agreesWith(captured, parent []profile.HeaderPair) bool {
 // has something the capture must not inherit.
 type declined struct {
 	*profile.Profile
+	TLS         json.RawMessage `json:"tls,omitempty"`
 	Devices     json.RawMessage `json:"devices,omitempty"`
 	ClientHints json.RawMessage `json:"client_hints,omitempty"`
 }
@@ -456,6 +457,23 @@ func declineInherited(p *profile.Profile, basedOn, dir string) (any, error) {
 		out.ClientHints, _ = json.Marshal(p.ClientHints)
 	} else if base.ClientHints.Enabled() || len(base.ClientHints.Values) > 0 {
 		out.ClientHints = json.RawMessage(`{"values": {}, "order": [], "fetch_order": []}`)
+	}
+	// A hello without trust_anchors under a parent that sends them: the
+	// parent's list would be inherited and the spec refuse to build, so the
+	// delta says "none" — an empty list, which the omitempty of the field
+	// cannot write (Brave 1.98 sends none; Chrome 156 does).
+	if len(p.TLS.TrustAnchors) == 0 && len(base.TLS.TrustAnchors) > 0 {
+		tls, err := json.Marshal(p.TLS)
+		if err != nil {
+			return nil, err
+		}
+		var m map[string]any
+		if err := json.Unmarshal(tls, &m); err != nil {
+			return nil, err
+		}
+		m["trust_anchors"] = []string{}
+		out.TLS, _ = json.Marshal(m)
+		fmt.Printf("the hello carries no trust_anchors: the parent's %d are not inherited\n", len(base.TLS.TrustAnchors))
 	}
 	return out, nil
 }
