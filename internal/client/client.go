@@ -150,6 +150,14 @@ type Options struct {
 	// socket destination moves.
 	Resolve map[string]string
 
+	// ResolveViaProxy says what Resolve does behind a proxy. "name" (or
+	// empty): nothing — the tunnel names the host and the proxy resolves it,
+	// as curl's --resolve. "ip": the tunnel goes to the table's address —
+	// CONNECT ip:port, SOCKS5's IPv4/IPv6 form, MASQUE's target — while SNI
+	// and Host keep the name; a proxy pinned to the address a client chose
+	// keeps it. Response.Conn.ResolvedBy says which happened.
+	ResolveViaProxy string
+
 	// DNS chooses what resolves names and whether HTTPS records are asked for
 	// first, as the browser asks (dns.go): "" the system's servers, "off" none,
 	// "1.1.1.1,8.8.8.8" those servers, "https://..." DNS over HTTPS.
@@ -301,6 +309,19 @@ type Request struct {
 	// 8441) with this :protocol — "websocket" for WebSocket over HTTP/2, as
 	// Chrome opens it where the server allows it. Upgrade only.
 	ConnectProtocol string
+
+	// TargetRaw is the request-target — path and query — sent exactly as
+	// given in place of the URL's, which still names the host, the scheme
+	// and the cookies' path: the bytes a client relayed through a proxy sent
+	// (an app's own encoding, a path a signature was computed over). On
+	// HTTP/1.1 a space would split the request line and is refused. The
+	// first hop only.
+	TargetRaw string
+
+	// OnInterim hears of each 1xx response the moment it is read, before the
+	// final one: a proxy relays a 103 Early Hints or a 100 Continue as it
+	// comes. It runs on the transport's goroutine and must not block.
+	OnInterim func(Interim)
 
 	// HeadersRaw, when set, is the request's whole header set, sent as
 	// given: in this order, in this case on HTTP/1.1 (HTTP/2 and HTTP/3 write
@@ -793,6 +814,11 @@ func (r *Request) validate(hasJar bool) error {
 			return configErr("%s cannot be negative, got %s (0 is no limit)", t.name, *t.d)
 		}
 	}
+	if r.TargetRaw != "" {
+		if err := checkTarget(r.TargetRaw); err != nil {
+			return err
+		}
+	}
 	if r.NewConnection && r.ConnectionID != 0 {
 		return configErr("a request takes a new connection or a named one, not both")
 	}
@@ -1034,6 +1060,12 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	}
 	if opts.IdleTimeout < 0 {
 		return nil, configErr("idle timeout cannot be negative, got %s", opts.IdleTimeout)
+	}
+	switch opts.ResolveViaProxy {
+	case "", "name", "ip":
+	default:
+		return nil, configErr("resolve_via_proxy %q: \"name\" (the proxy resolves) or \"ip\" "+
+			"(the tunnel goes to the resolve table's address)", opts.ResolveViaProxy)
 	}
 	if opts.TicketCache != "" && !opts.Resume {
 		return nil, configErr("ticket_cache %q shares tickets, and the session has resumption off", opts.TicketCache)
@@ -1444,7 +1476,11 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		}
 		return nil, nil, nil, err
 	}
-	setTarget(req.URL, u)
+	if r.TargetRaw != "" {
+		rawTarget(req.URL, r.TargetRaw)
+	} else {
+		setTarget(req.URL, u)
+	}
 	// The limit lives in the request context: HTTP/2 reads it itself, while
 	// HTTP/1.1 moves it onto the socket deadline (see conn.roundTrip).
 	//
@@ -1481,7 +1517,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		req = req.WithContext(http2.WithHeaderPriority(req.Context(), func(uint32) http2.PriorityParam { return param }))
 	}
 	if r.interim == nil {
-		r.interim = &interimLog{}
+		r.interim = &interimLog{notify: r.OnInterim}
 	}
 	req = req.WithContext(withInterim(req.Context(), r.interim))
 
@@ -1642,7 +1678,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 			resp, err := s.sendH3(req.Context(), r, u, proxy)
 			err = headersDone(err)
 			if err == nil {
-				info := &ConnInfo{Proto: "h3"}
+				info := &ConnInfo{Proto: "h3", ResolvedBy: s.resolvedBy(u.Host, proxy)}
 				if proxy != "" {
 					info.Proxy = redactProxy(proxy)
 				}
@@ -1687,6 +1723,11 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		return fail(&fatalError{fmt.Errorf(
 			"protocol=%s: server negotiated %s. The ALPN list is left intact on purpose: "+
 				"no browser offers h2 alone", ProtoH2, c.proto)})
+	}
+	if c.h2 == nil && strings.ContainsRune(r.TargetRaw, ' ') {
+		s.release(c)
+		return fail(&fatalError{configErr("target_raw %q has a space, which splits an HTTP/1.1 request line "+
+			"(the server negotiated http/1.1)", r.TargetRaw)})
 	}
 	// The headers are built after the connection is chosen: HTTP/1.1 order and
 	// case depend on what the server negotiated, not on an option.
@@ -1795,6 +1836,7 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 			c := newH1Conn(raw, ds)
 			c.noteDial(raw, nil, false, connectTook, 0, nil)
 			c.info.DNSMS = millis(dnsTook)
+			c.info.ResolvedBy = s.resolvedBy(ds.addr, ds.proxy)
 			return c, nil
 		}
 		hsCtx, hsDone := dialCtx, context.CancelFunc(func() {})
@@ -1852,11 +1894,13 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 		c.notePeer(raw, state, ds.proxy == "" && !s.opts.InsecureSkipVerify)
 		c.noteDial(raw, &state, verified, connectTook, tlsTook, sentHello(uconn))
 		c.info.DNSMS = millis(dnsTook)
+		c.info.ResolvedBy = s.resolvedBy(ds.addr, ds.proxy)
 		return c, nil
 	case "http/1.1", "":
 		c := newH1Conn(uconn, ds)
 		c.noteDial(raw, &state, verified, connectTook, tlsTook, sentHello(uconn))
 		c.info.DNSMS = millis(dnsTook)
+		c.info.ResolvedBy = s.resolvedBy(ds.addr, ds.proxy)
 		return c, nil
 	default:
 		uconn.Close()

@@ -141,6 +141,10 @@ func curlpro_free(s *C.char) {
 // otherwise an old DLL silently ignores the unknown field and an option like
 // follow_redirects=False simply has no effect.
 //
+// Since 0.34.0 it is the package's version too — the wheel, the header and the
+// bindings say the same (scripts/version.py writes and checks them all) — so a
+// patch adds nothing to the ABI; new exports and fields wait for a minor.
+//
 // 0.3.0: the code field in the envelope, max_message_size for WebSocket, and a
 // retry object with zero attempts meaning "no retries" rather than "ask the session".
 // 0.4.0: mode (navigation or fetch) and keep_alive on the session.
@@ -229,7 +233,12 @@ func curlpro_free(s *C.char) {
 // curlpro_upgrade_open, RFC 8441); curlpro_decode, the copy of a body relayed
 // compressed. The path and query go as Chromium writes them, and a
 // Content-Length in headers_raw goes once.
-const Version = "0.33.0"
+// 0.34.0: the proxy's second list — each 1xx comes to a *_start caller as
+// it arrives ("interim_events"), the request-target as given
+// ("target_raw"), resolve through a proxy ("resolve_via_proxy",
+// conn.resolved_by), and HTTP/3 failures with a phase and the codes of
+// TCP's (quic_protocol beside them).
+const Version = "0.34.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -426,9 +435,12 @@ type sessionConfig struct {
 	TrustEnv         bool   `json:"trust_env"`
 	MaxResponseSize  int64  `json:"max_response_size"`
 	// AltSvc is a pointer because a missing field means "enabled".
-	AltSvc    *bool             `json:"alt_svc"`
-	Resolve   map[string]string `json:"resolve"`
-	IPVersion string            `json:"ip_version"`
+	AltSvc  *bool             `json:"alt_svc"`
+	Resolve map[string]string `json:"resolve"`
+	// ResolveViaProxy: "name" (default) or "ip" — what resolve does
+	// behind a proxy.
+	ResolveViaProxy string `json:"resolve_via_proxy"`
+	IPVersion       string `json:"ip_version"`
 	// DNS: "" the system's servers for HTTPS records, "off", servers, or a
 	// DoH URL (internal/client/dns.go).
 	DNS string `json:"dns"`
@@ -558,6 +570,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		MaxResponseSize:       c.MaxResponseSize,
 		DisableAltSvc:         c.AltSvc != nil && !*c.AltSvc,
 		Resolve:               c.Resolve,
+		ResolveViaProxy:       c.ResolveViaProxy,
 		IPVersion:             c.IPVersion,
 		DNS:                   c.DNS,
 		DisableKeepAlive:      c.KeepAlive != nil && !*c.KeepAlive,
@@ -856,6 +869,11 @@ type requestJSON struct {
 	// Connection names the connection: "new" for one of its own, or the
 	// id of an open one (a response's conn.id).
 	Connection connectionRef `json:"connection"`
+	// TargetRaw is the request-target sent as given (client.Request.TargetRaw).
+	TargetRaw string `json:"target_raw"`
+	// InterimEvents: each 1xx comes to a *_start call's caller as a result
+	// of the call's number before the final one (async.go).
+	InterimEvents bool `json:"interim_events"`
 	// ConnectProtocol makes curlpro_upgrade_open an extended CONNECT on
 	// HTTP/2 with this :protocol ("websocket").
 	ConnectProtocol string         `json:"connect_protocol"`
@@ -954,6 +972,7 @@ func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 		NewConnection:   r.Connection.fresh,
 		ConnectionID:    r.Connection.id,
 		ConnectProtocol: r.ConnectProtocol,
+		TargetRaw:       r.TargetRaw,
 		Body:            body,
 		BodyFile:        r.BodyFile,
 		HeaderOrder:     r.HeaderOrder,
@@ -965,6 +984,11 @@ func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 		TrackCookies:    r.TrackCookies,
 	}
 	r.applyOverrides(req)
+	if r.InterimEvents {
+		// A placeholder: a *_start call puts its sender here once it has its
+		// number (withInterimEvents); a blocking call has nobody to tell.
+		req.OnInterim = func(client.Interim) {}
+	}
 	if r.BodyStream {
 		if len(body) > 0 || r.BodyFile != "" || r.Multipart != nil {
 			return nil, client.CodeError(client.CodeConfiguration, fmt.Errorf(

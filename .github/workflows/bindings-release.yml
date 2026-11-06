@@ -83,11 +83,18 @@ jobs:
         with:
           path: natives
 
+      # The crate is published from Cargo.toml as it stands, so the tag has to
+      # be the version already written there — and everywhere else.
       - name: the version is the tag's
         run: |
           v="${GITHUB_REF_NAME#v}"
-          [ "${GITHUB_REF_TYPE}" = tag ] || v="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+            python3 scripts/version.py check "$v"
+          else
+            v="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          fi
           echo "VERSION=$v" >> "$GITHUB_ENV"
+          echo "MIN_ABI=$(python3 scripts/version.py min-abi)" >> "$GITHUB_ENV"
 
       # The signed bundle goes into the jar when the signing key is available;
       # without it the jar carries the plain profiles (both load the same way).
@@ -98,7 +105,7 @@ jobs:
         run: |
           umask 077
           printf '%s\n' "$CURLPRO_SIGNING_KEY_SEED" > "$RUNNER_TEMP/signing.key"
-          go run ./cmd/curlpro bundle -key "$RUNNER_TEMP/signing.key" -package "$VERSION" -min-abi 0.30.0 -commit "$GITHUB_SHA" -out dist/bundle
+          go run ./cmd/curlpro bundle -key "$RUNNER_TEMP/signing.key" -package "$VERSION" -min-abi "$MIN_ABI" -commit "$GITHUB_SHA" -out dist/bundle
           rm -f "$RUNNER_TEMP/signing.key"
 
       - name: package

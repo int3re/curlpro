@@ -28,6 +28,9 @@ type ConnInfo struct {
 	Proto string `json:"proto"`
 	// Proxy is the proxy the connection went through, without credentials.
 	Proxy string `json:"proxy,omitempty"`
+	// ResolvedBy is who turned the host into the address: "local", or
+	// "proxy" when the tunnel named the host (0.34; ResolveViaProxy).
+	ResolvedBy string `json:"resolved_by,omitempty"`
 	// TLSVersion and Cipher as the server chose them ("TLS 1.3",
 	// "TLS_AES_128_GCM_SHA256"); empty on cleartext.
 	TLSVersion string `json:"tls_version,omitempty"`

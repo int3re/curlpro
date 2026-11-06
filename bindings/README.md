@@ -35,6 +35,8 @@ text and binary messages, an unknown profile raised `configuration`, and
   (`loadDir`, `loadBundle`, `register`).
 - **The version check:** a binding refuses a library older than the ABI it was
   written for (0.30): an older library silently ignores options it does not know.
+  The packages themselves carry the release's version (0.34.0 and on, the same
+  as the Python package and the library inside).
 - **Session defaults are the browser's:** profile headers on, redirects followed
   (20), cookies, TLS resumption, the environment's proxy, 30 s. The ABI's own
   zero values are not — a missing boolean is `false` there — so every binding

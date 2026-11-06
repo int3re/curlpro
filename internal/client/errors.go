@@ -93,6 +93,9 @@ const (
 	CodeEOFBeforeHeaders ErrorCode = "eof_before_headers"
 	// CodeEOFInBody — the connection ended inside the body.
 	CodeEOFInBody ErrorCode = "eof_in_body"
+	// CodeQUICProtocol — the QUIC connection under HTTP/3 failed on a
+	// transport error other than TLS; details.quic_code (0.34).
+	CodeQUICProtocol ErrorCode = "quic_protocol"
 )
 
 // Proxy failure stages, as ProxyError.Stage reports them.

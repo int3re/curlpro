@@ -89,7 +89,14 @@ func (s *Session) Upgrade(r *Request) (*Upgraded, error) {
 		}
 		return nil, err
 	}
-	setTarget(req.URL, u)
+	if r.TargetRaw != "" {
+		if strings.ContainsRune(r.TargetRaw, ' ') {
+			return nil, configErr("target_raw %q has a space, which splits an HTTP/1.1 request line", r.TargetRaw)
+		}
+		rawTarget(req.URL, r.TargetRaw)
+	} else {
+		setTarget(req.URL, u)
+	}
 	if size >= 0 {
 		req.ContentLength = size
 	}
@@ -185,6 +192,7 @@ func (s *Session) DialTLS(ctx context.Context, host string, port int, alpn []str
 	state := uconn.ConnectionState()
 	probe := &conn{proto: state.NegotiatedProtocol, spec: ds}
 	probe.noteDial(raw, &state, !s.opts.InsecureSkipVerify, connectTook, time.Since(shaking), sentHello(uconn))
+	probe.info.ResolvedBy = s.resolvedBy(ds.addr, ds.proxy)
 	return newRawConn(uconn, nil), probe.describe(false), nil
 }
 

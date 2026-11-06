@@ -4,8 +4,8 @@
 
 Builds profiles.json.gz and its Ed25519 signature from profiles/ with
 `curlpro bundle`, stamped with the package version of python/pyproject.toml,
-the native library version of lib/curlpro.go as the oldest library that reads
-it, and the commit; then replaces the assets of the GitHub release tagged
+its `X.Y.0` as the oldest library that reads it (a patch adds nothing to the
+ABI, so a 0.34.0 install reads what 0.34.3 publishes), and the commit; then replaces the assets of the GitHub release tagged
 `profiles` (created on the first run, never marked latest) with `gh`.
 curlpro.update_profiles() fetches from there.
 
@@ -18,10 +18,11 @@ from __future__ import annotations
 
 import argparse
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
+
+import version  # scripts/version.py, beside this file
 
 ROOT = Path(__file__).resolve().parent.parent
 TAG = "profiles"
@@ -48,10 +49,10 @@ def main() -> int:
     if run("git", "status", "--porcelain", "--", "profiles"):
         sys.exit("profiles/ has uncommitted changes: a bundle names the commit it comes from")
     commit = run("git", "rev-parse", "HEAD")
-    package = re.search(r'^version = "([^"]+)"', (ROOT / "python" / "pyproject.toml").read_text(encoding="utf-8"),
-                        re.M).group(1)
-    abi = re.search(r'^const Version = "([^"]+)"', (ROOT / "lib" / "curlpro.go").read_text(encoding="utf-8"),
-                    re.M).group(1)
+    if version.problems():
+        sys.exit("the versions disagree, see python scripts/version.py")
+    package = version.declared()["python/pyproject.toml"]
+    abi = version.min_abi(package)
     out = ROOT / "dist" / "bundle"
     print(run("go", "run", "./cmd/curlpro", "bundle", "-key", str(a.key), "-package", package,
               "-min-abi", abi, "-commit", commit, "-out", str(out)))
@@ -64,7 +65,7 @@ def main() -> int:
             "--notes", "The signed profile bundle curlpro.update_profiles() fetches. Its assets are "
                        "replaced as profiles are captured; each names the commit it was built from.")
     run("gh", "release", "upload", TAG, *files, "--clobber")
-    print(f"published: package {package}, ABI {abi}, commit {commit[:7]}")
+    print(f"published: package {package}, min ABI {abi}, commit {commit[:7]}")
     return 0
 
 

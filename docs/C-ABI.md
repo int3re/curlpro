@@ -39,11 +39,13 @@ the core directly ([bindings/go](../bindings/go/README.md)) rather than the ABI.
 ## The version check
 
 ```c
-char *v = curlpro_version();   /* {"ok":true,"data":{"version":"0.30.0"}} */
+char *v = curlpro_version();   /* {"ok":true,"data":{"version":"0.34.0"}} */
 ```
 
 The library's version is the ABI version (`CURLPRO_ABI_VERSION_*` in the
-header). It is raised when a function or a configuration field is added. Both
+header), and since 0.34.0 the release's version as well — the Python package and
+the bindings carry the same number. Its minor is raised when a function or a
+configuration field is added; a patch adds neither. Both
 sides ignore JSON fields they do not know, so an old library handed a new option
 drops it silently and the request leaves without it. **A binding refuses a
 library whose `major.minor` is lower than the one it was written against.** A
@@ -144,25 +146,27 @@ parallel.
 ### Configuration
 
 Only `profile` is required. **The zero values are not the browser defaults** —
-the Go side reads a missing boolean as `false`. A binding must send the
-defaults below explicitly, the way the Python `Session` does.
+the Go side reads a missing boolean as `false` and a missing number as `0`. A
+binding must send the defaults below explicitly, the way the Python `Session`
+does; each row says what an absent field means where that differs. The fields
+marked "absent = `true`" are the exceptions, read as on when missing.
 
 | Field | Type | Binding default | Meaning |
 |---|---|---|---|
 | `profile` | string or object | `chrome-156-windows` | registered profile name, or a profile given whole (`{"based_on": …, "tls": …}`) used for this session and never registered (0.32) |
-| `timeout_ms` | int | `30000` | whole request, redirects, retries and the body included; 0 = none (until 0.31 a 0 became 30 s) |
+| `timeout_ms` | int | `30000` (absent: no limit) | whole request, redirects, retries and the body included; 0 = none (until 0.31 a 0 became 30 s) |
 | `connect_timeout_ms` | int | 0 | connection setup; 0 = only `timeout_ms` |
 | `response_timeout_ms` | int | 0 | waiting for response headers |
 | `decompress` | bool | absent = `true` | `false` hands bodies over as they came: compressed, `Content-Encoding` and `Content-Length` kept; such responses bypass the cache (0.32) |
 | `ticket_cache` | string | `""` | a group name: sessions with the same one share their TLS tickets and resume each other's connections (one identity over several sessions); needs `resume` (0.32) |
 | `expect_continue_ms` | int | absent = 1000 | how long a body announced with `Expect: 100-continue` waits for the server's `100` (a final answer first leaves it unsent; silence sends it when the time is up); `0` sends it at once, as before 0.33 (0.33) |
 | `idle_timeout_ms` | int | 0 | a body that stops arriving: no byte for this long while a read waits; 0 = none. The bound for a stream with no total limit (0.31) |
-| `default_headers` | bool | **`true`** | send the profile's headers in its order |
-| `follow_redirects` | bool | **`true`** | |
-| `max_redirects` | int | **`20`** | |
-| `cookies` | bool | **`true`** | keep a cookie jar |
-| `resume` | bool | **`true`** | TLS session resumption, as browsers do |
-| `trust_env` | bool | **`true`** | `HTTPS_PROXY`/`NO_PROXY` from the environment |
+| `default_headers` | bool | **`true`** (absent: `false`) | send the profile's headers in its order |
+| `follow_redirects` | bool | **`true`** (absent: `false`) | |
+| `max_redirects` | int | **`20`** (absent or `0`: 20) | |
+| `cookies` | bool | **`true`** (absent: `false`) | keep a cookie jar |
+| `resume` | bool | **`true`** (absent: `false`) | TLS session resumption, as browsers do; `ticket_cache` needs it on |
+| `trust_env` | bool | **`true`** (absent: `false`) | `HTTPS_PROXY`/`NO_PROXY` from the environment |
 | `post_quantum` | bool | absent = `true` | the X25519MLKEM768 key share |
 | `alt_svc` | bool | absent = `true` | follow `Alt-Svc` to HTTP/3 |
 | `keep_alive` | bool | absent = `true` | reuse connections |
@@ -177,6 +181,7 @@ defaults below explicitly, the way the Python `Session` does.
 | `header_order` | [string] | | override the profile's header order |
 | `max_response_size` | int | 0 | bytes; 0 = no limit; past it → `too_large` |
 | `resolve` | {host: ip} | | fixed DNS answers |
+| `resolve_via_proxy` | string | absent = `"name"` | what `resolve` does behind a proxy: `"name"` nothing — the tunnel names the host and the proxy resolves it, as curl's `--resolve`; `"ip"` the tunnel goes to the table's address (`CONNECT ip:port`, SOCKS5's address form, MASQUE's target), SNI and `Host` keeping the name. `conn.resolved_by` says which happened (0.34) |
 | `ip_version` | string | `""` | `"4"`, `"6"` or `""` |
 | `dns` | string | `""` | HTTPS-record lookups: `""` system, `"off"`, servers, or a DoH URL |
 | `max_idle_conns`, `idle_conn_timeout_ms` | int | | pool limits |
@@ -224,6 +229,8 @@ curlpro_free(resp);
 | `headers` | {name: value} | added to (or replacing) the profile's; order comes from the profile |
 | `headers_raw` | [[name, value], …] | the whole header set, sent as given: order, case on HTTP/1.1 (lowercase on HTTP/2 and HTTP/3), a name twice sent twice — repeats of one name go out together, where its first stands; nothing of the profile's, the session's or the jar's is added; pseudo-headers in the list are skipped. Exclusive with `headers` and `header_order` (0.32). A value that is not UTF-8 goes as `[name, base64, "base64"]`; on HTTP/1.1 `Content-Length` and `Transfer-Encoding` in the list mark where the transport writes its own, from the body (0.33; they went out twice) |
 | `h2_priority` | {weight, exclusive, depends_on} | this request's HTTP/2 priority (weight 1–256) in place of the profile's (0.32) |
+| `target_raw` | string | the request-target — path and query — sent exactly as given, in place of the URL's (which still names the host, the scheme and the cookies' path): the bytes a relayed client sent, an app's own encoding, a path a signature was computed over. In origin form (`/…`) or `*`; CR, LF and NUL are refused, and so is a target starting with `//`; on HTTP/1.1 a space too, since it would split the request line. The first hop only (0.34) |
+| `interim_events` | bool | on a `*_start` call, each 1xx response becomes a result of the call's own handle the moment it is read — `{"interim": {status, headers}}` — before the final one (Asynchronous calls); a 103's preloads or the 100 a client waits on reach it in time (0.34) |
 | `connection` | `"new"` or an id | `"new"`: a connection of its own, opened for this request and pooled after; an id (a response's `conn.id`): that open connection — a proxy keeps each client connection to one server connection so. Either covers the first hop, takes the request past HTTP/3 and past the silent resend on a fresh connection; a named connection that is gone fails with `conn_closed`, one to another origin (not coalescable) or a busy HTTP/1.1 one with `configuration` (0.33) |
 | `decompress` | bool or absent | per-request `decompress` (0.32) |
 | `suppress_headers` | [string] | leave these out whatever set them |
@@ -257,7 +264,7 @@ curlpro_free(resp);
 | `trailers` | {name: [values]} — the fields sent after the body (gRPC's `grpc-status`, `grpc-message`); absent when none came (0.31) |
 | `headers_raw` | [[name, value], …] — the header block as it came off the wire: the server's order and case, a repeated field once per line; absent for a cached response (0.32). A value that is not UTF-8 (obs-text, a `Set-Cookie` in cp1251) comes as `[name, base64, "base64"]`: JSON would turn its bytes into U+FFFD, as it does in `headers` (0.33) |
 | `interim` | [{status, headers}] — the 1xx responses before the final one (103 Early Hints, 100 Continue), in order (0.32). Since 0.33 a body announced with `Expect: 100-continue` waits for the `100` (`expect_continue_ms`) |
-| `conn` | the connection: `id` (same id, same connection), `reused`, `remote`, `local`, `proto`, `proxy`, `tls_version`, `cipher`, `resumed`, `ech`, `verified`, `ja4`/`ja4_r` of the ClientHello actually sent, and on a connection's first response `peer_certs` (DER, base64, leaf first), `connect_ms` (name resolution, TCP and a proxy's tunnel together; `dns_ms` the address lookup within it, 0.33) and `tls_ms` (0.32) |
+| `conn` | the connection: `id` (same id, same connection), `reused`, `remote`, `local`, `proto`, `proxy`, `tls_version`, `cipher`, `resumed`, `ech`, `verified`, `ja4`/`ja4_r` of the ClientHello actually sent, and on a connection's first response `resolved_by` (`local`, or `proxy` when a proxy got the name, 0.34), `peer_certs` (DER, base64, leaf first), `connect_ms` (name resolution, TCP and a proxy's tunnel together; `dns_ms` the address lookup within it, 0.33) and `tls_ms` (0.32) |
 | `timing` | `{wait_ms, body_ms}` — from the request leaving to its headers (0.32); from the headers to the body's last byte, on a buffered response (0.33) |
 
 The body is already decompressed (gzip, br, zstd, deflate).
@@ -365,10 +372,7 @@ close codes:
 | `curlpro_tls_dial(session, config)` | no HTTP at all: a TLS connection with the profile's ClientHello to `{host, port}`, `alpn` replacing its list (`[]` none, absent the profile's), through `proxy` or the session's; `{conn, info}`, `info` as a response's `conn` (0.32) |
 | `curlpro_conn_close(conn)` | closes; a read blocked on it returns `-1` |
 
-A WebSocket over HTTP/2 (extended CONNECT, RFC 8441) is not offered yet: the
-upgrade always takes HTTP/1.1, as Chrome does for a socket on a connection of its
-own. `curlpro_ws_*` is the other choice, where the library speaks WebSocket
-itself.
+`curlpro_ws_*` is the other choice, where the library speaks WebSocket itself.
 
 ## WebSocket
 
@@ -424,7 +428,13 @@ for (;;) {
   with `curlpro_result_wait(0)` until `0`, which lowers it, and wait again.
   The handle lives as long as the process and is not closed by the caller.
 - `curlpro_result_take` may be called once per handle; the frame is the same as
-  the blocking call's.
+  the blocking call's. A request started with `"interim_events": true`
+  (`curlpro_request_start`, `curlpro_stream_open_start`) is the exception
+  (0.34): each 1xx it reads — a 103 Early Hints, the 100 a body waits on, a
+  102 — comes to the ready queue under the request's handle as a result of
+  its own, `{"interim": {status, headers}}`, the moment it arrives, and the
+  final result follows under the same handle. Take until a frame is not an
+  interim one. A cancelled request's events are dropped with it.
 - `curlpro_request_cancel(id)` aborts a request or a connect. A read or a receive
   cannot be un-read: after cancelling one, close the stream or socket.
 - `curlpro_async_pending()` counts calls started and not taken.
@@ -455,6 +465,7 @@ for (;;) {
 | `h2_protocol` | the HTTP/2 connection failed on a protocol error. `details: {h2_code}` | no |
 | `eof_before_headers` | the connection ended before the response's headers did | maybe |
 | `eof_in_body` | the connection ended inside the body | maybe |
+| `quic_protocol` | HTTP/3's QUIC connection failed on a transport error other than TLS. `details: {quic_code, remote}` (0.34) | no |
 | *(absent)* | not classified (until 0.32 that was DNS, TCP, TLS and HTTP/2 failures too) | maybe |
 
 `details.phase` (0.33) says where a request failed, whatever the code:
@@ -464,7 +475,12 @@ on `proxy` and `proxy_auth`, whose `stage` says it. A
 timeout keeps its code `timeout`; `phase: "connect"` or `"tls"` makes it a
 connect timeout. `tls_verify` carries `details: {reason, chain}` — the
 verifier's words and the chain the server showed (DER, base64, leaf first).
-An HTTP/3 request's own failures have no phase yet.
+HTTP/3's failures have a phase too (0.34) — `connect` for the address,
+`tls` for the QUIC handshake (QUIC has no connection before it), `response`,
+`body` — and TCP's codes: a QUIC crypto error is `tls_alert` with the alert's
+number, a stream reset, an HTTP/3 error or an application close `reset` with
+`details: {h3_code, stream_id, remote}`, any other transport error
+`quic_protocol`.
 
 `configuration`, `profile_capability` and `proxy_auth` are permanent: retrying
 the same call cannot change the outcome. A panic inside the library becomes

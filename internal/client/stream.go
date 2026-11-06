@@ -328,7 +328,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 			}
 		}
 
-		current.interim = &interimLog{}
+		current.interim = &interimLog{notify: current.OnInterim}
 		current.hop = &hopRecord{}
 		resp, cancel, used, err := s.sendCached(&current, deadline)
 		if err != nil {

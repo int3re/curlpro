@@ -70,8 +70,8 @@ Four ways profiles reach the library:
 - **At runtime.** `curlpro.register_profile(dict_or_json)` adds one profile
   without a release.
 
-The native library has an ABI version (`0.33` for this release) that the Python
-side checks on import. A wheel always carries a matching pair; the check exists
+The native library has an ABI version (`0.34` for this release; since 0.34.0 it
+is the package's own version) that the Python side checks on import. A wheel always carries a matching pair; the check exists
 for source builds and for `CURLPRO_LIBRARY`, which points the package at a
 library of your own. A mismatch raises at import time with the rebuild command
 in the message.
@@ -562,7 +562,8 @@ The codes: `timeout`, `expectation`, `profile_capability`, `configuration`,
 (a raw connection or a streamed request body that is closed — docs/C-ABI.md).
 Since 0.32 the transport's own failures have codes too, with the numbers in
 `details`: `dns`, `connect_refused`, `tls_alert`, `tls_verify`, `reset`,
-`goaway`, `h2_protocol`, `eof_before_headers`, `eof_in_body`.
+`goaway`, `h2_protocol`, `eof_before_headers`, `eof_in_body`, and since 0.34
+HTTP/3's `quic_protocol`.
 An error without a code is an ordinary failure with the reason in the text.
 
 Three hooks, each a list of callables on `s.hooks[...]`, also addable with

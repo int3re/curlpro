@@ -8,8 +8,11 @@ equal to pyproject.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 from pathlib import Path
+
+import pytest
 
 import curlpro
 
@@ -28,6 +31,19 @@ def test_fallback_matches_pyproject():
         REPO / "curlpro" / "__init__.py", r'^__version__ = "([^"]+)"'
     )
     assert fallback == pyproject
+
+
+def test_one_number_for_the_package_the_library_and_the_bindings():
+    # Since 0.34.0 the wheel, libcurlpro, the header and the bindings' packages
+    # say the same version; scripts/version.py lists where it is written.
+    script = REPO.parent / "scripts" / "version.py"
+    if not script.is_file():
+        pytest.skip("not a checkout of the whole repository")
+    spec = importlib.util.spec_from_file_location("_versions", script)
+    versions = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(versions)
+    assert versions.problems() == []
+    assert versions.min_abi("0.34.7") == "0.34.0"
 
 
 def test_exported_version_is_readable():

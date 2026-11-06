@@ -55,7 +55,11 @@ func (s *Session) upgradeH2(ctx context.Context, r, current *Request, u *url.URL
 		s.release(c)
 		return nil, err
 	}
-	setTarget(req.URL, u)
+	if r.TargetRaw != "" {
+		rawTarget(req.URL, r.TargetRaw)
+	} else {
+		setTarget(req.URL, u)
+	}
 	req.ContentLength = -1
 	s.applyHeaders(req, current, u, false)
 	req.Header[":protocol"] = []string{r.ConnectProtocol}

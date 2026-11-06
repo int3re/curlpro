@@ -27,6 +27,10 @@ const maxInterim = 16
 type interimLog struct {
 	mu   sync.Mutex
 	list []Interim
+	// notify, when set, hears of each 1xx the moment it is read — a proxy
+	// relays a 103 or a 100 before the final response exists (0.34). It runs
+	// on the transport's goroutine and must not block.
+	notify func(Interim)
 }
 
 func (l *interimLog) add(status int, h map[string][]string) {
@@ -42,11 +46,17 @@ func (l *interimLog) add(status int, h map[string][]string) {
 		}
 		copied[k] = append([]string(nil), vv...)
 	}
+	in := Interim{Status: status, Headers: copied}
 	l.mu.Lock()
-	if len(l.list) < maxInterim {
-		l.list = append(l.list, Interim{Status: status, Headers: copied})
+	kept := len(l.list) < maxInterim
+	if kept {
+		l.list = append(l.list, in)
 	}
+	notify := l.notify
 	l.mu.Unlock()
+	if kept && notify != nil {
+		notify(in)
+	}
 }
 
 func (l *interimLog) entries() []Interim {

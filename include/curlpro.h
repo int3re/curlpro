@@ -44,9 +44,9 @@ extern "C" {
  * refuse a library whose major.minor is lower than the one it was written
  * against, because an older library silently ignores options it does not know. */
 #define CURLPRO_ABI_VERSION_MAJOR 0
-#define CURLPRO_ABI_VERSION_MINOR 33
+#define CURLPRO_ABI_VERSION_MINOR 34
 #define CURLPRO_ABI_VERSION_PATCH 0
-#define CURLPRO_ABI_VERSION_STRING "0.33.0"
+#define CURLPRO_ABI_VERSION_STRING "0.34.0"
 
 /* Frame header size in bytes: a uint32 little-endian length of the JSON part. */
 #define CURLPRO_FRAME_HEADER 4
@@ -253,6 +253,9 @@ CURLPRO_API char *curlpro_ws_send_start(curlpro_handle socket, const char *frame
 CURLPRO_API char *curlpro_ws_recv_start(curlpro_handle socket);
 
 CURLPRO_API long long curlpro_result_wait(int timeout_ms);
+/* A request started with "interim_events": true also yields a result per 1xx
+ * response, {"interim": {status, headers}}, under its own handle before the
+ * final one: take until the frame is not an interim one (0.34). */
 CURLPRO_API char *curlpro_result_take(curlpro_handle request, int *out_len);
 CURLPRO_API char *curlpro_request_cancel(curlpro_handle request);
 

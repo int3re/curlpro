@@ -47,13 +47,30 @@ Not covered:
   when it turns out not to describe a real browser — that has happened twice —
   and the removal is named in the notes.
 
-## The ABI version is a separate number
+## One number for the package and the library
 
-The native library carries its own version (`Version` in
-[lib/curlpro.go](../lib/curlpro.go), `REQUIRED_VERSION` in
-`python/curlpro/_ffi.py`). It has nothing to do with the package version and
-moves on its own schedule: it is raised when the Python side starts depending on
-a new export or a new configuration field.
+Since 0.34.0 the package, the native library (`Version` in
+[lib/curlpro.go](../lib/curlpro.go), what `curlpro_version` returns), the
+header's `CURLPRO_ABI_VERSION_*` and the bindings' packages carry the same
+version. Until 0.22.1 they were numbered apart — package 0.22.x carried ABI
+0.33 — and a release with two numbers only confused whoever read them; the
+package jumped to the ABI's number, since an ABI version cannot go back (a
+profile bundle names the oldest library that reads it, and 0.22's library is
+0.33).
+
+[scripts/version.py](../scripts/version.py) lists every place the number is
+written, `set X.Y.Z` writes it everywhere, and the tag of a release is checked
+against all of them before anything is built. A test fails while they differ.
+
+What keeps one number honest is a rule about the ABI: **a patch adds nothing to
+it**. A new export or a new configuration field comes in a minor. So
+`major.minor` is all a caller has to compare, and a profile bundle asks for
+`X.Y.0` — an installed 0.34.0 reads what 0.34.3 publishes.
+
+`REQUIRED_VERSION` in `python/curlpro/_ffi.py` and the bindings' `REQUIRED` are
+not the version but its floor: the oldest library that side works with. It is
+raised by hand when the side starts depending on a new export or field, and
+never above the version itself.
 
 The check exists because the failure it prevents is silent. Both sides tolerate
 unknown JSON fields, so an old library given a new option ignores it and the
@@ -70,18 +87,18 @@ Since 2026-11-04 the exports of `libcurlpro` are a public interface, not an
 implementation detail of the Python package: [include/curlpro.h](../include/curlpro.h)
 declares them, [C-ABI.md](C-ABI.md) describes them, and the bindings in
 [bindings/](../bindings/README.md) — .NET, Node, Java, Rust, PHP, C — are built
-on them. The ABI version above is their version too, with these rules:
+on them. The version above is their version too, with these rules:
 
-- **A patch** (`0.30.x`) adds nothing to the ABI.
+- **A patch** (`0.34.x`) adds nothing to the ABI.
 - **A minor** may add exports and JSON fields. An existing signature, a field's
-  meaning and an error code stay; a binding written for `0.30` works with
-  `0.31`. Bindings refuse a library older than their own `major.minor`.
+  meaning and an error code stay; a binding written for `0.34` works with
+  `0.35`. Bindings refuse a library older than their floor's `major.minor`.
 - **Changing or removing an export** would break every binding at once and is
   not done before 1.0; if it ever is, it is named in the release notes like any
   other removal.
 - The header's `CURLPRO_ABI_VERSION_*` macros move together with `Version` in
-  lib/curlpro.go, and `const Version` in the root Go package with both — a Go
-  test checks the last pair.
+  lib/curlpro.go, and `const Version` in the root Go package with both —
+  `scripts/version.py` writes and checks them all.
 
 ## Deprecation
 

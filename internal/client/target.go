@@ -33,6 +33,30 @@ func setTarget(out, from *url.URL) {
 	out.RawQuery = escapeSet(from.RawQuery, &queryEscapes)
 }
 
+// rawTarget puts a request-target given whole (Request.TargetRaw) on the
+// request line or in :path, byte for byte.
+func rawTarget(out *url.URL, target string) {
+	out.Opaque = target
+	out.RawQuery = ""
+	out.ForceQuery = false
+}
+
+// checkTarget refuses a TargetRaw no request line can carry: origin-form
+// (or "*"), no CR, LF or NUL — and "//…", which url.URL would read as an
+// authority. A space is refused where the request goes on HTTP/1.1 only.
+func checkTarget(target string) error {
+	switch {
+	case target == "*":
+	case !strings.HasPrefix(target, "/"):
+		return configErr("target_raw %q: a request-target in origin form starts with \"/\"", target)
+	case strings.HasPrefix(target, "//"):
+		return configErr("target_raw %q: a target starting with \"//\" cannot be sent as given", target)
+	case strings.ContainsAny(target, "\r\n\x00"):
+		return configErr("target_raw %q: CR, LF and NUL break the request", target)
+	}
+	return nil
+}
+
 var pathEscapes, queryEscapes [256]bool
 
 func init() {

@@ -161,12 +161,12 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 			}
 			udpConn, err := net.ListenUDP(network, nil)
 			if err != nil {
-				return nil, err
+				return nil, inPhase(PhaseConnect, err)
 			}
 			ua, err := resolveUDP(ctx, resolver, network, resolveAddr(opts.Resolve, addr))
 			if err != nil {
 				udpConn.Close()
-				return nil, err
+				return nil, inPhase(PhaseConnect, err)
 			}
 			ut := &quic.UTransport{
 				Transport: &quic.Transport{Conn: udpConn},
@@ -226,7 +226,9 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 			if err != nil {
 				_ = ut.Close()
 				udpConn.Close()
-				return nil, err
+				// QUIC has no connection before its handshake: the first
+				// packet out is the ClientHello, and what fails is that.
+				return nil, inPhase(PhaseTLS, err)
 			}
 			udp.add(ut.Transport)
 			return conn, nil
@@ -382,7 +384,11 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL, proxy stri
 		}
 		return nil, err
 	}
-	setTarget(req.URL, req.URL)
+	if r.TargetRaw != "" {
+		rawTarget(req.URL, r.TargetRaw)
+	} else {
+		setTarget(req.URL, req.URL)
+	}
 	if size >= 0 {
 		req.ContentLength = size
 	}
@@ -395,7 +401,9 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL, proxy stri
 
 	resp, err := tr.RoundTrip(req)
 	if err != nil {
-		return nil, explainH3Error(err, s.profile.Name)
+		// A failure of the dial carries its phase already; the rest came
+		// once the connection was up.
+		return nil, inPhase(PhaseResponse, explainH3Error(err, s.profile.Name))
 	}
 	// The same gate as on TCP: a response to a request made without
 	// credentials sets nothing (0.10.1), and the family's SameSite rules

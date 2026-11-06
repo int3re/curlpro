@@ -50,6 +50,7 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy string) (net.Conn, er
 	if err != nil {
 		return nil, err
 	}
+	addr = s.tunnelTarget(addr)
 
 	switch strings.ToLower(pu.Scheme) {
 	case "socks5", "socks5h":
@@ -98,6 +99,33 @@ func parseProxy(raw string) (*url.URL, error) {
 // A rule is looked up first by the host-port pair and then by the bare name,
 // so "example.com:443" can be routed apart from "example.com". A value without
 // a port keeps the original port — only the host is replaced.
+// tunnelTarget is the address a proxy is asked for: the host by name, which
+// the proxy resolves, unless ResolveViaProxy is "ip" and the resolve table
+// pins it — then the table's address.
+func (s *Session) tunnelTarget(addr string) string {
+	if s.opts.ResolveViaProxy != "ip" {
+		return addr
+	}
+	return resolveAddr(s.opts.Resolve, addr)
+}
+
+// resolvedBy says who turned the host into the address a connection went
+// to: "local" — this side (directly, or through a proxy asked for an
+// address) — or "proxy", which got the name.
+func (s *Session) resolvedBy(addr, proxy string) string {
+	if proxy == "" {
+		return "local"
+	}
+	host, _, err := net.SplitHostPort(s.tunnelTarget(addr))
+	if err != nil {
+		host = s.tunnelTarget(addr)
+	}
+	if net.ParseIP(strings.Trim(host, "[]")) != nil {
+		return "local"
+	}
+	return "proxy"
+}
+
 func resolveAddr(table map[string]string, addr string) string {
 	if len(table) == 0 {
 		return addr

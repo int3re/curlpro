@@ -13,26 +13,20 @@ jobs:
   # to compare them: tagging v0.3.0 while pyproject still said 0.2.0 would
   # build and publish a 0.2.0 wheel — silently, and a version on PyPI can never
   # be reused or freed by deleting it. So the check runs before anything is
-  # built, and everything else waits on it.
+  # built, and everything else waits on it. Since 0.34.0 the native library,
+  # the header and the bindings carry the same number, and it is checked too.
   version:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: the tag matches pyproject
+      - name: every version is the tag's
         shell: bash
         run: |
-          declared=$(grep -m1 '^version = ' python/pyproject.toml | cut -d'"' -f2)
-          echo "pyproject: $declared"
           if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
-            echo "not a tag (${GITHUB_REF}) — nothing to compare, publishing is off anyway"
-            exit 0
-          fi
-          tagged="${GITHUB_REF_NAME#v}"
-          echo "tag:       $tagged"
-          if [ "$declared" != "$tagged" ]; then
-            echo "::error::tag v$tagged does not match version $declared in python/pyproject.toml."
-            echo "::error::The wheel would carry $declared, and that version on PyPI cannot be reused."
-            exit 1
+            echo "not a tag (${GITHUB_REF}): the places agree with each other, publishing is off anyway"
+            python3 scripts/version.py
+          else
+            python3 scripts/version.py check "${GITHUB_REF_NAME}"
           fi
 
   build:

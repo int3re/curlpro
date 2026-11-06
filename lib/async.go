@@ -38,6 +38,48 @@ type asyncCall struct {
 	// request has nothing to release; an opened stream or socket has a
 	// connection Python will never hear about.
 	discard func(frame []byte)
+	// events are results that come before the final one — the 1xx responses
+	// of a request asked for with "interim_events" — each announced in the
+	// ready queue under the call's number and taken first.
+	events [][]byte
+}
+
+// withInterimEvents makes a request asked for with "interim_events" hand
+// each 1xx response to the caller the moment it is read, as a result of the
+// call's own number — {"interim": {status, headers}} — before the final
+// result, which comes as before (0.34). A 103's preloads, or a 100 a client
+// waits on before sending its body, reach a proxy's client in time.
+func withInterimEvents(req *client.Request, before func(int64)) func(int64) {
+	if req.OnInterim == nil {
+		return before
+	}
+	return func(rid int64) {
+		req.OnInterim = interimSender(rid)
+		if before != nil {
+			before(rid)
+		}
+	}
+}
+
+func interimSender(rid int64) func(client.Interim) {
+	return func(in client.Interim) {
+		frame := buildFrame(map[string]any{"interim": in}, nil, nil)
+		asyncMu.Lock()
+		call, ok := asyncPending[rid]
+		ok = ok && !call.done && !call.dropped
+		if ok {
+			call.events = append(call.events, frame)
+		}
+		asyncMu.Unlock()
+		if ok {
+			// Off the transport's goroutine: HTTP/2 reads every stream of the
+			// connection there, and a full queue must not stall them.
+			go func() {
+				asyncReady <- rid
+				signalReady()
+			}()
+		}
+	}
 }
 
 // startAsync registers the work and runs it in a goroutine.
@@ -159,7 +201,7 @@ func curlpro_request_start(id C.longlong, frame *C.char, frameLen C.int) (out *C
 		bp.Attach(req)
 		before = func(rid int64) { registerBody(rid, bp) }
 	}
-	return startAsyncWith(cancel, nil, before, func(rid int64) []byte {
+	return startAsyncWith(cancel, nil, withInterimEvents(req, before), func(rid int64) []byte {
 		defer cancel()
 		resp, err := s.Do(req)
 		if bp != nil {
@@ -231,6 +273,13 @@ func curlpro_result_take(rid C.longlong, outLen *C.int) *C.char {
 	return framed(outLen, func() (*C.char, C.int) {
 		asyncMu.Lock()
 		call, ok := asyncPending[int64(rid)]
+		if ok && len(call.events) > 0 {
+			// An interim result first; the call stays registered.
+			ev := call.events[0]
+			call.events = call.events[1:]
+			asyncMu.Unlock()
+			return frameBytes(ev)
+		}
 		if ok && call.done {
 			delete(asyncPending, int64(rid))
 		}

@@ -265,10 +265,11 @@ library, a source build needs `go build` again.
 
 ## What happens on a tag
 
-1. **version** — compares the tag with `version` in `python/pyproject.toml`. It
-   runs first and everything waits on it: a `v0.3.0` tag while `version` still
-   said `0.2.0` would build and publish a `0.2.0` wheel silently, and a number
-   taken on PyPI is not freed by deleting it.
+1. **version** — compares the tag with every place the version is written
+   (`python scripts/version.py check vX.Y.Z`: pyproject, the library, the
+   header, the bindings). It runs first and everything waits on it: a `v0.3.0`
+   tag while `version` still said `0.2.0` would build and publish a `0.2.0`
+   wheel silently, and a number taken on PyPI is not freed by deleting it.
 2. **build** — wheels on five platforms: Linux x86-64 and arm64, macOS Intel and
    Apple Silicon, Windows x86-64. Each is built on its own machine: cgo does not
    cross-compile without the target platform's toolchain.
@@ -307,14 +308,15 @@ repository's secrets at all — there is nothing to steal.
 ## How to release
 
 ```bash
-# 1. Raise the version in python/pyproject.toml
+# 1. Raise the version — in every place at once (pyproject, lib, header, bindings)
+python scripts/version.py set X.Y.Z
 # 2. Make sure everything is green
 go test -race ./internal/... && cd python && python -m pytest tests -q -m "not network"
 
 # 3. A dry run: builds everything but publishes nothing — publish only fires on a tag
 gh workflow run wheels.yml --ref main
 
-# 4. Tag and push — the same version as in pyproject, or the version job stops it
+# 4. Tag and push — the same version as written, or the version job stops it
 git tag -a vX.Y.Z -m "curlpro X.Y.Z"
 git push origin vX.Y.Z
 ```
@@ -355,8 +357,8 @@ python scripts/publish-profiles.py --dry-run  # build and sign only
 ```
 
 The bundle is every profile of the committed tree, stamped with the package
-version (a bundle older than an installed package is ignored by it), the native
-library version as the oldest one that reads it, and the commit; it is signed
+version (a bundle older than an installed package is ignored by it), that
+version's `X.Y.0` as the oldest library that reads it, and the commit; it is signed
 with the maintainer's Ed25519 key — `--key`, `CURLPRO_SIGNING_KEY`, or
 `%APPDATA%/curlpro/profile-signing.key` (`~/.config/curlpro/` elsewhere) —
 whose public half is compiled into the library (`internal/profile/bundle.go`).
@@ -365,10 +367,15 @@ release, and the old bundles stop being trusted by it.
 
 ## The native part's version
 
-The library has an ABI version of its own (`Version` in
-[lib/curlpro.go](../lib/curlpro.go) and `REQUIRED_VERSION` in
-`python/curlpro/_ffi.py`). It is **not** the package version, and it is raised
-when Python starts depending on a new export or a new configuration field.
-Without that an old library ignores unknown fields silently: an option is passed
-and does not take effect — which looks like a logic error rather than a stale
-build. An hour of runs against the wrong code was once lost to that trap.
+Since 0.34.0 the library's version (`Version` in
+[lib/curlpro.go](../lib/curlpro.go)) **is** the package version — before it, the
+two were numbered apart and package 0.22.1 carried ABI 0.33.0
+([VERSIONING.md](VERSIONING.md) says why they joined). A patch therefore adds
+nothing to the ABI: a new export or configuration field waits for a minor.
+
+`REQUIRED_VERSION` in `python/curlpro/_ffi.py` is the floor, not the version,
+and is raised when Python starts depending on a new export or a new
+configuration field. Without that an old library ignores unknown fields
+silently: an option is passed and does not take effect — which looks like a
+logic error rather than a stale build. An hour of runs against the wrong code
+was once lost to that trap.

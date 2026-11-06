@@ -121,6 +121,14 @@ class RawStand:
                 head = json.dumps(rec["lines"]).encode()
                 c.sendall(b"HTTP/1.1 200 OK\r\nSet-Cookie: city=\xcc\xee\xf1\xea\xe2\xe0\r\n"
                           b"Content-Length: %d\r\n\r\n" % len(head) + head)
+            elif path.startswith("/x|"):
+                # The target given whole (target_raw): recorded, answered empty.
+                c.sendall(b"HTTP/1.1 204 No Content\r\n\r\n")
+            elif path == "/hints-late":
+                # A 103 at once, the final answer 0.6 s later.
+                c.sendall(b"HTTP/1.1 103 Early Hints\r\nLink: </a.css>; rel=preload\r\n\r\n")
+                time.sleep(0.6)
+                c.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
             elif path == "/gzip":
                 body = gzip.compress(b"compressible " * 40)
                 c.sendall(b"HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: %d\r\n\r\n" % len(body) + body)
@@ -455,4 +463,33 @@ def test_a_body_relayed_compressed_decodes_on_demand():
     assert not data["complete"] and data["error"] and out
     with pytest.raises(CurlProError) as e:
         _ffi.call_framed("curlpro_decode", meta={"encoding": "compress"}, body=raw)
+    assert e.value.code == "configuration"
+
+
+def test_interim_responses_come_before_the_final_one(session, stand):
+    started = time.time()
+    rid = _ffi.call_with_frame("curlpro_request_start", session, body=b"",
+                               meta={"method": "GET", "url": stand.url + "/hints-late",
+                                     "interim_events": True})["request"]
+    first, _ = _wait(rid)
+    first_at = time.time() - started
+    assert first == {"interim": {"status": 103, "headers": {"Link": ["</a.css>; rel=preload"]}}}
+    final, body = _wait(rid)
+    final_at = time.time() - started
+    assert body == b"ok" and final["status"] == 200 and final["interim"][0]["status"] == 103
+    assert final_at - first_at > 0.4, (first_at, final_at)
+    # Without the flag the call has one result, as before.
+    rid = _ffi.call_with_frame("curlpro_request_start", session, body=b"",
+                               meta={"method": "GET", "url": stand.url + "/hints-late"})["request"]
+    only, body = _wait(rid)
+    assert only["status"] == 200 and body == b"ok"
+
+
+def test_the_target_as_given_and_resolve_by_the_proxy(session, stand):
+    data, _ = _ffi.call_framed("curlpro_request", session, meta={
+        "method": "GET", "url": stand.url + "/ignored", "target_raw": "/x|y^{z}`?q=%7e"})
+    assert stand.seen[-1]["path"] == "/x|y^{z}`?q=%7e"
+    assert data["conn"]["resolved_by"] == "local"
+    with pytest.raises(CurlProError) as e:
+        _ffi._call("curlpro_session_new", _ffi.encode({"profile": "chrome-156-windows", "resolve_via_proxy": "dns"}))
     assert e.value.code == "configuration"

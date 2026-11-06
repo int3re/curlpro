@@ -12,7 +12,10 @@ import (
 	"syscall"
 
 	"github.com/bogdanfinn/fhttp/http2"
+	quic "github.com/refraction-networking/uquic"
 	utls "github.com/refraction-networking/utls"
+
+	"github.com/curlpro/curlpro/internal/h3"
 )
 
 // transportCode classifies what Code found no code for.
@@ -31,6 +34,28 @@ func transportCode(err error) ErrorCode {
 	var invalid x509.CertificateInvalidError
 	if errors.As(err, &verr) || errors.As(err, &unknown) || errors.As(err, &host) || errors.As(err, &invalid) {
 		return CodeTLSVerify
+	}
+	// HTTP/3 (0.34): a crypto error closes QUIC with 0x100 + the TLS alert;
+	// a stream reset, an HTTP/3 error, an application close or a stateless
+	// reset is a reset with its HTTP/3 code; any other transport error is
+	// QUIC's own protocol failure. Timeouts were "timeout" already (Code).
+	var qt *quic.TransportError
+	if errors.As(err, &qt) {
+		if qt.ErrorCode.IsCryptoError() {
+			return CodeTLSAlert
+		}
+		return CodeQUICProtocol
+	}
+	var qs *quic.StreamError
+	var qa *quic.ApplicationError
+	var he *h3.Error
+	var sr *quic.StatelessResetError
+	if errors.As(err, &qs) || errors.As(err, &qa) || errors.As(err, &he) || errors.As(err, &sr) {
+		return CodeReset
+	}
+	var vn *quic.VersionNegotiationError
+	if errors.As(err, &vn) {
+		return CodeQUICProtocol
 	}
 	var goaway http2.GoAwayError
 	if errors.As(err, &goaway) {
@@ -169,6 +194,26 @@ func ErrorDetails(err error) map[string]any {
 	var alert utls.AlertError
 	if errors.As(err, &alert) {
 		return map[string]any{"alert": int(alert), "name": alert.Error()}
+	}
+	var qt *quic.TransportError
+	if errors.As(err, &qt) {
+		if qt.ErrorCode.IsCryptoError() {
+			return map[string]any{"alert": int(qt.ErrorCode - 0x100), "name": qt.ErrorCode.Message()}
+		}
+		return map[string]any{"quic_code": qt.ErrorCode.String(), "remote": qt.Remote}
+	}
+	var qs *quic.StreamError
+	if errors.As(err, &qs) {
+		return map[string]any{"h3_code": h3.ErrCode(qs.ErrorCode).String(), "stream_id": int64(qs.StreamID),
+			"remote": qs.Remote}
+	}
+	var he *h3.Error
+	if errors.As(err, &he) {
+		return map[string]any{"h3_code": he.ErrorCode.String(), "remote": he.Remote}
+	}
+	var qa *quic.ApplicationError
+	if errors.As(err, &qa) {
+		return map[string]any{"h3_code": h3.ErrCode(qa.ErrorCode).String(), "remote": qa.Remote}
 	}
 	var goaway http2.GoAwayError
 	if errors.As(err, &goaway) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Packages the bindings with the native library inside, one package per ecosystem.
 
-    python scripts/package-bindings.py --natives natives --version 0.30.0 --out dist/bindings
+    python scripts/package-bindings.py --natives natives --version 0.34.0 --out dist/bindings
 
 `natives` holds one directory per platform, named as Node names platforms —
 the release workflow downloads one artifact per runner into it:
@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -158,7 +159,7 @@ def maven(libs: dict[str, Path], version: str, out: Path, bundle: Path) -> None:
         (out / "maven").mkdir(parents=True, exist_ok=True)
         run([tool("jar"), "--create", "--file", str(out / "maven" / f"curlpro-{version}.jar"), "-C", str(classes), "."])
     pom = (ROOT / "bindings" / "java" / "pom.xml").read_text(encoding="utf-8")
-    pom = pom.replace("<version>0.30.0</version>", f"<version>{version}</version>", 1)
+    pom = re.sub(r"(<artifactId>curlpro</artifactId>\s*<version>)[^<]+", rf"\g<1>{version}", pom, count=1)
     (out / "maven" / f"curlpro-{version}.pom").write_text(pom, encoding="utf-8")
 
 

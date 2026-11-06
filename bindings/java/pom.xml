@@ -6,7 +6,7 @@
 
   <groupId>io.curlpro</groupId>
   <artifactId>curlpro</artifactId>
-  <version>0.30.0</version>
+  <version>0.34.0</version>
   <name>curlpro</name>
   <description>HTTP client with a browser's network fingerprint — Java binding of libcurlpro (FFM)</description>
 

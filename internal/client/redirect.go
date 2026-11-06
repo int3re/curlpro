@@ -82,6 +82,8 @@ func (s *Session) nextRequest(prev *Request, nextURL string, status int, initiat
 	// The connection named was the first hop's; the next one goes wherever
 	// its origin is served.
 	next.NewConnection, next.ConnectionID = false, 0
+	// So was the target given whole: the Location names the next one.
+	next.TargetRaw = ""
 	next.Headers = make(map[string]string, len(prev.Headers))
 	for k, v := range prev.Headers {
 		next.Headers[k] = v

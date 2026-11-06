@@ -154,7 +154,7 @@ def test_the_error_codes_named_are_the_ones_the_native_side_knows():
                       "profile_capability", "configuration",
                       "proxy", "proxy_auth", "cors", "conn_closed",
                       "dns", "connect_refused", "tls_alert", "tls_verify", "reset", "goaway",
-                      "h2_protocol", "eof_before_headers", "eof_in_body"}
+                      "h2_protocol", "eof_before_headers", "eof_in_body", "quic_protocol"}
     for code in native | {"expectation"}:
         assert f"`{code}`" in GUIDE, code
         assert code in LLMS, code
