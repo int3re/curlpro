@@ -101,7 +101,15 @@
         "value": 262144
       }
     ],
-    "connection_window_update": 15663105
+    "connection_window_update": 15663105,
+    "hpack_indexing_policy": {
+      ":method": "without",
+      ":scheme": "without",
+      ":path": "without",
+      ":protocol": "without",
+      "default": "incremental"
+    },
+    "hpack_name_index": "first"
   },
   "source": {
     "kind": "transcribed",

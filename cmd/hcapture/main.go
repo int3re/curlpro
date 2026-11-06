@@ -53,6 +53,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 
+	"github.com/curlpro/curlpro/internal/hpackwire"
 	cqpack "github.com/curlpro/curlpro/internal/qpack"
 )
 
@@ -150,6 +151,10 @@ type record struct {
 	// it asks for a page's resources.
 	Conn int   `json:"conn"`
 	At   int64 `json:"at_ms"`
+	// HPACK is how each field of an HTTP/2 request's header block was
+	// encoded, in order (internal/hpackwire): what http2.hpack_indexing_policy
+	// reproduces. A table size update is an entry of its own.
+	HPACK []string `json:"hpack,omitempty"`
 }
 
 type srv struct {
@@ -828,7 +833,8 @@ func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte, connID int) {
 	if _, err := io.ReadFull(c, buf); err != nil || string(buf) != preface {
 		return
 	}
-	fr := http2.NewFramer(c, c)
+	tap := hpackwire.NewTap(c)
+	fr := http2.NewFramer(c, tap)
 	fr.ReadMetaHeaders = hpack.NewDecoder(4096, nil)
 	// One encoder for the connection: HPACK's dynamic table is shared
 	// state with the browser's decoder, and an encoder created per
@@ -861,7 +867,7 @@ func (s *srv) serveH2(c net.Conn, resumed bool, hello []byte, connID int) {
 		case *http2.PingFrame:
 			_ = fr.WritePing(true, f.Data)
 		case *http2.MetaHeadersFrame:
-			r := record{Proto: "h2", Resumed: resumed, Conn: connID}
+			r := record{Proto: "h2", Resumed: resumed, Conn: connID, HPACK: hpackwire.Reps(tap.Take(f.StreamID))}
 			if answered == 0 && len(hello) > 0 {
 				r.ClientHello = base64.StdEncoding.EncodeToString(hello)
 			}

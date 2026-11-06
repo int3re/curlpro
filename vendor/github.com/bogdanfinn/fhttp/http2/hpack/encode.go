@@ -28,8 +28,10 @@ type Encoder struct {
 	tableSizeUpdate bool
 	w               io.Writer
 	buf             []byte
-	// curlpro: the representation policy (curlpro_hpack.go).
-	curlproPolicy func(name string) IndexMode
+	// curlpro: the representation policy and the static name choice
+	// (curlpro_hpack.go).
+	curlproPolicy    func(name string) IndexMode
+	curlproFirstName bool
 }
 
 // NewEncoder returns a new Encoder which performs HPACK encoding. An
@@ -62,6 +64,7 @@ func (e *Encoder) WriteField(f HeaderField) error {
 	}
 
 	idx, nameValueMatch := e.searchTable(f)
+	idx = e.curlproName(f, idx, nameValueMatch) // curlpro
 	if nameValueMatch {
 		e.buf = appendIndexed(e.buf, idx)
 	} else {

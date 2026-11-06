@@ -171,7 +171,15 @@
       ":path"
     ],
     "stream_weight": 256,
-    "stream_exclusive": true
+    "stream_exclusive": true,
+    "hpack_indexing_policy": {
+      ":method": "without",
+      ":scheme": "without",
+      ":path": "without",
+      ":protocol": "without",
+      "default": "incremental"
+    },
+    "hpack_name_index": "first"
   },
   "headers": {
     "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",

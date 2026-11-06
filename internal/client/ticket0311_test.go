@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/http2/hpack"
 
 	"github.com/curlpro/curlpro/internal/fingerprint"
+	"github.com/curlpro/curlpro/internal/hpackwire"
 	"github.com/curlpro/curlpro/internal/profile"
 )
 
@@ -624,60 +625,9 @@ func TestDecodeABodyInHand(t *testing.T) {
 
 // hpackField is a field of a header block with the representation it came in.
 type hpackField struct {
-	name, value, rep string // rep: indexed, incremental, without, never
-}
-
-// hpackReps reads the representations of a block's fields, in order (RFC
-// 7541 §6), skipping table size updates.
-func hpackReps(block []byte) []string {
-	varint := func(b []byte, n uint) ([]byte, uint64) {
-		mask := byte(1<<n - 1)
-		v := uint64(b[0] & mask)
-		b = b[1:]
-		if v < uint64(mask) {
-			return b, v
-		}
-		for m := uint(0); ; m += 7 {
-			c := b[0]
-			b = b[1:]
-			v += uint64(c&0x7f) << m
-			if c&0x80 == 0 {
-				return b, v
-			}
-		}
-	}
-	skipString := func(b []byte) []byte {
-		b, n := varint(b, 7)
-		return b[n:]
-	}
-	var reps []string
-	for len(block) > 0 {
-		c := block[0]
-		var idx uint64
-		switch {
-		case c&0x80 != 0:
-			block, _ = varint(block, 7)
-			reps = append(reps, "indexed")
-			continue
-		case c&0xc0 == 0x40:
-			block, idx = varint(block, 6)
-			reps = append(reps, "incremental")
-		case c&0xe0 == 0x20:
-			block, _ = varint(block, 5)
-			continue
-		case c&0xf0 == 0x10:
-			block, idx = varint(block, 4)
-			reps = append(reps, "never")
-		default:
-			block, idx = varint(block, 4)
-			reps = append(reps, "without")
-		}
-		if idx == 0 {
-			block = skipString(block)
-		}
-		block = skipString(block)
-	}
-	return reps
+	name, value string
+	rep         string // indexed, incremental, without, never
+	form        string // the whole form, as hpackwire.Reps names it
 }
 
 // h2Blocks is an HTTP/2 server that hands over each request's header block
@@ -733,12 +683,18 @@ func h2Blocks(t *testing.T) (string, chan []hpackField, chan []int) {
 						if err != nil {
 							return
 						}
-						reps := hpackReps(block)
+						var reps []string
+						for _, r := range hpackwire.Reps(block) {
+							if !strings.HasPrefix(r, "size=") {
+								reps = append(reps, r)
+							}
+						}
 						out := make([]hpackField, len(fields))
 						for i, hf := range fields {
 							out[i] = hpackField{name: hf.Name, value: hf.Value}
 							if i < len(reps) {
-								out[i].rep = reps[i]
+								out[i].form = reps[i]
+								out[i].rep, _, _ = strings.Cut(reps[i], ":")
 							}
 						}
 						blocks <- out
@@ -940,5 +896,33 @@ func TestWebSocketOverHTTP2(t *testing.T) {
 	if _, err := s.Upgrade(&Request{Method: "GET", URL: "wss://" + refusing + "/", ConnectProtocol: "websocket"}); err == nil ||
 		!strings.Contains(err.Error(), "SETTINGS_ENABLE_CONNECT_PROTOCOL") {
 		t.Errorf("a server without the setting: %v", err)
+	}
+}
+
+// The Chrome profile's header block on the wire: :path a literal without
+// indexing, its name from the static table's first :path entry.
+func TestChromesPathGoesUnindexed(t *testing.T) {
+	addr, blocks, datas := h2Blocks(t)
+	s, err := New(auditProfile(t, "chrome-156-windows"), Options{DefaultHeaders: true, InsecureSkipVerify: true,
+		Timeout: 10 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, path := range []string{"/", "/page"} {
+		if _, err := s.Do(&Request{Method: "GET", URL: "https://" + addr + path}); err != nil {
+			t.Fatal(err)
+		}
+		fields := <-blocks
+		<-datas
+		want := map[string]string{"/": "indexed:4", "/page": "without:n4/H"}[path]
+		for _, f := range fields {
+			if f.name == ":path" && f.form != want {
+				t.Errorf("%s: :path went %s, want %s", path, f.form, want)
+			}
+			if f.name == ":authority" && path == "/" && !strings.HasPrefix(f.form, "incremental:n1") {
+				t.Errorf(":authority went %s", f.form)
+			}
+		}
 	}
 }

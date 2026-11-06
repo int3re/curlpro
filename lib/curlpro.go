@@ -223,7 +223,8 @@ func curlpro_free(s *C.char) {
 // a request's own connection ("connection": "new" or an id);
 // curlpro_result_event, a handle an event loop waits on; the profile's
 // http2.priority_frames, hpack_indexing_policy, disable_cookie_split and
-// data_frame_max_size; WebSocket over HTTP/2 (connect_protocol on
+// data_frame_max_size, hpack_name_index — the Chromium family's profiles
+// now encode HPACK as Chrome 156 was measured to; WebSocket over HTTP/2 (connect_protocol on
 // curlpro_upgrade_open, RFC 8441); curlpro_decode, the copy of a body relayed
 // compressed. The path and query go as Chromium writes them, and a
 // Content-Length in headers_raw goes once.

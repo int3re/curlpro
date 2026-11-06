@@ -1971,6 +1971,32 @@ func (s *Session) handshakeTLS(dialCtx context.Context, raw net.Conn, u *url.URL
 	return uconn, nil
 }
 
+// hpackPolicy is the profile's HPACK representation by field name, nil when
+// it names none (the encoder indexes whatever fits).
+func hpackPolicy(h2 profile.HTTP2Spec) func(string) hpack.IndexMode {
+	pol := h2.HPACKIndexingPolicy
+	if len(pol) == 0 {
+		return nil
+	}
+	modes := make(map[string]hpack.IndexMode, len(pol))
+	def := hpack.IndexDefault
+	for name, m := range pol {
+		mode := map[string]hpack.IndexMode{"incremental": hpack.IndexIncremental,
+			"without": hpack.IndexWithout, "never": hpack.IndexNever}[m]
+		if name == "default" {
+			def = mode
+		} else {
+			modes[name] = mode
+		}
+	}
+	return func(name string) hpack.IndexMode {
+		if m, ok := modes[name]; ok {
+			return m
+		}
+		return def
+	}
+}
+
 // transport builds the HTTP/2 transport from the profile.
 func (s *Session) transport() *http2.Transport {
 	h2 := s.profile.HTTP2
@@ -2018,25 +2044,8 @@ func (s *Session) transport() *http2.Transport {
 	}
 	// The header block field by field as the profile's browser writes it, and
 	// its bodies' frames no larger than the browser's (patch edits m, n, o).
-	if pol := h2.HPACKIndexingPolicy; len(pol) > 0 {
-		modes := make(map[string]hpack.IndexMode, len(pol))
-		def := hpack.IndexDefault
-		for name, m := range pol {
-			mode := map[string]hpack.IndexMode{"incremental": hpack.IndexIncremental,
-				"without": hpack.IndexWithout, "never": hpack.IndexNever}[m]
-			if name == "default" {
-				def = mode
-			} else {
-				modes[name] = mode
-			}
-		}
-		tr.HPACKIndexPolicy = func(name string) hpack.IndexMode {
-			if m, ok := modes[name]; ok {
-				return m
-			}
-			return def
-		}
-	}
+	tr.HPACKIndexPolicy = hpackPolicy(h2)
+	tr.HPACKStaticNameFirst = h2.HPACKNameIndex == "first"
 	tr.DisableCookieSplit = h2.DisableCookieSplit != nil && *h2.DisableCookieSplit
 	tr.DataFrameMaxSize = h2.DataFrameMaxSize
 	// fhttp writes them after the WINDOW_UPDATE and moves the first request's

@@ -364,9 +364,17 @@ func (t *Transport) expectContinueTimeout() time.Duration {
 }''',
 '''	w               io.Writer
 	buf             []byte
-	// curlpro: the representation policy (curlpro_hpack.go).
-	curlproPolicy func(name string) IndexMode
+	// curlpro: the representation policy and the static name choice
+	// (curlpro_hpack.go).
+	curlproPolicy    func(name string) IndexMode
+	curlproFirstName bool
 }'''),
+('m', HPACK,
+'''	idx, nameValueMatch := e.searchTable(f)
+	if nameValueMatch {''',
+'''	idx, nameValueMatch := e.searchTable(f)
+	idx = e.curlproName(f, idx, nameValueMatch) // curlpro
+	if nameValueMatch {'''),
 ('m', HPACK,
 '''		indexing := e.shouldIndex(f)
 		if indexing {''',
@@ -383,6 +391,9 @@ func (t *Transport) expectContinueTimeout() time.Duration {
 	// HPACKIndexPolicy (curlpro) decides each field's HPACK representation
 	// by its name; nil indexes whatever fits, as before.
 	HPACKIndexPolicy func(name string) hpack.IndexMode
+	// HPACKStaticNameFirst (curlpro) takes a literal's name from the first
+	// static-table entry with it, as Chrome does (:path 4, not 5).
+	HPACKStaticNameFirst bool
 	// DisableCookieSplit (curlpro) sends a Cookie as one field, not crumbs.
 	DisableCookieSplit bool
 	// DataFrameMaxSize (curlpro) caps the DATA frames of a request body
@@ -394,6 +405,7 @@ func (t *Transport) expectContinueTimeout() time.Duration {
 ''',
 '''	cc.henc = hpack.NewEncoder(&cc.hbuf)
 	cc.henc.SetIndexPolicy(t.HPACKIndexPolicy) // curlpro
+	cc.henc.SetStaticNameFirst(t.HPACKStaticNameFirst)
 '''),
 
 # (n) The Cookie as the caller gave it: crumbs relayed as they came stay
@@ -491,10 +503,15 @@ func (t *Transport) expectContinueTimeout() time.Duration {
 	br         *bufio.Reader
 '''),
 ('q', TRANSPORT,
-'''	cc.henc.SetIndexPolicy(t.HPACKIndexPolicy) // curlpro
+'''	if t.AllowHTTP {
+		cc.nextStreamID = 3
+	}
 ''',
-'''	cc.henc.SetIndexPolicy(t.HPACKIndexPolicy) // curlpro
-	cc.curlproSettings = make(chan struct{})  // curlpro
+'''	cc.curlproSettings = make(chan struct{}) // curlpro
+
+	if t.AllowHTTP {
+		cc.nextStreamID = 3
+	}
 '''),
 ('q', TRANSPORT,
 '''		case SettingEnableConnectProtocol:
@@ -654,6 +671,32 @@ const (
 // representation; nil restores its own.
 func (e *Encoder) SetIndexPolicy(policy func(name string) IndexMode) {
 	e.curlproPolicy = policy
+}
+
+// SetStaticNameFirst makes a literal take its name from the first entry of
+// the static table that has it — :method 2, :path 4, :scheme 6 — as
+// Chrome's encoder (QUICHE) does; Go's takes the last (3, 5, 7).
+func (e *Encoder) SetStaticNameFirst(on bool) { e.curlproFirstName = on }
+
+var curlproFirstStatic = func() map[string]uint64 {
+	m := make(map[string]uint64, len(staticTableEntries))
+	for i, f := range staticTableEntries {
+		if _, ok := m[f.Name]; !ok {
+			m[f.Name] = uint64(i + 1)
+		}
+	}
+	return m
+}()
+
+// curlproName is the name index a literal goes with.
+func (e *Encoder) curlproName(f HeaderField, idx uint64, match bool) uint64 {
+	if !e.curlproFirstName || match || idx == 0 || idx > uint64(staticTable.len()) {
+		return idx
+	}
+	if first, ok := curlproFirstStatic[f.Name]; ok {
+		return first
+	}
+	return idx
 }
 
 // curlproMode applies the policy: whether the field goes into the dynamic

@@ -166,7 +166,15 @@
         "value": 262144
       }
     ],
-    "connection_window_update": 15663105
+    "connection_window_update": 15663105,
+    "hpack_indexing_policy": {
+      ":method": "without",
+      ":scheme": "without",
+      ":path": "without",
+      ":protocol": "without",
+      "default": "incremental"
+    },
+    "hpack_name_index": "first"
   },
   "headers": {
     "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36",

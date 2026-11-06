@@ -656,6 +656,10 @@ type HTTP2Spec struct {
 	// match in the static table goes indexed whatever the policy, as from
 	// every encoder.
 	HPACKIndexingPolicy map[string]string `json:"hpack_indexing_policy,omitempty"`
+	// HPACKNameIndex is the static-table entry a literal takes its name
+	// from when several share it (:method 2–3, :path 4–5, :scheme 6–7):
+	// "first", as Chrome's encoder does, or "last", as Go's — the default.
+	HPACKNameIndex string `json:"hpack_name_index,omitempty"`
 	// DisableCookieSplit sends Cookie as one field; by default it goes as
 	// crumbs, one field per pair (RFC 9113 §8.2.3), as browsers send it.
 	DisableCookieSplit *bool `json:"disable_cookie_split,omitempty"`
@@ -1169,6 +1173,11 @@ func (p *Profile) validate() error {
 				strings.Join(HPACKModes, ", "))
 		}
 	}
+	switch p.HTTP2.HPACKNameIndex {
+	case "", "first", "last":
+	default:
+		return fmt.Errorf("http2.hpack_name_index %q: \"first\" or \"last\"", p.HTTP2.HPACKNameIndex)
+	}
 	if n := p.HTTP2.DataFrameMaxSize; n > 1<<24-1 {
 		return fmt.Errorf("http2.data_frame_max_size %d is above a frame's 2^24-1", n)
 	}
@@ -1344,6 +1353,9 @@ func merge(dst, src *Profile) {
 	}
 	if src.HTTP2.HPACKIndexingPolicy != nil {
 		dst.HTTP2.HPACKIndexingPolicy = src.HTTP2.HPACKIndexingPolicy
+	}
+	if src.HTTP2.HPACKNameIndex != "" {
+		dst.HTTP2.HPACKNameIndex = src.HTTP2.HPACKNameIndex
 	}
 	if src.HTTP2.DisableCookieSplit != nil {
 		dst.HTTP2.DisableCookieSplit = src.HTTP2.DisableCookieSplit

@@ -559,6 +559,13 @@ to any non-browser client:
   `cache-control` go. `-chips` frames `b.localhost` under three top-level
   sites after it set a plain and a `Partitioned` cookie, for which cookies and
   connections each browser keeps per site ([STAGE22](STAGE22-RESULTS.md)).
+  Every HTTP/2 record also carries `hpack`: how each field of its header
+  block was encoded, in order (`internal/hpackwire`) — `indexed:<n>`, or a
+  literal `incremental`/`without`/`never` with its name's source (`:n<idx>`
+  or `:new`) and `/H` or `/raw` for Huffman; a table size update is
+  `size=<n>`. That is what a decoder throws away and an anti-bot can read;
+  `capture/hpack/chrome-156-windows.json` is Chrome 156's, and
+  `TestTheHeaderBlocksMatchChromes` holds curlpro's encoder to it.
 
 The provider decides the ClientHello. On Android that is Conscrypt; on the JVM,
 SunJSSE unless Conscrypt is installed as a provider. Both were captured, and the
