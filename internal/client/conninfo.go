@@ -63,7 +63,7 @@ type Timing struct {
 	WaitMS float64 `json:"wait_ms"`
 	// BodyMS is from the headers to the body's last byte, on a buffered
 	// response (0.33); a stream's reader keeps its own clock.
-	BodyMS float64 `json:"body_ms,omitempty"`
+	BodyMS *float64 `json:"body_ms,omitempty"`
 }
 
 var connSeq atomic.Uint64

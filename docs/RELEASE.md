@@ -9,7 +9,26 @@ when its registry token is in the secrets ([bindings/README.md](../bindings/READ
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.21.0** — a minor: the fingerprints the corpus did not have. Yandex Browser
+**0.22.0** — a minor: what goes on the wire changed again, measured each time.
+The HTTP/2 header blocks of the Chromium and Firefox profiles are encoded the
+way Chrome 156 and Firefox 159 encode them, field by field (`cmd/hcapture`
+records each field's HPACK form now; Go's encoder differed in 114 of Chrome's
+203 recorded fields and 89 of Firefox's 114): which fields go into the dynamic
+table, which stay literals, which entry a literal names, when Huffman is used —
+`http2.hpack_indexing_policy`, `hpack_name_index`, `hpack_huffman` on the 30
+profiles that bring their own HTTP/2 settings. The path and query go as
+Chromium writes them (Go had re-escaped `| ^ [ ]` and passed a space in the
+query onto the request line); a body announced with `Expect: 100-continue`
+waits for the `100`. The C ABI is a public interface with bindings for C, .NET,
+Node.js, Java, Rust, PHP and Go, and it gained what a transparent proxy needs:
+a request body written in flight, trailers, the raw connection after a `101`
+and WebSocket over HTTP/2, the header block as given and as received,
+compressed bodies relayed as they came, each response's connection and
+timings, codes for the transport's failures with the phase they struck in,
+shared TLS tickets, a request's own connection, a TLS dial for protocols other
+than HTTP, and a handle an event loop waits on. 343 profiles, 50 captured.
+ABI 0.33.0: profile fields an older library refuses.
+Before it, **0.21.0** — a minor: the fingerprints the corpus did not have. Yandex Browser
 26.10 and Brave 1.98 are captured on Windows — Yandex's Chrome 152 hello with
 its own brands and build (the capture clicks the browser's own certificate
 exception over DevTools), Brave's hello without trust anchors, `Sec-GPC` on

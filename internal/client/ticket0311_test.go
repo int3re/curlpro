@@ -445,7 +445,7 @@ func TestDNSTimeIsItsOwn(t *testing.T) {
 	if c == nil || c.DNSMS < 70 || c.ConnectMS < c.DNSMS {
 		t.Errorf("conn %+v: the lookup took 80 ms and is part of connect", c)
 	}
-	if resp.Timing == nil || resp.Timing.BodyMS < 0 {
+	if resp.Timing == nil || resp.Timing.BodyMS == nil || *resp.Timing.BodyMS < 0 {
 		t.Errorf("timing %+v", resp.Timing)
 	}
 }

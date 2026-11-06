@@ -1,7 +1,7 @@
 # Bindings
 
 Every language reaches the same Go core. All of them except Go go through the C
-ABI — 45 functions in [include/curlpro.h](../include/curlpro.h), described in
+ABI — 62 functions in [include/curlpro.h](../include/curlpro.h), described in
 [docs/C-ABI.md](../docs/C-ABI.md). Go uses the core directly: a Go program
 cannot load a second Go runtime.
 

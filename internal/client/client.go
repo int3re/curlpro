@@ -1275,7 +1275,8 @@ func bodyTiming(t *Timing, body time.Duration) *Timing {
 		return nil
 	}
 	out := *t
-	out.BodyMS = millis(body)
+	ms := millis(body)
+	out.BodyMS = &ms
 	return &out
 }
 
