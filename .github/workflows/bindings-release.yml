@@ -56,6 +56,10 @@ jobs:
   package:
     needs: natives
     runs-on: ubuntu-latest
+    # The token is read-only by default: attaching to the tag's release was
+    # refused with 403 on v0.22.0, and the archives were attached by hand.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
