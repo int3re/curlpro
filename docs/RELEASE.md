@@ -9,7 +9,18 @@ when its registry token is in the secrets ([bindings/README.md](../bindings/READ
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.22.1** — a patch: Chrome 157.0.8103.39 captured (`chrome-157-windows`: 156's
+**0.34.0** — a minor, and the first with one version for everything: the
+package jumped from 0.22.1 to the native library's number, so the wheel,
+libcurlpro, the header and the bindings' packages all say 0.34.0, and a patch
+adds nothing to the ABI from here on. The default profile is
+`chrome-157-windows`, as 0.22.1 announced. For a transparent proxy, the second
+list: each 1xx response handed to an asynchronous caller the moment it is read
+(`interim_events`), the request-target sent byte for byte (`target_raw`),
+`resolve` behind a proxy either left to the proxy or pinned to the table's
+address (`resolve_via_proxy`, `conn.resolved_by`), and HTTP/3's failures with
+a phase and the transport codes TCP has (`quic_protocol` beside them).
+346 profiles, 51 captured.
+Before it, **0.22.1** — a patch: Chrome 157.0.8103.39 captured (`chrome-157-windows`: 156's
 hello, frames, header sets, resources and cache behaviour, with its own pool;
 taken from Google's enterprise installer, unpacked, since the stand's updater
 did not offer it), `chrome-157-macos` and `-linux` standing on it, and

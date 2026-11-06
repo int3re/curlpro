@@ -95,13 +95,13 @@ fetch), потом заголовки сессии, потом заголовк�
 
 ## 4. Сессии: каждый параметр
 
-`curlpro.Session(impersonate="chrome-156-windows", **options)`. У каждой опции
+`curlpro.Session(impersonate="chrome-157-windows", **options)`. У каждой опции
 значение по умолчанию воспроизводит браузер; таблица говорит, что меняется,
 когда вы её трогаете.
 
 | Параметр | По умолчанию | Значение |
 |---|---|---|
-| `impersonate` | `chrome-156-windows` | имя профиля, новейший Chrome, снятый целиком (по 0.16.0 включительно — `chrome-151-windows`, в 0.17 и 0.18 — `chrome-155-windows`); `list_profiles()` знает все 346 (и с 0.15.2 сначала загружает их, как и остальные функции профилей), `list_profiles(measured=True)` — 51 снятый целиком |
+| `impersonate` | `chrome-157-windows` | имя профиля, новейший Chrome, снятый целиком (по 0.16.0 включительно — `chrome-151-windows`, в 0.17 и 0.18 — `chrome-155-windows`, с 0.19 по 0.22 — `chrome-156-windows`); `list_profiles()` знает все 346 (и с 0.15.2 сначала загружает их, как и остальные функции профилей), `list_profiles(measured=True)` — 51 снятый целиком |
 | `verify` | `True` | `True` — системные корни; путь к PEM — доверять только ему; `False` — без проверки |
 | `cert` | `None` | пути `(certificate, key)` для mTLS |
 | `trust_env` | `True` | брать прокси из `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, учитывая `NO_PROXY`; явный `proxy` всегда сильнее |
