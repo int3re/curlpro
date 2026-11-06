@@ -200,6 +200,9 @@ def main() -> None:
     ap.add_argument("--dotnet-tfm", help="build the NuGet package for another framework (the SDK's own, offline)")
     ap.add_argument("--only", nargs="*", choices=["npm", "nuget", "maven", "php", "native"])
     a = ap.parse_args()
+    # Absolute: npm pack runs in each package's own directory, where a
+    # relative --pack-destination named nothing (npm exited 254).
+    a.natives, a.out, a.bundle = a.natives.resolve(), a.out.resolve(), a.bundle.resolve()
     a.out.mkdir(parents=True, exist_ok=True)
     libs = present(a.natives)
     steps = a.only or ["npm", "nuget", "maven", "php", "native"]
