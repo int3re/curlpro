@@ -68,12 +68,12 @@ type Transport struct {
 	// ExpectContinueTimeout (curlpro) — see expectContinueTimeout.
 	ExpectContinueTimeout time.Duration
 
-	// HPACKIndexPolicy (curlpro) decides each field's HPACK representation
-	// by its name; nil indexes whatever fits, as before.
-	HPACKIndexPolicy func(name string) hpack.IndexMode
-	// HPACKStaticNameFirst (curlpro) takes a literal's name from the first
-	// static-table entry with it, as Chrome does (:path 4, not 5).
-	HPACKStaticNameFirst bool
+	// HPACKIndexPolicy, HPACKNameRef and HPACKHuffmanAlways (curlpro) write
+	// each field as the profile's browser does (hpack/curlpro_hpack.go);
+	// unset, Go's encoder decides, as before.
+	HPACKIndexPolicy   func(name, value string) hpack.IndexMode
+	HPACKNameRef       hpack.NameRef
+	HPACKHuffmanAlways bool
 	// DisableCookieSplit (curlpro) sends a Cookie as one field, not crumbs.
 	DisableCookieSplit bool
 	// DataFrameMaxSize (curlpro) caps the DATA frames of a request body
@@ -861,8 +861,7 @@ func (t *Transport) newClientConn(c net.Conn, addr string, singleUse bool) (*Cli
 	// TODO: SetMaxDynamicTableSize, SetMaxDynamicTableSizeLimit on
 	// henc in response to SETTINGS frames?
 	cc.henc = hpack.NewEncoder(&cc.hbuf)
-	cc.henc.SetIndexPolicy(t.HPACKIndexPolicy) // curlpro
-	cc.henc.SetStaticNameFirst(t.HPACKStaticNameFirst)
+	cc.henc.SetRepresentation(t.HPACKIndexPolicy, t.HPACKNameRef, t.HPACKHuffmanAlways) // curlpro
 
 	cc.curlproSettings = make(chan struct{}) // curlpro
 

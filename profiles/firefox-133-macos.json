@@ -172,7 +172,14 @@
       ":scheme"
     ],
     "stream_weight": 42,
-    "stream_exclusive": false
+    "stream_exclusive": false,
+    "hpack_indexing_policy": {
+      ":path": "literal",
+      "cookie": "never<20",
+      "default": "incremental"
+    },
+    "hpack_name_index": "scan",
+    "hpack_huffman": "always"
   },
   "headers": {
     "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",

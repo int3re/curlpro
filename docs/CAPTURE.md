@@ -564,8 +564,12 @@ to any non-browser client:
   literal `incremental`/`without`/`never` with its name's source (`:n<idx>`
   or `:new`) and `/H` or `/raw` for Huffman; a table size update is
   `size=<n>`. That is what a decoder throws away and an anti-bot can read;
-  `capture/hpack/chrome-156-windows.json` is Chrome 156's, and
-  `TestTheHeaderBlocksMatchChromes` holds curlpro's encoder to it.
+  `capture/hpack/` holds Chrome 156's and Firefox 159's, and
+  `TestTheHeaderBlocksMatchTheBrowsers` holds curlpro's encoder to them.
+  Firefox ran headless against the stand started without `-auto`, from a
+  throwaway profile with the stand's `cert_override.txt` line and
+  `-extra-cookies hmid=0123456789abcd,h20=0123456789abcdef,hlong=…`: crumbs of
+  19, 20 and 40 bytes beside `hc=1`, which show where it stops never-indexing.
 
 The provider decides the ClientHello. On Android that is Conscrypt; on the JVM,
 SunJSSE unless Conscrypt is installed as a provider. Both were captured, and the

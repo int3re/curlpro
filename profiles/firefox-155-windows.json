@@ -65,7 +65,14 @@
       ":path",
       ":authority",
       ":scheme"
-    ]
+    ],
+    "hpack_indexing_policy": {
+      ":path": "literal",
+      "cookie": "never<20",
+      "default": "incremental"
+    },
+    "hpack_name_index": "scan",
+    "hpack_huffman": "always"
   },
   "http3": {},
   "quic": {},

@@ -75,6 +75,15 @@ func main() {
 	flag.StringVar(&criticalCH, "critical-ch", "", "the hints named in Critical-CH; empty means those of -accept-ch")
 	flag.BoolVar(&hintsPage, "hintspage", false, "serve the hints page: fetch and XHR with and without the page's own headers, an image, a script and a stylesheet, requests and frames to other origins, then two navigations")
 	flag.BoolVar(&headed, "headed", false, "start the browser with a window: a Chromium that ignores the address in headless mode (Yandex Browser) needs one")
+	flag.Func("extra-cookies", "more cookies the plain page sets beside hc=1, comma-separated name=value: "+
+		"how a browser encodes a short and a long one in HPACK (Firefox never indexes short ones)", func(v string) error {
+		for _, c := range strings.Split(v, ",") {
+			if c = strings.TrimSpace(c); c != "" {
+				extraCookies = append(extraCookies, c+"; path=/")
+			}
+		}
+		return nil
+	})
 	flag.StringVar(&permissionsPolicy, "permissions-policy", "", "a Permissions-Policy header on every response, to delegate hints to other origins (ch-ua-model=(self \"https://d.localhost:8443\"))")
 	flag.Parse()
 	if criticalCH == "" {
@@ -239,6 +248,9 @@ const second = `<!doctype html><meta charset=utf-8><title>second</title><body>ok
 // page's own Accept, an image, a script and a stylesheet — and then the
 // steady-state navigation (/second), which does the same once more.
 var hintsPage bool
+
+// extraCookies are set by the plain page beside hc=1 (-extra-cookies).
+var extraCookies []string
 
 // permissionsPolicy goes on every response when set: which origins the
 // page's hints may go to.
@@ -593,7 +605,7 @@ func route(path, host string) reply {
 		if hintsPage {
 			return reply{200, hintsHTML, html, "", []string{"hc=1; path=/"}}
 		}
-		return reply{200, page, html, "", []string{"hc=1; path=/"}}
+		return reply{200, page, html, "", append([]string{"hc=1; path=/"}, extraCookies...)}
 	case "/second":
 		if hintsPage {
 			return reply{200, hintsSecond, html, "", nil}

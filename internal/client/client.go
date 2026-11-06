@@ -1971,30 +1971,59 @@ func (s *Session) handshakeTLS(dialCtx context.Context, raw net.Conn, u *url.URL
 	return uconn, nil
 }
 
-// hpackPolicy is the profile's HPACK representation by field name, nil when
-// it names none (the encoder indexes whatever fits).
-func hpackPolicy(h2 profile.HTTP2Spec) func(string) hpack.IndexMode {
+// hpackMode is one entry of the profile's HPACK policy: a mode, or never
+// indexed below a value length (below > 0) and the default above it.
+type hpackMode struct {
+	mode  hpack.IndexMode
+	below int
+}
+
+// hpackPolicy is the profile's HPACK representation by field name and
+// value, nil when it names none (the encoder indexes whatever fits).
+func hpackPolicy(h2 profile.HTTP2Spec) func(name, value string) hpack.IndexMode {
 	pol := h2.HPACKIndexingPolicy
 	if len(pol) == 0 {
 		return nil
 	}
-	modes := make(map[string]hpack.IndexMode, len(pol))
+	modes := make(map[string]hpackMode, len(pol))
 	def := hpack.IndexDefault
 	for name, m := range pol {
-		mode := map[string]hpack.IndexMode{"incremental": hpack.IndexIncremental,
-			"without": hpack.IndexWithout, "never": hpack.IndexNever}[m]
-		if name == "default" {
-			def = mode
+		var hm hpackMode
+		if n, ok := profile.HPACKNeverBelow(m); ok {
+			hm.below = n
 		} else {
-			modes[name] = mode
+			hm.mode = map[string]hpack.IndexMode{"incremental": hpack.IndexIncremental,
+				"without": hpack.IndexWithout, "literal": hpack.IndexLiteral, "never": hpack.IndexNever}[m]
+		}
+		if name == "default" {
+			def = hm.mode
+		} else {
+			modes[name] = hm
 		}
 	}
-	return func(name string) hpack.IndexMode {
-		if m, ok := modes[name]; ok {
-			return m
+	return func(name, value string) hpack.IndexMode {
+		m, ok := modes[name]
+		switch {
+		case !ok:
+			return def
+		case m.below > 0 && len(value) < m.below:
+			return hpack.IndexNever
+		case m.below > 0:
+			return def
 		}
-		return def
+		return m.mode
 	}
+}
+
+// hpackNameRef is the profile's choice of a literal's name entry.
+func hpackNameRef(h2 profile.HTTP2Spec) hpack.NameRef {
+	switch h2.HPACKNameIndex {
+	case "first":
+		return hpack.NameFirstStatic
+	case "scan":
+		return hpack.NameScan
+	}
+	return hpack.NameGo
 }
 
 // transport builds the HTTP/2 transport from the profile.
@@ -2045,7 +2074,8 @@ func (s *Session) transport() *http2.Transport {
 	// The header block field by field as the profile's browser writes it, and
 	// its bodies' frames no larger than the browser's (patch edits m, n, o).
 	tr.HPACKIndexPolicy = hpackPolicy(h2)
-	tr.HPACKStaticNameFirst = h2.HPACKNameIndex == "first"
+	tr.HPACKNameRef = hpackNameRef(h2)
+	tr.HPACKHuffmanAlways = h2.HPACKHuffman == "always"
 	tr.DisableCookieSplit = h2.DisableCookieSplit != nil && *h2.DisableCookieSplit
 	tr.DataFrameMaxSize = h2.DataFrameMaxSize
 	// fhttp writes them after the WINDOW_UPDATE and moves the first request's

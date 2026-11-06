@@ -168,18 +168,26 @@ func TestPriorityFramesAreChecked(t *testing.T) {
 			t.Errorf("%+v: %v", c.frames, err)
 		}
 	}
-	for v, ok := range map[string]bool{"": true, "first": true, "last": true, "middle": false} {
+	for v, ok := range map[string]bool{"": true, "first": true, "last": true, "scan": true, "middle": false} {
 		p := *base
 		p.HTTP2.HPACKNameIndex = v
 		if err := p.validate(); (err == nil) != ok {
 			t.Errorf("hpack_name_index %q: %v", v, err)
 		}
 	}
-	for policy, ok := range map[string]bool{"incremental": true, "never": true, "sometimes": false} {
+	for policy, ok := range map[string]bool{"incremental": true, "never": true, "literal": true, "never<20": true,
+		"never<0": false, "never<x": false, "sometimes": false} {
 		p := *base
 		p.HTTP2.HPACKIndexingPolicy = map[string]string{":path": policy}
 		if err := p.validate(); (err == nil) != ok {
 			t.Errorf("hpack_indexing_policy %q: %v", policy, err)
+		}
+	}
+	for v, ok := range map[string]bool{"": true, "shorter": true, "always": true, "never": false} {
+		p := *base
+		p.HTTP2.HPACKHuffman = v
+		if err := p.validate(); (err == nil) != ok {
+			t.Errorf("hpack_huffman %q: %v", v, err)
 		}
 	}
 }

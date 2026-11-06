@@ -899,30 +899,36 @@ func TestWebSocketOverHTTP2(t *testing.T) {
 	}
 }
 
-// The Chrome profile's header block on the wire: :path a literal without
-// indexing, its name from the static table's first :path entry.
-func TestChromesPathGoesUnindexed(t *testing.T) {
-	addr, blocks, datas := h2Blocks(t)
-	s, err := New(auditProfile(t, "chrome-156-windows"), Options{DefaultHeaders: true, InsecureSkipVerify: true,
-		Timeout: 10 * time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	for _, path := range []string{"/", "/page"} {
-		if _, err := s.Do(&Request{Method: "GET", URL: "https://" + addr + path}); err != nil {
+// The browsers' :path on the wire: Chrome takes the static "/" and writes
+// any other path as a literal naming entry 4; Firefox writes "/" too as a
+// literal (naming 4, where it matched) and others naming 5, Huffman-coded.
+func TestThePathGoesAsTheBrowsersWriteIt(t *testing.T) {
+	for _, c := range []struct {
+		profile    string
+		root, page string
+	}{
+		{"chrome-156-windows", "indexed:4", "without:n4/H"},
+		{"firefox-159-windows", "without:n4/H", "without:n5/H"},
+	} {
+		addr, blocks, datas := h2Blocks(t)
+		s, err := New(auditProfile(t, c.profile), Options{DefaultHeaders: true, InsecureSkipVerify: true,
+			Timeout: 10 * time.Second})
+		if err != nil {
 			t.Fatal(err)
 		}
-		fields := <-blocks
-		<-datas
-		want := map[string]string{"/": "indexed:4", "/page": "without:n4/H"}[path]
-		for _, f := range fields {
-			if f.name == ":path" && f.form != want {
-				t.Errorf("%s: :path went %s, want %s", path, f.form, want)
+		for _, path := range []string{"/", "/page"} {
+			if _, err := s.Do(&Request{Method: "GET", URL: "https://" + addr + path}); err != nil {
+				t.Fatal(err)
 			}
-			if f.name == ":authority" && path == "/" && !strings.HasPrefix(f.form, "incremental:n1") {
-				t.Errorf(":authority went %s", f.form)
+			fields := <-blocks
+			<-datas
+			want := map[string]string{"/": c.root, "/page": c.page}[path]
+			for _, f := range fields {
+				if f.name == ":path" && f.form != want {
+					t.Errorf("%s %s: :path went %s, want %s", c.profile, path, f.form, want)
+				}
 			}
 		}
+		s.Close()
 	}
 }

@@ -649,17 +649,26 @@ type HTTP2Spec struct {
 	PriorityFrames []PriorityFrame `json:"priority_frames,omitempty"`
 
 	// HPACKIndexingPolicy is how each field goes into the header block, by
-	// its lowercase name: "incremental" (into the dynamic table), "without"
-	// (a literal without indexing) or "never" (never indexed), "default"
-	// naming the rest. Absent, whatever fits the table is indexed — Go's
-	// encoder; Chrome indexes no pseudo-header but :authority. An exact
-	// match in the static table goes indexed whatever the policy, as from
-	// every encoder.
+	// its lowercase name, "default" naming the rest: "incremental" (into
+	// the dynamic table), "without" (a literal without indexing, but an
+	// exact match in a table still indexed — Chrome's :path), "literal"
+	// (a literal even over an exact match — Firefox's :path), "never"
+	// (never indexed), or "never<N" (never indexed when the value is
+	// shorter than N bytes, the default otherwise — Firefox's cookie
+	// crumbs under 20). Absent, whatever fits the table is indexed, as Go's
+	// encoder does.
 	HPACKIndexingPolicy map[string]string `json:"hpack_indexing_policy,omitempty"`
-	// HPACKNameIndex is the static-table entry a literal takes its name
-	// from when several share it (:method 2–3, :path 4–5, :scheme 6–7):
-	// "first", as Chrome's encoder does, or "last", as Go's — the default.
+	// HPACKNameIndex is the entry a literal refers to for its name when
+	// more than one has it: "last" — the static table's last (:path 5),
+	// else the dynamic table's newest, as Go's encoder chooses (the
+	// default); "first" — the static table's first (:path 4), Chrome;
+	// "scan" — the last of a scan over the static then the dynamic table,
+	// so the dynamic table's oldest entry before any static one, Firefox.
 	HPACKNameIndex string `json:"hpack_name_index,omitempty"`
+	// HPACKHuffman is when a string goes Huffman-coded: "shorter" (only
+	// when that is shorter; the default, Chrome and Go) or "always"
+	// (Firefox: "1", "?1", "v1" too).
+	HPACKHuffman string `json:"hpack_huffman,omitempty"`
 	// DisableCookieSplit sends Cookie as one field; by default it goes as
 	// crumbs, one field per pair (RFC 9113 §8.2.3), as browsers send it.
 	DisableCookieSplit *bool `json:"disable_cookie_split,omitempty"`
@@ -668,8 +677,18 @@ type HTTP2Spec struct {
 	DataFrameMaxSize uint32 `json:"data_frame_max_size,omitempty"`
 }
 
-// HPACKModes are the values of http2.hpack_indexing_policy.
-var HPACKModes = []string{"incremental", "without", "never"}
+// HPACKModes are the values of http2.hpack_indexing_policy, besides
+// "never<N".
+var HPACKModes = []string{"incremental", "without", "literal", "never"}
+
+// HPACKNeverBelow reads a "never<N" mode: N, and whether the mode is one.
+func HPACKNeverBelow(mode string) (int, bool) {
+	n, err := strconv.Atoi(strings.TrimPrefix(mode, "never<"))
+	if !strings.HasPrefix(mode, "never<") || err != nil || n < 1 {
+		return 0, false
+	}
+	return n, true
+}
 
 // PriorityFrame is one standalone PRIORITY frame. Weight is as declared,
 // 1..256; on the wire it is one less (RFC 7540).
@@ -1168,15 +1187,20 @@ func (p *Profile) validate() error {
 		if name != strings.ToLower(name) || name == "" {
 			return fmt.Errorf("http2.hpack_indexing_policy: %q — names go in lower case, as on the wire", name)
 		}
-		if !slices.Contains(HPACKModes, mode) {
-			return fmt.Errorf("http2.hpack_indexing_policy[%q] = %q is not one of %s", name, mode,
+		if _, below := HPACKNeverBelow(mode); !below && !slices.Contains(HPACKModes, mode) {
+			return fmt.Errorf("http2.hpack_indexing_policy[%q] = %q is not one of %s or never<N", name, mode,
 				strings.Join(HPACKModes, ", "))
 		}
 	}
 	switch p.HTTP2.HPACKNameIndex {
-	case "", "first", "last":
+	case "", "first", "last", "scan":
 	default:
-		return fmt.Errorf("http2.hpack_name_index %q: \"first\" or \"last\"", p.HTTP2.HPACKNameIndex)
+		return fmt.Errorf("http2.hpack_name_index %q: \"first\", \"last\" or \"scan\"", p.HTTP2.HPACKNameIndex)
+	}
+	switch p.HTTP2.HPACKHuffman {
+	case "", "shorter", "always":
+	default:
+		return fmt.Errorf("http2.hpack_huffman %q: \"shorter\" or \"always\"", p.HTTP2.HPACKHuffman)
 	}
 	if n := p.HTTP2.DataFrameMaxSize; n > 1<<24-1 {
 		return fmt.Errorf("http2.data_frame_max_size %d is above a frame's 2^24-1", n)
@@ -1356,6 +1380,9 @@ func merge(dst, src *Profile) {
 	}
 	if src.HTTP2.HPACKNameIndex != "" {
 		dst.HTTP2.HPACKNameIndex = src.HTTP2.HPACKNameIndex
+	}
+	if src.HTTP2.HPACKHuffman != "" {
+		dst.HTTP2.HPACKHuffman = src.HTTP2.HPACKHuffman
 	}
 	if src.HTTP2.DisableCookieSplit != nil {
 		dst.HTTP2.DisableCookieSplit = src.HTTP2.DisableCookieSplit

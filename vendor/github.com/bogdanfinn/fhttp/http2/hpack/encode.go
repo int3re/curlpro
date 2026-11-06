@@ -28,10 +28,10 @@ type Encoder struct {
 	tableSizeUpdate bool
 	w               io.Writer
 	buf             []byte
-	// curlpro: the representation policy and the static name choice
-	// (curlpro_hpack.go).
-	curlproPolicy    func(name string) IndexMode
-	curlproFirstName bool
+	// curlpro: how the profile's browser writes a field (curlpro_hpack.go).
+	curlproPolicy  func(name, value string) IndexMode
+	curlproNameRef NameRef
+	curlproHuffman bool
 }
 
 // NewEncoder returns a new Encoder which performs HPACK encoding. An
@@ -63,13 +63,14 @@ func (e *Encoder) WriteField(f HeaderField) error {
 		e.buf = appendTableSize(e.buf, e.dynTab.maxSize)
 	}
 
+	if e.curlproPolicy != nil || e.curlproNameRef != NameGo || e.curlproHuffman { // curlpro
+		return e.curlproWrite(f)
+	}
 	idx, nameValueMatch := e.searchTable(f)
-	idx = e.curlproName(f, idx, nameValueMatch) // curlpro
 	if nameValueMatch {
 		e.buf = appendIndexed(e.buf, idx)
 	} else {
 		indexing := e.shouldIndex(f)
-		indexing, f.Sensitive = e.curlproMode(f, indexing) // curlpro
 		if indexing {
 			e.dynTab.add(f)
 		}

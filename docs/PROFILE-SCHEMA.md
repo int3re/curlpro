@@ -219,7 +219,7 @@ Go structures in `internal/profile` is rejected. Implemented today: `tls` —
 `extensions`, `signature_algorithms`, `alpn`, `permute_extensions`; `http1` —
 `order`, `connection`; `http2` — `settings`, `connection_window_update`,
 `pseudo_order`, `stream_weight`, `stream_exclusive`, `priority_frames`,
-`hpack_indexing_policy`, `hpack_name_index`, `disable_cookie_split`, `data_frame_max_size`; `http3` — `settings`,
+`hpack_indexing_policy`, `hpack_name_index`, `hpack_huffman`, `disable_cookie_split`, `data_frame_max_size`; `http3` — `settings`,
 `settings_order`, `pseudo_order`, `send_grease_frame`, `priority_param`; `quic` —
 `parrot`, `connection_options`, `send_initial_rtt`,
 `legacy_version_information_id`, `grease_version_first`; `headers` —
@@ -304,8 +304,18 @@ all.
 | `no_rfc7540_priorities` | Safari 26 |
 | `pseudo_order` | `[":method", ":authority", ":scheme", ":path"]` |
 | `header_order` | the order of the ordinary headers |
-| `hpack_indexing_policy` | each field's HPACK representation by its lowercase name: `"incremental"` (into the dynamic table), `"without"` (a literal without indexing), `"never"` (never indexed); `"default"` names the rest. Absent, whatever fits is indexed (Go's encoder). An exact static-table match (`:method GET`, `:path /`) goes indexed whatever the policy. A proxy reads it off the client's own HEADERS frames. Chrome — measured on 156, `capture/hpack/` — indexes every field but the pseudo-headers other than `:authority`; the 26 Chromium-family profiles that bring their own HTTP/2 settings say so, and their descendants inherit it |
-| `hpack_name_index` | where a literal takes its name when several static entries share it (`:method` 2–3, `:path` 4–5, `:scheme` 6–7): `"first"` as Chrome, `"last"` as Go's encoder (the default). With Go's choice and indexing, Chrome 156's recorded blocks came out different in 114 fields of 203 |
+| `hpack_indexing_policy` | each field's HPACK representation by its lowercase name, `"default"` naming the rest: `"incremental"` (into the dynamic table), `"without"` (a literal without indexing — an exact match in a table still goes indexed), `"literal"` (a literal even over an exact match), `"never"` (never indexed), `"never<N"` (never indexed when the value is shorter than N bytes, the default otherwise). Absent, whatever fits is indexed (Go's encoder). A proxy reads it off the client's own HEADERS frames. Measured (`capture/hpack/`): Chrome 156 indexes every field but the pseudo-headers other than `:authority` (`:path /` still goes indexed); Firefox 159 keeps `:path` a literal, `/` included, and never indexes a cookie crumb under 20 bytes |
+| `hpack_name_index` | which entry a literal refers to for its name when more than one has it: `"last"` — the static table's last (`:path` 5), else the dynamic table's newest, Go's encoder (the default); `"first"` — the static table's first (`:method` 2, `:path` 4, `:scheme` 6), Chrome; `"scan"` — the dynamic table's oldest entry with the name before any static one, else the static table's last: Firefox scans the static table and then the dynamic one and keeps the last match |
+| `hpack_huffman` | `"shorter"` — a string goes Huffman-coded only when that is shorter (the default; Chrome, Go); `"always"` — every string, `1`, `?1` and `v1` too (Firefox) |
+
+The 26 Chromium-family profiles that bring their own HTTP/2 settings carry
+Chrome's three fields, and the four Gecko ones (Firefox 133, 135, 155, Tor
+Browser 14) Firefox's; their descendants inherit them. With Go's encoder the
+recorded blocks came out different in 114 fields of Chrome's 203 and 89 of
+Firefox's 114; now `TestTheHeaderBlocksMatchTheBrowsers` holds both to the
+record. Not reproduced: Firefox writes a field larger than half the table as
+a literal without indexing, where Go's rule indexes anything that fits.
+
 | `disable_cookie_split` | `true` sends Cookie as one field; by default it goes as crumbs, one field per pair, as browsers send it. A request's `headers_raw` sends its Cookie fields as given either way |
 | `data_frame_max_size` | the largest DATA frame of a request body (below the server's `SETTINGS_MAX_FRAME_SIZE`) |
 | `hpack_header_order`, `preface_ping_idle_ms`, `idle_ping_ms` | planned |
