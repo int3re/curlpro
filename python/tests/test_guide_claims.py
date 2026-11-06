@@ -148,11 +148,13 @@ def test_the_device_pool_size():
 
 def test_the_error_codes_named_are_the_ones_the_native_side_knows():
     go = (REPO / "internal" / "client" / "errors.go").read_text(encoding="utf-8")
-    native = set(re.findall(r'ErrorCode = "([a-z_]+)"', go))
+    native = set(re.findall(r'ErrorCode\s+=\s+"([a-z0-9_]+)"', go))
     assert native == {"session_closed", "timeout", "ws_closed", "ws_too_big",
                       "ws_protocol", "too_large", "proxy_closed",
                       "profile_capability", "configuration",
-                      "proxy", "proxy_auth", "cors", "conn_closed"}
+                      "proxy", "proxy_auth", "cors", "conn_closed",
+                      "dns", "connect_refused", "tls_alert", "tls_verify", "reset", "goaway",
+                      "h2_protocol", "eof_before_headers", "eof_in_body"}
     for code in native | {"expectation"}:
         assert f"`{code}`" in GUIDE, code
         assert code in LLMS, code

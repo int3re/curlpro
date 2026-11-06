@@ -305,6 +305,16 @@ func updateResponseFromHeaders(rsp *http.Response, decodeFn qpack.DecodeFunc, si
 	rsp.Proto = "HTTP/3.0"
 	rsp.ProtoMajor = 3
 	rsp.Header = hdr.Headers
+	// curlpro: the block as it came, for the client (RawHeaderKey).
+	if headerFields != nil {
+		raw := make([]string, 0, 2*len(*headerFields))
+		for _, f := range *headerFields {
+			if !f.IsPseudo() {
+				raw = append(raw, f.Name, f.Value)
+			}
+		}
+		rsp.Header[RawHeaderKey] = raw
+	}
 	rsp.Trailer = extractAnnouncedTrailers(rsp.Header)
 	rsp.ContentLength = hdr.ContentLength
 
@@ -316,6 +326,12 @@ func updateResponseFromHeaders(rsp *http.Response, decodeFn qpack.DecodeFunc, si
 	rsp.Status = hdr.Status + " " + http.StatusText(status)
 	return nil
 }
+
+// RawHeaderKey carries a response's header block as it came — names and
+// values alternating, in QPACK order — from here to the client, which takes
+// it out of the map (client.fromStdResponse) before anyone reads the map.
+// The NUL keeps it from ever meeting a real field name.
+const RawHeaderKey = "\x00raw-header"
 
 // extractAnnouncedTrailers extracts trailer keys from the "Trailer" header.
 // It returns a map with the announced keys set to nil values, and removes the "Trailer" header.

@@ -2,6 +2,8 @@ package profile
 
 import (
 	"encoding/binary"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -93,5 +95,49 @@ func TestALPSWithAnEmptyListIsExplicit(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(err.Error(), "alpn") {
 		t.Errorf("ALPS without a list: %v", err)
+	}
+}
+
+// A delta's own hello carries nothing of what the parent said about its
+// hello: a phone's hello without 0xCA34 under a parent with trust anchors
+// builds (it failed: "trust_anchors is set, but extension 0xca34 is
+// missing"), and the parent's signature algorithms do not overwrite its own.
+func TestOwnHelloForgetsTheParentsHelloFields(t *testing.T) {
+	reg := NewRegistry()
+	if err := reg.LoadFS(os.DirFS(filepath.Join("..", "..", "profiles")), "."); err != nil {
+		t.Fatal(err)
+	}
+	brave, err := reg.Resolve("brave-1.98-windows")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, _ := reg.Resolve("chrome-156-windows")
+	if len(parent.TLS.TrustAnchors) == 0 {
+		t.Fatal("the parent was meant to carry trust anchors")
+	}
+	live := `{"name":"live-phone","based_on":"chrome-156-windows","tls":{"raw_client_hello":"` +
+		brave.TLS.RawClientHello + `"}}`
+	if err := reg.Register([]byte(live)); err != nil {
+		t.Fatal(err)
+	}
+	p, err := reg.Resolve("live-phone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.TLS.TrustAnchors != nil || p.TLS.SignatureAlgorithms != nil {
+		t.Errorf("inherited: trust anchors %d, sigalgs %v", len(p.TLS.TrustAnchors), p.TLS.SignatureAlgorithms)
+	}
+	if _, err := BuildSpec(p); err != nil {
+		t.Fatalf("the delta's own hello did not build: %v", err)
+	}
+	// Its own settings still apply on top of its own hello.
+	own := `{"name":"live-phone-2","based_on":"chrome-156-windows","tls":{"raw_client_hello":"` +
+		brave.TLS.RawClientHello + `","signature_algorithms":[1027,2052]}}`
+	if err := reg.Register([]byte(own)); err != nil {
+		t.Fatal(err)
+	}
+	p2, _ := reg.Resolve("live-phone-2")
+	if len(p2.TLS.SignatureAlgorithms) != 2 {
+		t.Errorf("the delta's own sigalgs: %v", p2.TLS.SignatureAlgorithms)
 	}
 }

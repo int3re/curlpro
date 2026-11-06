@@ -618,6 +618,14 @@ func (s *Session) applyHeaders(req *http.Request, r *Request, u *url.URL, h1 boo
 	if req.Host != "" {
 		host = req.Host
 	}
+	if len(r.HeadersRaw) > 0 {
+		order := rawHeaderSet(req.Header, r.HeadersRaw, host, h1)
+		req.Header[http.HeaderOrderKey] = order
+		if len(s.profile.HTTP2.PseudoOrder) > 0 {
+			req.Header[http.PHeaderOrderKey] = s.profile.HTTP2.PseudoOrder
+		}
+		return
+	}
 	tpl := s.templateAt(r, u)
 	h1Order := s.http1Order(h1, tpl)
 	built := s.buildHeadersWith(r, u, host, h1Order, tpl)
@@ -653,6 +661,51 @@ func (s *Session) applyHeaders(req *http.Request, r *Request, u *url.URL, h1 boo
 	if len(s.profile.HTTP2.PseudoOrder) > 0 {
 		req.Header[http.PHeaderOrderKey] = s.profile.HTTP2.PseudoOrder
 	}
+}
+
+// rawHeaderSet fills h with a request's HeadersRaw as given and returns the
+// send order: lowercase names, each once, where it first appears (repeats
+// of a name are written together there). HTTP/1.1 keeps the case and gets
+// Host first when the list has none; HTTP/2 and HTTP/3 write lowercase.
+// Pseudo-headers in the list are skipped: the request's own go out.
+func rawHeaderSet(h map[string][]string, raw [][2]string, host string, h1 bool) []string {
+	for k := range h {
+		delete(h, k)
+	}
+	built := make([]headerKV, 0, len(raw)+1)
+	if h1 {
+		hasHost := false
+		for _, kv := range raw {
+			if sameName(kv[0], "host") {
+				hasHost = true
+				break
+			}
+		}
+		if !hasHost {
+			built = append(built, headerKV{Key: "Host", Value: host})
+		}
+	}
+	for _, kv := range raw {
+		name := kv[0]
+		if strings.HasPrefix(name, ":") {
+			continue // the request's own pseudo-headers stand
+		}
+		if !h1 {
+			name = strings.ToLower(name)
+		}
+		built = append(built, headerKV{Key: name, Value: kv[1]})
+	}
+	order := make([]string, 0, len(built))
+	seen := make(map[string]bool, len(built))
+	for _, kv := range built {
+		h[kv.Key] = append(h[kv.Key], kv.Value)
+		if lk := strings.ToLower(kv.Key); !seen[lk] {
+			seen[lk] = true
+			order = append(order, lk)
+		}
+	}
+	suppressDefaultUA(h, built, h1)
+	return order
 }
 
 // suppressDefaultUA stops the transport from substituting its own User-Agent.

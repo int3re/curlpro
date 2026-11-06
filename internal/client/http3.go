@@ -8,6 +8,8 @@ import (
 	"io"
 	"net"
 	nethttp "net/http"
+	"net/http/httptrace"
+	"net/textproto"
 	"net/url"
 	"strings"
 	"sync"
@@ -274,6 +276,19 @@ func quicSpec(p *profile.Profile) (*quic.QUICSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("QUIC parrot %q: %w", p.QUIC.Parrot, err)
 	}
+	if p.QUIC.RawClientHello != "" {
+		// The capture's hello in place of the parrot's: its extensions and
+		// transport parameters as captured, the shuffle as the profile says.
+		chs, err := profile.QUICHelloFromRaw(p.QUIC.RawClientHello)
+		if err != nil {
+			return nil, err
+		}
+		if p.TLS.PermuteExtensions != nil && *p.TLS.PermuteExtensions {
+			chs.Extensions = utls.ShuffleChromeTLSExtensions(chs.Extensions)
+		}
+		spec.ClientHelloSpec = chs
+		return &spec, nil
+	}
 	if spec.ClientHelloSpec != nil {
 		q := p.QUIC
 		if err := profile.ApplyQUIC(spec.ClientHelloSpec, &q); err != nil {
@@ -348,6 +363,14 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL, proxy stri
 	if method == "" {
 		method = nethttp.MethodGet
 	}
+	if log := r.interim; log != nil {
+		ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+			Got1xxResponse: func(code int, h textproto.MIMEHeader) error {
+				log.add(code, h)
+				return nil
+			},
+		})
+	}
 	body, size, err := requestBody(r)
 	if err != nil {
 		return nil, err
@@ -384,7 +407,8 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL, proxy stri
 	// Accept-Encoding itself. The profile also advertises br and zstd, so on
 	// this path the decompression is ours. HEAD is left alone: its body is
 	// empty by definition, and Content-Encoding describes what a GET would get.
-	if ce := resp.Header.Get("Content-Encoding"); !resp.Uncompressed && ce != "" && method != nethttp.MethodHead {
+	if ce := resp.Header.Get("Content-Encoding"); !resp.Uncompressed && ce != "" && method != nethttp.MethodHead &&
+		s.decompress(r) {
 		body, err := decompress(resp.Body, ce)
 		if err != nil {
 			return nil, err
@@ -402,6 +426,17 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL, proxy stri
 // of the rules lived here, the HTTP/3 path silently lost SuppressHeaders and the
 // cookie slot. h1Order is not passed — HTTP/3 sends no Host or Connection.
 func (s *Session) applyH3Headers(req *nethttp.Request, r *Request, u *url.URL) {
+	if len(r.HeadersRaw) > 0 {
+		req.Header[h3.HeaderOrderKey] = rawHeaderSet(req.Header, r.HeadersRaw, req.Host, false)
+		pseudo := s.profile.HTTP3.PseudoOrder
+		if len(pseudo) == 0 {
+			pseudo = s.profile.HTTP2.PseudoOrder
+		}
+		if len(pseudo) > 0 {
+			req.Header[h3.PseudoHeaderOrderKey] = pseudo
+		}
+		return
+	}
 	tpl := s.templateAt(r, u)
 	built := s.buildHeadersWith(r, u, req.Host, nil, tpl)
 	s.noteMode(r)

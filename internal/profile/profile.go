@@ -971,6 +971,61 @@ func (r *Registry) Names() []string {
 	return out
 }
 
+// Unregister removes a profile from the registry. A profile another one
+// stands on (based_on) is refused: that one would stop resolving. Sessions
+// already made with it keep their copy.
+//
+// A proxy that builds a profile per client from the client's own hello
+// registered one per new client and variant, and the registry only grew.
+func (r *Registry) Unregister(name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.raw[name]; !ok {
+		return fmt.Errorf("profile %q not found", name)
+	}
+	for n, p := range r.raw {
+		if p.BasedOn == name {
+			return fmt.Errorf("profile %q is the parent of %q: unregister that one first", name, n)
+		}
+	}
+	delete(r.raw, name)
+	return nil
+}
+
+// ResolveInline resolves a profile given as JSON without registering it:
+// its based_on chain comes from the registry, the profile itself is used
+// once and forgotten. A missing name is "inline".
+func (r *Registry) ResolveInline(data []byte) (*Profile, error) {
+	var p Profile
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&p); err != nil {
+		return nil, fmt.Errorf("parsing profile: %w", err)
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, fmt.Errorf("parsing profile: data after the profile object")
+	}
+	if p.Name == "" {
+		p.Name = "inline"
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	chain := []*Profile{&p}
+	if p.BasedOn != "" {
+		rest, err := r.chain(p.BasedOn)
+		if err != nil {
+			return nil, err
+		}
+		for _, link := range rest {
+			if link.Name == p.Name {
+				return nil, fmt.Errorf("based_on cycle through %q", p.Name)
+			}
+		}
+		chain = append(chain, rest...)
+	}
+	return fold(p.Name, chain)
+}
+
 // Resolve returns the profile with its based_on chain collapsed.
 func (r *Registry) Resolve(name string) (*Profile, error) {
 	r.mu.RLock()
@@ -980,6 +1035,11 @@ func (r *Registry) Resolve(name string) (*Profile, error) {
 	if err != nil {
 		return nil, err
 	}
+	return fold(name, chain)
+}
+
+// fold collapses a chain, leaf first, into one profile and validates it.
+func fold(name string, chain []*Profile) (*Profile, error) {
 	// Root to leaf: each next profile overrides the previous one.
 	out := &Profile{Name: name}
 	for i := len(chain) - 1; i >= 0; i-- {
@@ -1139,6 +1199,20 @@ func namesOf(ps []*Profile) []string {
 	return out
 }
 
+// forgetHello drops what an inherited profile said about its own hello's
+// contents — the trust anchors that replace its 0xCA34, the signature
+// algorithms, the ALPN list — when a delta brings a hello of its own: they
+// described the parent's bytes, not these. The delta's own settings of them
+// are applied after this. A phone's hello without trust anchors under a
+// parent that has them failed to build ("trust_anchors is set, but extension
+// 0xca34 is missing"), and one with them had its list replaced by the
+// parent's. permute_extensions and allow_blunt_mimicry stay: they say how a
+// hello is sent, not what is in it.
+func (t *TLSSpec) forgetHello() {
+	t.TrustAnchors, t.TrustAnchorsOrder = nil, ""
+	t.SignatureAlgorithms, t.ALPN = nil, nil
+}
+
 // merge applies src on top of dst. Set fields override, empty ones do not.
 func merge(dst, src *Profile) {
 	// Provenance travels down the chain: a delta that names a source is
@@ -1154,10 +1228,13 @@ func merge(dst, src *Profile) {
 	switch {
 	case src.TLS.RawClientHello != "":
 		dst.TLS.RawClientHello, dst.TLS.ClientHelloSpec, dst.TLS.Extensions = src.TLS.RawClientHello, nil, nil
+		dst.TLS.forgetHello()
 	case len(src.TLS.Extensions) > 0:
 		dst.TLS.RawClientHello, dst.TLS.ClientHelloSpec, dst.TLS.Extensions = "", nil, src.TLS.Extensions
+		dst.TLS.forgetHello()
 	case len(src.TLS.ClientHelloSpec) > 0:
 		dst.TLS.RawClientHello, dst.TLS.ClientHelloSpec, dst.TLS.Extensions = "", src.TLS.ClientHelloSpec, nil
+		dst.TLS.forgetHello()
 	}
 	if len(src.TLS.CipherSuites) > 0 {
 		dst.TLS.CipherSuites = src.TLS.CipherSuites
@@ -1228,6 +1305,9 @@ func merge(dst, src *Profile) {
 
 	if src.QUIC.Parrot != "" {
 		dst.QUIC.Parrot = src.QUIC.Parrot
+	}
+	if src.QUIC.RawClientHello != "" {
+		dst.QUIC.RawClientHello = src.QUIC.RawClientHello
 	}
 	if src.QUIC.ConnectionOptions != "" {
 		dst.QUIC.ConnectionOptions = src.QUIC.ConnectionOptions

@@ -544,6 +544,35 @@ A top-level `tls.signature_algorithms` overrides the extension's list on every
 build, and a parent's is inherited: a delta in field form standing on a parent
 that has one writes its own, or the parent's list goes out.
 
+## A QUIC hello from a capture
+
+`quic.raw_client_hello` is a captured QUIC ClientHello, base64 — the handshake
+message `cmd/quiccapture` assembles from the decrypted Initial's CRYPTO frames
+(a TLS record is accepted too). It replaces the parrot's ClientHello: the
+extensions as captured (shuffled when `tls.permute_extensions` is true), the
+transport parameters in the captured order with the captured values. Those
+uquic runs the connection on — the windows, stream limits, idle timeout,
+`active_connection_id_limit`, `max_datagram_frame_size` — are typed values, so
+the connection keeps what it advertises; `initial_source_connection_id` is
+left for uquic to fill with the connection's own ID, a GREASE parameter and a
+reserved version in `version_information` are drawn anew per connection, the
+rest goes out as the bytes captured. `connection_options`, `send_initial_rtt`,
+`legacy_version_information_id` and `grease_version_first` do not apply over a
+capture; `quic.parrot` still frames the packet (CRYPTO fragmentation, padding,
+the first packet number).
+
+## A delta's own hello
+
+A delta that brings a ClientHello of its own — `raw_client_hello`,
+`extensions` or `client_hello_spec` — inherits nothing of what its parent said
+about the parent's hello: not `trust_anchors` (with their order), not
+`signature_algorithms`, not `alpn`. Its own values of them apply. Until 0.32 a
+phone's hello without extension 0xCA34 under a Chrome parent failed to build
+("trust_anchors is set, but extension 0xca34 is missing"), and one with it had
+its list replaced by the parent's. `permute_extensions` and
+`allow_blunt_mimicry` are still inherited: they say how a hello is sent, not
+what is in it.
+
 ## What must break the loading of a profile
 
 A profile has to be rejected rather than quietly degraded:

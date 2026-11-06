@@ -2,7 +2,7 @@
 
 `libcurlpro` (`curlpro.dll`, `libcurlpro.so`, `libcurlpro.dylib`) is a Go
 library built with `-buildmode=c-shared`. Every language other than Go talks to
-it through the 57 functions declared in [include/curlpro.h](../include/curlpro.h).
+it through the 60 functions declared in [include/curlpro.h](../include/curlpro.h).
 This file is the contract those functions keep: what goes in, what comes out,
 who frees what, which errors exist, and what is safe from several threads.
 
@@ -147,10 +147,12 @@ defaults below explicitly, the way the Python `Session` does.
 
 | Field | Type | Binding default | Meaning |
 |---|---|---|---|
-| `profile` | string | `chrome-156-windows` | registered profile name |
+| `profile` | string or object | `chrome-156-windows` | registered profile name, or a profile given whole (`{"based_on": …, "tls": …}`) used for this session and never registered (0.32) |
 | `timeout_ms` | int | `30000` | whole request, redirects, retries and the body included; 0 = none (until 0.31 a 0 became 30 s) |
 | `connect_timeout_ms` | int | 0 | connection setup; 0 = only `timeout_ms` |
 | `response_timeout_ms` | int | 0 | waiting for response headers |
+| `decompress` | bool | absent = `true` | `false` hands bodies over as they came: compressed, `Content-Encoding` and `Content-Length` kept; such responses bypass the cache (0.32) |
+| `ticket_cache` | string | `""` | a group name: sessions with the same one share their TLS tickets and resume each other's connections (one identity over several sessions); needs `resume` (0.32) |
 | `idle_timeout_ms` | int | 0 | a body that stops arriving: no byte for this long while a read waits; 0 = none. The bound for a stream with no total limit (0.31) |
 | `default_headers` | bool | **`true`** | send the profile's headers in its order |
 | `follow_redirects` | bool | **`true`** | |
@@ -217,6 +219,9 @@ curlpro_free(resp);
 |---|---|---|
 | `method`, `url` | string | required |
 | `headers` | {name: value} | added to (or replacing) the profile's; order comes from the profile |
+| `headers_raw` | [[name, value], …] | the whole header set, sent as given: order, case on HTTP/1.1 (lowercase on HTTP/2 and HTTP/3), a name twice sent twice — repeats of one name go out together, where its first stands; nothing of the profile's, the session's or the jar's is added; pseudo-headers in the list are skipped. Exclusive with `headers` and `header_order` (0.32) |
+| `h2_priority` | {weight, exclusive, depends_on} | this request's HTTP/2 priority (weight 1–256) in place of the profile's (0.32) |
+| `decompress` | bool or absent | per-request `decompress` (0.32) |
 | `suppress_headers` | [string] | leave these out whatever set them |
 | `header_order` | [string] | this request's order |
 | `default_headers`, `session_headers`, `cookies` | bool or absent | switch the profile headers / session headers / jar off for this request |
@@ -246,6 +251,10 @@ curlpro_free(resp);
 | `cookie_changes` | with `track_cookies` |
 | `cache` | `"hit"`, `"revalidated"`, `"miss"`, or absent |
 | `trailers` | {name: [values]} — the fields sent after the body (gRPC's `grpc-status`, `grpc-message`); absent when none came (0.31) |
+| `headers_raw` | [[name, value], …] — the header block as it came off the wire: the server's order and case, a repeated field once per line; absent for a cached response (0.32) |
+| `interim` | [{status, headers}] — the 1xx responses before the final one (103 Early Hints, 100 Continue), in order (0.32). The library does not wait for a `100 Continue` before sending a body |
+| `conn` | the connection: `id` (same id, same connection), `reused`, `remote`, `local`, `proto`, `proxy`, `tls_version`, `cipher`, `resumed`, `ech`, `verified`, `ja4`/`ja4_r` of the ClientHello actually sent, and on a connection's first response `peer_certs` (DER, base64, leaf first), `connect_ms` (name resolution, TCP and a proxy's tunnel together) and `tls_ms` (0.32) |
+| `timing` | `{wait_ms}` — from the request leaving to its headers (0.32) |
 
 The body is already decompressed (gzip, br, zstd, deflate).
 
@@ -329,6 +338,7 @@ close codes:
 | `curlpro_conn_error(conn)` | the stored error of a failed read or write, as an envelope |
 | `curlpro_conn_read_start(conn, len)`, `curlpro_conn_write_start(conn, buf, len)` | asynchronous: `{"eof": bool}` + bytes, `{"written": n}` (the buffer is copied) |
 | `curlpro_conn_close_write(conn)` | ends your direction (TLS close_notify), reading stays open |
+| `curlpro_tls_dial(session, config)` | no HTTP at all: a TLS connection with the profile's ClientHello to `{host, port}`, `alpn` replacing its list (`[]` none, absent the profile's), through `proxy` or the session's; `{conn, info}`, `info` as a response's `conn` (0.32) |
 | `curlpro_conn_close(conn)` | closes; a read blocked on it returns `-1` |
 
 A WebSocket over HTTP/2 (extended CONNECT, RFC 8441) is not offered yet: the
@@ -406,7 +416,16 @@ for (;;) {
 | `ws_too_big` | a message exceeded `max_message_size` | no |
 | `ws_protocol` | the server broke RFC 6455/7692 | no |
 | `conn_closed` | a raw connection, or a streamed request body, is closed — by you, or because its request ended (0.31) | no |
-| *(absent)* | not classified: DNS, TCP, TLS alert, a reset connection, … | maybe |
+| `dns` | the name did not resolve | maybe |
+| `connect_refused` | the TCP connection was refused | maybe |
+| `tls_alert` | the server ended the handshake with an alert. `details: {alert, name}` | depends |
+| `tls_verify` | the server's certificate did not verify | **no** |
+| `reset` | the peer reset the connection, or the HTTP/2 stream. `details: {h2_code, stream_id}` for a stream | maybe |
+| `goaway` | the HTTP/2 server sent GOAWAY. `details: {h2_code, last_stream_id}` | maybe |
+| `h2_protocol` | the HTTP/2 connection failed on a protocol error. `details: {h2_code}` | no |
+| `eof_before_headers` | the connection ended before the response's headers did | maybe |
+| `eof_in_body` | the connection ended inside the body | maybe |
+| *(absent)* | not classified (until 0.32 that was DNS, TCP, TLS and HTTP/2 failures too) | maybe |
 
 `configuration`, `profile_capability` and `proxy_auth` are permanent: retrying
 the same call cannot change the outcome. A panic inside the library becomes

@@ -4,6 +4,8 @@ import (
 	nethttp "net/http"
 
 	http "github.com/bogdanfinn/fhttp"
+
+	"github.com/curlpro/curlpro/internal/h3"
 )
 
 // The bridge between net/http and fhttp.
@@ -14,7 +16,16 @@ import (
 // HTTP/3 response is converted into the fhttp representation.
 
 func fromStdResponse(r *nethttp.Response) *http.Response {
+	var raw [][2]string
+	if flat, ok := r.Header[h3.RawHeaderKey]; ok {
+		delete(r.Header, h3.RawHeaderKey)
+		raw = make([][2]string, 0, len(flat)/2)
+		for i := 0; i+1 < len(flat); i += 2 {
+			raw = append(raw, [2]string{flat[i], flat[i+1]})
+		}
+	}
 	out := &http.Response{
+		RawHeader:     raw,
 		Status:        r.Status,
 		StatusCode:    r.StatusCode,
 		Proto:         r.Proto,

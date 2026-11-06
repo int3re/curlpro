@@ -168,6 +168,10 @@ for _name, _args in (
     ("curlpro_conn_write_start", [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]),
     ("curlpro_conn_close_write", [ctypes.c_longlong]),
     ("curlpro_conn_close", [ctypes.c_longlong]),
+    # 0.32: profiles that do not stay registered, shared tickets, TLS for any protocol.
+    ("curlpro_profile_unregister", [ctypes.c_char_p]),
+    ("curlpro_ticket_cache_drop", [ctypes.c_char_p]),
+    ("curlpro_tls_dial", [ctypes.c_longlong, ctypes.c_char_p]),
 ):
     try:
         _fn = getattr(_lib, _name)
@@ -237,7 +241,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Minimum version of the native part: major and minor. Raise it together
 # with lib/curlpro.go whenever Python starts depending on a new export or field.
-REQUIRED_VERSION = (0, 31)
+REQUIRED_VERSION = (0, 32)
 
 
 def _check_version() -> None:

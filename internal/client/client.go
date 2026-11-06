@@ -120,6 +120,19 @@ type Options struct {
 	// blocked and the extra attempt only wastes time.
 	DisableAltSvc bool
 
+	// TicketCache names a group of sessions that share their TLS tickets, so
+	// one resumes a connection another opened (tickets.go): sessions of one
+	// identity, as a proxy opening a session per client connection runs
+	// them. Empty, the session keeps its own. Needs Resume.
+	TicketCache string
+
+	// DisableDecompression hands bodies over as they came: compressed, with
+	// their Content-Encoding and Content-Length, the way a transparent proxy
+	// relays them (a 206 of a compressed resource stays a valid range, and
+	// the size is the size on the wire). Off, the body is decoded — gzip, br,
+	// zstd, deflate — as the profile's Accept-Encoding promises.
+	DisableDecompression bool
+
 	// Resolve overrides a host's address without touching the name in SNI or Host.
 	//
 	// The key is "host:port" or just "host" (then the rule applies to any port),
@@ -260,6 +273,24 @@ type Request struct {
 	Headers map[string]string
 	Body    []byte
 
+	// H2Priority, when set, is this request's priority in its HTTP/2
+	// HEADERS frame, in place of the profile's stream_weight and
+	// stream_exclusive: Chrome gives every resource type its own weight (256
+	// a document, 220 a stylesheet, 110 an image…), and a proxy relays the
+	// client's. Weight is 1–256 as RFC 7540 counts it.
+	H2Priority *H2Priority
+
+	// HeadersRaw, when set, is the request's whole header set, sent as
+	// given: in this order, in this case on HTTP/1.1 (HTTP/2 and HTTP/3 write
+	// names lowercase, as they must), a name given twice sent twice. Nothing
+	// is added — not the profile's headers, not the session's, not the jar's
+	// cookies — beyond what the protocol needs: Host on HTTP/1.1 when the
+	// list has none, the body's length. It is what a proxy relaying a
+	// client's request wants: the client's headers, on the profile's TLS and
+	// frames. Repeats of one name go out together, where its first one
+	// stands. Exclusive with Headers and HeaderOrder.
+	HeadersRaw [][2]string
+
 	// Multipart, when set, is encoded into the body with a boundary in the
 	// profile's style. Mutually exclusive with Body.
 	Multipart *MultipartForm
@@ -297,6 +328,12 @@ type Request struct {
 	// freshConn sends the request on a new connection, past the pool: the
 	// resend after a reused connection died under it.
 	freshConn bool
+
+	// interim logs the 1xx responses that came before this hop's final one;
+	// made by attempt, shared by the copies the cache makes of the request.
+	interim *interimLog
+	// hop is the connection and the wait this hop's response came with.
+	hop *hopRecord
 
 	// TrackCookies logs the records the request changes in the jar, so a
 	// failure can be undone exactly (rollback_cookies): the log comes back on
@@ -347,6 +384,9 @@ type Request struct {
 	// IdleTimeout overrides the limit on a body that stops arriving.
 	// For all four a zero is no limit for this request.
 	IdleTimeout *time.Duration
+	// Decompress overrides DisableDecompression for this request: false
+	// hands the body over as it came, true decodes it; nil takes the session's.
+	Decompress *bool
 	// FollowRedirects overrides whether 3xx are followed.
 	FollowRedirects *bool
 	// MaxRedirects overrides the chain length limit.
@@ -658,6 +698,23 @@ func (s *Session) timeout(r *Request) time.Duration {
 	return s.opts.Timeout
 }
 
+// decompress reports whether this request's body is decoded.
+func (s *Session) decompress(r *Request) bool {
+	if r != nil && r.Decompress != nil {
+		return *r.Decompress
+	}
+	return !s.opts.DisableDecompression
+}
+
+// rawBodyKey marks, in a request's context, a body to be handed over as it
+// came: conn.roundTrip reads it on HTTP/1.1 and HTTP/2.
+type rawBodyKey struct{}
+
+func wantsDecoded(ctx context.Context) bool {
+	raw, _ := ctx.Value(rawBodyKey{}).(bool)
+	return !raw
+}
+
 // idleTimeout returns the limit on a body that stops arriving; 0 is none.
 func (s *Session) idleTimeout(r *Request) time.Duration {
 	if r != nil && r.IdleTimeout != nil {
@@ -691,6 +748,22 @@ func (r *Request) validate(hasJar bool) error {
 		{"response timeout", r.ResponseTimeout}, {"idle timeout", r.IdleTimeout}} {
 		if t.d != nil && *t.d < 0 {
 			return configErr("%s cannot be negative, got %s (0 is no limit)", t.name, *t.d)
+		}
+	}
+	if p := r.H2Priority; p != nil && (p.Weight < 1 || p.Weight > 256) {
+		return configErr("h2_priority weight %d: RFC 7540 weights are 1 to 256", p.Weight)
+	}
+	if len(r.HeadersRaw) > 0 && (len(r.Headers) > 0 || len(r.HeaderOrder) > 0) {
+		return configErr("headers_raw is the whole header set: it takes no headers or header_order beside it")
+	}
+	for _, kv := range r.HeadersRaw {
+		// A pseudo-header relayed from an HTTP/2 or HTTP/3 request is left out:
+		// :method, :scheme, :authority and :path come from the request itself.
+		if strings.HasPrefix(kv[0], ":") {
+			continue
+		}
+		if kv[0] == "" || strings.ContainsAny(kv[0], " \t\r\n:") || strings.ContainsAny(kv[1], "\r\n") {
+			return configErr("headers_raw: not a header field: %q: %q", kv[0], kv[1])
 		}
 	}
 	if r.Cookies != nil && *r.Cookies && !hasJar {
@@ -749,9 +822,11 @@ func (s *Session) maxRedirects(r *Request) int {
 type Response struct {
 	Status  int
 	Headers map[string][]string
-	Body    []byte
-	Proto   string
-	URL     string // the final URL after redirects
+	// RawHeaders is the header block as it came (Stream.RawHeaders).
+	RawHeaders [][2]string
+	Body       []byte
+	Proto      string
+	URL        string // the final URL after redirects
 	// History holds the redirects that were followed, first to last.
 	History []Redirect
 	// Preflights are the CORS preflights sent (or found cached) before the
@@ -764,6 +839,11 @@ type Response struct {
 	// "revalidated", "miss", or "" without a cache or for a request it
 	// does not take (a POST, a no-store).
 	Cache string
+	// Interim are the 1xx responses that came before the final one.
+	Interim []Interim
+	// Conn is the connection the response came over; Timing its wait.
+	Conn   *ConnInfo
+	Timing *Timing
 	// Trailers are the fields the server sent after the body (gRPC's
 	// grpc-status, grpc-message); nil when it sent none.
 	Trailers map[string][]string
@@ -909,6 +989,9 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if opts.IdleTimeout < 0 {
 		return nil, configErr("idle timeout cannot be negative, got %s", opts.IdleTimeout)
 	}
+	if opts.TicketCache != "" && !opts.Resume {
+		return nil, configErr("ticket_cache %q shares tickets, and the session has resumption off", opts.TicketCache)
+	}
 	// A session-wide fetch on a profile without a fetch set is refused here,
 	// once, rather than on every request.
 	if err := modeError(p, opts.Mode); err != nil {
@@ -985,8 +1068,11 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	s.buildTemplates()
 	if opts.Resume {
 		// Thirty-two hosts is generous for one identity and small enough that
-		// an abandoned session costs nothing.
+		// an abandoned session costs nothing. A named group is shared.
 		s.tlsSessions = utls.NewLRUClientSessionCache(32)
+		if opts.TicketCache != "" {
+			s.tlsSessions = sharedTickets(opts.TicketCache)
+		}
 	}
 	if opts.ForceHTTP1 {
 		s.alpn = []string{"http/1.1"}
@@ -1122,12 +1208,16 @@ func (s *Session) Do(r *Request) (*Response, error) {
 		Preflights:    stream.Preflights,
 		Status:        stream.Status,
 		Headers:       stream.Headers,
+		RawHeaders:    stream.RawHeaders,
 		Body:          data,
 		Proto:         stream.Proto,
 		URL:           stream.URL,
 		CookieChanges: stream.CookieChanges,
 		Cache:         stream.Cache,
 		Trailers:      stream.Trailers(),
+		Interim:       stream.Interim,
+		Conn:          stream.Conn,
+		Timing:        stream.Timing,
 	}, nil
 }
 
@@ -1315,6 +1405,17 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	if r != nil && r.ConnectTimeout != nil {
 		req = req.WithContext(withConnectLimit(req.Context(), *r.ConnectTimeout))
 	}
+	if !s.decompress(r) {
+		req = req.WithContext(context.WithValue(req.Context(), rawBodyKey{}, true))
+	}
+	if p := r.H2Priority; p != nil {
+		param := http2.PriorityParam{StreamDep: p.DependsOn, Exclusive: p.Exclusive, Weight: uint8(p.Weight - 1)}
+		req = req.WithContext(http2.WithHeaderPriority(req.Context(), func(uint32) http2.PriorityParam { return param }))
+	}
+	if r.interim == nil {
+		r.interim = &interimLog{}
+	}
+	req = req.WithContext(withInterim(req.Context(), r.interim))
 
 	// ResponseTimeout bounds the wait for the response headers only. It is a
 	// timer that cancels the request if nothing has arrived by then, and is
@@ -1469,9 +1570,15 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		}
 		if useH3 {
 			armHeaders()
+			sent := time.Now()
 			resp, err := s.sendH3(req.Context(), r, u, proxy)
 			err = headersDone(err)
 			if err == nil {
+				info := &ConnInfo{Proto: "h3"}
+				if proxy != "" {
+					info.Proxy = redactProxy(proxy)
+				}
+				r.hop.set(info, time.Since(sent))
 				// sendH3 opened its own copy of the body; this one would stay
 				// open (and a file locked on Windows) until collected. A
 				// streamed body is the same reader, still being sent.
@@ -1512,8 +1619,12 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	s.noteMode(r)
 
 	armHeaders()
+	sent := time.Now()
 	resp, err := c.roundTrip(req.Context(), req)
 	err = headersDone(err)
+	if err == nil {
+		r.hop.set(c.describe(reused), time.Since(sent))
+	}
 	if err != nil {
 		// The connection is no longer usable. For HTTP/2 close it gently: a hard
 		// close would cut the streams of neighbouring requests.
@@ -1576,12 +1687,15 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 	ech := s.echConfig(dialCtx, u, ds)
 	var raw net.Conn
 	var uconn *utls.UConn
+	var connectTook, tlsTook time.Duration
 	for attempt := 0; ; attempt++ {
 		var err error
+		dialed := time.Now()
 		raw, err = s.dialRaw(dialCtx, ds.addr, ds.proxy)
 		if err != nil {
 			return nil, err
 		}
+		connectTook = time.Since(dialed)
 
 		// Cleartext: no ClientHello, so no TLS fingerprint — but the HTTP/1.1 half
 		// of the profile still applies, and that is the half a plain-HTTP server
@@ -1589,13 +1703,17 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 		// do over TLS, because the connection is an ordinary h1 connection from
 		// here on.
 		if ds.plain {
-			return newH1Conn(raw, ds), nil
+			c := newH1Conn(raw, ds)
+			c.noteDial(raw, nil, false, connectTook, 0, nil)
+			return c, nil
 		}
 		hsCtx, hsDone := dialCtx, context.CancelFunc(func() {})
 		if ech != nil {
 			hsCtx, hsDone = context.WithTimeout(dialCtx, echHandshakeWait)
 		}
+		shaking := time.Now()
 		uconn, err = s.handshakeTLS(hsCtx, raw, u, ds, ech)
+		tlsTook = time.Since(shaking)
 		hsDone()
 		if err == nil {
 			break
@@ -1627,6 +1745,7 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 	// The protocol was chosen by the server. An empty ALPN means HTTP/1.1 — that
 	// is how browser profiles that do not offer h2 behave.
 	state := uconn.ConnectionState()
+	verified := !s.opts.InsecureSkipVerify
 	switch proto := state.NegotiatedProtocol; proto {
 	case "h2":
 		if spare != nil && spare() {
@@ -1640,9 +1759,12 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 		}
 		c := newH2Conn(cc, ds)
 		c.notePeer(raw, state, ds.proxy == "" && !s.opts.InsecureSkipVerify)
+		c.noteDial(raw, &state, verified, connectTook, tlsTook, sentHello(uconn))
 		return c, nil
 	case "http/1.1", "":
-		return newH1Conn(uconn, ds), nil
+		c := newH1Conn(uconn, ds)
+		c.noteDial(raw, &state, verified, connectTook, tlsTook, sentHello(uconn))
+		return c, nil
 	default:
 		uconn.Close()
 		return nil, fmt.Errorf("server negotiated %q, which is not supported", proto)
@@ -1691,6 +1813,15 @@ func (s *Session) handshakeTLS(dialCtx context.Context, raw net.Conn, u *url.URL
 			return nil, capabilityErr("force_http1: profile %q has no ALPN extension to restrict", s.profile.Name)
 		}
 	}
+	switch ds.alpn {
+	case "":
+	case "-":
+		dropALPN(spec)
+	default:
+		if !setALPN(spec, strings.Split(ds.alpn, ",")) {
+			return nil, capabilityErr("alpn: profile %q has no ALPN extension to set", s.profile.Name)
+		}
+	}
 	if s.opts.DisablePostQuantum {
 		dropPostQuantum(spec)
 	}
@@ -1709,7 +1840,8 @@ func (s *Session) handshakeTLS(dialCtx context.Context, raw net.Conn, u *url.URL
 	if resume {
 		// One cache per session: tickets belong to the identity, and sharing
 		// them between sessions would let two identities be linked by the very
-		// mechanism meant to make each look like a returning browser.
+		// mechanism meant to make each look like a returning browser — unless
+		// the caller names one identity's group (Options.TicketCache).
 		cfg.ClientSessionCache = s.tlsSessions
 	} else {
 		cfg.SessionTicketsDisabled = true

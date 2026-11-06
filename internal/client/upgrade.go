@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -128,6 +129,57 @@ func (s *Session) Upgrade(r *Request) (*Upgraded, error) {
 	_ = c.raw.SetDeadline(time.Time{})
 	out.Conn = &RawConn{raw: c.raw, br: c.br}
 	return out, nil
+}
+
+// DialTLS opens a TLS connection to host:port with the profile's ClientHello
+// and hands it over raw — MQTT over TLS, XMPP on 5223, an app's own protocol:
+// what a proxy could otherwise only pass through undecrypted. alpn replaces
+// the hello's ALPN list (nil keeps the profile's, an empty list sends none);
+// the connection is the caller's whatever the server negotiates. It goes
+// through the session's proxy, or proxy's when given ("" is direct), and
+// uses the session's tickets, roots and client certificate.
+func (s *Session) DialTLS(ctx context.Context, host string, port int, alpn []string, proxy *string) (*RawConn, *ConnInfo, error) {
+	if err := s.ensureOpen(); err != nil {
+		return nil, nil, err
+	}
+	if host == "" || port <= 0 || port > 65535 {
+		return nil, nil, configErr("tls_dial: a host and a port 1-65535, got %q:%d", host, port)
+	}
+	u, err := parseURL(fmt.Sprintf("https://%s", net.JoinHostPort(host, fmt.Sprint(port))))
+	if err != nil {
+		return nil, nil, err
+	}
+	px := s.opts.Proxy
+	if proxy != nil {
+		px = *proxy
+	}
+	ds := s.newDialSpec(u, px, false)
+	switch {
+	case alpn == nil:
+	case len(alpn) == 0:
+		ds.alpn = "-"
+	default:
+		ds.alpn = strings.Join(alpn, ",")
+	}
+	dialCtx, done := s.connectContext(ctx)
+	defer done()
+	dialed := time.Now()
+	raw, err := s.dialRaw(dialCtx, ds.addr, ds.proxy)
+	if err != nil {
+		return nil, nil, err
+	}
+	connectTook := time.Since(dialed)
+	shaking := time.Now()
+	uconn, err := s.handshakeTLS(dialCtx, raw, u, ds, nil)
+	if err != nil {
+		raw.Close()
+		return nil, nil, err
+	}
+	_ = uconn.SetDeadline(time.Time{})
+	state := uconn.ConnectionState()
+	probe := &conn{proto: state.NegotiatedProtocol, spec: ds}
+	probe.noteDial(raw, &state, !s.opts.InsecureSkipVerify, connectTook, time.Since(shaking), sentHello(uconn))
+	return newRawConn(uconn, nil), probe.describe(false), nil
 }
 
 // upgradeBodyLimit bounds the body of a refused upgrade: an error page.

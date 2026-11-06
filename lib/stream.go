@@ -112,14 +112,18 @@ func registerStreamBody(st *client.Stream, cancel context.CancelFunc, bodyRID in
 // streamMeta is what the caller learns about an opened stream.
 func streamMeta(sid int64, st *client.Stream) map[string]any {
 	return map[string]any{
-		"stream":     sid,
-		"status":     st.Status,
-		"proto":      st.Proto,
-		"headers":    st.Headers,
-		"url":        st.URL,
-		"history":    st.History,
-		"preflights": st.Preflights,
-		"cache":      st.Cache,
+		"stream":      sid,
+		"status":      st.Status,
+		"proto":       st.Proto,
+		"headers":     st.Headers,
+		"headers_raw": st.RawHeaders,
+		"url":         st.URL,
+		"history":     st.History,
+		"preflights":  st.Preflights,
+		"cache":       st.Cache,
+		"interim":     st.Interim,
+		"conn":        st.Conn,
+		"timing":      st.Timing,
 	}
 }
 

@@ -23,6 +23,7 @@ package main
 import "C"
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/binary"
 	"encoding/json"
@@ -80,7 +81,8 @@ func errorDetails(err error) map[string]any {
 		return map[string]any{"method": ce.Method, "url": ce.URL, "reason": ce.Reason,
 			"status": ce.Status, "headers": ce.Headers}
 	}
-	return nil
+	// tls_alert, goaway, reset and h2_protocol name their numbers.
+	return client.ErrorDetails(err)
 }
 
 func respond(data any, err error) *C.char {
@@ -194,7 +196,14 @@ func curlpro_free(s *C.char) {
 // flight (body_stream, curlpro_request_body_write/_end); the raw connection
 // after an upgrade (curlpro_upgrade_open, curlpro_conn_*); the conn_closed
 // code.
-const Version = "0.31.0"
+// 0.32.0: the wire as it is — headers_raw both ways, decompress false,
+// interim 1xx, h2_priority per request, conn and timing on every response
+// (the JA4 of the hello sent), codes for the transport's failures (dns,
+// connect_refused, tls_alert, tls_verify, reset, goaway, h2_protocol,
+// eof_before_headers, eof_in_body) with details; ticket_cache shared across
+// sessions; a profile given whole to curlpro_session_new and
+// curlpro_profile_unregister; quic.raw_client_hello; curlpro_tls_dial.
+const Version = "0.32.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -274,6 +283,28 @@ func curlpro_profile_register(data *C.char) (out *C.char) {
 	return respond(map[string]any{"profiles": registry.Names()}, nil)
 }
 
+// curlpro_profile_unregister removes a registered profile; one another
+// profile stands on is refused. Sessions made with it keep their copy.
+// data: {"profiles": [names…]}.
+//
+//export curlpro_profile_unregister
+func curlpro_profile_unregister(name *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	if err := registry.Unregister(C.GoString(name)); err != nil {
+		return respond(nil, client.AsConfigError(err))
+	}
+	return respond(map[string]any{"profiles": registry.Names()}, nil)
+}
+
+// curlpro_ticket_cache_drop forgets a named ticket group (ticket_cache):
+// sessions holding it keep it, new ones start empty. data: {"dropped": bool}.
+//
+//export curlpro_ticket_cache_drop
+func curlpro_ticket_cache_drop(name *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	return respond(map[string]any{"dropped": client.DropTicketCache(C.GoString(name))}, nil)
+}
+
 //export curlpro_profiles_list
 func curlpro_profiles_list() (out *C.char) {
 	defer recoverInto(&out)
@@ -310,17 +341,41 @@ func curlpro_profile_get(name *C.char) (out *C.char) {
 	return respond(p, nil)
 }
 
+// profileRef is a session's profile: a registered name, or a profile given
+// whole — {"based_on": …, "tls": …} — resolved for this session and never
+// registered (a proxy's profile per client, which the registry would only
+// accumulate).
+type profileRef struct {
+	name   string
+	inline json.RawMessage
+}
+
+func (p *profileRef) UnmarshalJSON(b []byte) error {
+	if trimmed := bytes.TrimSpace(b); len(trimmed) > 0 && trimmed[0] == '{' {
+		p.inline = append(json.RawMessage(nil), trimmed...)
+		return nil
+	}
+	return json.Unmarshal(b, &p.name)
+}
+
+func (p profileRef) resolve() (*profile.Profile, error) {
+	if p.inline != nil {
+		return registry.ResolveInline(p.inline)
+	}
+	return registry.Resolve(p.name)
+}
+
 type sessionConfig struct {
-	Profile            string   `json:"profile"`
-	InsecureSkipVerify bool     `json:"insecure_skip_verify"`
-	TimeoutMS          int      `json:"timeout_ms"`
-	Proxy              string   `json:"proxy"`
-	DefaultHeaders     bool     `json:"default_headers"`
-	HeaderOrder        []string `json:"header_order"`
-	FollowRedirects    bool     `json:"follow_redirects"`
-	MaxRedirects       int      `json:"max_redirects"`
-	Cookies            bool     `json:"cookies"`
-	ForceHTTP1         bool     `json:"force_http1"`
+	Profile            profileRef `json:"profile"`
+	InsecureSkipVerify bool       `json:"insecure_skip_verify"`
+	TimeoutMS          int        `json:"timeout_ms"`
+	Proxy              string     `json:"proxy"`
+	DefaultHeaders     bool       `json:"default_headers"`
+	HeaderOrder        []string   `json:"header_order"`
+	FollowRedirects    bool       `json:"follow_redirects"`
+	MaxRedirects       int        `json:"max_redirects"`
+	Cookies            bool       `json:"cookies"`
+	ForceHTTP1         bool       `json:"force_http1"`
 	// PostQuantum is a pointer because a missing field means "send the share".
 	PostQuantum       *bool `json:"post_quantum"`
 	Resume            bool  `json:"resume"`
@@ -329,6 +384,11 @@ type sessionConfig struct {
 	IdleConnTimeoutMS int   `json:"idle_conn_timeout_ms"`
 	ConnectTimeoutMS  int   `json:"connect_timeout_ms"`
 	ResponseTimeoutMS int   `json:"response_timeout_ms"`
+	// Decompress: absent or true decodes bodies, false hands them over as
+	// they came (Content-Encoding and Content-Length kept).
+	Decompress *bool `json:"decompress"`
+	// TicketCache names a group of sessions that share TLS tickets.
+	TicketCache string `json:"ticket_cache"`
 	// IdleTimeoutMS cuts a body that stops arriving; 0 is none.
 	IdleTimeoutMS   int    `json:"idle_timeout_ms"`
 	CACert          string `json:"ca_cert"`
@@ -424,50 +484,52 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 	if err := json.Unmarshal([]byte(C.GoString(cfg)), &c); err != nil {
 		return respond(nil, fmt.Errorf("parsing configuration: %w", err))
 	}
-	p, err := registry.Resolve(c.Profile)
+	p, err := c.Profile.resolve()
 	if err != nil {
 		// A name that is not registered is the caller's mistake, permanent:
 		// retrying it a minute later finds the same nothing.
 		return respond(nil, client.AsConfigError(err))
 	}
 	s, err := client.New(p, client.Options{
-		InsecureSkipVerify: c.InsecureSkipVerify,
-		Timeout:            time.Duration(c.TimeoutMS) * time.Millisecond,
-		Proxy:              c.Proxy,
-		DefaultHeaders:     c.DefaultHeaders,
-		HeaderOrder:        c.HeaderOrder,
-		FollowRedirects:    c.FollowRedirects,
-		MaxRedirects:       c.MaxRedirects,
-		Cookies:            c.Cookies,
-		ForceHTTP1:         c.ForceHTTP1,
-		DisablePostQuantum: c.PostQuantum != nil && !*c.PostQuantum,
-		Resume:             c.Resume,
-		HTTP3:              c.HTTP3,
-		ConnectTimeout:     time.Duration(c.ConnectTimeoutMS) * time.Millisecond,
-		ResponseTimeout:    time.Duration(c.ResponseTimeoutMS) * time.Millisecond,
-		IdleTimeout:        time.Duration(c.IdleTimeoutMS) * time.Millisecond,
-		CACert:             c.CACert,
-		ClientCert:         c.ClientCert,
-		ClientKey:          c.ClientKey,
-		TrustEnv:           c.TrustEnv,
-		MaxResponseSize:    c.MaxResponseSize,
-		DisableAltSvc:      c.AltSvc != nil && !*c.AltSvc,
-		Resolve:            c.Resolve,
-		IPVersion:          c.IPVersion,
-		DNS:                c.DNS,
-		DisableKeepAlive:   c.KeepAlive != nil && !*c.KeepAlive,
-		MaxIdleConns:       c.MaxIdleConns,
-		IdleConnTimeout:    time.Duration(c.IdleConnTimeoutMS) * time.Millisecond,
-		Retry:              c.Retry.toPolicy(),
-		Mode:               c.Mode,
-		Page:               c.Page,
-		TopLevel:           c.TopLevel,
-		Cache:              c.Cache.toOptions(),
-		Credentials:        c.Credentials,
-		DisableSameSite:    c.SameSite != nil && !*c.SameSite,
-		DisablePreflight:   c.Preflight != nil && !*c.Preflight,
-		Device:             c.Device,
-		Devices:            c.Devices,
+		InsecureSkipVerify:   c.InsecureSkipVerify,
+		Timeout:              time.Duration(c.TimeoutMS) * time.Millisecond,
+		Proxy:                c.Proxy,
+		DefaultHeaders:       c.DefaultHeaders,
+		HeaderOrder:          c.HeaderOrder,
+		FollowRedirects:      c.FollowRedirects,
+		MaxRedirects:         c.MaxRedirects,
+		Cookies:              c.Cookies,
+		ForceHTTP1:           c.ForceHTTP1,
+		DisablePostQuantum:   c.PostQuantum != nil && !*c.PostQuantum,
+		Resume:               c.Resume,
+		HTTP3:                c.HTTP3,
+		ConnectTimeout:       time.Duration(c.ConnectTimeoutMS) * time.Millisecond,
+		ResponseTimeout:      time.Duration(c.ResponseTimeoutMS) * time.Millisecond,
+		IdleTimeout:          time.Duration(c.IdleTimeoutMS) * time.Millisecond,
+		DisableDecompression: c.Decompress != nil && !*c.Decompress,
+		TicketCache:          c.TicketCache,
+		CACert:               c.CACert,
+		ClientCert:           c.ClientCert,
+		ClientKey:            c.ClientKey,
+		TrustEnv:             c.TrustEnv,
+		MaxResponseSize:      c.MaxResponseSize,
+		DisableAltSvc:        c.AltSvc != nil && !*c.AltSvc,
+		Resolve:              c.Resolve,
+		IPVersion:            c.IPVersion,
+		DNS:                  c.DNS,
+		DisableKeepAlive:     c.KeepAlive != nil && !*c.KeepAlive,
+		MaxIdleConns:         c.MaxIdleConns,
+		IdleConnTimeout:      time.Duration(c.IdleConnTimeoutMS) * time.Millisecond,
+		Retry:                c.Retry.toPolicy(),
+		Mode:                 c.Mode,
+		Page:                 c.Page,
+		TopLevel:             c.TopLevel,
+		Cache:                c.Cache.toOptions(),
+		Credentials:          c.Credentials,
+		DisableSameSite:      c.SameSite != nil && !*c.SameSite,
+		DisablePreflight:     c.Preflight != nil && !*c.Preflight,
+		Device:               c.Device,
+		Devices:              c.Devices,
 	})
 	if err != nil {
 		return respond(nil, err)
@@ -738,15 +800,21 @@ func curlpro_debug_counts() (out *C.char) {
 }
 
 type requestJSON struct {
-	Method         string            `json:"method"`
-	URL            string            `json:"url"`
-	Headers        map[string]string `json:"headers"`
-	HeaderOrder    []string          `json:"header_order"`
-	DefaultHeaders *bool             `json:"default_headers"`
-	Cookies        *bool             `json:"cookies"`
-	SessionHeaders *bool             `json:"session_headers"`
-	Protocol       string            `json:"protocol"`
-	Multipart      *multipartJSON    `json:"multipart"`
+	Method  string            `json:"method"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+	// HeadersRaw is the whole header set as [[name, value], …], sent as
+	// given: order, case (HTTP/1.1), repeats; nothing added.
+	HeadersRaw [][2]string `json:"headers_raw"`
+	// H2Priority is this request's HTTP/2 priority {weight, exclusive,
+	// depends_on}, in place of the profile's.
+	H2Priority     *client.H2Priority `json:"h2_priority"`
+	HeaderOrder    []string           `json:"header_order"`
+	DefaultHeaders *bool              `json:"default_headers"`
+	Cookies        *bool              `json:"cookies"`
+	SessionHeaders *bool              `json:"session_headers"`
+	Protocol       string             `json:"protocol"`
+	Multipart      *multipartJSON     `json:"multipart"`
 	// BodyFile streams a file instead of reading it whole into memory.
 	BodyFile string `json:"body_file"`
 	// BodyStream: the body is written while the request is in flight
@@ -761,6 +829,7 @@ type requestJSON struct {
 	ConnectTimeoutMS  *int       `json:"connect_timeout_ms"`
 	ResponseTimeoutMS *int       `json:"response_timeout_ms"`
 	IdleTimeoutMS     *int       `json:"idle_timeout_ms"`
+	Decompress        *bool      `json:"decompress"`
 	FollowRedirects   *bool      `json:"follow_redirects"`
 	MaxRedirects      *int       `json:"max_redirects"`
 	Retry             *retryJSON `json:"retry"`
@@ -809,6 +878,7 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 		d := time.Duration(*r.IdleTimeoutMS) * time.Millisecond
 		req.IdleTimeout = &d
 	}
+	req.Decompress = r.Decompress
 	req.FollowRedirects = r.FollowRedirects
 	req.MaxRedirects = r.MaxRedirects
 	req.Retry = r.Retry.toPolicy()
@@ -829,6 +899,8 @@ func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 		Method:          r.Method,
 		URL:             r.URL,
 		Headers:         r.Headers,
+		HeadersRaw:      r.HeadersRaw,
+		H2Priority:      r.H2Priority,
 		Body:            body,
 		BodyFile:        r.BodyFile,
 		HeaderOrder:     r.HeaderOrder,
@@ -904,9 +976,13 @@ type responseJSON struct {
 	Status  int                 `json:"status"`
 	Proto   string              `json:"proto"`
 	Headers map[string][]string `json:"headers"`
-	URL     string              `json:"url"`
-	BodyLen int                 `json:"body_len"`
-	History []client.Redirect   `json:"history,omitempty"`
+	// HeadersRaw is the header block as it came off the wire: [[name,
+	// value], …] in the server's order and case, a repeated field once per
+	// line. Absent for a response from the cache.
+	HeadersRaw [][2]string       `json:"headers_raw,omitempty"`
+	URL        string            `json:"url"`
+	BodyLen    int               `json:"body_len"`
+	History    []client.Redirect `json:"history,omitempty"`
 	// Preflights are the CORS preflights sent before the request, in order.
 	Preflights []client.Preflight `json:"preflights,omitempty"`
 	// CookieChanges is the log a rollback undoes (track_cookies).
@@ -917,6 +993,11 @@ type responseJSON struct {
 	// Trailers are the fields sent after the body ({name: [values]}, as
 	// headers): gRPC's grpc-status and grpc-message. Absent when none came.
 	Trailers map[string][]string `json:"trailers,omitempty"`
+	// Interim are the 1xx responses before the final one, in order.
+	Interim []client.Interim `json:"interim,omitempty"`
+	// Conn is the connection the response came over; Timing its wait.
+	Conn   *client.ConnInfo `json:"conn,omitempty"`
+	Timing *client.Timing   `json:"timing,omitempty"`
 }
 
 // pause turns a millisecond setting into a duration: nil keeps the policy's
@@ -1056,6 +1137,7 @@ func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int
 			Status:        resp.Status,
 			Proto:         resp.Proto,
 			Headers:       resp.Headers,
+			HeadersRaw:    resp.RawHeaders,
 			URL:           resp.URL,
 			BodyLen:       len(resp.Body),
 			CookieChanges: resp.CookieChanges,
@@ -1063,6 +1145,9 @@ func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int
 			History:       resp.History,
 			Preflights:    resp.Preflights,
 			Trailers:      resp.Trailers,
+			Interim:       resp.Interim,
+			Conn:          resp.Conn,
+			Timing:        resp.Timing,
 		}, resp.Body, nil)
 	})
 }

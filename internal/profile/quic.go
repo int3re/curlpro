@@ -28,6 +28,15 @@ type QUICSpec struct {
 	// padding) cannot be expressed as data: it lives inside the uquic code.
 	Parrot string `json:"parrot,omitempty"`
 
+	// RawClientHello is a captured QUIC ClientHello, base64 — the handshake
+	// message cmd/quiccapture assembles from the decrypted Initial. When set,
+	// it replaces the parrot's ClientHello (quicraw.go): the extensions in
+	// the captured order, the transport parameters in the captured order
+	// with the captured values, the connection ID and GREASE drawn per
+	// connection. The fields below then do not apply — the capture says what
+	// they would. The parrot still frames the packet.
+	RawClientHello string `json:"raw_client_hello,omitempty"`
+
 	// ConnectionOptions is the value of google_connection_options (0x3128),
 	// four-character QUIC tags.
 	//

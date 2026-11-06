@@ -68,7 +68,7 @@ pip install curlpro
 - **Во время работы.** `curlpro.register_profile(dict_or_json)` добавляет один
   профиль без релиза.
 
-У нативной библиотеки есть версия ABI (`0.31` в этом релизе), которую Python
+У нативной библиотеки есть версия ABI (`0.32` в этом релизе), которую Python
 проверяет при импорте. Колесо всегда несёт согласованную пару; проверка нужна
 для сборок из исходников и для `CURLPRO_LIBRARY`, которая указывает пакету на
 вашу собственную библиотеку. Несовпадение поднимает ошибку при импорте с
@@ -558,8 +558,11 @@ CORS-preflight (раздел 7) с `.status`, `.headers` и `.reason` ответ
 Коды: `timeout`, `expectation`, `profile_capability`, `configuration`,
 `session_closed`, `too_large`, `ws_closed`, `ws_too_big`, `ws_protocol`,
 `proxy_closed`, `proxy`, `proxy_auth`, `cors`, а в C ABI ещё `conn_closed`
-(закрытое сырое соединение или потоковое тело запроса — docs/C-ABI.md). Ошибка
-без кода — обычный сбой с причиной в тексте.
+(закрытое сырое соединение или потоковое тело запроса — docs/C-ABI.md). С 0.32
+коды есть и у сбоев самого транспорта, с номерами в `details`: `dns`,
+`connect_refused`, `tls_alert`, `tls_verify`, `reset`, `goaway`, `h2_protocol`,
+`eof_before_headers`, `eof_in_body`. Ошибка без кода — обычный сбой с причиной
+в тексте.
 
 Три хука, каждый — список вызываемых в `s.hooks[...]`, добавляются и через
 `@s.on_request`, `@s.on_response`, `@s.on_error`:

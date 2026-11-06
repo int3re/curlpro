@@ -66,6 +66,33 @@ const (
 	// refused, or its answer does not allow the request, which therefore
 	// was not sent. The error is a *CORSError carrying the answer.
 	CodeCORS ErrorCode = "cors"
+
+	// The transport's own failures (since 0.32; errclass.go classifies them).
+	// Each is given only where nothing classified the error before: a
+	// timeout stays "timeout" whatever the phase.
+
+	// CodeDNS — the name did not resolve.
+	CodeDNS ErrorCode = "dns"
+	// CodeConnectRefused — the TCP connection was refused (nothing listens).
+	CodeConnectRefused ErrorCode = "connect_refused"
+	// CodeTLSAlert — the server ended the handshake with an alert;
+	// details.alert is its number.
+	CodeTLSAlert ErrorCode = "tls_alert"
+	// CodeTLSVerify — the server's certificate did not verify.
+	CodeTLSVerify ErrorCode = "tls_verify"
+	// CodeReset — the peer reset the connection, or the HTTP/2 stream
+	// (details.h2_code).
+	CodeReset ErrorCode = "reset"
+	// CodeGoAway — the HTTP/2 server sent GOAWAY; details.h2_code and
+	// details.last_stream_id.
+	CodeGoAway ErrorCode = "goaway"
+	// CodeH2Protocol — the HTTP/2 connection failed on a protocol error.
+	CodeH2Protocol ErrorCode = "h2_protocol"
+	// CodeEOFBeforeHeaders — the connection ended before the response's
+	// headers did.
+	CodeEOFBeforeHeaders ErrorCode = "eof_before_headers"
+	// CodeEOFInBody — the connection ended inside the body.
+	CodeEOFInBody ErrorCode = "eof_in_body"
 )
 
 // Proxy failure stages, as ProxyError.Stage reports them.
@@ -172,6 +199,12 @@ func CodeError(code ErrorCode, err error) error { return withCode(code, err) }
 // Code returns the error code. Timeouts are recognised by type rather than by
 // code: they come from net and context, which know nothing of our codes.
 func Code(err error) ErrorCode {
+	return codeOf(err, true)
+}
+
+// codeOf is Code; transport says whether the transport's own failures are
+// classified too — not inside a proxy failure, which is "proxy" as it was.
+func codeOf(err error, transport bool) ErrorCode {
 	if err == nil {
 		return ""
 	}
@@ -187,7 +220,7 @@ func Code(err error) ErrorCode {
 		if pe.Stage == ProxyStageAuth {
 			return CodeProxyAuth
 		}
-		if c := Code(pe.Err); c != "" {
+		if c := codeOf(pe.Err, false); c != "" {
 			return c // proxy_closed, or a timeout on the way to the proxy
 		}
 		return CodeProxy
@@ -206,5 +239,8 @@ func Code(err error) ErrorCode {
 	if errors.As(err, &nerr) && nerr.Timeout() {
 		return CodeTimeout
 	}
-	return ""
+	if !transport {
+		return ""
+	}
+	return transportCode(err)
 }

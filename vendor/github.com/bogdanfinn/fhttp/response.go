@@ -96,6 +96,12 @@ type Response struct {
 	// the server, set Transport.DisableCompression to true.
 	Uncompressed bool
 
+	// curlpro: RawHeader is the header block as it came off the wire —
+	// names in the server's case and order, a repeated field once per line —
+	// which Header, a map, cannot keep. Set by ReadResponse and the HTTP/2
+	// transport; nil for a response built some other way.
+	RawHeader [][2]string
+
 	// Trailer maps trailer keys to Values in the same
 	// format as Header.
 	//
@@ -189,7 +195,8 @@ func ReadResponse(r *bufio.Reader, req *Request) (*Response, error) {
 	}
 
 	// Parse the response headers.
-	mimeHeader, err := tp.ReadMIMEHeader()
+	// curlpro: read line by line, to keep the block as well (RawHeader).
+	mimeHeader, rawHeader, err := readRawMIMEHeader(tp)
 	if err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
@@ -197,6 +204,7 @@ func ReadResponse(r *bufio.Reader, req *Request) (*Response, error) {
 		return nil, err
 	}
 	resp.Header = Header(mimeHeader)
+	resp.RawHeader = rawHeader
 
 	fixPragmaCacheControl(resp.Header)
 

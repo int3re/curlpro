@@ -268,6 +268,7 @@ func okFrame(resp *client.Response) []byte {
 		Status:        resp.Status,
 		Proto:         resp.Proto,
 		Headers:       resp.Headers,
+		HeadersRaw:    resp.RawHeaders,
 		URL:           resp.URL,
 		BodyLen:       len(resp.Body),
 		History:       resp.History,
@@ -275,6 +276,9 @@ func okFrame(resp *client.Response) []byte {
 		CookieChanges: resp.CookieChanges,
 		Cache:         resp.Cache,
 		Trailers:      resp.Trailers,
+		Interim:       resp.Interim,
+		Conn:          resp.Conn,
+		Timing:        resp.Timing,
 	}, resp.Body, nil)
 }
 

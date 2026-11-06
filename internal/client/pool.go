@@ -62,6 +62,9 @@ type dialSpec struct {
 	// partitions nothing.
 	anon bool
 	site string
+	// alpn, when set, replaces the hello's ALPN list (comma-separated; "-"
+	// for none): a raw TLS connection for a protocol that is not HTTP.
+	alpn string
 }
 
 // newDialSpec builds the connection key.

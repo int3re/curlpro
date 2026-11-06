@@ -36,8 +36,12 @@ type Redirect struct {
 type Stream struct {
 	Status  int
 	Headers map[string][]string
-	Proto   string
-	URL     string
+	// RawHeaders is the header block as it came off the wire: names in the
+	// server's case and order, a repeated field once per line. nil for a
+	// response that did not come off the wire (the cache's).
+	RawHeaders [][2]string
+	Proto      string
+	URL        string
 	// History holds the intermediate responses, first to last.
 	History []Redirect
 	// Preflights are the CORS preflights sent before the request and its
@@ -47,6 +51,13 @@ type Stream struct {
 	CookieChanges []CookieChange
 	// Cache is how the session's cache served the response (Response.Cache).
 	Cache string
+	// Interim are the informational 1xx responses that came before the
+	// final one — 103 Early Hints, 100 Continue — in order.
+	Interim []Interim
+	// Conn is the connection the response came over (nil from the cache),
+	// Timing the wait for its headers.
+	Conn   *ConnInfo
+	Timing *Timing
 
 	body io.ReadCloser
 	// resp is the response the body belongs to: its trailers arrive in it
@@ -76,7 +87,8 @@ func (s *Stream) Read(p []byte) (int, error) {
 	}
 	s.trailerMu.Lock()
 	defer s.trailerMu.Unlock()
-	return s.body.Read(p)
+	n, err := s.body.Read(p)
+	return n, bodyErr(err)
 }
 
 // Close releases the connection. Calling it twice is safe.
@@ -316,6 +328,8 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 			}
 		}
 
+		current.interim = &interimLog{}
+		current.hop = &hopRecord{}
 		resp, cancel, used, err := s.sendCached(&current, deadline)
 		if err != nil {
 			// A network error: send() has already thrown the connection out of the
@@ -333,6 +347,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 			held := &Stream{
 				Status:     resp.StatusCode,
 				Headers:    resp.Header,
+				RawHeaders: resp.RawHeader,
 				Proto:      resp.Proto,
 				URL:        current.URL,
 				History:    history,
@@ -374,6 +389,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 			}
 		}
 		if next == "" {
+			hopConn, hopTiming := current.hop.get()
 			// The body is already decompressed here: HTTP/2 by the fhttp transport,
 			// HTTP/1.1 by conn.roundTrip, HTTP/3 by sendH3. The Content-Encoding
 			// header stays, so decompressing again would fall apart on a signature
@@ -381,11 +397,15 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 			return &Stream{
 				Status:     resp.StatusCode,
 				Headers:    resp.Header,
+				RawHeaders: resp.RawHeader,
 				Proto:      resp.Proto,
 				URL:        current.URL,
 				History:    history,
 				Preflights: preflights,
 				Cache:      cacheOutcome(resp.Body),
+				Interim:    current.interim.entries(),
+				Conn:       hopConn,
+				Timing:     hopTiming,
 				body:       idleBodyFor(resp.Body, s.idleTimeout(r), cancel),
 				resp:       resp,
 				cancel:     cancel,

@@ -558,6 +558,10 @@ func (s *Session) cacheable(r *Request) bool {
 	if s.cache == nil || r.preflight || r.cacheMode() == CacheNoStore {
 		return false
 	}
+	// The cache keeps decoded bodies; one asked for as it came goes past it.
+	if !s.decompress(r) {
+		return false
+	}
 	if m := strings.ToUpper(r.Method); m != "" && m != http.MethodGet {
 		return false
 	}

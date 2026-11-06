@@ -16,6 +16,8 @@ import sys
 ROOT = 'vendor/github.com/bogdanfinn/fhttp/http2/'
 TRANSPORT = ROOT + 'transport.go'
 PIPE = ROOT + 'pipe.go'
+RESPONSE = 'vendor/github.com/bogdanfinn/fhttp/response.go'
+RAWHEADER = 'vendor/github.com/bogdanfinn/fhttp/curlpro_rawheader.go'
 
 # (tag, file, old, new)
 EDITS = [
@@ -260,10 +262,124 @@ func (cc *ClientConn) writeHeadersPriority(streamID uint32, endStream bool, maxF
 ('h3', TRANSPORT,
 '''	werr := cc.writeHeaders(cs.ID, endStream, int(cc.maxFrameSize), hdrs)''',
 '''	werr := cc.writeHeadersPriority(cs.ID, endStream, int(cc.maxFrameSize), hdrs, headerPriorityFor(req, cs.ID))'''),
+
+# (i) The header block as it came off the wire. Header is a map: it sorts the
+#     names when it is written out, canonicalises their case and folds a
+#     repeated field into one key. A transparent proxy relays what the server
+#     sent, so the response keeps the block too.
+('i', RESPONSE,
+'''	Uncompressed bool
+''',
+'''	Uncompressed bool
+
+	// curlpro: RawHeader is the header block as it came off the wire —
+	// names in the server's case and order, a repeated field once per line —
+	// which Header, a map, cannot keep. Set by ReadResponse and the HTTP/2
+	// transport; nil for a response built some other way.
+	RawHeader [][2]string
+'''),
+
+# (j) HTTP/1.1: the header lines are read one by one (curlpro_rawheader.go)
+#     into the same MIMEHeader ReadMIMEHeader builds, and into RawHeader.
+('j', RESPONSE,
+'''	mimeHeader, err := tp.ReadMIMEHeader()
+	if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return nil, err
+	}
+	resp.Header = Header(mimeHeader)
+''',
+'''	// curlpro: read line by line, to keep the block as well (RawHeader).
+	mimeHeader, rawHeader, err := readRawMIMEHeader(tp)
+	if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return nil, err
+	}
+	resp.Header = Header(mimeHeader)
+	resp.RawHeader = rawHeader
+'''),
+
+# (k) HTTP/2: the decoded fields in HPACK order.
+('k', TRANSPORT,
+'''	if statusCode >= 100 && statusCode <= 199 {
+		cs.num1xx++''',
+'''	// curlpro: the block as it came (Response.RawHeader), Trailer included.
+	res.RawHeader = make([][2]string, 0, len(regularFields))
+	for _, hf := range regularFields {
+		res.RawHeader = append(res.RawHeader, [2]string{hf.Name, hf.Value})
+	}
+
+	if statusCode >= 100 && statusCode <= 199 {
+		cs.num1xx++'''),
+]
+
+# Files the patch adds whole; written when missing or different.
+FILES = [
+(RAWHEADER, """package http
+
+// curlpro: not part of upstream fhttp. See scripts/patch-fhttp.py, edit (j).
+
+import (
+	"net/textproto"
+	"strings"
+)
+
+// readRawMIMEHeader reads a header block as ReadMIMEHeader does — the same
+// map, keys canonical, values trimmed, a folded line joined — and keeps the
+// lines as they came: the name in its own case, in order, a repeated field
+// once per line.
+func readRawMIMEHeader(tp *textproto.Reader) (textproto.MIMEHeader, [][2]string, error) {
+	m := make(textproto.MIMEHeader)
+	var raw [][2]string
+	for {
+		line, err := tp.ReadContinuedLine()
+		if line == "" {
+			return m, raw, err
+		}
+		i := strings.IndexByte(line, ':')
+		if i <= 0 || !validRawFieldName(line[:i]) {
+			return m, raw, textproto.ProtocolError("malformed MIME header line: " + line)
+		}
+		name := line[:i]
+		value := strings.Trim(line[i+1:], " \\t")
+		key := textproto.CanonicalMIMEHeaderKey(name)
+		m[key] = append(m[key], value)
+		raw = append(raw, [2]string{name, value})
+		if err != nil {
+			return m, raw, err
+		}
+	}
+}
+
+// validRawFieldName is RFC 7230's token: what ReadMIMEHeader accepts.
+func validRawFieldName(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case 'a' <= c && c <= 'z', 'A' <= c && c <= 'Z', '0' <= c && c <= '9':
+		case strings.IndexByte("!#$%&'*+-.^_`|~", c) >= 0:
+		default:
+			return false
+		}
+	}
+	return true
+}
+"""),
 ]
 
 
 def main():
+    for path, content in FILES:
+        have = io.open(path, 'rb').read().decode('utf-8') if __import__('os').path.exists(path) else None
+        if have != content:
+            io.open(path, 'wb').write(content.encode('utf-8'))
+            print(f'{path}: written')
+        else:
+            print(f'{path}: already present')
     files = {}
     for tag, path, old, new in EDITS:
         if path not in files:

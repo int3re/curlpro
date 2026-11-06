@@ -67,6 +67,9 @@ type conn struct {
 	// whose certificate was verified: what pooling by address needs.
 	remote string
 	leaf   *x509.Certificate
+
+	// info is what the connection is (ConnInfo), set once it is up.
+	info ConnInfo
 }
 
 // notePeer keeps what ipPooled matches on. Only a verified certificate on a
@@ -168,6 +171,7 @@ func (c *conn) readResponse(req *http.Request) (*http.Response, error) {
 			return nil, &partialResponse{err}
 		}
 		if resp.StatusCode >= 100 && resp.StatusCode < 200 && resp.StatusCode != http.StatusSwitchingProtocols {
+			interimOf(req.Context()).add(resp.StatusCode, resp.Header)
 			resp.Body.Close()
 			continue
 		}
@@ -201,7 +205,7 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 		if err != nil {
 			return nil, err
 		}
-		if ce := resp.Header.Get("Content-Encoding"); ce != "" && req.Method != http.MethodHead {
+		if ce := resp.Header.Get("Content-Encoding"); ce != "" && req.Method != http.MethodHead && wantsDecoded(ctx) {
 			body, err := decompress(resp.Body, ce)
 			if err != nil {
 				resp.Body.Close()
@@ -294,7 +298,7 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 	// Transport (persistConn.readLoop) and in the HTTP/2 transport; conn.roundTrip
 	// goes around both, and before this change the client handed gzip bytes back
 	// as the body even though the profile advertises accept-encoding.
-	if ce := resp.Header.Get("Content-Encoding"); ce != "" && req.Method != http.MethodHead {
+	if ce := resp.Header.Get("Content-Encoding"); ce != "" && req.Method != http.MethodHead && wantsDecoded(ctx) {
 		body, err := decompress(resp.Body, ce)
 		if err != nil {
 			resp.Body.Close()
@@ -398,6 +402,18 @@ func setALPN(spec *utls.ClientHelloSpec, protos []string) bool {
 		}
 	}
 	return false
+}
+
+// dropALPN removes the ALPN extension: a protocol that names none.
+func dropALPN(spec *utls.ClientHelloSpec) {
+	kept := spec.Extensions[:0:0]
+	for _, e := range spec.Extensions {
+		if _, ok := e.(*utls.ALPNExtension); ok {
+			continue
+		}
+		kept = append(kept, e)
+	}
+	spec.Extensions = kept
 }
 
 // offersH2 reports whether a ClientHello offers HTTP/2 in its ALPN.

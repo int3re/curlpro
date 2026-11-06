@@ -2359,6 +2359,12 @@ func (rl *clientConnReadLoop) handleResponse(cs *clientStream, f *MetaHeadersFra
 		}
 	}
 
+	// curlpro: the block as it came (Response.RawHeader), Trailer included.
+	res.RawHeader = make([][2]string, 0, len(regularFields))
+	for _, hf := range regularFields {
+		res.RawHeader = append(res.RawHeader, [2]string{hf.Name, hf.Value})
+	}
+
 	if statusCode >= 100 && statusCode <= 199 {
 		cs.num1xx++
 		const max1xxResponses = 5 // arbitrary bound on number of informational responses, same as net/http

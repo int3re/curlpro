@@ -7,10 +7,12 @@ import "C"
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/curlpro/curlpro/internal/client"
@@ -157,6 +159,50 @@ func curlpro_upgrade_open_start(id C.longlong, frame *C.char, frameLen C.int) (o
 		}
 		return buildFrame(upgradedMeta(up, cid), up.Body, nil)
 	})
+}
+
+// tlsDialJSON is curlpro_tls_dial's configuration.
+type tlsDialJSON struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+	// ALPN replaces the hello's list; absent keeps the profile's, [] sends none.
+	ALPN             *[]string `json:"alpn"`
+	Proxy            *string   `json:"proxy"`
+	ConnectTimeoutMS int       `json:"connect_timeout_ms"`
+}
+
+// curlpro_tls_dial opens a TLS connection with the profile's ClientHello to
+// host:port for a protocol that is not HTTP, and hands it over raw:
+// {"conn": handle, "info": {…}} (the connection's ConnInfo: the TLS the
+// server chose, the chain, the JA4 of the hello sent). The curlpro_conn_*
+// calls then read and write it.
+//
+//export curlpro_tls_dial
+func curlpro_tls_dial(id C.longlong, cfg *C.char) (out *C.char) {
+	defer recoverInto(&out)
+	s, err := lookupSession(id)
+	if err != nil {
+		return respond(nil, err)
+	}
+	var c tlsDialJSON
+	if err := json.Unmarshal([]byte(C.GoString(cfg)), &c); err != nil {
+		return respond(nil, client.CodeError(client.CodeConfiguration, fmt.Errorf("parsing tls_dial: %w", err)))
+	}
+	ctx := context.Background()
+	if c.ConnectTimeoutMS > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(c.ConnectTimeoutMS)*time.Millisecond)
+		defer cancel()
+	}
+	var alpn []string
+	if c.ALPN != nil {
+		alpn = append([]string{}, (*c.ALPN)...)
+	}
+	rc, info, err := s.DialTLS(ctx, c.Host, c.Port, alpn, c.Proxy)
+	if err != nil {
+		return respond(nil, err)
+	}
+	return respond(map[string]any{"conn": registerConn(rc), "info": info}, nil)
 }
 
 // curlpro_conn_read reads what the peer sent into buf: the byte count, 0

@@ -9,8 +9,10 @@ trailers, a chunked upload read back, a 101 with bytes behind it.
 from __future__ import annotations
 
 import ctypes
+import gzip
 import json
 import socket
+import ssl
 import threading
 import time
 from pathlib import Path
@@ -24,16 +26,18 @@ REPO = Path(__file__).resolve().parents[2]
 lib = _ffi._lib
 
 
-def _read_head(f) -> tuple[str, dict[str, str]]:
+def _read_head(f) -> tuple[str, dict[str, str], list[str]]:
     line = f.readline().decode("latin-1").strip()
     headers: dict[str, str] = {}
+    lines: list[str] = []
     while True:
         h = f.readline().decode("latin-1")
         if h in ("\r\n", "\n", ""):
             break
+        lines.append(h.rstrip("\r\n"))
         k, _, v = h.partition(":")
         headers[k.strip().lower()] = v.strip()
-    return line, headers
+    return line, headers, lines
 
 
 def _read_chunked(f) -> tuple[bytes, dict[str, str]]:
@@ -74,9 +78,9 @@ class RawStand:
     def _one(self, c: socket.socket) -> None:
         f = c.makefile("rb")
         try:
-            line, h = _read_head(f)
+            line, h, lines = _read_head(f)
             path = line.split(" ")[1]
-            rec = {"path": path, "headers": h}
+            rec = {"path": path, "headers": h, "lines": lines}
             self.seen.append(rec)
             if path == "/trailers":
                 c.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/grpc\r\n"
@@ -102,6 +106,18 @@ class RawStand:
                 for _ in range(8):
                     c.sendall(b"x")
                     time.sleep(0.1)
+            elif path == "/raw":
+                # The request's head back as the body; a header block in the
+                # server's own case and order.
+                head = json.dumps(rec["lines"]).encode()
+                c.sendall(b"HTTP/1.1 200 OK\r\nX-Zeta: 1\r\nset-cookie: a=1\r\nCACHE-control: no\r\n"
+                          b"Set-Cookie: b=2\r\nContent-Length: %d\r\n\r\n" % len(head) + head)
+            elif path == "/gzip":
+                body = gzip.compress(b"compressible " * 40)
+                c.sendall(b"HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: %d\r\n\r\n" % len(body) + body)
+            elif path == "/early":
+                c.sendall(b"HTTP/1.1 103 Early Hints\r\nLink: </a.css>; rel=preload\r\n\r\n"
+                          b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
             elif path == "/stall":
                 c.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nstart")
                 time.sleep(3)
@@ -267,3 +283,85 @@ def test_zero_timeout_is_none_and_the_idle_limit_cuts_silence(stand):
         assert time.time() - started < 2.5
     finally:
         _ffi._call("curlpro_session_close", sid)
+
+
+def test_raw_headers_both_ways_and_the_raw_body(session, stand):
+    data, body = _ffi.call_framed("curlpro_request", session, meta={
+        "method": "GET", "url": stand.url + "/raw",
+        "headers_raw": [["X-B", "2"], ["accept", "a1"], ["accept", "a2"], ["Connection", "keep-alive"]]})
+    sent = json.loads(body)
+    assert sent[0].startswith("Host: 127.0.0.1:")
+    assert sent[1:] == ["X-B: 2", "accept: a1", "accept: a2", "Connection: keep-alive"]
+    assert data["headers_raw"] == [["X-Zeta", "1"], ["set-cookie", "a=1"], ["CACHE-control", "no"],
+                                   ["Set-Cookie", "b=2"], ["Content-Length", str(len(body))]]
+    raw, wire = _ffi.call_framed("curlpro_request", session, meta={
+        "method": "GET", "url": stand.url + "/gzip", "decompress": False})
+    assert wire[:2] == b"\x1f\x8b" and gzip.decompress(wire) == b"compressible " * 40
+    assert raw["headers"]["Content-Encoding"] == ["gzip"]
+    _, decoded = _ffi.call_framed("curlpro_request", session, meta={"method": "GET", "url": stand.url + "/gzip"})
+    assert decoded == b"compressible " * 40
+
+
+def test_interim_conn_and_codes(session, stand):
+    data, body = _ffi.call_framed("curlpro_request", session, meta={"method": "GET", "url": stand.url + "/early"})
+    assert body == b"ok"
+    assert data["interim"] == [{"status": 103, "headers": {"Link": ["</a.css>; rel=preload"]}}]
+    conn = data["conn"]
+    assert conn["id"] > 0 and conn["proto"] == "http/1.1" and conn["remote"].startswith("127.0.0.1:")
+    assert data["timing"]["wait_ms"] >= 0
+    with pytest.raises(CurlProError) as e:
+        _ffi.call_framed("curlpro_request", session, meta={"method": "GET", "url": "http://127.0.0.1:1/"})
+    assert e.value.code == "connect_refused"
+
+
+def test_a_profile_given_whole_and_unregistered():
+    _ffi._call("curlpro_profiles_load_dir", str(REPO / "profiles").encode())
+    inline = {"name": "live-one", "based_on": "chrome-156-windows", "headers": {"user_agent": "phone/1"}}
+    sid = _ffi._call("curlpro_session_new", _ffi.encode({"profile": inline, "default_headers": True}))["session"]
+    try:
+        assert "live-one" not in _ffi._call("curlpro_profiles_list")["profiles"]
+    finally:
+        _ffi._call("curlpro_session_close", sid)
+    _ffi._call("curlpro_profile_register", _ffi.encode({"name": "live-two", "based_on": "chrome-156-windows"}))
+    left = _ffi._call("curlpro_profile_unregister", b"live-two")["profiles"]
+    assert "live-two" not in left
+    with pytest.raises(CurlProError) as e:
+        _ffi._call("curlpro_profile_unregister", b"chrome-155-windows")  # chrome-156 stands on it
+    assert e.value.code == "configuration"
+    assert _ffi._call("curlpro_ticket_cache_drop", b"never-made") == {"dropped": False}
+
+
+def test_tls_dial_for_another_protocol():
+    _ffi._call("curlpro_profiles_load_dir", str(REPO / "profiles").encode())
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(str(REPO / "capture" / "certs" / "tls.crt"), str(REPO / "capture" / "certs" / "tls.key"))
+    ctx.set_alpn_protocols(["mqtt"])
+    srv = socket.create_server(("127.0.0.1", 0))
+    port = srv.getsockname()[1]
+    seen = {}
+
+    def serve():
+        c, _ = srv.accept()
+        with ctx.wrap_socket(c, server_side=True) as tc:
+            seen["alpn"] = tc.selected_alpn_protocol()
+            tc.sendall(tc.recv(64))
+
+    threading.Thread(target=serve, daemon=True).start()
+    insecure = _ffi._call("curlpro_session_new", _ffi.encode({
+        "profile": "chrome-156-windows", "insecure_skip_verify": True}))["session"]
+    try:
+        out = _ffi._call("curlpro_tls_dial", insecure, _ffi.encode({"host": "127.0.0.1", "port": port, "alpn": ["mqtt"]}))
+        cid = out["conn"]
+        assert out["info"]["proto"] == "mqtt" and out["info"]["ja4"].startswith("t13i")
+        assert lib.curlpro_conn_write(cid, b"\x10\x0cCONNECT", 9) == 9
+        buf = ctypes.create_string_buffer(16)
+        got = b""
+        while len(got) < 9:
+            n = lib.curlpro_conn_read(cid, buf, 16)
+            assert n > 0
+            got += buf.raw[:n]
+        assert got == b"\x10\x0cCONNECT" and seen["alpn"] == "mqtt"
+        _ffi._call("curlpro_conn_close", cid)
+    finally:
+        _ffi._call("curlpro_session_close", insecure)
+        srv.close()

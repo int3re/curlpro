@@ -44,9 +44,9 @@ extern "C" {
  * refuse a library whose major.minor is lower than the one it was written
  * against, because an older library silently ignores options it does not know. */
 #define CURLPRO_ABI_VERSION_MAJOR 0
-#define CURLPRO_ABI_VERSION_MINOR 31
+#define CURLPRO_ABI_VERSION_MINOR 32
 #define CURLPRO_ABI_VERSION_PATCH 0
-#define CURLPRO_ABI_VERSION_STRING "0.31.0"
+#define CURLPRO_ABI_VERSION_STRING "0.32.0"
 
 /* Frame header size in bytes: a uint32 little-endian length of the JSON part. */
 #define CURLPRO_FRAME_HEADER 4
@@ -85,6 +85,16 @@ CURLPRO_API char *curlpro_profiles_load_bundle(const char *path, const char *key
 
 /* Registers one profile given as JSON (may use "based_on"). */
 CURLPRO_API char *curlpro_profile_register(const char *profile_json);
+
+/* Removes a registered profile; one another profile stands on is refused.
+ * Sessions made with it keep their copy. data: {"profiles": [names…]}. Since
+ * 0.32. A profile used once can instead be given whole to curlpro_session_new
+ * ("profile": {…}) and never registered. */
+CURLPRO_API char *curlpro_profile_unregister(const char *name);
+
+/* Forgets a named ticket group (ticket_cache): sessions holding it keep it.
+ * data: {"dropped": bool}. Since 0.32. */
+CURLPRO_API char *curlpro_ticket_cache_drop(const char *name);
 
 /* data: list of registered profile names. */
 CURLPRO_API char *curlpro_profiles_list(void);
@@ -191,6 +201,12 @@ CURLPRO_API char *curlpro_conn_error(curlpro_handle conn);
  * copied before the call returns). */
 CURLPRO_API char *curlpro_conn_read_start(curlpro_handle conn, int buf_len);
 CURLPRO_API char *curlpro_conn_write_start(curlpro_handle conn, const char *buf, int buf_len);
+
+/* A TLS connection with the profile's ClientHello for a protocol that is not
+ * HTTP (MQTT, XMPP, an app's own), handed over raw like an upgraded one.
+ * config: {host, port, alpn ([] none, absent the profile's), proxy,
+ * connect_timeout_ms}. data: {"conn": <handle>, "info": {…}}. Since 0.32. */
+CURLPRO_API char *curlpro_tls_dial(curlpro_handle session, const char *config_json);
 
 /* Ends the caller's direction (TLS close_notify / FIN), reading stays open. */
 CURLPRO_API char *curlpro_conn_close_write(curlpro_handle conn);
