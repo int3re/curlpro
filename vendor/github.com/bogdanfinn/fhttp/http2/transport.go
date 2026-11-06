@@ -65,6 +65,18 @@ type Transport struct {
 	InitialStreamID uint32
 	ConnectionFlow  uint32
 
+	// ExpectContinueTimeout (curlpro) — see expectContinueTimeout.
+	ExpectContinueTimeout time.Duration
+
+	// HPACKIndexPolicy (curlpro) decides each field's HPACK representation
+	// by its name; nil indexes whatever fits, as before.
+	HPACKIndexPolicy func(name string) hpack.IndexMode
+	// DisableCookieSplit (curlpro) sends a Cookie as one field, not crumbs.
+	DisableCookieSplit bool
+	// DataFrameMaxSize (curlpro) caps the DATA frames of a request body
+	// below the peer's SETTINGS_MAX_FRAME_SIZE; 0 is no cap of our own.
+	DataFrameMaxSize uint32
+
 	// ConnPool optionally specifies an alternate connection pool to use.
 	// If nil, the default is used.
 	ConnPool ClientConnPool
@@ -308,6 +320,11 @@ func (t *Transport) initConnPool() {
 // ClientConn is the state of a single HTTP/2 client connection to an
 // HTTP/2 server.
 type ClientConn struct {
+	// curlpro: closed at the server's first SETTINGS, and whether they
+	// allow extended CONNECT (curlpro_connect.go).
+	curlproSettings        chan struct{}
+	curlproConnectProtocol bool
+
 	br         *bufio.Reader
 	bw         *bufio.Writer
 	closed     bool
@@ -750,7 +767,12 @@ func (t *Transport) disableKeepAlives() bool {
 	return t.t1 != nil && t.t1.DisableKeepAlives
 }
 
+// curlpro: the transport's own ExpectContinueTimeout first — a request with
+// Expect: 100-continue holds its body that long for the 100; there is no t1.
 func (t *Transport) expectContinueTimeout() time.Duration {
+	if t.ExpectContinueTimeout > 0 {
+		return t.ExpectContinueTimeout
+	}
 	if t.t1 == nil {
 		return 0
 	}
@@ -836,6 +858,8 @@ func (t *Transport) newClientConn(c net.Conn, addr string, singleUse bool) (*Cli
 	// TODO: SetMaxDynamicTableSize, SetMaxDynamicTableSizeLimit on
 	// henc in response to SETTINGS frames?
 	cc.henc = hpack.NewEncoder(&cc.hbuf)
+	cc.henc.SetIndexPolicy(t.HPACKIndexPolicy) // curlpro
+	cc.curlproSettings = make(chan struct{})  // curlpro
 
 	if t.AllowHTTP {
 		cc.nextStreamID = 3
@@ -1723,6 +1747,9 @@ func (cs *clientStream) awaitFlowControl(maxBytes int) (taken int32, err error) 
 			if take > int32(cc.maxFrameSize) {
 				take = int32(cc.maxFrameSize)
 			}
+			if m := int32(cc.t.DataFrameMaxSize); m > 0 && take > m { // curlpro
+				take = m
+			}
 			cs.flow.take(take)
 
 			return take, nil
@@ -1802,6 +1829,7 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 		if m == "" {
 			m = http.MethodGet
 		}
+		wroteProtocol := false // curlpro
 		if ok {
 			// follow based on pseudo header order
 			for _, p := range pHeaderOrder {
@@ -1811,12 +1839,17 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 				case ":method":
 					f(":method", req.Method)
 				case ":path":
-					if req.Method != "CONNECT" {
+					if !isNormalConnect(req) { // curlpro: extended CONNECT keeps it
 						f(":path", path)
 					}
 				case ":scheme":
-					if req.Method != "CONNECT" {
+					if !isNormalConnect(req) { // curlpro: extended CONNECT keeps it
 						f(":scheme", req.URL.Scheme)
+					}
+				case ":protocol": // curlpro: extended CONNECT (RFC 8441)
+					if proto := req.Header.Get(":protocol"); proto != "" && req.Method == "CONNECT" {
+						f(":protocol", proto)
+						wroteProtocol = true
 					}
 
 				// (zMrKrabz): Currently skips over unrecognized pheader fields,
@@ -1824,6 +1857,10 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 				default:
 					continue
 				}
+			}
+			// curlpro: :protocol after the others, as Chrome sends it.
+			if proto := req.Header.Get(":protocol"); proto != "" && req.Method == "CONNECT" && !wroteProtocol {
+				f(":protocol", proto)
 			}
 		} else {
 			f(":authority", host)
@@ -1864,6 +1901,9 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 		}
 
 		for _, kv := range kvs {
+			if kv.Key == ":protocol" {
+				continue // curlpro: a pseudo-header, sent with the others
+			}
 			if len(kv.Values) == 0 {
 				// feat: skip empty headers
 				// for skip auto headers
@@ -1881,7 +1921,7 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 				// fields. We have already checked if any
 				// are error-worthy so just ignore the rest.
 				continue
-			} else if strings.EqualFold(kv.Key, "cookie") {
+			} else if strings.EqualFold(kv.Key, "cookie") && !cc.t.DisableCookieSplit && !curlproWholeCookie(req) {
 				// Per 8.1.2.5 To allow for better compression efficiency, the
 				// Cookie header field MAY be split into separate header fields,
 				// each with one or more cookie-pairs.
@@ -2796,6 +2836,7 @@ func (rl *clientConnReadLoop) processSettings(f *SettingsFrame) error {
 			if err := s.Valid(); err != nil {
 				return err
 			}
+			cc.curlproConnectProtocol = s.Val == 1 // curlpro
 		default:
 			// TODO(bradfitz): handle more settings? SETTINGS_HEADER_TABLE_SIZE probably.
 			cc.vlogf("Unhandled Setting: %v", s)
@@ -2805,6 +2846,13 @@ func (rl *clientConnReadLoop) processSettings(f *SettingsFrame) error {
 	})
 	if err != nil {
 		return err
+	}
+	if cc.curlproSettings != nil { // curlpro: the first SETTINGS are in
+		select {
+		case <-cc.curlproSettings:
+		default:
+			close(cc.curlproSettings)
+		}
 	}
 
 	cc.wmu.Lock()
@@ -3088,7 +3136,7 @@ func (t *Transport) getBodyWriterState(cs *clientStream, body io.Reader) (s body
 	s.delay = t.expectContinueTimeout()
 	if s.delay == 0 ||
 		!httpguts.HeaderValuesContainsToken(
-			cs.req.Header["Expect"],
+			curlproHeaderValues(cs.req.Header, "Expect"), // curlpro: any case
 			"100-continue") {
 		return
 	}

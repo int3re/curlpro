@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"slices"
@@ -137,6 +138,9 @@ type dialGroup struct {
 	err     error
 	// changed is closed, and replaced, whenever an attempt finishes.
 	changed chan struct{}
+	// phase is how far the attempts got: a request that stops waiting
+	// names it (details.phase), the attempts still going.
+	phase *dialPhase
 }
 
 // errSpare is how an attempt that lost the race ends: it came up after
@@ -174,7 +178,9 @@ func (s *Session) joinGroupLocked(ctx context.Context, u *url.URL, spec dialSpec
 		if d, ok := ctx.Value(connectLimitKey{}).(time.Duration); ok {
 			gctx = withConnectLimit(gctx, d)
 		}
-		g = &dialGroup{ctx: gctx, cancel: cancel, changed: make(chan struct{})}
+		ph := &dialPhase{}
+		gctx = context.WithValue(gctx, dialPhaseKey{}, ph)
+		g = &dialGroup{ctx: gctx, cancel: cancel, changed: make(chan struct{}), phase: ph}
 		s.dialing[spec] = g
 	}
 	g.waiting++
@@ -285,7 +291,7 @@ func (s *Session) waitGroupLocked(ctx context.Context, g *dialGroup) error {
 		if g.waiting == 0 && !g.won {
 			g.cancel()
 		}
-		return err
+		return inPhase(g.phase.get(), err)
 	}
 	if !g.won && g.running == 0 && g.err != nil {
 		return g.err
@@ -507,6 +513,52 @@ func (s *Session) conn(ctx context.Context, u *url.URL, spec dialSpec, fresh boo
 
 	closeAll(over)
 	return c, false, nil
+}
+
+// pinnedConn hands out the open connection with the given ID for a request
+// to spec's origin: the connection must be in the pool and usable, go to
+// the same address the same way — or, on HTTP/2, carry a verified
+// certificate for the host, as a coalesced connection does — and, on
+// HTTP/1.1, be idle.
+func (s *Session) pinnedConn(id uint64, spec dialSpec, host string) (*conn, bool, error) {
+	s.mu.Lock()
+	var c *conn
+	var key dialSpec
+	for k, list := range s.conns {
+		for _, cand := range list {
+			if cand.info.ID == id {
+				c, key = cand, k
+			}
+		}
+	}
+	switch {
+	case s.closed:
+		s.mu.Unlock()
+		return nil, false, errSessionClosed
+	case c == nil || !c.usable():
+		s.mu.Unlock()
+		return nil, false, withCode(CodeConnClosed, fmt.Errorf("connection %d is not open in this session", id))
+	case !(key.addr == spec.addr && key.proxy == spec.proxy && key.plain == spec.plain) &&
+		!(c.h2 != nil && c.leaf != nil && key.proxy == "" && spec.proxy == "" && certCovers(c.leaf, host)):
+		s.mu.Unlock()
+		return nil, false, configErr("connection %d goes to %s, not to %s", id, key.addr, spec.addr)
+	case !c.canTake():
+		s.mu.Unlock()
+		return nil, false, configErr("connection %d is busy: HTTP/1.1 carries one request at a time "+
+			"(read or close the response before it first)", id)
+	}
+	c.acquire()
+	c.lastUsed = time.Now()
+	reused := c.handed > 0
+	c.handed++
+	watch := c.idleWatch
+	c.idleWatch = nil
+	s.mu.Unlock()
+	if c.h2 == nil && !c.endIdleWatch(watch) {
+		s.evict(c, true)
+		return nil, false, withCode(CodeConnClosed, fmt.Errorf("connection %d was closed by the server", id))
+	}
+	return c, reused, nil
 }
 
 // pickLocked picks a pooled connection ready to take a request.

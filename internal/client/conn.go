@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,7 @@ import (
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/bogdanfinn/fhttp/http2"
 	utls "github.com/refraction-networking/utls"
+	"golang.org/x/net/http/httpguts"
 
 	"github.com/curlpro/curlpro/internal/profile"
 )
@@ -231,7 +233,28 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 		_ = c.raw.SetDeadline(deadline)
 	}
 
-	if err := req.Write(c.raw); err != nil {
+	var resp *http.Response
+	if wait := expectWait(ctx); wait > 0 && req.Body != nil && req.Body != http.NoBody && expectsContinue(req.Header) {
+		// The header block goes first; the body waits for the 100. A final
+		// answer before it leaves the body unsent — and the connection
+		// unusable, since the server may still read what was announced.
+		var early error
+		err := req.WriteExpectingContinue(c.raw, func() bool {
+			resp, early = c.awaitContinue(ctx, req, wait)
+			return resp == nil && early == nil
+		})
+		if err == nil {
+			err = early
+		}
+		if err != nil {
+			c.dead.Store(true)
+			return nil, fmt.Errorf("sending request: %w", err)
+		}
+		if resp != nil {
+			c.dead.Store(true)
+			return c.finish(ctx, req, resp)
+		}
+	} else if err := req.Write(c.raw); err != nil {
 		c.dead.Store(true)
 		return nil, fmt.Errorf("sending request: %w", err)
 	}
@@ -270,6 +293,11 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 		c.dead.Store(true)
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
+	return c.finish(ctx, req, resp)
+}
+
+// finish wraps a response's body for the connection it came on.
+func (c *conn) finish(ctx context.Context, req *http.Request, resp *http.Response) (*http.Response, error) {
 	// Close: true in the response means the server will close the connection and
 	// it cannot be reused.
 	if resp.Close {
@@ -310,6 +338,61 @@ func (c *conn) roundTrip(ctx context.Context, req *http.Request) (*http.Response
 		resp.ContentLength = -1
 	}
 	return resp, nil
+}
+
+// expectsContinue finds Expect: 100-continue whatever the case of the name:
+// headers_raw keeps the caller's.
+func expectsContinue(h http.Header) bool {
+	for k, v := range h {
+		if strings.EqualFold(k, "Expect") && httpguts.HeaderValuesContainsToken(v, "100-continue") {
+			return true
+		}
+	}
+	return false
+}
+
+// awaitContinue waits, with the request's header block sent, for the
+// server's word on the body: a 100 (nil, nil — send it), its final response
+// (returned — do not), or silence for wait (nil, nil — send it anyway, as
+// RFC 9110 lets a client that has waited). Other 1xx are logged and waited
+// past.
+func (c *conn) awaitContinue(ctx context.Context, req *http.Request, wait time.Duration) (*http.Response, error) {
+	deadline := time.Now().Add(wait)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	_ = c.raw.SetReadDeadline(deadline)
+	stop := context.AfterFunc(ctx, func() { _ = c.raw.SetReadDeadline(aLongTimeAgo) })
+	_, err := c.br.Peek(1)
+	stop()
+	if d, ok := ctx.Deadline(); ok {
+		_ = c.raw.SetReadDeadline(d)
+	} else {
+		_ = c.raw.SetReadDeadline(time.Time{})
+	}
+	if cerr := ctx.Err(); cerr != nil {
+		return nil, cerr
+	}
+	if err != nil {
+		if isTimeout(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	for {
+		resp, err := http.ReadResponse(c.br, req)
+		if err != nil {
+			return nil, &partialResponse{err}
+		}
+		if resp.StatusCode < 100 || resp.StatusCode >= 200 || resp.StatusCode == http.StatusSwitchingProtocols {
+			return resp, nil
+		}
+		interimOf(req.Context()).add(resp.StatusCode, resp.Header)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusContinue {
+			return nil, nil
+		}
+	}
 }
 
 // h1Body tracks whether an HTTP/1.1 body reached its end.

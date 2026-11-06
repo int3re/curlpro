@@ -89,6 +89,7 @@ func startAsyncWith(cancel context.CancelFunc, discard func([]byte), before func
 			return
 		}
 		asyncReady <- rid
+		signalReady()
 	}()
 
 	return respond(map[string]any{"request": rid}, nil)
@@ -179,11 +180,18 @@ func curlpro_request_start(id C.longlong, frame *C.char, frameLen C.int) (out *C
 //
 //export curlpro_result_wait
 func curlpro_result_wait(timeoutMS C.int) C.longlong {
+	return C.longlong(waitReady(int(timeoutMS)))
+}
+
+// waitReady is curlpro_result_wait: a finished call's number, or 0 when
+// none finished in time — and then the ready event is lowered.
+func waitReady(timeoutMS int) int64 {
 	if timeoutMS <= 0 {
 		select {
 		case rid := <-asyncReady:
-			return C.longlong(rid)
+			return rid
 		default:
+			quietReady()
 			return 0
 		}
 	}
@@ -191,10 +199,29 @@ func curlpro_result_wait(timeoutMS C.int) C.longlong {
 	defer t.Stop()
 	select {
 	case rid := <-asyncReady:
-		return C.longlong(rid)
+		return rid
 	case <-t.C:
+		quietReady()
 		return 0
 	}
+}
+
+// curlpro_result_event returns a handle an event loop can wait on beside
+// its sockets: {"handle": n, "kind": "event"} on Windows (a manual-reset
+// event), {"handle": n, "kind": "fd"} elsewhere (a pipe's read end). It is
+// signalled while finished calls wait; take them with curlpro_result_wait(0)
+// until it returns 0, which lowers it again (readyevent.go). The same
+// handle every call, for the life of the process; the caller does not
+// close it.
+//
+//export curlpro_result_event
+func curlpro_result_event() (out *C.char) {
+	defer recoverInto(&out)
+	h, err := readyHandle()
+	if err != nil {
+		return respond(nil, fmt.Errorf("creating the ready event: %w", err))
+	}
+	return respond(map[string]any{"handle": uint64(h), "kind": readyHandleKind}, nil)
 }
 
 // curlpro_result_take collects a ready response and unregisters the call.

@@ -382,6 +382,7 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL, proxy stri
 		}
 		return nil, err
 	}
+	setTarget(req.URL, req.URL)
 	if size >= 0 {
 		req.ContentLength = size
 	}

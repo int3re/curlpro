@@ -16,6 +16,7 @@ import (
 	"math"
 	"math/big"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -640,6 +641,39 @@ type HTTP2Spec struct {
 	PseudoOrder            []string  `json:"pseudo_order,omitempty"`
 	StreamWeight           *uint16   `json:"stream_weight,omitempty"`
 	StreamExclusive        *bool     `json:"stream_exclusive,omitempty"`
+
+	// PriorityFrames are standalone PRIORITY frames sent right after the
+	// preface, in this order — the dependency tree Firefox built before 2024
+	// (streams 3 to 13, its requests hanging off them). The first request
+	// then takes the stream after the last of them, as the browser's did.
+	PriorityFrames []PriorityFrame `json:"priority_frames,omitempty"`
+
+	// HPACKIndexingPolicy is how each field goes into the header block, by
+	// its lowercase name: "incremental" (into the dynamic table), "without"
+	// (a literal without indexing) or "never" (never indexed), "default"
+	// naming the rest. Absent, whatever fits the table is indexed — Go's
+	// encoder; Chrome indexes no pseudo-header but :authority. An exact
+	// match in the static table goes indexed whatever the policy, as from
+	// every encoder.
+	HPACKIndexingPolicy map[string]string `json:"hpack_indexing_policy,omitempty"`
+	// DisableCookieSplit sends Cookie as one field; by default it goes as
+	// crumbs, one field per pair (RFC 9113 §8.2.3), as browsers send it.
+	DisableCookieSplit *bool `json:"disable_cookie_split,omitempty"`
+	// DataFrameMaxSize caps the DATA frames of a request body; 0 leaves
+	// them to the server's SETTINGS_MAX_FRAME_SIZE.
+	DataFrameMaxSize uint32 `json:"data_frame_max_size,omitempty"`
+}
+
+// HPACKModes are the values of http2.hpack_indexing_policy.
+var HPACKModes = []string{"incremental", "without", "never"}
+
+// PriorityFrame is one standalone PRIORITY frame. Weight is as declared,
+// 1..256; on the wire it is one less (RFC 7540).
+type PriorityFrame struct {
+	StreamID  uint32 `json:"stream_id"`
+	Weight    uint16 `json:"weight"`
+	Exclusive bool   `json:"exclusive,omitempty"`
+	DependsOn uint32 `json:"depends_on,omitempty"`
 }
 
 // Setting is an id/value pair. The order in the slice matters: it is
@@ -1126,6 +1160,32 @@ func (p *Profile) validate() error {
 	if w := p.HTTP2.StreamWeight; w != nil && *w > 256 {
 		return fmt.Errorf("http2.stream_weight %d is out of the 0..256 range", *w)
 	}
+	for name, mode := range p.HTTP2.HPACKIndexingPolicy {
+		if name != strings.ToLower(name) || name == "" {
+			return fmt.Errorf("http2.hpack_indexing_policy: %q — names go in lower case, as on the wire", name)
+		}
+		if !slices.Contains(HPACKModes, mode) {
+			return fmt.Errorf("http2.hpack_indexing_policy[%q] = %q is not one of %s", name, mode,
+				strings.Join(HPACKModes, ", "))
+		}
+	}
+	if n := p.HTTP2.DataFrameMaxSize; n > 1<<24-1 {
+		return fmt.Errorf("http2.data_frame_max_size %d is above a frame's 2^24-1", n)
+	}
+	// The frames open streams the client owns: odd, rising (the next request
+	// takes the one after the last), and none may depend on itself.
+	var last uint32
+	for i, f := range p.HTTP2.PriorityFrames {
+		switch {
+		case f.StreamID%2 == 0 || f.StreamID <= last:
+			return fmt.Errorf("http2.priority_frames[%d]: stream_id %d is not odd and above %d", i, f.StreamID, last)
+		case f.Weight < 1 || f.Weight > 256:
+			return fmt.Errorf("http2.priority_frames[%d]: weight %d is out of the 1..256 range", i, f.Weight)
+		case f.DependsOn == f.StreamID:
+			return fmt.Errorf("http2.priority_frames[%d]: stream %d depends on itself", i, f.StreamID)
+		}
+		last = f.StreamID
+	}
 	// The SETTINGS order must cover every setting: an uncovered one would go last,
 	// sorted by identifier — that is, not where the browser sends it, and without
 	// a single warning.
@@ -1278,6 +1338,18 @@ func merge(dst, src *Profile) {
 	}
 	if src.HTTP2.StreamExclusive != nil {
 		dst.HTTP2.StreamExclusive = src.HTTP2.StreamExclusive
+	}
+	if src.HTTP2.PriorityFrames != nil {
+		dst.HTTP2.PriorityFrames = src.HTTP2.PriorityFrames
+	}
+	if src.HTTP2.HPACKIndexingPolicy != nil {
+		dst.HTTP2.HPACKIndexingPolicy = src.HTTP2.HPACKIndexingPolicy
+	}
+	if src.HTTP2.DisableCookieSplit != nil {
+		dst.HTTP2.DisableCookieSplit = src.HTTP2.DisableCookieSplit
+	}
+	if src.HTTP2.DataFrameMaxSize != 0 {
+		dst.HTTP2.DataFrameMaxSize = src.HTTP2.DataFrameMaxSize
 	}
 
 	if src.HTTP1.Order != nil {

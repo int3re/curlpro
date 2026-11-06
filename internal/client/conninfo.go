@@ -47,9 +47,12 @@ type ConnInfo struct {
 	// PeerCerts is the server's chain, DER, leaf first — on the first
 	// response of a connection only; later ones name it by ID.
 	PeerCerts [][]byte `json:"peer_certs,omitempty"`
-	// ConnectMS is name resolution, TCP and a proxy's tunnel together;
-	// TLSMS the handshake. Both 0 on a reused connection's later requests.
+	// ConnectMS is name resolution, TCP and a proxy's tunnel together, and
+	// DNSMS the address lookup within it (0.33; with a proxy, the lookup of
+	// the proxy's name); TLSMS the handshake. All 0 on a reused connection's
+	// later requests.
 	ConnectMS float64 `json:"connect_ms"`
+	DNSMS     float64 `json:"dns_ms"`
 	TLSMS     float64 `json:"tls_ms"`
 }
 
@@ -58,6 +61,9 @@ type Timing struct {
 	// WaitMS is from the request going out on its connection to the
 	// response headers (the time to first byte, connection setup excluded).
 	WaitMS float64 `json:"wait_ms"`
+	// BodyMS is from the headers to the body's last byte, on a buffered
+	// response (0.33); a stream's reader keeps its own clock.
+	BodyMS float64 `json:"body_ms,omitempty"`
 }
 
 var connSeq atomic.Uint64
@@ -111,7 +117,7 @@ func (c *conn) describe(reused bool) *ConnInfo {
 	info.Reused = reused
 	if reused {
 		info.PeerCerts = nil
-		info.ConnectMS, info.TLSMS = 0, 0
+		info.ConnectMS, info.DNSMS, info.TLSMS = 0, 0, 0
 	}
 	return &info
 }

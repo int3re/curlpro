@@ -74,6 +74,8 @@ func errorDetails(err error) map[string]any {
 		if pe.Status != 0 {
 			d["status"] = pe.Status
 		}
+		// No phase: the stage says it, and bindings take these fields by
+		// name (Python's ProxyError would refuse one it does not know).
 		return d
 	}
 	var ce *client.CORSError
@@ -82,7 +84,18 @@ func errorDetails(err error) map[string]any {
 			"status": ce.Status, "headers": ce.Headers}
 	}
 	// tls_alert, goaway, reset and h2_protocol name their numbers.
-	return client.ErrorDetails(err)
+	return withPhase(client.ErrorDetails(err), err)
+}
+
+// withPhase adds details.phase — where the request failed (0.33).
+func withPhase(d map[string]any, err error) map[string]any {
+	if ph := client.ErrorPhase(err); ph != "" {
+		if d == nil {
+			d = map[string]any{}
+		}
+		d["phase"] = ph
+	}
+	return d
 }
 
 func respond(data any, err error) *C.char {
@@ -203,7 +216,18 @@ func curlpro_free(s *C.char) {
 // eof_before_headers, eof_in_body) with details; ticket_cache shared across
 // sessions; a profile given whole to curlpro_session_new and
 // curlpro_profile_unregister; quic.raw_client_hello; curlpro_tls_dial.
-const Version = "0.32.0"
+// 0.33.0: the rest of the proxy's list — a header value that is not UTF-8
+// as [name, base64, "base64"] in headers_raw, both ways; Expect:
+// 100-continue held for the 100 (expect_continue_ms); details.phase on a
+// failure, tls_verify's reason and chain; conn.dns_ms and timing.body_ms;
+// a request's own connection ("connection": "new" or an id);
+// curlpro_result_event, a handle an event loop waits on; the profile's
+// http2.priority_frames, hpack_indexing_policy, disable_cookie_split and
+// data_frame_max_size; WebSocket over HTTP/2 (connect_protocol on
+// curlpro_upgrade_open, RFC 8441); curlpro_decode, the copy of a body relayed
+// compressed. The path and query go as Chromium writes them, and a
+// Content-Length in headers_raw goes once.
+const Version = "0.33.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -390,12 +414,15 @@ type sessionConfig struct {
 	// TicketCache names a group of sessions that share TLS tickets.
 	TicketCache string `json:"ticket_cache"`
 	// IdleTimeoutMS cuts a body that stops arriving; 0 is none.
-	IdleTimeoutMS   int    `json:"idle_timeout_ms"`
-	CACert          string `json:"ca_cert"`
-	ClientCert      string `json:"client_cert"`
-	ClientKey       string `json:"client_key"`
-	TrustEnv        bool   `json:"trust_env"`
-	MaxResponseSize int64  `json:"max_response_size"`
+	IdleTimeoutMS int `json:"idle_timeout_ms"`
+	// ExpectContinueMS is how long a body announced with Expect:
+	// 100-continue waits for the 100: absent, a second; 0, not at all.
+	ExpectContinueMS *int   `json:"expect_continue_ms"`
+	CACert           string `json:"ca_cert"`
+	ClientCert       string `json:"client_cert"`
+	ClientKey        string `json:"client_key"`
+	TrustEnv         bool   `json:"trust_env"`
+	MaxResponseSize  int64  `json:"max_response_size"`
 	// AltSvc is a pointer because a missing field means "enabled".
 	AltSvc    *bool             `json:"alt_svc"`
 	Resolve   map[string]string `json:"resolve"`
@@ -477,6 +504,19 @@ func (r *retryJSON) toPolicy() *client.RetryPolicy {
 	}
 }
 
+// expectContinue maps expect_continue_ms onto Options: absent is the
+// default second (0 there), 0 is no wait (negative there).
+func expectContinue(ms *int) time.Duration {
+	switch {
+	case ms == nil:
+		return 0
+	case *ms <= 0:
+		return -1
+	default:
+		return time.Duration(*ms) * time.Millisecond
+	}
+}
+
 //export curlpro_session_new
 func curlpro_session_new(cfg *C.char) (out *C.char) {
 	defer recoverInto(&out)
@@ -491,45 +531,46 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		return respond(nil, client.AsConfigError(err))
 	}
 	s, err := client.New(p, client.Options{
-		InsecureSkipVerify:   c.InsecureSkipVerify,
-		Timeout:              time.Duration(c.TimeoutMS) * time.Millisecond,
-		Proxy:                c.Proxy,
-		DefaultHeaders:       c.DefaultHeaders,
-		HeaderOrder:          c.HeaderOrder,
-		FollowRedirects:      c.FollowRedirects,
-		MaxRedirects:         c.MaxRedirects,
-		Cookies:              c.Cookies,
-		ForceHTTP1:           c.ForceHTTP1,
-		DisablePostQuantum:   c.PostQuantum != nil && !*c.PostQuantum,
-		Resume:               c.Resume,
-		HTTP3:                c.HTTP3,
-		ConnectTimeout:       time.Duration(c.ConnectTimeoutMS) * time.Millisecond,
-		ResponseTimeout:      time.Duration(c.ResponseTimeoutMS) * time.Millisecond,
-		IdleTimeout:          time.Duration(c.IdleTimeoutMS) * time.Millisecond,
-		DisableDecompression: c.Decompress != nil && !*c.Decompress,
-		TicketCache:          c.TicketCache,
-		CACert:               c.CACert,
-		ClientCert:           c.ClientCert,
-		ClientKey:            c.ClientKey,
-		TrustEnv:             c.TrustEnv,
-		MaxResponseSize:      c.MaxResponseSize,
-		DisableAltSvc:        c.AltSvc != nil && !*c.AltSvc,
-		Resolve:              c.Resolve,
-		IPVersion:            c.IPVersion,
-		DNS:                  c.DNS,
-		DisableKeepAlive:     c.KeepAlive != nil && !*c.KeepAlive,
-		MaxIdleConns:         c.MaxIdleConns,
-		IdleConnTimeout:      time.Duration(c.IdleConnTimeoutMS) * time.Millisecond,
-		Retry:                c.Retry.toPolicy(),
-		Mode:                 c.Mode,
-		Page:                 c.Page,
-		TopLevel:             c.TopLevel,
-		Cache:                c.Cache.toOptions(),
-		Credentials:          c.Credentials,
-		DisableSameSite:      c.SameSite != nil && !*c.SameSite,
-		DisablePreflight:     c.Preflight != nil && !*c.Preflight,
-		Device:               c.Device,
-		Devices:              c.Devices,
+		InsecureSkipVerify:    c.InsecureSkipVerify,
+		Timeout:               time.Duration(c.TimeoutMS) * time.Millisecond,
+		Proxy:                 c.Proxy,
+		DefaultHeaders:        c.DefaultHeaders,
+		HeaderOrder:           c.HeaderOrder,
+		FollowRedirects:       c.FollowRedirects,
+		MaxRedirects:          c.MaxRedirects,
+		Cookies:               c.Cookies,
+		ForceHTTP1:            c.ForceHTTP1,
+		DisablePostQuantum:    c.PostQuantum != nil && !*c.PostQuantum,
+		Resume:                c.Resume,
+		HTTP3:                 c.HTTP3,
+		ConnectTimeout:        time.Duration(c.ConnectTimeoutMS) * time.Millisecond,
+		ResponseTimeout:       time.Duration(c.ResponseTimeoutMS) * time.Millisecond,
+		IdleTimeout:           time.Duration(c.IdleTimeoutMS) * time.Millisecond,
+		DisableDecompression:  c.Decompress != nil && !*c.Decompress,
+		TicketCache:           c.TicketCache,
+		ExpectContinueTimeout: expectContinue(c.ExpectContinueMS),
+		CACert:                c.CACert,
+		ClientCert:            c.ClientCert,
+		ClientKey:             c.ClientKey,
+		TrustEnv:              c.TrustEnv,
+		MaxResponseSize:       c.MaxResponseSize,
+		DisableAltSvc:         c.AltSvc != nil && !*c.AltSvc,
+		Resolve:               c.Resolve,
+		IPVersion:             c.IPVersion,
+		DNS:                   c.DNS,
+		DisableKeepAlive:      c.KeepAlive != nil && !*c.KeepAlive,
+		MaxIdleConns:          c.MaxIdleConns,
+		IdleConnTimeout:       time.Duration(c.IdleConnTimeoutMS) * time.Millisecond,
+		Retry:                 c.Retry.toPolicy(),
+		Mode:                  c.Mode,
+		Page:                  c.Page,
+		TopLevel:              c.TopLevel,
+		Cache:                 c.Cache.toOptions(),
+		Credentials:           c.Credentials,
+		DisableSameSite:       c.SameSite != nil && !*c.SameSite,
+		DisablePreflight:      c.Preflight != nil && !*c.Preflight,
+		Device:                c.Device,
+		Devices:               c.Devices,
 	})
 	if err != nil {
 		return respond(nil, err)
@@ -804,17 +845,24 @@ type requestJSON struct {
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers"`
 	// HeadersRaw is the whole header set as [[name, value], …], sent as
-	// given: order, case (HTTP/1.1), repeats; nothing added.
-	HeadersRaw [][2]string `json:"headers_raw"`
+	// given: order, case (HTTP/1.1), repeats; nothing added. A value may come
+	// as [name, base64, "base64"] (wirefields.go).
+	HeadersRaw wireFields `json:"headers_raw"`
 	// H2Priority is this request's HTTP/2 priority {weight, exclusive,
 	// depends_on}, in place of the profile's.
-	H2Priority     *client.H2Priority `json:"h2_priority"`
-	HeaderOrder    []string           `json:"header_order"`
-	DefaultHeaders *bool              `json:"default_headers"`
-	Cookies        *bool              `json:"cookies"`
-	SessionHeaders *bool              `json:"session_headers"`
-	Protocol       string             `json:"protocol"`
-	Multipart      *multipartJSON     `json:"multipart"`
+	H2Priority *client.H2Priority `json:"h2_priority"`
+	// Connection names the connection: "new" for one of its own, or the
+	// id of an open one (a response's conn.id).
+	Connection connectionRef `json:"connection"`
+	// ConnectProtocol makes curlpro_upgrade_open an extended CONNECT on
+	// HTTP/2 with this :protocol ("websocket").
+	ConnectProtocol string         `json:"connect_protocol"`
+	HeaderOrder     []string       `json:"header_order"`
+	DefaultHeaders  *bool          `json:"default_headers"`
+	Cookies         *bool          `json:"cookies"`
+	SessionHeaders  *bool          `json:"session_headers"`
+	Protocol        string         `json:"protocol"`
+	Multipart       *multipartJSON `json:"multipart"`
 	// BodyFile streams a file instead of reading it whole into memory.
 	BodyFile string `json:"body_file"`
 	// BodyStream: the body is written while the request is in flight
@@ -901,6 +949,9 @@ func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 		Headers:         r.Headers,
 		HeadersRaw:      r.HeadersRaw,
 		H2Priority:      r.H2Priority,
+		NewConnection:   r.Connection.fresh,
+		ConnectionID:    r.Connection.id,
+		ConnectProtocol: r.ConnectProtocol,
 		Body:            body,
 		BodyFile:        r.BodyFile,
 		HeaderOrder:     r.HeaderOrder,
@@ -928,6 +979,33 @@ func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 		req.Body = nil
 	}
 	return req, nil
+}
+
+// connectionRef is a request's connection field: "new", or a number.
+type connectionRef struct {
+	fresh bool
+	id    uint64
+}
+
+func (c *connectionRef) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		switch s {
+		case "new":
+			c.fresh = true
+		case "":
+		default:
+			return fmt.Errorf(`connection: "new" or a connection's id, got %q`, s)
+		}
+		return nil
+	}
+	if string(b) == "null" {
+		return nil
+	}
+	if err := json.Unmarshal(b, &c.id); err != nil || c.id == 0 {
+		return fmt.Errorf(`connection: "new" or a connection's id, got %s`, b)
+	}
+	return nil
 }
 
 // multipartJSON describes the form. File contents travel in the binary part of
@@ -978,8 +1056,9 @@ type responseJSON struct {
 	Headers map[string][]string `json:"headers"`
 	// HeadersRaw is the header block as it came off the wire: [[name,
 	// value], …] in the server's order and case, a repeated field once per
-	// line. Absent for a response from the cache.
-	HeadersRaw [][2]string       `json:"headers_raw,omitempty"`
+	// line, a value that is not UTF-8 as [name, base64, "base64"]. Absent
+	// for a response from the cache.
+	HeadersRaw wireFields        `json:"headers_raw,omitempty"`
 	URL        string            `json:"url"`
 	BodyLen    int               `json:"body_len"`
 	History    []client.Redirect `json:"history,omitempty"`

@@ -218,7 +218,8 @@ Go structures in `internal/profile` is rejected. Implemented today: `tls` —
 `raw_client_hello`, `client_hello_spec`, `cipher_suites`, `compression_methods`,
 `extensions`, `signature_algorithms`, `alpn`, `permute_extensions`; `http1` —
 `order`, `connection`; `http2` — `settings`, `connection_window_update`,
-`pseudo_order`, `stream_weight`, `stream_exclusive`; `http3` — `settings`,
+`pseudo_order`, `stream_weight`, `stream_exclusive`, `priority_frames`,
+`hpack_indexing_policy`, `disable_cookie_split`, `data_frame_max_size`; `http3` — `settings`,
 `settings_order`, `pseudo_order`, `send_grease_frame`, `priority_param`; `quic` —
 `parrot`, `connection_options`, `send_initial_rtt`,
 `legacy_version_information_id`, `grease_version_first`; `headers` —
@@ -297,15 +298,16 @@ all.
 | `akamai` | the shortcut string `SETTINGS\|WU\|PRIORITY\|PSEUDO` — sets everything at once |
 | `settings`, `settings_order` | the id/value pairs and **the send order** |
 | `connection_window_update` | the WINDOW_UPDATE increment (Chrome: 15663105) |
-| `priority_frames` | standalone PRIORITY frames |
+| `priority_frames` | standalone PRIORITY frames after the preface, in order: `[{stream_id, weight, exclusive, depends_on}]`, the weight as declared (1–256). The streams are odd and rising; the first request takes the stream after the last (Firefox before 2024: 3–13, then 15). The Akamai string lists them as `stream:exclusive:depends_on:weight` |
 | `header_priority` | PRIORITY on the HEADERS frame: `{stream_dep, exclusive, weight}` |
 | `stream_weight`, `stream_exclusive` | the priority on the HEADERS frame. ⚠ on the wire the weight is one less (RFC 7540): Chrome 256, Firefox 42. **Zero means "do not send"**: that is how Safari behaves. An absent field hands the decision to the library, and its default (255, exclusive) is right only for Chrome |
 | `no_rfc7540_priorities` | Safari 26 |
 | `pseudo_order` | `[":method", ":authority", ":scheme", ":path"]` |
 | `header_order` | the order of the ordinary headers |
-| `hpack_header_order`, `hpack_indexing_policy`, `hpack_never_index` | fine HPACK tuning |
-| `disable_cookie_split` | the HPACK "crumbling" of cookies |
-| `data_frame_max_size`, `preface_ping_idle_ms`, `idle_ping_ms` | connection behaviour |
+| `hpack_indexing_policy` | each field's HPACK representation by its lowercase name: `"incremental"` (into the dynamic table), `"without"` (a literal without indexing), `"never"` (never indexed); `"default"` names the rest. Absent, whatever fits is indexed (Go's encoder). An exact static-table match (`:method GET`, `:path /`) goes indexed whatever the policy. A proxy reads it off the client's own HEADERS frames |
+| `disable_cookie_split` | `true` sends Cookie as one field; by default it goes as crumbs, one field per pair, as browsers send it. A request's `headers_raw` sends its Cookie fields as given either way |
+| `data_frame_max_size` | the largest DATA frame of a request body (below the server's `SETTINGS_MAX_FRAME_SIZE`) |
+| `hpack_header_order`, `preface_ping_idle_ms`, `idle_ping_ms` | planned |
 | `priority_table` | priority by `sec-fetch-dest` → `{urgency, incremental, emit_header}` |
 
 ### `http3`

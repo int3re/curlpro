@@ -323,6 +323,7 @@ func (s *Session) websocketRequest(u *url.URL, key string, opts WebSocketOptions
 	if err != nil {
 		return nil, err
 	}
+	setTarget(req.URL, u)
 	built := s.websocketHeaders(u, key, opts)
 	order := make([]string, 0, len(built))
 	for _, h := range built {

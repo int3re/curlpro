@@ -1,0 +1,66 @@
+package client
+
+import (
+	"net/url"
+	"strings"
+)
+
+// setTarget puts the path and query on the request line (or in :path) as
+// Chromium writes them (url_canon_path.cc, url_canon_query.cc), from the
+// URL as given in from: what is already percent-encoded stays as it is, %xx
+// in its own case; | ^ [ ] ' go raw; a space, a control byte, a byte above
+// 0x7E, and " < > (and in the path also ` { }) are encoded.
+//
+// url.URL re-escaped the path its own way — %7C for |, %5E for ^, %5B for [
+// — and left the query alone: a space in it went onto the request line raw
+// and broke it. A proxy relaying a phone's request needs the target as the
+// phone's browser made it; a scraper needs it as Chrome would make it; this
+// gives both, since a browser's own output passes through unchanged.
+func setTarget(out, from *url.URL) {
+	raw := from.RawPath
+	if raw == "" {
+		raw = from.EscapedPath()
+	}
+	path := escapeSet(raw, &pathEscapes)
+	if path == "" {
+		path = "/"
+	}
+	// RequestURI reads an opaque "//…" as scheme-relative; such a path keeps
+	// url.URL's form.
+	if !strings.HasPrefix(path, "//") {
+		out.Opaque = path
+	}
+	out.RawQuery = escapeSet(from.RawQuery, &queryEscapes)
+}
+
+var pathEscapes, queryEscapes [256]bool
+
+func init() {
+	for c := 0; c < 256; c++ {
+		ctl := c <= ' ' || c >= 0x7f
+		queryEscapes[c] = ctl || strings.IndexByte(`"#<>`, byte(c)) >= 0
+		pathEscapes[c] = queryEscapes[c] || strings.IndexByte("?`{}", byte(c)) >= 0
+	}
+}
+
+func escapeSet(s string, set *[256]bool) string {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		if set[s[i]] {
+			n++
+		}
+	}
+	if n == 0 {
+		return s
+	}
+	const hex = "0123456789ABCDEF"
+	b := make([]byte, 0, len(s)+2*n)
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; set[c] {
+			b = append(b, '%', hex[c>>4], hex[c&15])
+		} else {
+			b = append(b, c)
+		}
+	}
+	return string(b)
+}

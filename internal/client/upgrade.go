@@ -25,10 +25,11 @@ import (
 // answer (Sec-WebSocket-Accept is the client's business), and after a 101
 // the bytes are the caller's in both directions.
 //
-// The request goes on a connection of its own, negotiated as http/1.1 — an
-// upgrade on HTTP/2 is extended CONNECT (RFC 8441), which this does not do.
-// A response other than 101 comes back with its body (up to
-// upgradeBodyLimit) and no connection.
+// The request goes on a connection of its own, negotiated as http/1.1. With
+// ConnectProtocol set it is extended CONNECT on HTTP/2 instead (RFC 8441,
+// h2tunnel.go): a stream on the origin's HTTP/2 connection, a 2xx in place
+// of the 101. A response other than 101 (or 2xx) comes back with its body
+// (up to upgradeBodyLimit) and no connection.
 func (s *Session) Upgrade(r *Request) (*Upgraded, error) {
 	if err := s.ensureOpen(); err != nil {
 		return nil, err
@@ -69,6 +70,10 @@ func (s *Session) Upgrade(r *Request) (*Upgraded, error) {
 		ctx = withConnectLimit(ctx, *r.ConnectTimeout)
 	}
 
+	if r.ConnectProtocol != "" {
+		return s.upgradeH2(ctx, r, &current, u)
+	}
+
 	method := current.Method
 	if method == "" {
 		method = http.MethodGet
@@ -84,6 +89,7 @@ func (s *Session) Upgrade(r *Request) (*Upgraded, error) {
 		}
 		return nil, err
 	}
+	setTarget(req.URL, u)
 	if size >= 0 {
 		req.ContentLength = size
 	}

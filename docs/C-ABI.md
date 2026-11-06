@@ -2,7 +2,7 @@
 
 `libcurlpro` (`curlpro.dll`, `libcurlpro.so`, `libcurlpro.dylib`) is a Go
 library built with `-buildmode=c-shared`. Every language other than Go talks to
-it through the 60 functions declared in [include/curlpro.h](../include/curlpro.h).
+it through the 62 functions declared in [include/curlpro.h](../include/curlpro.h).
 This file is the contract those functions keep: what goes in, what comes out,
 who frees what, which errors exist, and what is safe from several threads.
 
@@ -62,7 +62,9 @@ NUL-terminated UTF-8 JSON object:
 - `data` is absent when the call has nothing to report (`session_close`).
 - `code` is absent for errors that have no class yet; treat absence as
   "unknown, maybe transient".
-- `details` is present only for `proxy`, `proxy_auth` and `cors` (below).
+- `details` carries an error's machine-readable fields beside its code — a
+  proxy's stage, an alert's number, `phase` (below) — and is absent when it
+  has none.
 - The text of `error` is for people and changes between releases. Branch on
   `code`.
 
@@ -153,6 +155,7 @@ defaults below explicitly, the way the Python `Session` does.
 | `response_timeout_ms` | int | 0 | waiting for response headers |
 | `decompress` | bool | absent = `true` | `false` hands bodies over as they came: compressed, `Content-Encoding` and `Content-Length` kept; such responses bypass the cache (0.32) |
 | `ticket_cache` | string | `""` | a group name: sessions with the same one share their TLS tickets and resume each other's connections (one identity over several sessions); needs `resume` (0.32) |
+| `expect_continue_ms` | int | absent = 1000 | how long a body announced with `Expect: 100-continue` waits for the server's `100` (a final answer first leaves it unsent; silence sends it when the time is up); `0` sends it at once, as before 0.33 (0.33) |
 | `idle_timeout_ms` | int | 0 | a body that stops arriving: no byte for this long while a read waits; 0 = none. The bound for a stream with no total limit (0.31) |
 | `default_headers` | bool | **`true`** | send the profile's headers in its order |
 | `follow_redirects` | bool | **`true`** | |
@@ -217,10 +220,11 @@ curlpro_free(resp);
 
 | Field | Type | Meaning |
 |---|---|---|
-| `method`, `url` | string | required |
+| `method`, `url` | string | required. The path and query go on the wire as Chromium writes them, from the URL as given: what is percent-encoded stays as it is (`%xx` in its case), `\| ^ [ ] '` raw; a space, a control or non-ASCII byte, `" < >` (and in the path `` ` { } ``) are encoded (0.33; before, the path was re-escaped Go's way and a space in the query went raw) |
 | `headers` | {name: value} | added to (or replacing) the profile's; order comes from the profile |
-| `headers_raw` | [[name, value], …] | the whole header set, sent as given: order, case on HTTP/1.1 (lowercase on HTTP/2 and HTTP/3), a name twice sent twice — repeats of one name go out together, where its first stands; nothing of the profile's, the session's or the jar's is added; pseudo-headers in the list are skipped. Exclusive with `headers` and `header_order` (0.32) |
+| `headers_raw` | [[name, value], …] | the whole header set, sent as given: order, case on HTTP/1.1 (lowercase on HTTP/2 and HTTP/3), a name twice sent twice — repeats of one name go out together, where its first stands; nothing of the profile's, the session's or the jar's is added; pseudo-headers in the list are skipped. Exclusive with `headers` and `header_order` (0.32). A value that is not UTF-8 goes as `[name, base64, "base64"]`; on HTTP/1.1 `Content-Length` and `Transfer-Encoding` in the list mark where the transport writes its own, from the body (0.33; they went out twice) |
 | `h2_priority` | {weight, exclusive, depends_on} | this request's HTTP/2 priority (weight 1–256) in place of the profile's (0.32) |
+| `connection` | `"new"` or an id | `"new"`: a connection of its own, opened for this request and pooled after; an id (a response's `conn.id`): that open connection — a proxy keeps each client connection to one server connection so. Either covers the first hop, takes the request past HTTP/3 and past the silent resend on a fresh connection; a named connection that is gone fails with `conn_closed`, one to another origin (not coalescable) or a busy HTTP/1.1 one with `configuration` (0.33) |
 | `decompress` | bool or absent | per-request `decompress` (0.32) |
 | `suppress_headers` | [string] | leave these out whatever set them |
 | `header_order` | [string] | this request's order |
@@ -251,10 +255,10 @@ curlpro_free(resp);
 | `cookie_changes` | with `track_cookies` |
 | `cache` | `"hit"`, `"revalidated"`, `"miss"`, or absent |
 | `trailers` | {name: [values]} — the fields sent after the body (gRPC's `grpc-status`, `grpc-message`); absent when none came (0.31) |
-| `headers_raw` | [[name, value], …] — the header block as it came off the wire: the server's order and case, a repeated field once per line; absent for a cached response (0.32) |
-| `interim` | [{status, headers}] — the 1xx responses before the final one (103 Early Hints, 100 Continue), in order (0.32). The library does not wait for a `100 Continue` before sending a body |
-| `conn` | the connection: `id` (same id, same connection), `reused`, `remote`, `local`, `proto`, `proxy`, `tls_version`, `cipher`, `resumed`, `ech`, `verified`, `ja4`/`ja4_r` of the ClientHello actually sent, and on a connection's first response `peer_certs` (DER, base64, leaf first), `connect_ms` (name resolution, TCP and a proxy's tunnel together) and `tls_ms` (0.32) |
-| `timing` | `{wait_ms}` — from the request leaving to its headers (0.32) |
+| `headers_raw` | [[name, value], …] — the header block as it came off the wire: the server's order and case, a repeated field once per line; absent for a cached response (0.32). A value that is not UTF-8 (obs-text, a `Set-Cookie` in cp1251) comes as `[name, base64, "base64"]`: JSON would turn its bytes into U+FFFD, as it does in `headers` (0.33) |
+| `interim` | [{status, headers}] — the 1xx responses before the final one (103 Early Hints, 100 Continue), in order (0.32). Since 0.33 a body announced with `Expect: 100-continue` waits for the `100` (`expect_continue_ms`) |
+| `conn` | the connection: `id` (same id, same connection), `reused`, `remote`, `local`, `proto`, `proxy`, `tls_version`, `cipher`, `resumed`, `ech`, `verified`, `ja4`/`ja4_r` of the ClientHello actually sent, and on a connection's first response `peer_certs` (DER, base64, leaf first), `connect_ms` (name resolution, TCP and a proxy's tunnel together; `dns_ms` the address lookup within it, 0.33) and `tls_ms` (0.32) |
+| `timing` | `{wait_ms, body_ms}` — from the request leaving to its headers (0.32); from the headers to the body's last byte, on a buffered response (0.33) |
 
 The body is already decompressed (gzip, br, zstd, deflate).
 
@@ -278,6 +282,14 @@ on an error (or an unknown handle). Close the stream in every case.
 `curlpro_stream_trailers(stream)` gives the response's trailers once a read has
 returned `0`: `{"trailers": {name: [values]}}`, empty before the end and when the
 server sent none. A buffered response carries them as `trailers` (0.31).
+
+`curlpro_decode(frame, len, &out_len)` (0.33) undoes a `Content-Encoding` on
+bytes you hold — the copy to show of a body relayed as it came (`decompress:
+false`). The frame's JSON is `{"encoding": "gzip, br", "limit": n}` (`0` is no
+limit), its body the bytes; the answer is `{"complete": bool, "error"?: text}`
+and the decoded bytes, at most `limit`. A cut input — the first megabyte of a
+stream — gives what decoded before the cut with `complete: false` and the
+reason; an encoding the library does not know is `configuration`.
 
 ## Streaming a request body
 
@@ -324,6 +336,18 @@ its own negotiated as `http/1.1`, with the profile's ClientHello. Nothing is add
 for the upgrade and nothing is checked in the answer: `Connection`, `Upgrade` and
 `Sec-WebSocket-*` are whatever you send, and `Sec-WebSocket-Accept` is your
 client's to check.
+
+With `"connect_protocol": "websocket"` (0.33) the request is extended CONNECT
+on HTTP/2 instead (RFC 8441) — WebSocket over HTTP/2, as Chrome opens it where
+the server allows it: a stream on the origin's HTTP/2 connection (pooled, or
+new with `"connection": "new"`), `:method CONNECT` and `:protocol` after
+`:authority`, `:scheme` and `:path`. The server must have sent
+`SETTINGS_ENABLE_CONNECT_PROTOCOL`, or the call fails without sending; a `2xx`
+takes the place of the `101`, and `conn` is the stream: its DATA frames carry
+your bytes both ways, `curlpro_conn_close_write` ends your side with
+END_STREAM, `curlpro_conn_close` resets the stream and leaves the connection to
+its other streams. `headers_raw` sends the client's `sec-websocket-*` as they
+came. The URL is `wss://` or `https://`.
 
 The out frame is `{status, proto, headers, url, body_len, conn}` and, for an
 answer other than `101`, its body (up to 1 MiB); `conn` is a handle, present
@@ -393,6 +417,12 @@ for (;;) {
   `0`. `timeout_ms <= 0` polls without waiting. The ready queue is
   process-wide: one thread per process should wait on it and route results by
   handle. That is what the bindings do.
+- `curlpro_result_event()` (0.33) gives the queue as a handle for a loop that
+  already waits on sockets — `{"handle", "kind": "event"}` on Windows, a
+  manual-reset event for `WaitForMultipleObjects`; `"fd"` elsewhere, a pipe's
+  read end for epoll or kqueue. It is up while finished calls wait: take them
+  with `curlpro_result_wait(0)` until `0`, which lowers it, and wait again.
+  The handle lives as long as the process and is not closed by the caller.
 - `curlpro_result_take` may be called once per handle; the frame is the same as
   the blocking call's.
 - `curlpro_request_cancel(id)` aborts a request or a connect. A read or a receive
@@ -419,13 +449,22 @@ for (;;) {
 | `dns` | the name did not resolve | maybe |
 | `connect_refused` | the TCP connection was refused | maybe |
 | `tls_alert` | the server ended the handshake with an alert. `details: {alert, name}` | depends |
-| `tls_verify` | the server's certificate did not verify | **no** |
+| `tls_verify` | the server's certificate did not verify. `details: {reason, chain}` (0.33) | **no** |
 | `reset` | the peer reset the connection, or the HTTP/2 stream. `details: {h2_code, stream_id}` for a stream | maybe |
 | `goaway` | the HTTP/2 server sent GOAWAY. `details: {h2_code, last_stream_id}` | maybe |
 | `h2_protocol` | the HTTP/2 connection failed on a protocol error. `details: {h2_code}` | no |
 | `eof_before_headers` | the connection ended before the response's headers did | maybe |
 | `eof_in_body` | the connection ended inside the body | maybe |
 | *(absent)* | not classified (until 0.32 that was DNS, TCP, TLS and HTTP/2 failures too) | maybe |
+
+`details.phase` (0.33) says where a request failed, whatever the code:
+`connect` (name resolution, TCP, a proxy's tunnel), `tls` (the handshake),
+`response` (the request on its way, the wait for the headers), `body` — not
+on `proxy` and `proxy_auth`, whose `stage` says it. A
+timeout keeps its code `timeout`; `phase: "connect"` or `"tls"` makes it a
+connect timeout. `tls_verify` carries `details: {reason, chain}` — the
+verifier's words and the chain the server showed (DER, base64, leaf first).
+An HTTP/3 request's own failures have no phase yet.
 
 `configuration`, `profile_capability` and `proxy_auth` are permanent: retrying
 the same call cannot change the outcome. A panic inside the library becomes

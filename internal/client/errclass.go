@@ -1,12 +1,14 @@
 package client
 
 import (
+	"context"
 	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"runtime"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/bogdanfinn/fhttp/http2"
@@ -73,23 +75,97 @@ func errnoIs(err error, unix syscall.Errno, windows ...uintptr) bool {
 }
 
 // bodyErr marks a failure while reading a body: a connection that ended
-// early is eof_in_body there, not before the headers.
+// early is eof_in_body there, not before the headers; and any failure is
+// in the body phase.
 func bodyErr(err error) error {
+	if err == nil || err == io.EOF {
+		return err
+	}
 	// Only an explicit mark counts as classified here: Code itself would
 	// call any EOF eof_before_headers.
 	var marked *codedError
-	if err == nil || err == io.EOF || errors.As(err, &marked) {
+	if !errors.As(err, &marked) && (errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF)) {
+		err = withCode(CodeEOFInBody, fmt.Errorf("the response body ended early: %w", err))
+	}
+	return inPhase(PhaseBody, err)
+}
+
+// The phases a request fails in, as details.phase names them (0.33). A
+// timeout keeps its code "timeout" whatever the phase; the phase says
+// where it struck — connect_timeout is a timeout in PhaseConnect.
+const (
+	// PhaseConnect — name resolution, TCP, a proxy's tunnel, the HTTP/2
+	// preface: no connection yet.
+	PhaseConnect = "connect"
+	// PhaseTLS — the TLS handshake.
+	PhaseTLS = "tls"
+	// PhaseResponse — the request on its way and the wait for the
+	// response's headers.
+	PhaseResponse = "response"
+	// PhaseBody — reading the response's body.
+	PhaseBody = "body"
+)
+
+// phaseError notes the phase an error came in; its text is the error's.
+type phaseError struct {
+	phase string
+	err   error
+}
+
+func (e *phaseError) Error() string { return e.err.Error() }
+func (e *phaseError) Unwrap() error { return e.err }
+
+// inPhase marks err with the phase, unless an earlier one is marked.
+func inPhase(phase string, err error) error {
+	var pe *phaseError
+	if err == nil || errors.As(err, &pe) {
 		return err
 	}
-	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
-		return withCode(CodeEOFInBody, fmt.Errorf("the response body ended early: %w", err))
+	return &phaseError{phase, err}
+}
+
+// dialPhase is how far a dial got, for the requests waiting on it.
+type dialPhase struct{ v atomic.Value }
+
+type dialPhaseKey struct{}
+
+// notePhase records, in a dial's context, the phase it entered.
+func notePhase(ctx context.Context, phase string) {
+	if d, ok := ctx.Value(dialPhaseKey{}).(*dialPhase); ok {
+		d.v.Store(phase)
 	}
-	return err
+}
+
+func (d *dialPhase) get() string {
+	if d != nil {
+		if p, ok := d.v.Load().(string); ok {
+			return p
+		}
+	}
+	return PhaseConnect
+}
+
+// ErrorPhase is the phase the error came in, "" when none is known (an
+// HTTP/3 request's own failures, a configuration error).
+func ErrorPhase(err error) string {
+	var pe *phaseError
+	if errors.As(err, &pe) {
+		return pe.phase
+	}
+	return ""
 }
 
 // ErrorDetails is what a transport error carries beside its code, for the
 // C ABI's details: the alert, the HTTP/2 error code, GOAWAY's last stream.
 func ErrorDetails(err error) map[string]any {
+	var verr *utls.CertificateVerificationError
+	if errors.As(err, &verr) {
+		chain := make([][]byte, 0, len(verr.UnverifiedCertificates))
+		for _, c := range verr.UnverifiedCertificates {
+			chain = append(chain, c.Raw)
+		}
+		return map[string]any{"reason": verr.Err.Error(), "chain": chain}
+	}
 	var alert utls.AlertError
 	if errors.As(err, &alert) {
 		return map[string]any{"alert": int(alert), "name": alert.Error()}

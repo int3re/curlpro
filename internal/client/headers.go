@@ -698,6 +698,16 @@ func rawHeaderSet(h map[string][]string, raw [][2]string, host string, h1 bool) 
 	order := make([]string, 0, len(built))
 	seen := make(map[string]bool, len(built))
 	for _, kv := range built {
+		// On HTTP/1.1 the transport writes Content-Length and
+		// Transfer-Encoding from the body itself, where the order puts them:
+		// the caller's copy went out beside its own, twice.
+		if h1 && (sameName(kv.Key, "content-length") || sameName(kv.Key, "transfer-encoding")) {
+			if lk := strings.ToLower(kv.Key); !seen[lk] {
+				seen[lk] = true
+				order = append(order, lk)
+			}
+			continue
+		}
 		h[kv.Key] = append(h[kv.Key], kv.Value)
 		if lk := strings.ToLower(kv.Key); !seen[lk] {
 			seen[lk] = true

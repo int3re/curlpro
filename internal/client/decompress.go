@@ -2,6 +2,7 @@ package client
 
 import (
 	"bufio"
+	"bytes"
 	"compress/flate"
 	"compress/gzip"
 	"compress/zlib"
@@ -53,6 +54,28 @@ func decompress(body io.ReadCloser, encoding string) (io.ReadCloser, error) {
 		body = &lazyDecoder{codec: codecs[i], src: body}
 	}
 	return body, nil
+}
+
+// Decode undoes a Content-Encoding on bytes already in hand: the copy a
+// proxy that relays bodies as they came (decompress false) shows its user.
+// At most limit bytes come out, 0 meaning no limit; complete says the input
+// decoded to its end within it. A cut input — the first megabyte of a
+// stream — gives what decoded before the cut, and the error.
+func Decode(encoding string, data []byte, limit int) (out []byte, complete bool, err error) {
+	body, err := decompress(io.NopCloser(bytes.NewReader(data)), encoding)
+	if err != nil {
+		return nil, false, configErr("%v", err)
+	}
+	defer body.Close()
+	var r io.Reader = body
+	if limit > 0 {
+		r = io.LimitReader(body, int64(limit)+1)
+	}
+	out, err = io.ReadAll(r)
+	if limit > 0 && len(out) > limit {
+		return out[:limit], false, nil
+	}
+	return out, err == nil, err
 }
 
 // lazyDecoder creates the decoder on the first read.

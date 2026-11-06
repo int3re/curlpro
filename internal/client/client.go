@@ -15,6 +15,7 @@ import (
 	"golang.org/x/net/idna"
 	"io"
 	"net"
+	"net/http/httptrace"
 	"net/url"
 	"sort"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/bogdanfinn/fhttp/cookiejar"
 	"github.com/bogdanfinn/fhttp/http2"
+	"github.com/bogdanfinn/fhttp/http2/hpack"
 	utls "github.com/refraction-networking/utls"
 
 	"github.com/curlpro/curlpro/internal/profile"
@@ -132,6 +134,12 @@ type Options struct {
 	// the size is the size on the wire). Off, the body is decoded — gzip, br,
 	// zstd, deflate — as the profile's Accept-Encoding promises.
 	DisableDecompression bool
+
+	// ExpectContinueTimeout is how long a request with Expect: 100-continue
+	// holds its body for the server's 100 (or its final answer, which leaves
+	// the body unsent). 0 means a second, as curl and net/http wait;
+	// negative, the body goes at once (the behaviour until 0.33).
+	ExpectContinueTimeout time.Duration
 
 	// Resolve overrides a host's address without touching the name in SNI or Host.
 	//
@@ -279,6 +287,20 @@ type Request struct {
 	// a document, 220 a stylesheet, 110 an image…), and a proxy relays the
 	// client's. Weight is 1–256 as RFC 7540 counts it.
 	H2Priority *H2Priority
+
+	// NewConnection sends the request on a connection of its own, opened
+	// for it and pooled after; ConnectionID on the open connection with
+	// that ID (Response.Conn.ID) — a proxy keeps each client connection to
+	// one server connection that way. Either covers the request's first hop
+	// and takes it past HTTP/3 and past the resend on another connection:
+	// a connection named and gone is an error (conn_closed), not a detour.
+	NewConnection bool
+	ConnectionID  uint64
+
+	// ConnectProtocol makes an Upgrade an extended CONNECT on HTTP/2 (RFC
+	// 8441) with this :protocol — "websocket" for WebSocket over HTTP/2, as
+	// Chrome opens it where the server allows it. Upgrade only.
+	ConnectProtocol string
 
 	// HeadersRaw, when set, is the request's whole header set, sent as
 	// given: in this order, in this case on HTTP/1.1 (HTTP/2 and HTTP/3 write
@@ -715,6 +737,27 @@ func wantsDecoded(ctx context.Context) bool {
 	return !raw
 }
 
+// expectContinue is the session's wait for a 100, 0 for none.
+func (s *Session) expectContinue() time.Duration {
+	switch t := s.opts.ExpectContinueTimeout; {
+	case t < 0:
+		return 0
+	case t == 0:
+		return time.Second
+	default:
+		return t
+	}
+}
+
+// expectKey carries the session's wait for a 100 Continue to the HTTP/1.1
+// path, which has no transport to hold it (HTTP/2's does).
+type expectKey struct{}
+
+func expectWait(ctx context.Context) time.Duration {
+	d, _ := ctx.Value(expectKey{}).(time.Duration)
+	return d
+}
+
 // idleTimeout returns the limit on a body that stops arriving; 0 is none.
 func (s *Session) idleTimeout(r *Request) time.Duration {
 	if r != nil && r.IdleTimeout != nil {
@@ -749,6 +792,9 @@ func (r *Request) validate(hasJar bool) error {
 		if t.d != nil && *t.d < 0 {
 			return configErr("%s cannot be negative, got %s (0 is no limit)", t.name, *t.d)
 		}
+	}
+	if r.NewConnection && r.ConnectionID != 0 {
+		return configErr("a request takes a new connection or a named one, not both")
 	}
 	if p := r.H2Priority; p != nil && (p.Weight < 1 || p.Weight > 256) {
 		return configErr("h2_priority weight %d: RFC 7540 weights are 1 to 256", p.Weight)
@@ -1184,6 +1230,7 @@ func (s *Session) Do(r *Request) (*Response, error) {
 		return nil, err
 	}
 	defer stream.Close()
+	headersAt := time.Now()
 
 	// The body limit: without it a server with an endless response eats the
 	// process memory whole. One byte more is read to tell "exactly the limit"
@@ -1217,8 +1264,19 @@ func (s *Session) Do(r *Request) (*Response, error) {
 		Trailers:      stream.Trailers(),
 		Interim:       stream.Interim,
 		Conn:          stream.Conn,
-		Timing:        stream.Timing,
+		Timing:        bodyTiming(stream.Timing, time.Since(headersAt)),
 	}, nil
+}
+
+// bodyTiming is the hop's timing with the body's read time added; a copy,
+// since the hop's record is shared with the cache's copies.
+func bodyTiming(t *Timing, body time.Duration) *Timing {
+	if t == nil {
+		return nil
+	}
+	out := *t
+	out.BodyMS = millis(body)
+	return &out
 }
 
 // bodySizeHint is the size to read a body into at first: its Content-Length
@@ -1385,6 +1443,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		}
 		return nil, nil, nil, err
 	}
+	setTarget(req.URL, u)
 	// The limit lives in the request context: HTTP/2 reads it itself, while
 	// HTTP/1.1 moves it onto the socket deadline (see conn.roundTrip).
 	//
@@ -1407,6 +1466,14 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	}
 	if !s.decompress(r) {
 		req = req.WithContext(context.WithValue(req.Context(), rawBodyKey{}, true))
+	}
+	if d := s.expectContinue(); d > 0 {
+		req = req.WithContext(context.WithValue(req.Context(), expectKey{}, d))
+	}
+	// A header set given whole goes as given on HTTP/2 too: Cookie crumbs as
+	// they came, a joined Cookie as one field.
+	if len(r.HeadersRaw) > 0 {
+		req = req.WithContext(context.WithValue(req.Context(), http2.WholeCookie{}, true))
 	}
 	if p := r.H2Priority; p != nil {
 		param := http2.PriorityParam{StreamDep: p.DependsOn, Exclusive: p.Exclusive, Weight: uint8(p.Weight - 1)}
@@ -1527,7 +1594,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	}
 	// A guess races QUIC against TCP and may fall back: a streamed body read
 	// by the losing attempt would be gone for the winning one.
-	if r.BodyStream != nil {
+	if r.BodyStream != nil || r.NewConnection || r.ConnectionID != 0 {
 		viaAltSvc, viaDNS = false, false
 	}
 	tcpSpec := func() dialSpec {
@@ -1598,8 +1665,15 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	}
 
 	c, reused, err := raced, false, error(nil)
-	if c == nil {
-		c, reused, err = s.conn(req.Context(), u, tcpSpec(), r.freshConn)
+	switch {
+	case c != nil:
+	case r.ConnectionID != 0:
+		c, reused, err = s.pinnedConn(r.ConnectionID, tcpSpec(), u.Hostname())
+		if err != nil {
+			return fail(&fatalError{err})
+		}
+	default:
+		c, reused, err = s.conn(req.Context(), u, tcpSpec(), r.freshConn || r.NewConnection)
 	}
 	if err != nil {
 		// No connection — the request never reached the server, a retry is safe.
@@ -1643,7 +1717,8 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		// (HttpNetworkTransaction::ShouldResendRequest: the connection was
 		// reused and no headers were received). A new connection that fails is
 		// not resent: that is a real failure, and retries= decides about it.
-		if reused && r.BodyStream == nil && (connectionDropped(err) || (c.h2 != nil && h2Unprocessed(err))) &&
+		if reused && r.BodyStream == nil && r.ConnectionID == 0 &&
+			(connectionDropped(err) || (c.h2 != nil && h2Unprocessed(err))) &&
 			req.Context().Err() == nil && (deadline.IsZero() || time.Now().Before(deadline)) {
 			if closer, ok := body.(io.Closer); ok {
 				closer.Close()
@@ -1655,7 +1730,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 			again.freshConn = true
 			return s.send(&again, deadline)
 		}
-		err = fmt.Errorf("request failed: %w", err)
+		err = fmt.Errorf("request failed: %w", inPhase(PhaseResponse, err))
 		if c.h2 != nil && h2Unprocessed(err) {
 			return fail(&unprocessedError{err})
 		}
@@ -1688,12 +1763,25 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 	var raw net.Conn
 	var uconn *utls.UConn
 	var connectTook, tlsTook time.Duration
+	// The address lookup inside the dial, timed by net's own hooks (with a
+	// proxy, the lookup of the proxy's name).
+	var dnsMu sync.Mutex
+	var dnsAt time.Time
+	var dnsTook time.Duration
+	traced := httptrace.WithClientTrace(dialCtx, &httptrace.ClientTrace{
+		DNSStart: func(httptrace.DNSStartInfo) { dnsMu.Lock(); dnsAt = time.Now(); dnsMu.Unlock() },
+		DNSDone: func(httptrace.DNSDoneInfo) {
+			dnsMu.Lock()
+			dnsTook += time.Since(dnsAt)
+			dnsMu.Unlock()
+		},
+	})
 	for attempt := 0; ; attempt++ {
 		var err error
 		dialed := time.Now()
-		raw, err = s.dialRaw(dialCtx, ds.addr, ds.proxy)
+		raw, err = s.dialRaw(traced, ds.addr, ds.proxy)
 		if err != nil {
-			return nil, err
+			return nil, inPhase(PhaseConnect, err)
 		}
 		connectTook = time.Since(dialed)
 
@@ -1705,6 +1793,7 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 		if ds.plain {
 			c := newH1Conn(raw, ds)
 			c.noteDial(raw, nil, false, connectTook, 0, nil)
+			c.info.DNSMS = millis(dnsTook)
 			return c, nil
 		}
 		hsCtx, hsDone := dialCtx, context.CancelFunc(func() {})
@@ -1712,6 +1801,7 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 			hsCtx, hsDone = context.WithTimeout(dialCtx, echHandshakeWait)
 		}
 		shaking := time.Now()
+		notePhase(dialCtx, PhaseTLS)
 		uconn, err = s.handshakeTLS(hsCtx, raw, u, ds, ech)
 		tlsTook = time.Since(shaking)
 		hsDone()
@@ -1739,7 +1829,7 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 			ech = nil
 			continue
 		}
-		return nil, err
+		return nil, inPhase(PhaseTLS, err)
 	}
 
 	// The protocol was chosen by the server. An empty ALPN means HTTP/1.1 — that
@@ -1755,15 +1845,17 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 		cc, err := s.transport().NewClientConn(uconn)
 		if err != nil {
 			uconn.Close()
-			return nil, fmt.Errorf("h2: %w", err)
+			return nil, inPhase(PhaseConnect, fmt.Errorf("h2: %w", err))
 		}
 		c := newH2Conn(cc, ds)
 		c.notePeer(raw, state, ds.proxy == "" && !s.opts.InsecureSkipVerify)
 		c.noteDial(raw, &state, verified, connectTook, tlsTook, sentHello(uconn))
+		c.info.DNSMS = millis(dnsTook)
 		return c, nil
 	case "http/1.1", "":
 		c := newH1Conn(uconn, ds)
 		c.noteDial(raw, &state, verified, connectTook, tlsTook, sentHello(uconn))
+		c.info.DNSMS = millis(dnsTook)
 		return c, nil
 	default:
 		uconn.Close()
@@ -1902,6 +1994,8 @@ func (s *Session) transport() *http2.Transport {
 		// decoder took zstd with a 512 MB window allocated up front, and knew
 		// no stacked encodings.
 		DisableCompression: true,
+		// Expect: 100-continue holds the body (patch edit l).
+		ExpectContinueTimeout: s.expectContinue(),
 	}
 	// Priority on the HEADERS frame.
 	//
@@ -1921,6 +2015,41 @@ func (s *Session) transport() *http2.Transport {
 				Weight:    uint8(*h2.StreamWeight - 1),
 			}
 		}
+	}
+	// The header block field by field as the profile's browser writes it, and
+	// its bodies' frames no larger than the browser's (patch edits m, n, o).
+	if pol := h2.HPACKIndexingPolicy; len(pol) > 0 {
+		modes := make(map[string]hpack.IndexMode, len(pol))
+		def := hpack.IndexDefault
+		for name, m := range pol {
+			mode := map[string]hpack.IndexMode{"incremental": hpack.IndexIncremental,
+				"without": hpack.IndexWithout, "never": hpack.IndexNever}[m]
+			if name == "default" {
+				def = mode
+			} else {
+				modes[name] = mode
+			}
+		}
+		tr.HPACKIndexPolicy = func(name string) hpack.IndexMode {
+			if m, ok := modes[name]; ok {
+				return m
+			}
+			return def
+		}
+	}
+	tr.DisableCookieSplit = h2.DisableCookieSplit != nil && *h2.DisableCookieSplit
+	tr.DataFrameMaxSize = h2.DataFrameMaxSize
+	// fhttp writes them after the WINDOW_UPDATE and moves the first request's
+	// stream past the last of them.
+	for _, f := range h2.PriorityFrames {
+		tr.Priorities = append(tr.Priorities, http2.Priority{
+			StreamID: f.StreamID,
+			PriorityParam: http2.PriorityParam{
+				StreamDep: f.DependsOn,
+				Exclusive: f.Exclusive,
+				Weight:    uint8(f.Weight - 1),
+			},
+		})
 	}
 	return tr
 }

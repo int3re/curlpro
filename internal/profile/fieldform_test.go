@@ -141,3 +141,31 @@ func TestOwnHelloForgetsTheParentsHelloFields(t *testing.T) {
 		t.Errorf("the delta's own sigalgs: %v", p2.TLS.SignatureAlgorithms)
 	}
 }
+
+func TestPriorityFramesAreChecked(t *testing.T) {
+	r := NewRegistry()
+	if err := r.LoadFS(os.DirFS("../../profiles"), "."); err != nil {
+		t.Fatal(err)
+	}
+	base, err := r.Resolve("firefox-159-windows")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		frames []PriorityFrame
+		ok     bool
+	}{
+		{[]PriorityFrame{{StreamID: 3, Weight: 201}, {StreamID: 5, Weight: 256, DependsOn: 3}}, true},
+		{[]PriorityFrame{{StreamID: 4, Weight: 1}}, false},
+		{[]PriorityFrame{{StreamID: 5, Weight: 1}, {StreamID: 3, Weight: 1}}, false},
+		{[]PriorityFrame{{StreamID: 3, Weight: 0}}, false},
+		{[]PriorityFrame{{StreamID: 3, Weight: 257}}, false},
+		{[]PriorityFrame{{StreamID: 3, Weight: 1, DependsOn: 3}}, false},
+	} {
+		p := *base
+		p.HTTP2.PriorityFrames = c.frames
+		if err := p.validate(); (err == nil) != c.ok {
+			t.Errorf("%+v: %v", c.frames, err)
+		}
+	}
+}

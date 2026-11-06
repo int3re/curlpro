@@ -8,11 +8,15 @@ trailers, a chunked upload read back, a 101 with bytes behind it.
 """
 from __future__ import annotations
 
+import base64
 import ctypes
 import gzip
+import http.server
 import json
+import random
 import socket
 import ssl
+import sys
 import threading
 import time
 from pathlib import Path
@@ -112,6 +116,11 @@ class RawStand:
                 head = json.dumps(rec["lines"]).encode()
                 c.sendall(b"HTTP/1.1 200 OK\r\nX-Zeta: 1\r\nset-cookie: a=1\r\nCACHE-control: no\r\n"
                           b"Set-Cookie: b=2\r\nContent-Length: %d\r\n\r\n" % len(head) + head)
+            elif path == "/cp1251":
+                # A Set-Cookie in cp1251, as old Russian sites send it.
+                head = json.dumps(rec["lines"]).encode()
+                c.sendall(b"HTTP/1.1 200 OK\r\nSet-Cookie: city=\xcc\xee\xf1\xea\xe2\xe0\r\n"
+                          b"Content-Length: %d\r\n\r\n" % len(head) + head)
             elif path == "/gzip":
                 body = gzip.compress(b"compressible " * 40)
                 c.sendall(b"HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: %d\r\n\r\n" % len(body) + body)
@@ -365,3 +374,85 @@ def test_tls_dial_for_another_protocol():
     finally:
         _ffi._call("curlpro_session_close", insecure)
         srv.close()
+
+
+def test_header_values_that_are_not_utf8_go_as_base64(session, stand):
+    moscow = "Москва".encode("cp1251")
+    data, body = _ffi.call_framed("curlpro_request", session, meta={
+        "method": "GET", "url": stand.url + "/cp1251",
+        "headers_raw": [["X-City", base64.b64encode(moscow).decode(), "base64"], ["X-Plain", "1"]]})
+    sent = json.loads(body)
+    assert sent[1:] == ["X-City: " + moscow.decode("latin-1"), "X-Plain: 1"]
+    assert data["headers_raw"][0] == ["Set-Cookie", base64.b64encode(b"city=" + moscow).decode(), "base64"]
+    assert data["headers_raw"][1][:2] == ["Content-Length", str(len(body))]
+    with pytest.raises(CurlProError):
+        _ffi.call_framed("curlpro_request", session, meta={
+            "method": "GET", "url": stand.url + "/cp1251", "headers_raw": [["X-City", "%%%", "base64"]]})
+
+
+class _KeepAlive(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def do_GET(self):
+        self.send_response(204)
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+def test_a_request_names_its_connection(session):
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _KeepAlive)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}/"
+    try:
+        def get(conn):
+            return _ffi.call_framed("curlpro_request", session, meta={
+                "method": "GET", "url": url, "connection": conn})[0]
+
+        first, second = get("new"), get("new")
+        assert first["conn"]["id"] != second["conn"]["id"]
+        again = get(first["conn"]["id"])
+        assert again["conn"]["id"] == first["conn"]["id"] and again["conn"]["reused"]
+        with pytest.raises(CurlProError) as e:
+            get(1 << 40)
+        assert e.value.code == "conn_closed"
+        with pytest.raises(CurlProError):
+            get("old")
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_a_failure_names_its_phase(session):
+    raw = _ffi._lib.curlpro_request
+    out_len = ctypes.c_int()
+    meta = json.dumps({"method": "GET", "url": "http://127.0.0.1:1/"}).encode()
+    frame = len(meta).to_bytes(4, "little") + meta
+    ptr = raw(session, frame, len(frame), ctypes.byref(out_len))
+    try:
+        buf = ctypes.string_at(ptr, out_len.value)
+    finally:
+        _ffi._lib.curlpro_free(ptr)
+    n = int.from_bytes(buf[:4], "little")
+    env = json.loads(buf[4:4 + n])
+    assert env["code"] == "connect_refused" and env["details"]["phase"] == "connect"
+
+
+def test_the_ready_queue_has_a_handle():
+    out = _ffi._call("curlpro_result_event")
+    assert out["handle"] > 0
+    assert out["kind"] == ("event" if sys.platform == "win32" else "fd")
+    assert _ffi._call("curlpro_result_event") == out
+
+
+def test_a_body_relayed_compressed_decodes_on_demand():
+    plain = bytes(random.Random(7).choice(b"abcdefghijklmnopqrstuvwxyz") for _ in range(300000))
+    raw = gzip.compress(plain)
+    data, out = _ffi.call_framed("curlpro_decode", meta={"encoding": "gzip", "limit": 0}, body=raw)
+    assert data["complete"] and out == plain
+    data, out = _ffi.call_framed("curlpro_decode", meta={"encoding": "gzip", "limit": 0}, body=raw[:len(raw) // 2])
+    assert not data["complete"] and data["error"] and out
+    with pytest.raises(CurlProError) as e:
+        _ffi.call_framed("curlpro_decode", meta={"encoding": "compress"}, body=raw)
+    assert e.value.code == "configuration"

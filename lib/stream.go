@@ -116,7 +116,7 @@ func streamMeta(sid int64, st *client.Stream) map[string]any {
 		"status":      st.Status,
 		"proto":       st.Proto,
 		"headers":     st.Headers,
-		"headers_raw": st.RawHeaders,
+		"headers_raw": wireFields(st.RawHeaders),
 		"url":         st.URL,
 		"history":     st.History,
 		"preflights":  st.Preflights,
@@ -317,6 +317,40 @@ func curlpro_stream_trailers(sid C.longlong) (out *C.char) {
 		trailers = map[string][]string{}
 	}
 	return respond(map[string]any{"trailers": trailers}, nil)
+}
+
+// curlpro_decode undoes a Content-Encoding on bytes the caller holds — the
+// copy for a user of a body relayed as it came (decompress false). The
+// frame's meta is {"encoding": "gzip, br", "limit": n} (0: no limit), its
+// body the bytes; the answer is {"complete": bool, "error"?: text} and the
+// decoded bytes, at most limit of them. A cut input gives what decoded
+// before the cut, complete false and the error's text; an encoding the
+// library does not know is a configuration error.
+//
+//export curlpro_decode
+func curlpro_decode(frame *C.char, frameLen C.int, outLen *C.int) *C.char {
+	return framed(outLen, func() (*C.char, C.int) {
+		meta, body, err := decodeFrame(frame, frameLen)
+		if err != nil {
+			return respondFrame(nil, nil, err)
+		}
+		var m struct {
+			Encoding string `json:"encoding"`
+			Limit    int    `json:"limit"`
+		}
+		if err := json.Unmarshal(meta, &m); err != nil {
+			return respondFrame(nil, nil, fmt.Errorf("parsing decode: %w", err))
+		}
+		out, complete, err := client.Decode(m.Encoding, body, m.Limit)
+		if client.Code(err) == client.CodeConfiguration {
+			return respondFrame(nil, nil, err)
+		}
+		data := map[string]any{"complete": complete}
+		if err != nil {
+			data["error"] = err.Error()
+		}
+		return respondFrame(data, out, nil)
+	})
 }
 
 //export curlpro_stream_close

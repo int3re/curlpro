@@ -44,9 +44,9 @@ extern "C" {
  * refuse a library whose major.minor is lower than the one it was written
  * against, because an older library silently ignores options it does not know. */
 #define CURLPRO_ABI_VERSION_MAJOR 0
-#define CURLPRO_ABI_VERSION_MINOR 32
+#define CURLPRO_ABI_VERSION_MINOR 33
 #define CURLPRO_ABI_VERSION_PATCH 0
-#define CURLPRO_ABI_VERSION_STRING "0.32.0"
+#define CURLPRO_ABI_VERSION_STRING "0.33.0"
 
 /* Frame header size in bytes: a uint32 little-endian length of the JSON part. */
 #define CURLPRO_FRAME_HEADER 4
@@ -162,6 +162,14 @@ CURLPRO_API char *curlpro_stream_close(curlpro_handle stream);
  * returned 0 and when the server sent none. Since 0.31. */
 CURLPRO_API char *curlpro_stream_trailers(curlpro_handle stream);
 
+/* Undoes a Content-Encoding on bytes the caller holds — the copy to show of
+ * a body relayed as it came (decompress false). The frame's JSON is
+ * {"encoding": "gzip, br", "limit": n} (0: no limit), its body the bytes; the
+ * result frame is {"complete": bool, "error"?: text} + the decoded bytes, at
+ * most limit of them. A cut input gives what decoded before the cut. Since
+ * 0.33. */
+CURLPRO_API char *curlpro_decode(const char *frame, int frame_len, int *out_len);
+
 /* ---- Streamed request bodies (0.31) --------------------------------------- */
 /*
  * A request with "body_stream": true carries no body in its frame. Start it
@@ -247,6 +255,14 @@ CURLPRO_API char *curlpro_ws_recv_start(curlpro_handle socket);
 CURLPRO_API long long curlpro_result_wait(int timeout_ms);
 CURLPRO_API char *curlpro_result_take(curlpro_handle request, int *out_len);
 CURLPRO_API char *curlpro_request_cancel(curlpro_handle request);
+
+/* A handle an event loop waits on beside its sockets instead of a thread in
+ * curlpro_result_wait: data {"handle": n, "kind": "event"} on Windows (a
+ * manual-reset event), {"handle": n, "kind": "fd"} elsewhere (a pipe's read
+ * end). Signalled while finished calls wait: take them with
+ * curlpro_result_wait(0) until it returns 0, which lowers it. The same handle
+ * for the life of the process; do not close it. Since 0.33. */
+CURLPRO_API char *curlpro_result_event(void);
 
 /* Number of async calls started and not yet taken. */
 CURLPRO_API long long curlpro_async_pending(void);

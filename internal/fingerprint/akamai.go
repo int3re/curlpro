@@ -49,13 +49,25 @@ func Akamai(h2 profile.HTTP2Spec) string {
 	// disagree with every oracle.
 	windowText := fmt.Sprintf("%02d", window)
 
-	// PRIORITY is the literal "0": the section counts standalone PRIORITY
-	// frames, and we send none. The profile's stream_weight rides on the
-	// HEADERS frame instead, and the oracles disagree about that on purpose —
-	// fingerproxy folds it into this section, browserleaks does not (see
-	// AUDIT-BRIEF §6). The captures come from browserleaks, so the value
-	// follows browserleaks; writing the weight here made all 47 disagree.
+	// PRIORITY lists the standalone PRIORITY frames, stream:exclusive:
+	// depends_on:weight — "0" when there are none. The profile's
+	// stream_weight rides on the HEADERS frame instead, and the oracles
+	// disagree about that on purpose — fingerproxy folds it into this section,
+	// browserleaks does not (see AUDIT-BRIEF §6). The captures come from
+	// browserleaks, so the value follows browserleaks; writing the weight here
+	// made all 47 disagree.
 	priority := "0"
+	if len(h2.PriorityFrames) > 0 {
+		frames := make([]string, 0, len(h2.PriorityFrames))
+		for _, f := range h2.PriorityFrames {
+			excl := 0
+			if f.Exclusive {
+				excl = 1
+			}
+			frames = append(frames, fmt.Sprintf("%d:%d:%d:%d", f.StreamID, excl, f.DependsOn, f.Weight))
+		}
+		priority = strings.Join(frames, ",")
+	}
 
 	pseudo := make([]string, 0, len(h2.PseudoOrder))
 	for _, name := range h2.PseudoOrder {

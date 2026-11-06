@@ -28,6 +28,8 @@ type Encoder struct {
 	tableSizeUpdate bool
 	w               io.Writer
 	buf             []byte
+	// curlpro: the representation policy (curlpro_hpack.go).
+	curlproPolicy func(name string) IndexMode
 }
 
 // NewEncoder returns a new Encoder which performs HPACK encoding. An
@@ -64,6 +66,7 @@ func (e *Encoder) WriteField(f HeaderField) error {
 		e.buf = appendIndexed(e.buf, idx)
 	} else {
 		indexing := e.shouldIndex(f)
+		indexing, f.Sensitive = e.curlproMode(f, indexing) // curlpro
 		if indexing {
 			e.dynTab.add(f)
 		}

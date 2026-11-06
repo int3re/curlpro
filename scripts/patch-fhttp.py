@@ -18,6 +18,7 @@ TRANSPORT = ROOT + 'transport.go'
 PIPE = ROOT + 'pipe.go'
 RESPONSE = 'vendor/github.com/bogdanfinn/fhttp/response.go'
 RAWHEADER = 'vendor/github.com/bogdanfinn/fhttp/curlpro_rawheader.go'
+HPACK = ROOT + 'hpack/encode.go'
 
 # (tag, file, old, new)
 EDITS = [
@@ -315,7 +316,227 @@ func (cc *ClientConn) writeHeadersPriority(streamID uint32, endStream bool, maxF
 
 	if statusCode >= 100 && statusCode <= 199 {
 		cs.num1xx++'''),
+
+# (l) HTTP/2: Expect: 100-continue holds the body until the 100 or this long.
+#     fhttp read the delay from t1, the net/http Transport it is built on,
+#     and there is none here: the body went out at once.
+('l', TRANSPORT,
+'''func (t *Transport) expectContinueTimeout() time.Duration {
+	if t.t1 == nil {
+		return 0
+	}
+''',
+'''// curlpro: the transport's own ExpectContinueTimeout first — a request with
+// Expect: 100-continue holds its body that long for the 100; there is no t1.
+func (t *Transport) expectContinueTimeout() time.Duration {
+	if t.ExpectContinueTimeout > 0 {
+		return t.ExpectContinueTimeout
+	}
+	if t.t1 == nil {
+		return 0
+	}
+'''),
+('l', TRANSPORT,
+'''	InitialStreamID uint32
+	ConnectionFlow  uint32
+''',
+'''	InitialStreamID uint32
+	ConnectionFlow  uint32
+
+	// ExpectContinueTimeout (curlpro) — see expectContinueTimeout.
+	ExpectContinueTimeout time.Duration
+'''),
+('l', TRANSPORT,
+'''		!httpguts.HeaderValuesContainsToken(
+			cs.req.Header["Expect"],
+			"100-continue") {''',
+'''		!httpguts.HeaderValuesContainsToken(
+			curlproHeaderValues(cs.req.Header, "Expect"), // curlpro: any case
+			"100-continue") {'''),
+
+# (m) HPACK: each field's representation by name — into the dynamic table,
+#     a literal without indexing, never indexed — as the profile's browser
+#     chooses (Chrome indexes no pseudo-header but :authority). Go's encoder
+#     indexed whatever fit.
+('m', HPACK,
+'''	w               io.Writer
+	buf             []byte
+}''',
+'''	w               io.Writer
+	buf             []byte
+	// curlpro: the representation policy (curlpro_hpack.go).
+	curlproPolicy func(name string) IndexMode
+}'''),
+('m', HPACK,
+'''		indexing := e.shouldIndex(f)
+		if indexing {''',
+'''		indexing := e.shouldIndex(f)
+		indexing, f.Sensitive = e.curlproMode(f, indexing) // curlpro
+		if indexing {'''),
+('m', TRANSPORT,
+'''	// ExpectContinueTimeout (curlpro) — see expectContinueTimeout.
+	ExpectContinueTimeout time.Duration
+''',
+'''	// ExpectContinueTimeout (curlpro) — see expectContinueTimeout.
+	ExpectContinueTimeout time.Duration
+
+	// HPACKIndexPolicy (curlpro) decides each field's HPACK representation
+	// by its name; nil indexes whatever fits, as before.
+	HPACKIndexPolicy func(name string) hpack.IndexMode
+	// DisableCookieSplit (curlpro) sends a Cookie as one field, not crumbs.
+	DisableCookieSplit bool
+	// DataFrameMaxSize (curlpro) caps the DATA frames of a request body
+	// below the peer's SETTINGS_MAX_FRAME_SIZE; 0 is no cap of our own.
+	DataFrameMaxSize uint32
+'''),
+('m', TRANSPORT,
+'''	cc.henc = hpack.NewEncoder(&cc.hbuf)
+''',
+'''	cc.henc = hpack.NewEncoder(&cc.hbuf)
+	cc.henc.SetIndexPolicy(t.HPACKIndexPolicy) // curlpro
+'''),
+
+# (n) The Cookie as the caller gave it: crumbs relayed as they came stay
+#     crumbs, a joined Cookie stays one field (curlpro_cookie.go).
+('n', TRANSPORT,
+'''			} else if strings.EqualFold(kv.Key, "cookie") {
+				// Per 8.1.2.5''',
+'''			} else if strings.EqualFold(kv.Key, "cookie") && !cc.t.DisableCookieSplit && !curlproWholeCookie(req) {
+				// Per 8.1.2.5'''),
+
+# (o) A request body's DATA frames no larger than the profile's browser
+#     makes them.
+('o', TRANSPORT,
+'''			if take > int32(cc.maxFrameSize) {
+				take = int32(cc.maxFrameSize)
+			}
+			cs.flow.take(take)''',
+'''			if take > int32(cc.maxFrameSize) {
+				take = int32(cc.maxFrameSize)
+			}
+			if m := int32(cc.t.DataFrameMaxSize); m > 0 && take > m { // curlpro
+				take = m
+			}
+			cs.flow.take(take)'''),
+
+# (q) Extended CONNECT (RFC 8441): a CONNECT with :protocol keeps :scheme and
+#     :path and sends :protocol — after the others unless the order names it,
+#     as Chrome sends it; the server's SETTINGS_ENABLE_CONNECT_PROTOCOL is
+#     kept, and the first SETTINGS can be waited for (curlpro_connect.go).
+('q', TRANSPORT,
+'''				case ":path":
+					if req.Method != "CONNECT" {
+						f(":path", path)
+					}
+				case ":scheme":
+					if req.Method != "CONNECT" {
+						f(":scheme", req.URL.Scheme)
+					}
+''',
+'''				case ":path":
+					if !isNormalConnect(req) { // curlpro: extended CONNECT keeps it
+						f(":path", path)
+					}
+				case ":scheme":
+					if !isNormalConnect(req) { // curlpro: extended CONNECT keeps it
+						f(":scheme", req.URL.Scheme)
+					}
+				case ":protocol": // curlpro: extended CONNECT (RFC 8441)
+					if proto := req.Header.Get(":protocol"); proto != "" && req.Method == "CONNECT" {
+						f(":protocol", proto)
+						wroteProtocol = true
+					}
+'''),
+('q', TRANSPORT,
+'''				default:
+					continue
+				}
+			}
+		} else {''',
+'''				default:
+					continue
+				}
+			}
+			// curlpro: :protocol after the others, as Chrome sends it.
+			if proto := req.Header.Get(":protocol"); proto != "" && req.Method == "CONNECT" && !wroteProtocol {
+				f(":protocol", proto)
+			}
+		} else {'''),
+('q', TRANSPORT,
+'''		if ok {
+			// follow based on pseudo header order''',
+'''		wroteProtocol := false // curlpro
+		if ok {
+			// follow based on pseudo header order'''),
+('q', TRANSPORT,
+'''		for _, kv := range kvs {
+			if len(kv.Values) == 0 {
+				// feat: skip empty headers''',
+'''		for _, kv := range kvs {
+			if kv.Key == ":protocol" {
+				continue // curlpro: a pseudo-header, sent with the others
+			}
+			if len(kv.Values) == 0 {
+				// feat: skip empty headers'''),
+('q', TRANSPORT,
+'''type ClientConn struct {
+	br         *bufio.Reader
+''',
+'''type ClientConn struct {
+	// curlpro: closed at the server's first SETTINGS, and whether they
+	// allow extended CONNECT (curlpro_connect.go).
+	curlproSettings        chan struct{}
+	curlproConnectProtocol bool
+
+	br         *bufio.Reader
+'''),
+('q', TRANSPORT,
+'''	cc.henc.SetIndexPolicy(t.HPACKIndexPolicy) // curlpro
+''',
+'''	cc.henc.SetIndexPolicy(t.HPACKIndexPolicy) // curlpro
+	cc.curlproSettings = make(chan struct{})  // curlpro
+'''),
+('q', TRANSPORT,
+'''		case SettingEnableConnectProtocol:
+			if err := s.Valid(); err != nil {
+				return err
+			}
+		default:
+			// TODO(bradfitz): handle more settings? SETTINGS_HEADER_TABLE_SIZE probably.''',
+'''		case SettingEnableConnectProtocol:
+			if err := s.Valid(); err != nil {
+				return err
+			}
+			cc.curlproConnectProtocol = s.Val == 1 // curlpro
+		default:
+			// TODO(bradfitz): handle more settings? SETTINGS_HEADER_TABLE_SIZE probably.'''),
+('q', TRANSPORT,
+'''	if err != nil {
+		return err
+	}
+
+	cc.wmu.Lock()
+	defer cc.wmu.Unlock()
+
+	cc.fr.WriteSettingsAck()''',
+'''	if err != nil {
+		return err
+	}
+	if cc.curlproSettings != nil { // curlpro: the first SETTINGS are in
+		select {
+		case <-cc.curlproSettings:
+		default:
+			close(cc.curlproSettings)
+		}
+	}
+
+	cc.wmu.Lock()
+	defer cc.wmu.Unlock()
+
+	cc.fr.WriteSettingsAck()'''),
 ]
+
+HPACK_FILE = ROOT + 'hpack/curlpro_hpack.go'
 
 # Files the patch adds whole; written when missing or different.
 FILES = [
@@ -370,6 +591,120 @@ func validRawFieldName(s string) bool {
 }
 """),
 ]
+
+
+EXPECT = 'vendor/github.com/bogdanfinn/fhttp/curlpro_expect.go'
+FILES.append((EXPECT, """package http
+
+import "io"
+
+// WriteExpectingContinue writes the request as Write does, but after the
+// header block it flushes and asks wait whether to send the body: false
+// leaves it unsent (the server answered before the 100). curlpro's
+// HTTP/1.1 path is its own, so the wait net/http's Transport does for
+// Expect: 100-continue is reached through here.
+func (r *Request) WriteExpectingContinue(w io.Writer, wait func() bool) error {
+	return r.write(w, false, nil, wait)
+}
+"""))
+
+FILES.append((ROOT + 'curlpro_expect.go', """package http2
+
+import (
+	"strings"
+
+	http "github.com/bogdanfinn/fhttp"
+)
+
+// curlproHeaderValues is h[name] whatever the case of the key: curlpro's
+// headers_raw keeps the caller's (lowercase on HTTP/2), and a lookup by the
+// canonical key missed Expect: 100-continue.
+func curlproHeaderValues(h http.Header, name string) []string {
+	if v, ok := h[name]; ok {
+		return v
+	}
+	var out []string
+	for k, v := range h {
+		if strings.EqualFold(k, name) {
+			out = append(out, v...)
+		}
+	}
+	return out
+}
+"""))
+
+FILES.append((HPACK_FILE, """package hpack
+
+// IndexMode is how a field goes when the tables hold no exact match for it
+// (curlpro: a browser's encoder chooses by the name).
+type IndexMode uint8
+
+const (
+	// IndexDefault leaves the choice to the encoder: index what fits.
+	IndexDefault IndexMode = iota
+	// IndexIncremental: "Literal Header Field with Incremental Indexing".
+	IndexIncremental
+	// IndexWithout: "Literal Header Field without Indexing".
+	IndexWithout
+	// IndexNever: "Literal Header Field Never Indexed".
+	IndexNever
+)
+
+// SetIndexPolicy makes the encoder ask policy for each field's
+// representation; nil restores its own.
+func (e *Encoder) SetIndexPolicy(policy func(name string) IndexMode) {
+	e.curlproPolicy = policy
+}
+
+// curlproMode applies the policy: whether the field goes into the dynamic
+// table, and whether it is marked never indexed.
+func (e *Encoder) curlproMode(f HeaderField, indexing bool) (bool, bool) {
+	if e.curlproPolicy == nil || f.Sensitive {
+		return indexing, f.Sensitive
+	}
+	switch e.curlproPolicy(f.Name) {
+	case IndexWithout:
+		return false, false
+	case IndexNever:
+		return false, true
+	}
+	return indexing, false
+}
+"""))
+FILES.append((ROOT + 'curlpro_cookie.go', """package http2
+
+import http "github.com/bogdanfinn/fhttp"
+
+// WholeCookie, true in a request's context, sends its Cookie fields as they
+// are — no splitting into crumbs (curlpro: headers_raw relays crumbs as they
+// came, and a joined Cookie as one field).
+type WholeCookie struct{}
+
+func curlproWholeCookie(req *http.Request) bool {
+	v, _ := req.Context().Value(WholeCookie{}).(bool)
+	return v
+}
+"""))
+
+FILES.append((ROOT + 'curlpro_connect.go', """package http2
+
+import "context"
+
+// CurlproExtendedConnect waits for the server's first SETTINGS and reports
+// whether they allow extended CONNECT — RFC 8441's
+// SETTINGS_ENABLE_CONNECT_PROTOCOL, which a client must see before it sends
+// a CONNECT with :protocol (curlpro: WebSocket over HTTP/2).
+func (cc *ClientConn) CurlproExtendedConnect(ctx context.Context) (bool, error) {
+	select {
+	case <-cc.curlproSettings:
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	return cc.curlproConnectProtocol, nil
+}
+"""))
 
 
 def main():
