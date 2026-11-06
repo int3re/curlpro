@@ -42,6 +42,10 @@ type openStream struct {
 	// different Python threads, hence the mutex.
 	mu  sync.Mutex
 	err error
+
+	// bodyRID is the number of the call that opened the stream when its
+	// request body is streamed: the body is dropped with the stream.
+	bodyRID int64
 }
 
 func (st *openStream) setErr(err error) {
@@ -58,32 +62,49 @@ func (st *openStream) lastErr() error {
 
 // streamRequest parses the frame and finds the session — shared by both opens.
 func streamRequest(id C.longlong, frame *C.char, frameLen C.int) (*client.Session, *client.Request, error) {
+	sess, req, _, err := streamRequestJSON(id, frame, frameLen)
+	return sess, req, err
+}
+
+// streamedBody reports whether a request frame's JSON asks for body_stream.
+func streamedBody(meta []byte) bool {
+	var probe struct {
+		BodyStream bool `json:"body_stream"`
+	}
+	return json.Unmarshal(meta, &probe) == nil && probe.BodyStream
+}
+
+func streamRequestJSON(id C.longlong, frame *C.char, frameLen C.int) (*client.Session, *client.Request, bool, error) {
 	sessionsMu.RLock()
 	sess, ok := sessions[int64(id)]
 	sessionsMu.RUnlock()
 	if !ok {
-		return nil, nil, fmt.Errorf("session %d not found", int64(id))
+		return nil, nil, false, fmt.Errorf("session %d not found", int64(id))
 	}
 	meta, body, err := decodeFrame(frame, frameLen)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	var r requestJSON
 	if err := json.Unmarshal(meta, &r); err != nil {
-		return nil, nil, fmt.Errorf("parsing request: %w", err)
+		return nil, nil, false, fmt.Errorf("parsing request: %w", err)
 	}
 	req, err := r.toRequest(body)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
-	return sess, req, nil
+	return sess, req, r.BodyStream, nil
 }
 
 // registerStream registers an open stream and returns its number.
 func registerStream(st *client.Stream, cancel context.CancelFunc) int64 {
+	return registerStreamBody(st, cancel, 0)
+}
+
+func registerStreamBody(st *client.Stream, cancel context.CancelFunc, bodyRID int64) int64 {
 	sid := nextID.Add(1)
 	streamsMu.Lock()
-	streams[sid] = &openStream{s: st, cancel: cancel}
+	streams[sid] = &openStream{s: st, cancel: cancel, bodyRID: bodyRID}
 	streamsMu.Unlock()
 	return sid
 }
@@ -111,25 +132,40 @@ func streamMeta(sid int64, st *client.Stream) map[string]any {
 //export curlpro_stream_open_start
 func curlpro_stream_open_start(id C.longlong, frame *C.char, frameLen C.int) (out *C.char) {
 	defer recoverInto(&out)
-	sess, req, err := streamRequest(id, frame, frameLen)
+	sess, req, streamed, err := streamRequestJSON(id, frame, frameLen)
 	if err != nil {
 		return respond(nil, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	req.Ctx = ctx
 
+	// A streamed body is the caller's to write from the moment the number
+	// comes back; it lives as long as the stream it opens.
+	var before func(int64)
+	if streamed {
+		bp := client.NewBodyPipe()
+		bp.Attach(req)
+		before = func(rid int64) { registerBody(rid, bp) }
+	}
 	opened := new(int64)
-	return startAsync(cancel, func([]byte) {
+	return startAsyncWith(cancel, func([]byte) {
 		if sid := atomic.LoadInt64(opened); sid != 0 {
 			closeStream(sid)
 		}
-	}, func(int64) []byte {
+	}, before, func(rid int64) []byte {
 		st, err := sess.DoStream(req)
 		if err != nil {
 			cancel()
+			if streamed {
+				dropBody(rid, err)
+			}
 			return errorFrame(err)
 		}
-		sid := registerStream(st, cancel)
+		bodyRID := int64(0)
+		if streamed {
+			bodyRID = rid
+		}
+		sid := registerStreamBody(st, cancel, bodyRID)
 		atomic.StoreInt64(opened, sid)
 		return buildFrame(streamMeta(sid, st), nil, nil)
 	})
@@ -176,6 +212,9 @@ func closeStream(sid int64) error {
 	if !ok {
 		return fmt.Errorf("stream %d not found", sid)
 	}
+	if st.bodyRID != 0 {
+		dropBody(st.bodyRID, errRequestOver)
+	}
 	if st.cancel != nil {
 		st.cancel()
 	}
@@ -189,9 +228,12 @@ func closeStream(sid int64) error {
 //export curlpro_stream_open
 func curlpro_stream_open(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int) *C.char {
 	return framed(outLen, func() (*C.char, C.int) {
-		sess, req, err := streamRequest(id, frame, frameLen)
+		sess, req, streamed, err := streamRequestJSON(id, frame, frameLen)
 		if err != nil {
 			return respondFrame(nil, nil, err)
+		}
+		if streamed {
+			return respondFrame(nil, nil, errStreamedNeedsStart)
 		}
 
 		st, err := sess.DoStream(req)
@@ -250,6 +292,27 @@ func curlpro_stream_error(sid C.longlong) (out *C.char) {
 		return respond(nil, fmt.Errorf("stream %d not found", int64(sid)))
 	}
 	return respond(nil, st.lastErr())
+}
+
+// curlpro_stream_trailers reports the trailers of a stream's response, the
+// fields sent after the body: {"trailers": {name: [values]}}, empty before
+// curlpro_stream_read has returned 0 and when the server sent none. gRPC
+// carries its status there (grpc-status, grpc-message).
+//
+//export curlpro_stream_trailers
+func curlpro_stream_trailers(sid C.longlong) (out *C.char) {
+	defer recoverInto(&out)
+	streamsMu.RLock()
+	st, ok := streams[int64(sid)]
+	streamsMu.RUnlock()
+	if !ok {
+		return respond(nil, fmt.Errorf("stream %d not found", int64(sid)))
+	}
+	trailers := st.s.Trailers()
+	if trailers == nil {
+		trailers = map[string][]string{}
+	}
+	return respond(map[string]any{"trailers": trailers}, nil)
 }
 
 //export curlpro_stream_close

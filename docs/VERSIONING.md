@@ -64,6 +64,25 @@ existed.
 A wheel always carries a matching pair. The mismatch is only reachable when
 building from source or pointing `CURLPRO_LIBRARY` at an older file.
 
+## The C ABI is covered too
+
+Since 2026-11-04 the exports of `libcurlpro` are a public interface, not an
+implementation detail of the Python package: [include/curlpro.h](../include/curlpro.h)
+declares them, [C-ABI.md](C-ABI.md) describes them, and the bindings in
+[bindings/](../bindings/README.md) — .NET, Node, Java, Rust, PHP, C — are built
+on them. The ABI version above is their version too, with these rules:
+
+- **A patch** (`0.30.x`) adds nothing to the ABI.
+- **A minor** may add exports and JSON fields. An existing signature, a field's
+  meaning and an error code stay; a binding written for `0.30` works with
+  `0.31`. Bindings refuse a library older than their own `major.minor`.
+- **Changing or removing an export** would break every binding at once and is
+  not done before 1.0; if it ever is, it is named in the release notes like any
+  other removal.
+- The header's `CURLPRO_ABI_VERSION_*` macros move together with `Version` in
+  lib/curlpro.go, and `const Version` in the root Go package with both — a Go
+  test checks the last pair.
+
 ## Deprecation
 
 Anything on its way out keeps working for at least one minor release and warns

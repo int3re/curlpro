@@ -1,0 +1,17 @@
+[package]
+name = "curlpro"
+version = "0.30.0"
+edition = "2021"
+rust-version = "1.74"
+license = "Apache-2.0"
+description = "HTTP client with a browser's network fingerprint (TLS ClientHello, HTTP/2, HTTP/3, header order) — Rust binding of libcurlpro"
+repository = "https://github.com/int3re/curlpro"
+keywords = ["http", "tls", "fingerprint", "ja3", "ja4"]
+
+[dependencies]
+# The library is loaded at run time, as in every other binding: a Go
+# c-shared DLL has no import library for the MSVC linker, and one
+# CURLPRO_LIBRARY steers all languages alike.
+libloading = "0.8"
+serde = "1"
+serde_json = "1"

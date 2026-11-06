@@ -48,7 +48,7 @@ curlpro.register_profile({
 [Совместимость с requests](#совместимость-с-requests) · [Куки](#куки-между-запусками) ·
 [Мобильные профили](#мобильные-профили-и-client-hints) ·
 [Навигация и fetch](#навигация-и-fetch) · [Загрузка страницы](#загрузка-страницы-и-ресурсы) · [Профили как данные](#профили-как-данные) ·
-[Проверено замером](#проверено-замером) · [Границы](#границы)
+[Проверено замером](#проверено-замером) · [Другие языки](#другие-языки) · [Границы](#границы)
 
 ---
 
@@ -962,6 +962,26 @@ wreq-util — до 149. Отпечаток HTTP/3 сверен с `quic.browserl
 | curl_cffi | 1352 | 0.70 ms | 76% |
 | requests (без отпечатка) | 867 | 1.12 ms | 49% |
 
+## Другие языки
+
+Ядро — C-библиотека с описанным ABI, и Python лишь одна из привязок. Все они
+держат одни правила — умолчания браузера, проверку версии, коды ошибок — и один
+отпечаток: JA4 сессии на .NET, Node или Java тот же, что у сессии на Python.
+
+| Язык | Где | На чём |
+|---|---|---|
+| C, C++ | [bindings/c](bindings/c) | [include/curlpro.h](include/curlpro.h) |
+| Go | корневой пакет `github.com/curlpro/curlpro` | само ядро, без cgo |
+| .NET | [bindings/dotnet](bindings/dotnet) | `LibraryImport`, async с отменой |
+| Node.js | [bindings/node](bindings/node) | koffi, Promise |
+| Java | [bindings/java](bindings/java) | FFM (JDK 22+), `CompletableFuture` |
+| Rust | [bindings/rust](bindings/rust) | libloading (ещё не собиралась) |
+| PHP | [bindings/php](bindings/php) | FFI (ещё не запускалась) |
+
+Контракт — конверты, кадры, дескрипторы, каждое поле JSON, коды ошибок,
+потоки — в [docs/C-ABI.md](docs/C-ABI.md); обзор привязок и того, как каждая
+проверена, — в [bindings/README.md](bindings/README.md).
+
 ## Границы
 
 Библиотека закрывает сетевой слой: TLS ClientHello, кадры HTTP/2 и HTTP/3, порядок
@@ -1002,6 +1022,7 @@ Go выбран из-за двух возможностей uTLS: `ClientHelloSp
 | [llms.txt](llms.txt) | Карта на одну страницу для ИИ-ассистента: правила, поверхность API, факты, в которых он обычно ошибается |
 | [docs/AUDIT-BRIEF.md](docs/AUDIT-BRIEF.md) | **Срез состояния:** карта репозитория, инварианты («выглядит багом, но так задумано»), способы проверки |
 | [docs/AUDIT-QUESTIONS.md](docs/AUDIT-QUESTIONS.md) | Известные долги, пробелы в проверке, места, где нужна помощь |
+| [docs/C-ABI.md](docs/C-ABI.md) · [bindings/](bindings/README.md) | C ABI, на котором стоят все привязки, кроме Python; привязки для C, Go, .NET, Node, Java, Rust, PHP |
 | [docs/PROFILE-SCHEMA.md](docs/PROFILE-SCHEMA.md) | Схема JSON-профиля, наследование `based_on`, полный список полей |
 | [docs/CAPTURE.md](docs/CAPTURE.md) | Методика снятия эталона: команды, подводные камни, публичные оракулы |
 | [docs/FINGERPRINT-SPEC.md](docs/FINGERPRINT-SPEC.md) | Форматы JA3/JA4/JA4H/Akamai, текущие значения браузеров, расхождения между сервисами |

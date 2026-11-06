@@ -154,6 +154,20 @@ for _name, _args in (
     ("curlpro_result_take", [ctypes.c_longlong, ctypes.POINTER(ctypes.c_int)]),
     ("curlpro_request_cancel", [ctypes.c_longlong]),
     ("curlpro_debug_counts", []),
+    # 0.31: trailers, streamed request bodies, raw connections after an upgrade.
+    ("curlpro_stream_trailers", [ctypes.c_longlong]),
+    ("curlpro_request_body_write", [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]),
+    ("curlpro_request_body_end", [ctypes.c_longlong, ctypes.c_char_p]),
+    (
+        "curlpro_upgrade_open",
+        [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int, ctypes.POINTER(ctypes.c_int)],
+    ),
+    ("curlpro_upgrade_open_start", [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]),
+    ("curlpro_conn_error", [ctypes.c_longlong]),
+    ("curlpro_conn_read_start", [ctypes.c_longlong, ctypes.c_int]),
+    ("curlpro_conn_write_start", [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]),
+    ("curlpro_conn_close_write", [ctypes.c_longlong]),
+    ("curlpro_conn_close", [ctypes.c_longlong]),
 ):
     try:
         _fn = getattr(_lib, _name)
@@ -179,6 +193,10 @@ _lib.curlpro_async_pending.restype = ctypes.c_longlong
 # read returns a byte count, not a pointer: the caller owns the buffer.
 _lib.curlpro_stream_read.argtypes = [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]
 _lib.curlpro_stream_read.restype = ctypes.c_int
+# A raw connection's read and write answer byte counts too.
+for _name in ("curlpro_conn_read", "curlpro_conn_write"):
+    getattr(_lib, _name).argtypes = [ctypes.c_longlong, ctypes.c_char_p, ctypes.c_int]
+    getattr(_lib, _name).restype = ctypes.c_int
 
 
 #: One read buffer per thread, reused: a fresh zeroed 64 KiB buffer per chunk
@@ -219,7 +237,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Minimum version of the native part: major and minor. Raise it together
 # with lib/curlpro.go whenever Python starts depending on a new export or field.
-REQUIRED_VERSION = (0, 30)
+REQUIRED_VERSION = (0, 31)
 
 
 def _check_version() -> None:

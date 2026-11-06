@@ -27,6 +27,13 @@ func fromStdResponse(r *nethttp.Response) *http.Response {
 		Uncompressed:  r.Uncompressed,
 		Trailer:       http.Header(r.Trailer),
 	}
+	if r.Body != nil && r.Body != nethttp.NoBody {
+		out.Body = &stdTrailerBody{ReadCloser: r.Body, copy: func() {
+			if len(r.Trailer) > 0 {
+				out.Trailer = http.Header(r.Trailer)
+			}
+		}}
+	}
 	return out
 }
 

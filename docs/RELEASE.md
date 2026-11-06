@@ -2,7 +2,10 @@
 
 The package is built and published by the
 [.github/workflows/wheels.yml](../.github/workflows/wheels.yml) workflow, on a
-`v*` tag.
+`v*` tag. The same tag runs
+[bindings-release.yml](../.github/workflows/bindings-release.yml): the npm,
+NuGet, Maven and PHP packages and the native archives, each published only
+when its registry token is in the secrets ([bindings/README.md](../bindings/README.md#packages)).
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is

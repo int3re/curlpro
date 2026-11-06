@@ -47,6 +47,15 @@ type asyncCall struct {
 // bytes already taken off the connection are lost, which is why the stream or
 // socket is closed after a cancellation.
 func startAsync(cancel context.CancelFunc, discard func([]byte), work func(rid int64) []byte) *C.char {
+	return startAsyncWith(cancel, discard, nil, work)
+}
+
+// startAsyncWith is startAsync with a hook that runs with the call's number
+// before the work starts and before the number is returned: what the caller
+// may use the moment it has the number — a streamed body it writes to — is
+// registered by then.
+func startAsyncWith(cancel context.CancelFunc, discard func([]byte), before func(rid int64),
+	work func(rid int64) []byte) *C.char {
 	if cancel == nil {
 		cancel = func() {}
 	}
@@ -55,6 +64,9 @@ func startAsync(cancel context.CancelFunc, discard func([]byte), work func(rid i
 	asyncMu.Lock()
 	asyncPending[rid] = call
 	asyncMu.Unlock()
+	if before != nil {
+		before(rid)
+	}
 
 	go func() {
 		payload := runGuarded(rid, work)
@@ -136,9 +148,22 @@ func curlpro_request_start(id C.longlong, frame *C.char, frameLen C.int) (out *C
 	ctx, cancel := context.WithCancel(context.Background())
 	req.Ctx = ctx
 
-	return startAsync(cancel, nil, func(int64) []byte {
+	// A streamed body is registered under the call's number before the
+	// number goes back, and dropped when the response is complete: whatever
+	// the caller has not written by then is not going anywhere.
+	var bp *client.BodyPipe
+	var before func(int64)
+	if r.BodyStream {
+		bp = client.NewBodyPipe()
+		bp.Attach(req)
+		before = func(rid int64) { registerBody(rid, bp) }
+	}
+	return startAsyncWith(cancel, nil, before, func(rid int64) []byte {
 		defer cancel()
 		resp, err := s.Do(req)
+		if bp != nil {
+			dropBody(rid, errRequestOver)
+		}
 		if err != nil {
 			return errorFrame(err)
 		}
@@ -249,6 +274,7 @@ func okFrame(resp *client.Response) []byte {
 		Preflights:    resp.Preflights,
 		CookieChanges: resp.CookieChanges,
 		Cache:         resp.Cache,
+		Trailers:      resp.Trailers,
 	}, resp.Body, nil)
 }
 

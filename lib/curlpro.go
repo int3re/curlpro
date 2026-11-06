@@ -188,7 +188,13 @@ func curlpro_free(s *C.char) {
 // — "always" on padding, an explicit empty ALPS list — and {full_version} in
 // a User-Agent template (Yandex on iPhone writes its build); the profiles
 // carrying them do not load into an older library.
-const Version = "0.30.0"
+// 0.31.0: what a transparent proxy needs — timeout_ms 0 is no limit (it was
+// 30 s) and idle_timeout_ms cuts a stalled body; trailers in a response and
+// curlpro_stream_trailers; a request body written while the request is in
+// flight (body_stream, curlpro_request_body_write/_end); the raw connection
+// after an upgrade (curlpro_upgrade_open, curlpro_conn_*); the conn_closed
+// code.
+const Version = "0.31.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -316,18 +322,20 @@ type sessionConfig struct {
 	Cookies            bool     `json:"cookies"`
 	ForceHTTP1         bool     `json:"force_http1"`
 	// PostQuantum is a pointer because a missing field means "send the share".
-	PostQuantum       *bool  `json:"post_quantum"`
-	Resume            bool   `json:"resume"`
-	HTTP3             bool   `json:"http3"`
-	MaxIdleConns      int    `json:"max_idle_conns"`
-	IdleConnTimeoutMS int    `json:"idle_conn_timeout_ms"`
-	ConnectTimeoutMS  int    `json:"connect_timeout_ms"`
-	ResponseTimeoutMS int    `json:"response_timeout_ms"`
-	CACert            string `json:"ca_cert"`
-	ClientCert        string `json:"client_cert"`
-	ClientKey         string `json:"client_key"`
-	TrustEnv          bool   `json:"trust_env"`
-	MaxResponseSize   int64  `json:"max_response_size"`
+	PostQuantum       *bool `json:"post_quantum"`
+	Resume            bool  `json:"resume"`
+	HTTP3             bool  `json:"http3"`
+	MaxIdleConns      int   `json:"max_idle_conns"`
+	IdleConnTimeoutMS int   `json:"idle_conn_timeout_ms"`
+	ConnectTimeoutMS  int   `json:"connect_timeout_ms"`
+	ResponseTimeoutMS int   `json:"response_timeout_ms"`
+	// IdleTimeoutMS cuts a body that stops arriving; 0 is none.
+	IdleTimeoutMS   int    `json:"idle_timeout_ms"`
+	CACert          string `json:"ca_cert"`
+	ClientCert      string `json:"client_cert"`
+	ClientKey       string `json:"client_key"`
+	TrustEnv        bool   `json:"trust_env"`
+	MaxResponseSize int64  `json:"max_response_size"`
 	// AltSvc is a pointer because a missing field means "enabled".
 	AltSvc    *bool             `json:"alt_svc"`
 	Resolve   map[string]string `json:"resolve"`
@@ -437,6 +445,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		HTTP3:              c.HTTP3,
 		ConnectTimeout:     time.Duration(c.ConnectTimeoutMS) * time.Millisecond,
 		ResponseTimeout:    time.Duration(c.ResponseTimeoutMS) * time.Millisecond,
+		IdleTimeout:        time.Duration(c.IdleTimeoutMS) * time.Millisecond,
 		CACert:             c.CACert,
 		ClientCert:         c.ClientCert,
 		ClientKey:          c.ClientKey,
@@ -695,6 +704,14 @@ func curlpro_debug_counts() (out *C.char) {
 	nStreams := len(streams)
 	streamsMu.RUnlock()
 
+	connsMu.RLock()
+	nConns := len(conns)
+	connsMu.RUnlock()
+
+	bodiesMu.Lock()
+	nBodies := len(bodies)
+	bodiesMu.Unlock()
+
 	socketsMu.RLock()
 	nSockets := len(sockets)
 	socketsMu.RUnlock()
@@ -712,6 +729,8 @@ func curlpro_debug_counts() (out *C.char) {
 		"sessions":   nSessions,
 		"streams":    nStreams,
 		"sockets":    nSockets,
+		"conns":      nConns,
+		"bodies":     nBodies,
 		"pending":    nPending,
 		"goroutines": runtime.NumGoroutine(),
 		"heap_kb":    int(mem.HeapAlloc / 1024),
@@ -730,12 +749,18 @@ type requestJSON struct {
 	Multipart      *multipartJSON    `json:"multipart"`
 	// BodyFile streams a file instead of reading it whole into memory.
 	BodyFile string `json:"body_file"`
+	// BodyStream: the body is written while the request is in flight
+	// (curlpro_request_body_write/_end on the request's number), not carried
+	// in the frame. BodySize is its Content-Length when known; 0 is unknown.
+	BodyStream bool  `json:"body_stream"`
+	BodySize   int64 `json:"body_size"`
 
 	// Per-request overrides of session settings. Pointers tell "not set" from
 	// "set to zero": for a timeout and for redirects those differ.
 	TimeoutMS         *int       `json:"timeout_ms"`
 	ConnectTimeoutMS  *int       `json:"connect_timeout_ms"`
 	ResponseTimeoutMS *int       `json:"response_timeout_ms"`
+	IdleTimeoutMS     *int       `json:"idle_timeout_ms"`
 	FollowRedirects   *bool      `json:"follow_redirects"`
 	MaxRedirects      *int       `json:"max_redirects"`
 	Retry             *retryJSON `json:"retry"`
@@ -780,6 +805,10 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 		d := time.Duration(*r.ResponseTimeoutMS) * time.Millisecond
 		req.ResponseTimeout = &d
 	}
+	if r.IdleTimeoutMS != nil {
+		d := time.Duration(*r.IdleTimeoutMS) * time.Millisecond
+		req.IdleTimeout = &d
+	}
 	req.FollowRedirects = r.FollowRedirects
 	req.MaxRedirects = r.MaxRedirects
 	req.Retry = r.Retry.toPolicy()
@@ -811,6 +840,13 @@ func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 		TrackCookies:    r.TrackCookies,
 	}
 	r.applyOverrides(req)
+	if r.BodyStream {
+		if len(body) > 0 || r.BodyFile != "" || r.Multipart != nil {
+			return nil, client.CodeError(client.CodeConfiguration, fmt.Errorf(
+				"body_stream with a body in the frame, a body_file or a multipart form: pass one body"))
+		}
+		req.BodySize = r.BodySize
+	}
 	if r.Multipart != nil {
 		form, err := splitFiles(r.Multipart, body)
 		if err != nil {
@@ -878,6 +914,9 @@ type responseJSON struct {
 	// Cache is how the session's cache served the response: "hit",
 	// "revalidated", "miss", or absent when it took no part.
 	Cache string `json:"cache,omitempty"`
+	// Trailers are the fields sent after the body ({name: [values]}, as
+	// headers): gRPC's grpc-status and grpc-message. Absent when none came.
+	Trailers map[string][]string `json:"trailers,omitempty"`
 }
 
 // pause turns a millisecond setting into a duration: nil keeps the policy's
@@ -1006,6 +1045,9 @@ func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int
 			return respondFrame(nil, nil, err)
 		}
 
+		if streamedBody(meta) {
+			return respondFrame(nil, nil, errStreamedNeedsStart)
+		}
 		resp, err := s.Do(req)
 		if err != nil {
 			return respondFrame(nil, nil, err)
@@ -1020,6 +1062,7 @@ func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int
 			Cache:         resp.Cache,
 			History:       resp.History,
 			Preflights:    resp.Preflights,
+			Trailers:      resp.Trailers,
 		}, resp.Body, nil)
 	})
 }

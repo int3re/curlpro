@@ -96,6 +96,8 @@ func (s *Session) nextRequest(prev *Request, nextURL string, status int, initiat
 		next.BodyFile = ""
 		next.BodySize = 0
 		next.Multipart = nil
+		next.BodyStream = nil
+		next.BodyTrailer = nil
 		dropHeader(next.Headers, "content-type", "content-length")
 	}
 

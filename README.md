@@ -50,7 +50,7 @@ curlpro.register_profile({
 [Mobile profiles](#mobile-profiles-and-client-hints) ·
 [Navigation vs fetch](#navigation-vs-fetch) · [Page loads](#page-loads-and-resources) ·
 [Profiles as data](#profiles-as-data) ·
-[Measured, not assumed](#measured-not-assumed) · [Limits](#limits)
+[Measured, not assumed](#measured-not-assumed) · [Other languages](#other-languages) · [Limits](#limits)
 
 ---
 
@@ -981,6 +981,27 @@ Speed — 400 requests, a local stand, a reused connection:
 | curl_cffi | 1352 | 0.70 ms | 76% |
 | requests (no fingerprint) | 867 | 1.12 ms | 49% |
 
+## Other languages
+
+The core is a C library with a documented ABI, so Python is one binding among
+several. Each of them keeps the same rules — browser defaults, the version
+check, error codes — and the same fingerprint: the JA4 a .NET, Node or Java
+session sends is the one the Python session sends.
+
+| Language | Where | Built on |
+|---|---|---|
+| C, C++ | [bindings/c](bindings/c) | [include/curlpro.h](include/curlpro.h) |
+| Go | the root package `github.com/curlpro/curlpro` | the core itself, no cgo |
+| .NET | [bindings/dotnet](bindings/dotnet) | `LibraryImport`, async with cancellation |
+| Node.js | [bindings/node](bindings/node) | koffi, Promises |
+| Java | [bindings/java](bindings/java) | FFM (JDK 22+), `CompletableFuture` |
+| Rust | [bindings/rust](bindings/rust) | libloading (not compiled yet) |
+| PHP | [bindings/php](bindings/php) | FFI (not run yet) |
+
+The contract — envelopes, frames, handles, every JSON field, error codes,
+threads — is [docs/C-ABI.md](docs/C-ABI.md); the overview of the bindings and
+how each was checked is [bindings/README.md](bindings/README.md).
+
 ## Limits
 
 The library covers the network layer: the TLS ClientHello, HTTP/2 and HTTP/3 frames,
@@ -1021,6 +1042,7 @@ an AI assistant.
 | [llms.txt](llms.txt) | The one-page map for an AI assistant: rules, API surface, facts it tends to get wrong |
 | [docs/AUDIT-BRIEF.md](docs/AUDIT-BRIEF.md) | State snapshot: repository map, invariants, verification recipes |
 | [docs/AUDIT-QUESTIONS.md](docs/AUDIT-QUESTIONS.md) | Known debts, gaps in coverage, where help is wanted |
+| [docs/C-ABI.md](docs/C-ABI.md) · [bindings/](bindings/README.md) | The C ABI every non-Python binding is built on; the bindings for C, Go, .NET, Node, Java, Rust, PHP |
 | [docs/PROFILE-SCHEMA.md](docs/PROFILE-SCHEMA.md) | The JSON profile schema, `based_on` inheritance, every field |
 | [docs/CAPTURE.md](docs/CAPTURE.md) | How a baseline is captured: commands, pitfalls, public oracles |
 | [docs/FINGERPRINT-SPEC.md](docs/FINGERPRINT-SPEC.md) | JA3/JA4/JA4H/Akamai formats, current browser values, disagreements between services |

@@ -63,3 +63,15 @@ capture/certs-multi/
 # record that is meant to be shipped as a device the fork can present is moved
 # to profiles/ deliberately, from hardware whose owner meant to publish it.
 capture/fp/
+
+# The public C header is written by hand, unlike dist/curlpro.h
+!include/curlpro.h
+
+# Binding build output
+bindings/dotnet/**/bin/
+bindings/dotnet/**/obj/
+bindings/java/target/
+bindings/node/node_modules/
+bindings/rust/target/
+bindings/rust/Cargo.lock
+bindings/php/vendor/

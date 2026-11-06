@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- LibraryImport needs .NET 7+; 8.0 is the oldest supported LTS. -->
+    <!-- dotnet build -p:CurlproTfm=net10.0 builds for another framework. -->
+    <CurlproTfm Condition="'$(CurlproTfm)' == ''">net8.0</CurlproTfm>
+    <TargetFramework>$(CurlproTfm)</TargetFramework>
+    <RootNamespace>Curlpro</RootNamespace>
+    <!-- Not "Curlpro": on Windows Curlpro.dll and the native curlpro.dll are the same file name. -->
+    <AssemblyName>Curlpro.Net</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <Version>0.30.0</Version>
+    <PackageId>Curlpro</PackageId>
+    <Description>HTTP client with a browser's network fingerprint (TLS ClientHello, HTTP/2, HTTP/3, header order) — .NET binding of libcurlpro.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <!--
+    scripts/package-bindings.py packs the native library and the profiles in:
+    -p:CurlproNatives=<dir with win32-x64/curlpro.dll, linux-arm64/libcurlpro.so…>
+    -p:CurlproProfiles=<the profiles directory>
+    A consuming app gets the library under runtimes/<rid>/native (the runtime
+    finds it through deps.json) and the profiles in its output's profiles/.
+  -->
+  <ItemGroup Condition="'$(CurlproNatives)' != ''">
+    <None Include="$(CurlproNatives)/win32-x64/curlpro.dll" Condition="Exists('$(CurlproNatives)/win32-x64/curlpro.dll')" Pack="true" PackagePath="runtimes/win-x64/native/" />
+    <None Include="$(CurlproNatives)/win32-arm64/curlpro.dll" Condition="Exists('$(CurlproNatives)/win32-arm64/curlpro.dll')" Pack="true" PackagePath="runtimes/win-arm64/native/" />
+    <None Include="$(CurlproNatives)/linux-x64/libcurlpro.so" Condition="Exists('$(CurlproNatives)/linux-x64/libcurlpro.so')" Pack="true" PackagePath="runtimes/linux-x64/native/" />
+    <None Include="$(CurlproNatives)/linux-arm64/libcurlpro.so" Condition="Exists('$(CurlproNatives)/linux-arm64/libcurlpro.so')" Pack="true" PackagePath="runtimes/linux-arm64/native/" />
+    <None Include="$(CurlproNatives)/darwin-x64/libcurlpro.dylib" Condition="Exists('$(CurlproNatives)/darwin-x64/libcurlpro.dylib')" Pack="true" PackagePath="runtimes/osx-x64/native/" />
+    <None Include="$(CurlproNatives)/darwin-arm64/libcurlpro.dylib" Condition="Exists('$(CurlproNatives)/darwin-arm64/libcurlpro.dylib')" Pack="true" PackagePath="runtimes/osx-arm64/native/" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(CurlproProfiles)' != ''">
+    <Content Include="$(CurlproProfiles)/*.json" Pack="true" PackagePath="contentFiles/any/any/profiles/" PackageCopyToOutput="true" BuildAction="None" CopyToOutputDirectory="Never" />
+  </ItemGroup>
+
+</Project>

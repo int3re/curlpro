@@ -28,6 +28,9 @@ const (
 	// CodeWSProtocol — the server broke RFC 6455/7692: a compressed frame without
 	// the negotiated extension, an unknown opcode and the like.
 	CodeWSProtocol ErrorCode = "ws_protocol"
+	// CodeConnClosed — a raw connection (after an upgrade) or a streamed
+	// request body is closed: by the caller, or because the request ended.
+	CodeConnClosed ErrorCode = "conn_closed"
 	// CodeTooLarge — the response body outgrew MaxResponseSize. The streaming
 	// path raises the same code from Python, so a caller that branches on it
 	// does not have to know which path produced the body.
@@ -161,6 +164,10 @@ func asConfig(err error) error {
 // that is not registered, a profile file that does not parse — as a
 // configuration mistake, so the FFI layer reports it as permanent too.
 func AsConfigError(err error) error { return asConfig(err) }
+
+// CodeError gives err a code, for the layers above the client (the C ABI)
+// that raise errors of their own in the same classes.
+func CodeError(code ErrorCode, err error) error { return withCode(code, err) }
 
 // Code returns the error code. Timeouts are recognised by type rather than by
 // code: they come from net and context, which know nothing of our codes.

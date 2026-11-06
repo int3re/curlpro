@@ -362,6 +362,11 @@ func (s *Session) sendH3(ctx context.Context, r *Request, u *url.URL, proxy stri
 	if size >= 0 {
 		req.ContentLength = size
 	}
+	// A streamed body's trailers: the h3 client sends what the map holds when
+	// the body ends (send() has made the map).
+	if r.BodyStream != nil && r.BodyTrailer != nil {
+		req.Trailer = nethttp.Header(r.BodyTrailer)
+	}
 	s.applyH3Headers(req, r, u)
 
 	resp, err := tr.RoundTrip(req)

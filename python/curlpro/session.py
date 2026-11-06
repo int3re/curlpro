@@ -59,6 +59,25 @@ def _ms(value: float | None, name: str) -> int | None:
     return int(v * 1000)
 
 
+def _request_ms(value: float | None, name: str) -> int | None:
+    """A request's own limit: as _ms, and zero refused.
+
+    The native side reads a zero as "no limit" (ABI 0.31, what the C ABI had
+    always promised for the session); here a zero keeps meaning what it meant
+    — a mistake, as in requests — and no limit stays float("inf").
+    """
+    ms = _ms(value, name)
+    if ms == 0:
+        from .errors import ConfigurationError
+
+        raise ConfigurationError(
+            f"{name.replace('_', ' ')} must be positive, got {value} "
+            f"(float('inf') is no limit; leave it unset for the session's)",
+            "configuration",
+        )
+    return ms
+
+
 if TYPE_CHECKING:
     from typing_extensions import Unpack
 
@@ -524,9 +543,9 @@ def _request_meta(
         "body_file": body_file or "",
         # None means "take the session's"; zero is a meaningful value, so
         # absence is what travels, not a substituted default.
-        "timeout_ms": _ms(timeout, "timeout"),
-        "connect_timeout_ms": _ms(connect_timeout, "connect_timeout"),
-        "response_timeout_ms": _ms(response_timeout, "response_timeout"),
+        "timeout_ms": _request_ms(timeout, "timeout"),
+        "connect_timeout_ms": _request_ms(connect_timeout, "connect_timeout"),
+        "response_timeout_ms": _request_ms(response_timeout, "response_timeout"),
         "follow_redirects": allow_redirects,
         "max_redirects": max_redirects,
         "retry": _retry_config(

@@ -1,0 +1,141 @@
+name: bindings-release
+
+# The language packages, on the same v* tag as the wheels: the native library
+# is built on each platform (cgo does not cross-compile), then
+# scripts/package-bindings.py puts it into an npm, NuGet, Maven and PHP package
+# and a plain archive per platform.
+#
+# Publishing is opt-in per registry: a step runs only when its token is set in
+# the repository's secrets. Without any, the packages are still built and kept
+# as the run's artifact, and attached to the GitHub release of the tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  natives:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, plat: linux-x64, lib: libcurlpro.so }
+          - { os: ubuntu-24.04-arm, plat: linux-arm64, lib: libcurlpro.so }
+          - { os: macos-15-intel, plat: darwin-x64, lib: libcurlpro.dylib }
+          - { os: macos-latest, plat: darwin-arm64, lib: libcurlpro.dylib }
+          - { os: windows-latest, plat: win32-x64, lib: curlpro.dll }
+          - { os: windows-11-arm, plat: win32-arm64, lib: curlpro.dll, llvm_mingw: "20261020" }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+      # The same compiler the wheels use on Windows on ARM64 (see wheels.yml).
+      - name: a C compiler for Windows on ARM64
+        if: matrix.llvm_mingw
+        shell: pwsh
+        run: |
+          $v = "${{ matrix.llvm_mingw }}"
+          $url = "https://github.com/mstorsjo/llvm-mingw/releases/download/$v/llvm-mingw-$v-ucrt-aarch64.zip"
+          Invoke-WebRequest $url -OutFile llvm-mingw.zip
+          Expand-Archive llvm-mingw.zip -DestinationPath C:\
+          "C:\llvm-mingw-$v-ucrt-aarch64\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+      - name: build the library
+        env:
+          CGO_ENABLED: "1"
+        run: go build -buildmode=c-shared -o "natives/${{ matrix.plat }}/${{ matrix.lib }}" ./lib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.plat }}
+          path: natives/${{ matrix.plat }}/${{ matrix.lib }}
+
+  package:
+    needs: natives
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          path: natives
+
+      - name: the version is the tag's
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          [ "${GITHUB_REF_TYPE}" = tag ] || v="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+
+      # The signed bundle goes into the jar when the signing key is available;
+      # without it the jar carries the plain profiles (both load the same way).
+      - name: sign the profile bundle
+        env:
+          CURLPRO_SIGNING_KEY_SEED: ${{ secrets.CURLPRO_SIGNING_KEY }}
+        if: env.CURLPRO_SIGNING_KEY_SEED != ''
+        run: |
+          umask 077
+          printf '%s\n' "$CURLPRO_SIGNING_KEY_SEED" > "$RUNNER_TEMP/signing.key"
+          go run ./cmd/curlpro bundle -key "$RUNNER_TEMP/signing.key" -package "$VERSION" -min-abi 0.30.0 -commit "$GITHUB_SHA" -out dist/bundle
+          rm -f "$RUNNER_TEMP/signing.key"
+
+      - name: package
+        run: python scripts/package-bindings.py --natives natives --version "$VERSION" --out dist/bindings
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bindings
+          path: |
+            dist/bindings/npm/*.tgz
+            dist/bindings/nuget/*.nupkg
+            dist/bindings/maven/*
+            dist/bindings/php/*.zip
+            dist/bindings/native/*.zip
+
+      - name: attach to the release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/bindings/maven/*
+            dist/bindings/php/*.zip
+            dist/bindings/native/*.zip
+
+      # The platform packages first: the main one depends on them.
+      - name: publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        if: github.ref_type == 'tag' && env.NODE_AUTH_TOKEN != ''
+        run: |
+          for t in dist/bindings/npm/curlpro-*-*.tgz; do npm publish --access public "$t"; done
+          npm publish --access public "dist/bindings/npm/curlpro-$VERSION.tgz"
+
+      - name: publish to NuGet
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        if: github.ref_type == 'tag' && env.NUGET_API_KEY != ''
+        run: dotnet nuget push dist/bindings/nuget/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
+
+      - name: publish the crate
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        if: github.ref_type == 'tag' && env.CARGO_REGISTRY_TOKEN != ''
+        run: cargo publish --manifest-path bindings/rust/Cargo.toml

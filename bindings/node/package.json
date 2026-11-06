@@ -1,0 +1,17 @@
+{
+  "name": "curlpro",
+  "version": "0.30.0",
+  "description": "HTTP client with a browser's network fingerprint (TLS ClientHello, HTTP/2, HTTP/3, header order) — Node.js binding of libcurlpro",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": ["index.js", "index.d.ts", "lib/", "profiles/"],
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "koffi": "^3.3.6"
+  },
+  "scripts": {
+    "example": "node example.js"
+  },
+  "license": "Apache-2.0",
+  "repository": { "type": "git", "url": "https://github.com/int3re/curlpro.git", "directory": "bindings/node" }
+}

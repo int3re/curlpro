@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -48,6 +49,11 @@ type Stream struct {
 	Cache string
 
 	body io.ReadCloser
+	// resp is the response the body belongs to: its trailers arrive in it
+	// when the body ends. trailerMu keeps Trailers from reading them while a
+	// Read is writing them (every protocol fills them inside the last Read).
+	resp      *http.Response
+	trailerMu sync.Mutex
 
 	// closed is atomic: Close arrives both from Python's GC thread (__del__) and
 	// from an explicit call, and a plain bool would allow a double close.
@@ -68,6 +74,8 @@ func (s *Stream) Read(p []byte) (int, error) {
 	if s.closed.Load() {
 		return 0, fmt.Errorf("stream is closed")
 	}
+	s.trailerMu.Lock()
+	defer s.trailerMu.Unlock()
 	return s.body.Read(p)
 }
 
@@ -125,7 +133,7 @@ func (s *Session) DoStream(r *Request) (st *Stream, err error) {
 	// and a nil stream came back with a nil error).
 	topNav := r.Resource == "" && s.modeFor(r) == ModeNavigate
 	if u, uerr := url.Parse(stream.URL); uerr == nil && topNav && s.noteAcceptCH(u, stream.Headers) &&
-		isIdempotent(r.Method) {
+		isIdempotent(r.Method) && r.BodyStream == nil {
 		stream.Close()
 		retried, rerr := s.doStream(r)
 		if rerr != nil {
@@ -149,8 +157,13 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 	if err := r.validate(s.cookieJar() != nil); err != nil {
 		return nil, err
 	}
+	// A zero limit is no deadline at all: the zero time, which send() and
+	// the checks below read as "unbounded".
 	limit := s.timeout(r)
-	deadline := time.Now().Add(limit)
+	var deadline time.Time
+	if limit > 0 {
+		deadline = time.Now().Add(limit)
+	}
 	policy := s.retryPolicy(r)
 
 	for attempt := 0; ; attempt++ {
@@ -159,7 +172,8 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 			return stream, nil
 		}
 
-		exhausted := attempt >= policy.attempts()
+		// A streamed body is gone once sent: nothing to send again.
+		exhausted := attempt >= policy.attempts() || r.BodyStream != nil
 		// Repeating a non-idempotent method may create a second order: the server
 		// may have processed the request and failed to answer in time. Listing it in
 		// Methods lifts the ban for server responses (it answered, so it processed
@@ -182,7 +196,7 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 		}
 
 		wait := policy.delay(attempt+1, outcome.header)
-		if time.Now().Add(wait).After(deadline) {
+		if !deadline.IsZero() && time.Now().Add(wait).After(deadline) {
 			if outcome.stream != nil {
 				return outcome.stream, nil
 			}
@@ -195,11 +209,18 @@ func (s *Session) doStream(r *Request) (*Stream, error) {
 		// request budget long. Bounded by the retry count, so a small leak —
 		// but a leak per attempt on a hot path is not worth keeping.
 		backoff := time.NewTimer(wait)
-		budget := time.NewTimer(time.Until(deadline))
+		var budget *time.Timer
+		var budgetC <-chan time.Time // nil without a deadline: never ready
+		if !deadline.IsZero() {
+			budget = time.NewTimer(time.Until(deadline))
+			budgetC = budget.C
+		}
 		select {
 		case <-backoff.C:
-			budget.Stop()
-		case <-budget.C:
+			if budget != nil {
+				budget.Stop()
+			}
+		case <-budgetC:
 			backoff.Stop()
 			if outcome.stream != nil {
 				return outcome.stream, nil
@@ -271,7 +292,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 	policy := s.retryPolicy(r)
 
 	for hop := 0; ; hop++ {
-		if time.Now().After(deadline) {
+		if !deadline.IsZero() && time.Now().After(deadline) {
 			return nil, attemptOutcome{}, fmt.Errorf("request timed out after %s", limit)
 		}
 
@@ -308,7 +329,7 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 
 		// A response code the server itself uses to invite a retry.
 		// The response is kept whole: if the attempts run out, it goes to the caller.
-		if policy.attempts() > 0 && policy.allowsStatus(resp.StatusCode) {
+		if policy.attempts() > 0 && r.BodyStream == nil && policy.allowsStatus(resp.StatusCode) {
 			held := &Stream{
 				Status:     resp.StatusCode,
 				Headers:    resp.Header,
@@ -326,7 +347,11 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 		}
 
 		next := ""
-		if follow && isRedirect(resp.StatusCode) {
+		// A 307 or 308 repeats the body, which a streamed one cannot: the
+		// response goes back to the caller with its Location.
+		keepsBody := resp.StatusCode == http.StatusTemporaryRedirect ||
+			resp.StatusCode == http.StatusPermanentRedirect
+		if follow && isRedirect(resp.StatusCode) && !(r.BodyStream != nil && keepsBody) {
 			if location := resp.Header.Get("Location"); location != "" {
 				target, err := redirectTarget(current.URL, location)
 				switch {
@@ -361,7 +386,8 @@ func (s *Session) attempt(r *Request, deadline time.Time, limit time.Duration) (
 				History:    history,
 				Preflights: preflights,
 				Cache:      cacheOutcome(resp.Body),
-				body:       resp.Body,
+				body:       idleBodyFor(resp.Body, s.idleTimeout(r), cancel),
+				resp:       resp,
 				cancel:     cancel,
 				conn:       used,
 				sess:       s,

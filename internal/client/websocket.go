@@ -144,7 +144,15 @@ func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocke
 	if parent == nil {
 		parent = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(parent, timeout)
+	// A zero timeout is no limit, as for a request: no handshake deadline
+	// (WithTimeout(0) would have expired before the dial).
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if timeout > 0 {
+		ctx, cancel = context.WithTimeout(parent, timeout)
+	} else {
+		ctx, cancel = context.WithCancel(parent)
+	}
 	defer cancel()
 	if opts.ConnectTimeout > 0 {
 		ctx = withConnectLimit(ctx, opts.ConnectTimeout)

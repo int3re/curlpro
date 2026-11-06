@@ -1,0 +1,82 @@
+name: bindings
+
+# Every binding on every system, on every change that can move them: the
+# library, the core, the header or the bindings themselves.
+#
+# What is checked is the library's one promise across languages: the same
+# profile sends the same fingerprint. Each binding prints the offline JA4 of
+# chrome-156-windows (no network, so no flaky oracle), and
+# scripts/bindings-agree.sh compares them with the Go package. BINDINGS_STRICT
+# turns a missing toolchain into a failure — a runner image that loses PHP
+# must not quietly drop the PHP binding from the check.
+on:
+  push:
+    paths: [lib/**, internal/**, include/**, bindings/**, curlpro.go, profiles/**, scripts/bindings-agree.sh, .github/workflows/bindings.yml]
+  pull_request:
+    paths: [lib/**, internal/**, include/**, bindings/**, curlpro.go, profiles/**, scripts/bindings-agree.sh, .github/workflows/bindings.yml]
+  workflow_dispatch:
+
+jobs:
+  agree:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            lib: libcurlpro.so
+          - os: macos-latest
+            lib: libcurlpro.dylib
+          - os: windows-latest
+            lib: curlpro.dll
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      BINDINGS_STRICT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: ffi
+          ini-values: ffi.enable=1
+
+      - name: build the library
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          go build -buildmode=c-shared -o "dist/${{ matrix.lib }}" ./lib
+          echo "CURLPRO_LIBRARY=$PWD/dist/${{ matrix.lib }}" >> "$GITHUB_ENV"
+          echo "CURLPRO_PROFILES=$PWD/profiles" >> "$GITHUB_ENV"
+
+      - name: the Go package
+        run: go test -count=1 -run 'Version|Offline|Unknown' .
+
+      - name: the bindings compile
+        run: |
+          dotnet build bindings/dotnet/Example -nologo -v q
+          (cd bindings/node && npm install --no-audit --no-fund && node --check index.js)
+          javac --release 22 -d "$RUNNER_TEMP/classes" $(find bindings/java/src/main/java -name '*.java')
+          cargo build --quiet --manifest-path bindings/rust/Cargo.toml --examples
+          php -l bindings/php/src/curlpro.php
+
+      - name: every binding sends the same fingerprint
+        run: scripts/bindings-agree.sh

@@ -1,0 +1,14 @@
+{
+    "name": "curlpro/curlpro",
+    "description": "HTTP client with a browser's network fingerprint (TLS ClientHello, HTTP/2, HTTP/3, header order) — PHP FFI binding of libcurlpro",
+    "type": "library",
+    "license": "Apache-2.0",
+    "require": {
+        "php": ">=8.1",
+        "ext-ffi": "*",
+        "ext-json": "*"
+    },
+    "autoload": {
+        "files": ["src/curlpro.php"]
+    }
+}

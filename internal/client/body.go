@@ -18,6 +18,15 @@ func requestBody(r *Request) (io.Reader, int64, error) {
 	case r.BodyFile != "" && len(r.Body) > 0:
 		return nil, 0, fmt.Errorf("request has both Body and BodyFile set: pass exactly one")
 
+	case r.BodyStream != nil && (r.BodyFile != "" || len(r.Body) > 0 || r.Multipart != nil):
+		return nil, 0, configErr("request has a streamed body and another one: pass exactly one")
+
+	case r.BodyStream != nil:
+		if r.BodySize > 0 {
+			return r.BodyStream, r.BodySize, nil
+		}
+		return r.BodyStream, -1, nil
+
 	case r.BodyFile != "":
 		f, err := os.Open(r.BodyFile)
 		if err != nil {

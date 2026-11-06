@@ -129,9 +129,16 @@ func TestResponseTimeoutIsValidated(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	// A negative override is refused by name; a zero one is no limit for the
+	// request (since 0.31, as in the options), so it gets as far as the dial.
+	neg := -time.Second
+	_, err = s.Do(&Request{Method: "GET", URL: "https://127.0.0.1:1/", ResponseTimeout: &neg})
+	if err == nil || !strings.Contains(err.Error(), "response timeout cannot be negative") {
+		t.Errorf("a negative override was not refused by name: %v", err)
+	}
 	zero := time.Duration(0)
 	_, err = s.Do(&Request{Method: "GET", URL: "https://127.0.0.1:1/", ResponseTimeout: &zero})
-	if err == nil || !strings.Contains(err.Error(), "response timeout must be positive") {
-		t.Errorf("a zero override was not refused by name: %v", err)
+	if err == nil || Code(err) == CodeConfiguration {
+		t.Errorf("a zero override was refused instead of meaning no limit: %v", err)
 	}
 }

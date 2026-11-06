@@ -38,8 +38,16 @@ const DefaultMaxRedirects = 20
 type Options struct {
 	// InsecureSkipVerify turns certificate verification off.
 	InsecureSkipVerify bool
-	// Timeout caps every request as a whole, redirects included.
+	// Timeout caps every request as a whole, redirects included. 0 means no
+	// limit: a video, a download, a server-sent event stream or a long poll
+	// is read for as long as it lasts (until 0.31 a zero became 30 seconds,
+	// while the C ABI and the Python docs promised none).
 	Timeout time.Duration
+	// IdleTimeout aborts a response whose body stops arriving: no byte for
+	// this long while a read waits for one. 0 means no idle limit. It is the
+	// bound a stream without a total limit wants — a dead peer is noticed,
+	// and a live one is read however long it takes.
+	IdleTimeout time.Duration
 	// Proxy is http://, https:// or socks5:// with optional user:pass.
 	Proxy string
 
@@ -262,8 +270,29 @@ type Request struct {
 	// archive must not need a gigabyte of RAM. Mutually exclusive with Body.
 	BodyFile string
 	// BodySize is the body size for Content-Length. Zero together with BodyFile
-	// means "take it from the file".
+	// means "take it from the file"; with BodyStream, an unknown length.
 	BodySize int64
+
+	// BodyStream is a body written while the request is in flight — an
+	// io.Pipe's reader the caller feeds: a gRPC client or bidirectional
+	// stream, an upload relayed as it arrives rather than after it ended.
+	// Without BodySize its length is unknown: chunked on HTTP/1.1, DATA
+	// frames until END_STREAM on HTTP/2 and HTTP/3, where the response may
+	// come back while the body is still being written (full duplex).
+	//
+	// It cannot be read twice, so a request with one is never replayed: no
+	// retries, no resend on a fresh connection after a reused one died, no
+	// HTTP/3 guessed from Alt-Svc or DNS (a lost race would have eaten part
+	// of it), and a 307 or 308 is handed back rather than followed. The
+	// transport closes it when it is done with it — early, too, when the
+	// server answers before the body ended — which fails the writer's next
+	// write instead of leaving it blocked.
+	BodyStream io.ReadCloser
+	// BodyTrailer, with BodyStream, holds the trailers sent after the body.
+	// The map is filled before the stream's writer closes it; empty, the
+	// body ends with no trailers. Only names it holds at the end go out, and
+	// no Trailer header announces them, as no browser announces any.
+	BodyTrailer http.Header
 
 	// freshConn sends the request on a new connection, past the pool: the
 	// resend after a reused connection died under it.
@@ -315,6 +344,9 @@ type Request struct {
 	ConnectTimeout *time.Duration
 	// ResponseTimeout overrides the limit on waiting for the response headers.
 	ResponseTimeout *time.Duration
+	// IdleTimeout overrides the limit on a body that stops arriving.
+	// For all four a zero is no limit for this request.
+	IdleTimeout *time.Duration
 	// FollowRedirects overrides whether 3xx are followed.
 	FollowRedirects *bool
 	// MaxRedirects overrides the chain length limit.
@@ -602,7 +634,8 @@ func withConnectLimit(ctx context.Context, d time.Duration) context.Context {
 // with a cancel per connection would cost more than it saves.
 func (s *Session) connectContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	limit := s.opts.ConnectTimeout
-	if d, ok := ctx.Value(connectLimitKey{}).(time.Duration); ok && d > 0 {
+	// A request's own limit wins, a zero one too: no separate connect limit.
+	if d, ok := ctx.Value(connectLimitKey{}).(time.Duration); ok {
 		limit = d
 	}
 	if limit <= 0 {
@@ -611,16 +644,26 @@ func (s *Session) connectContext(ctx context.Context) (context.Context, context.
 	return context.WithTimeout(ctx, limit)
 }
 
-// timeout returns the limit for a request, honouring its override.
+// timeout returns the limit for a request, honouring its override; 0 is no
+// limit.
 //
-// Zero is rejected at the entry points (New and validate), so it cannot mean
-// anything here: zero in the options used to substitute 30 seconds while zero
-// in a request meant an instant timeout — one number with opposite meanings.
+// Zero means the same at both levels now. It used to mean 30 seconds in the
+// options and an error in a request, while the C ABI documented "0 = none":
+// a stream of video or server-sent events was cut off at 30 seconds unless
+// the caller set a day.
 func (s *Session) timeout(r *Request) time.Duration {
 	if r != nil && r.Timeout != nil {
 		return *r.Timeout
 	}
 	return s.opts.Timeout
+}
+
+// idleTimeout returns the limit on a body that stops arriving; 0 is none.
+func (s *Session) idleTimeout(r *Request) time.Duration {
+	if r != nil && r.IdleTimeout != nil {
+		return *r.IdleTimeout
+	}
+	return s.opts.IdleTimeout
 }
 
 // responseTimeout returns the limit on waiting for the response headers,
@@ -639,17 +682,16 @@ func (r *Request) validate(hasJar bool) error {
 	if r == nil {
 		return nil
 	}
-	if r.Timeout != nil && *r.Timeout <= 0 {
-		return configErr("timeout must be positive, got %s "+
-			"(leave it unset for no limit)", *r.Timeout)
-	}
-	if r.ConnectTimeout != nil && *r.ConnectTimeout <= 0 {
-		return configErr("connect timeout must be positive, got %s "+
-			"(leave it unset for no limit)", *r.ConnectTimeout)
-	}
-	if r.ResponseTimeout != nil && *r.ResponseTimeout <= 0 {
-		return configErr("response timeout must be positive, got %s "+
-			"(leave it unset for no limit)", *r.ResponseTimeout)
+	// Zero is no limit for this request; leaving a field unset takes the
+	// session's.
+	for _, t := range []struct {
+		name string
+		d    *time.Duration
+	}{{"timeout", r.Timeout}, {"connect timeout", r.ConnectTimeout},
+		{"response timeout", r.ResponseTimeout}, {"idle timeout", r.IdleTimeout}} {
+		if t.d != nil && *t.d < 0 {
+			return configErr("%s cannot be negative, got %s (0 is no limit)", t.name, *t.d)
+		}
 	}
 	if r.Cookies != nil && *r.Cookies && !hasJar {
 		return configErr("cookies=true: the session has no cookie jar " +
@@ -722,6 +764,9 @@ type Response struct {
 	// "revalidated", "miss", or "" without a cache or for a request it
 	// does not take (a POST, a no-store).
 	Cache string
+	// Trailers are the fields the server sent after the body (gRPC's
+	// grpc-status, grpc-message); nil when it sent none.
+	Trailers map[string][]string
 }
 
 // Session performs requests with a single profile.
@@ -861,6 +906,9 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if opts.ResponseTimeout < 0 {
 		return nil, configErr("response timeout cannot be negative, got %s", opts.ResponseTimeout)
 	}
+	if opts.IdleTimeout < 0 {
+		return nil, configErr("idle timeout cannot be negative, got %s", opts.IdleTimeout)
+	}
 	// A session-wide fetch on a profile without a fetch set is refused here,
 	// once, rather than on every request.
 	if err := modeError(p, opts.Mode); err != nil {
@@ -881,9 +929,6 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	}
 	if err := validateCredentials(opts.Credentials); err != nil {
 		return nil, err
-	}
-	if opts.Timeout == 0 {
-		opts.Timeout = 30 * time.Second
 	}
 	if opts.MaxRedirects == 0 {
 		opts.MaxRedirects = DefaultMaxRedirects
@@ -1082,6 +1127,7 @@ func (s *Session) Do(r *Request) (*Response, error) {
 		URL:           stream.URL,
 		CookieChanges: stream.CookieChanges,
 		Cache:         stream.Cache,
+		Trailers:      stream.Trailers(),
 	}, nil
 }
 
@@ -1283,7 +1329,9 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	var headersLate atomic.Bool
 	var headersTimer *time.Timer
 	responseLimit := s.responseTimeout(r)
-	if responseLimit > 0 && cancel == nil {
+	// The idle limit aborts a stalled body through the same cancel, so a
+	// request with only that limit needs one too.
+	if (responseLimit > 0 || s.idleTimeout(r) > 0) && cancel == nil {
 		var ctx context.Context
 		ctx, cancel = context.WithCancel(req.Context())
 		req = req.WithContext(ctx)
@@ -1313,6 +1361,15 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// which a browser does not use when uploading a file.
 	if size >= 0 {
 		req.ContentLength = size
+	}
+	// A streamed body may end with trailers. The map has to exist before the
+	// body is written — the HTTP/2 transport decides then whether to end the
+	// stream with a HEADERS frame — and is read when the body ends.
+	if r.BodyStream != nil {
+		if r.BodyTrailer == nil {
+			r.BodyTrailer = http.Header{}
+		}
+		req.Trailer = r.BodyTrailer
 	}
 
 	fail := func(err error) (*http.Response, context.CancelFunc, *conn, error) {
@@ -1367,6 +1424,11 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 			viaDNS = rec.ALPN("h3")
 		}
 	}
+	// A guess races QUIC against TCP and may fall back: a streamed body read
+	// by the losing attempt would be gone for the winning one.
+	if r.BodyStream != nil {
+		viaAltSvc, viaDNS = false, false
+	}
 	tcpSpec := func() dialSpec {
 		forceH1 := s.opts.ForceHTTP1
 		if forced != "" {
@@ -1411,8 +1473,9 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 			err = headersDone(err)
 			if err == nil {
 				// sendH3 opened its own copy of the body; this one would stay
-				// open (and a file locked on Windows) until collected.
-				if closer, ok := body.(io.Closer); ok {
+				// open (and a file locked on Windows) until collected. A
+				// streamed body is the same reader, still being sent.
+				if closer, ok := body.(io.Closer); ok && r.BodyStream == nil {
 					closer.Close()
 				}
 				// HTTP/3 keeps its own connection inside the transport, nothing to release.
@@ -1469,7 +1532,7 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 		// (HttpNetworkTransaction::ShouldResendRequest: the connection was
 		// reused and no headers were received). A new connection that fails is
 		// not resent: that is a real failure, and retries= decides about it.
-		if reused && (connectionDropped(err) || (c.h2 != nil && h2Unprocessed(err))) &&
+		if reused && r.BodyStream == nil && (connectionDropped(err) || (c.h2 != nil && h2Unprocessed(err))) &&
 			req.Context().Err() == nil && (deadline.IsZero() || time.Now().Before(deadline)) {
 			if closer, ok := body.(io.Closer); ok {
 				closer.Close()
