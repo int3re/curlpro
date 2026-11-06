@@ -13,7 +13,7 @@ const koffi = require('koffi');
 
 const REQUIRED = [0, 30];
 const FRAME_HEADER = 4;
-const DEFAULT_PROFILE = 'chrome-157-windows';
+const DEFAULT_PROFILE = 'chrome-156-windows';
 
 class CurlproError extends Error {
   /**

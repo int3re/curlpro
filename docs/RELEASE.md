@@ -9,7 +9,16 @@ when its registry token is in the secrets ([bindings/README.md](../bindings/READ
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.22.0** — a minor: what goes on the wire changed again, measured each time.
+**0.22.1** — a patch: Chrome 157.0.8103.39 captured (`chrome-157-windows`: 156's
+hello, frames, header sets, resources and cache behaviour, with its own pool;
+taken from Google's enterprise installer, unpacked, since the stand's updater
+did not offer it), `chrome-157-macos` and `-linux` standing on it, and
+`chrome-158-windows`, `-macos` and `-linux` derived (158 was in an early
+rollout no client of the stand was in). `curlpro capture -based-on` had been
+writing deltas without their captured hello — a wrapper field shadowed the
+profile's `tls` — and writes it now. The default stays `chrome-156-windows`
+until the next minor. 346 profiles, 51 captured. ABI 0.33.0.
+Before it, **0.22.0** — a minor: what goes on the wire changed again, measured each time.
 The HTTP/2 header blocks of the Chromium and Firefox profiles are encoded the
 way Chrome 156 and Firefox 159 encode them, field by field (`cmd/hcapture`
 records each field's HPACK form now; Go's encoder differed in 114 of Chrome's

@@ -11,7 +11,7 @@ export class CurlproError extends Error {
 }
 
 export interface SessionOptions {
-  /** A registered profile name; default "chrome-157-windows". */
+  /** A registered profile name; default "chrome-156-windows". */
   profile?: string;
   /** Milliseconds for the whole request; default 30000. */
   timeout?: number;
