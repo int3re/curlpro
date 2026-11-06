@@ -316,7 +316,16 @@ func toDelta(p *profile.Profile, basedOn, dir string) (*profile.Profile, error) 
 		TLS:     p.TLS,
 		Headers: profile.HeadersSpec{UserAgent: p.Headers.UserAgent, Order: p.Headers.Order},
 	}
-	if !reflect.DeepEqual(p.HTTP2, base.HTTP2) {
+	// The stand sees the SETTINGS, the window, the pseudo-header order and
+	// the HEADERS priority; how the header block is encoded and how a body is
+	// framed it does not (hpack_*, data_frame_max_size: cmd/hcapture records
+	// those), so they are compared as the parent's — or every capture under a
+	// parent that has them would re-list an http2 section it did not change.
+	seen := p.HTTP2
+	seen.HPACKIndexingPolicy, seen.HPACKNameIndex = base.HTTP2.HPACKIndexingPolicy, base.HTTP2.HPACKNameIndex
+	seen.HPACKHuffman, seen.DisableCookieSplit = base.HTTP2.HPACKHuffman, base.HTTP2.DisableCookieSplit
+	seen.DataFrameMaxSize = base.HTTP2.DataFrameMaxSize
+	if !reflect.DeepEqual(seen, base.HTTP2) {
 		delta.HTTP2 = p.HTTP2
 	}
 	if agreesWith(p.Headers.Order, base.Headers.Order) {
@@ -445,7 +454,18 @@ func declineInherited(p *profile.Profile, basedOn, dir string) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parent: %w", err)
 	}
+	// The TLS field here shadows the profile's own (same JSON name, shallower
+	// depth): left empty, it dropped the captured hello from every delta but
+	// Brave's, and Chrome 157 came out inheriting 156's without a word. It
+	// carries the capture's TLS always.
 	out := declined{Profile: p}
+	if !reflect.ValueOf(p.TLS).IsZero() {
+		tls, err := json.Marshal(p.TLS)
+		if err != nil {
+			return nil, err
+		}
+		out.TLS = tls
+	}
 	if len(p.Devices) > 0 {
 		out.Devices, _ = json.Marshal(p.Devices)
 	} else if len(base.Devices) > 0 {

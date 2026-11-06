@@ -289,7 +289,7 @@ final class Session
      * @param array $options session fields of docs/C-ABI.md; the browser defaults are filled in
      *     (the ABI's own zero values are not the browser's: a missing boolean is false there).
      */
-    public function __construct(public readonly string $profile = 'chrome-156-windows', array $options = [])
+    public function __construct(public readonly string $profile = 'chrome-157-windows', array $options = [])
     {
         Library::ffi();
         Library::ensureProfiles();

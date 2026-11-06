@@ -84,6 +84,7 @@ DATE_1010 = "2026-10-10"
 DATE_1026 = "2026-10-26"
 DATE_1029 = "2026-10-29"
 DATE_1103 = "2026-11-03"
+DATE_1106 = "2026-11-06"
 PLATFORM = {"windows": '"Windows"', "macos": '"macOS"', "linux": '"Linux"', "android": '"Android"'}
 
 WIN = "Windows NT 10.0; Win64; x64"
@@ -121,12 +122,17 @@ CHROME_156_ANDROID_NOTE = (
     "default from 155, and the decoder is built on every platform), with Android's reduced User-Agent, "
     "sec-ch-ua-mobile ?1, sec-ch-ua-platform \"Android\" and 156's brands. The hints go out in the "
     "steady-state order of the desktop capture. Replace with a capture from a phone.")
-CHROME_157_NOTE = ("Derived, not captured: Chrome 157 went stable on 2026-10-22 (chromiumdash, Stable: "
-                   "157.0.8103.15), and the stand's Chrome is 156 — its updater rolls 157 out to this "
-                   "machine later. The ClientHello, HTTP/2 frames, header sets and resources are the "
-                   "captured chrome-156-windows's{os}; the User-Agent and the brand list are 157's, the "
-                   "brands computed as Chromium computes them. Chrome 153 to 156 sent the same hello, which "
-                   "is evidence, not a measurement: replace with a capture when Chrome 157 is on the stand.")
+CHROME_157_NOTE = ("Derived, not captured: Chrome 157 was captured on Windows (157.0.8103.39, "
+                   "2026-11-06: the same hello, frames, header sets, resources and cache behaviour as 156), "
+                   "and this {os} twin stands on that capture with {os}'s sec-ch-ua-platform and User-Agent "
+                   "and 157's brands, computed as Chromium computes them. Replace with a capture from {os}.")
+CHROME_158_NOTE = ("Derived, not captured: Chrome 158 went stable on 2026-11-04 (chromiumdash, Stable: "
+                   "158.0.8127.18), as an early-stable rollout no client of this stand is in yet — the "
+                   "machine's updater, a fresh install's update check and the enterprise installer all give "
+                   "157. The ClientHello, HTTP/2 frames, header sets and resources are the captured "
+                   "chrome-157-windows's{os}; the User-Agent and the brand list are 158's, the brands "
+                   "computed as Chromium computes them. Chrome 153 to 157 sent the same hello, which is "
+                   "evidence, not a measurement: replace with a capture when Chrome 158 is on the stand.")
 
 CHROME_NOTE = ("Derived, not captured: Chrome 154 went stable on 2026-09-22 (chromiumdash, Stable: "
                "154.0.8037.57/.58), and the Chrome on this project's stand is still 153. The ClientHello, "
@@ -191,15 +197,22 @@ PLAN = [
      CHROME_156_NOTE.format(os="Linux"), DATE_1029),
     ("chrome-156-android", "chrome-156-windows", android_ua(156), sec_ch_ua(156, "Google Chrome", 156),
      "https://chromiumdash.appspot.com/releases?platform=Android", CHROME_156_ANDROID_NOTE, DATE_1029),
-    ("chrome-157-windows", "chrome-156-windows", chrome_ua(WIN, 157), sec_ch_ua(157, "Google Chrome", 157),
-     "https://chromiumdash.appspot.com/releases?platform=Windows",
-     CHROME_157_NOTE.format(os=""), DATE_1029),
-    ("chrome-157-macos", "chrome-156-windows", chrome_ua(MAC, 157), sec_ch_ua(157, "Google Chrome", 157),
+    # chrome-157-windows is captured (2026-11-06); its twins stand on it.
+    ("chrome-157-macos", "chrome-157-windows", chrome_ua(MAC, 157), sec_ch_ua(157, "Google Chrome", 157),
      "https://chromiumdash.appspot.com/releases?platform=Mac",
-     CHROME_157_NOTE.format(os=", with macOS's sec-ch-ua-platform"), DATE_1029),
-    ("chrome-157-linux", "chrome-156-windows", chrome_ua(LINUX, 157), sec_ch_ua(157, "Google Chrome", 157),
+     CHROME_157_NOTE.format(os="macOS"), DATE_1106),
+    ("chrome-157-linux", "chrome-157-windows", chrome_ua(LINUX, 157), sec_ch_ua(157, "Google Chrome", 157),
      "https://chromiumdash.appspot.com/releases?platform=Linux",
-     CHROME_157_NOTE.format(os=", with Linux's sec-ch-ua-platform"), DATE_1029),
+     CHROME_157_NOTE.format(os="Linux"), DATE_1106),
+    ("chrome-158-windows", "chrome-157-windows", chrome_ua(WIN, 158), sec_ch_ua(158, "Google Chrome", 158),
+     "https://chromiumdash.appspot.com/releases?platform=Windows",
+     CHROME_158_NOTE.format(os=""), DATE_1106),
+    ("chrome-158-macos", "chrome-157-windows", chrome_ua(MAC, 158), sec_ch_ua(158, "Google Chrome", 158),
+     "https://chromiumdash.appspot.com/releases?platform=Mac",
+     CHROME_158_NOTE.format(os=", with macOS's sec-ch-ua-platform"), DATE_1106),
+    ("chrome-158-linux", "chrome-157-windows", chrome_ua(LINUX, 158), sec_ch_ua(158, "Google Chrome", 158),
+     "https://chromiumdash.appspot.com/releases?platform=Linux",
+     CHROME_158_NOTE.format(os=", with Linux's sec-ch-ua-platform"), DATE_1106),
     ("edge-156-windows", "chrome-156-windows", chrome_ua(WIN, 156, " Edg/156.0.0.0"),
      sec_ch_ua(156, "Microsoft Edge", 156), "https://edgeupdates.microsoft.com/api/products",
      "Derived, not captured: Edge 156.0.4314.50 is the stable release of 2026-10-28, on Chromium 156. "

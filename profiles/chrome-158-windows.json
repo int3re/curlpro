@@ -1,0 +1,436 @@
+{
+  "name": "chrome-158-windows",
+  "based_on": "chrome-157-windows",
+  "source": {
+    "kind": "derived",
+    "from": "https://chromiumdash.appspot.com/releases?platform=Windows",
+    "date": "2026-11-06",
+    "path": "scripts/derive-current.py",
+    "note": "Derived, not captured: Chrome 158 went stable on 2026-11-04 (chromiumdash, Stable: 158.0.8127.18), as an early-stable rollout no client of this stand is in yet — the machine's updater, a fresh install's update check and the enterprise installer all give 157. The ClientHello, HTTP/2 frames, header sets and resources are the captured chrome-157-windows's; the User-Agent and the brand list are 158's, the brands computed as Chromium computes them. Chrome 153 to 157 sent the same hello, which is evidence, not a measurement: replace with a capture when Chrome 158 is on the stand."
+  },
+  "headers": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36",
+    "order": [
+      {
+        "key": "cache-control",
+        "value": ""
+      },
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": "\"Chromium\";v=\"158\", \"Not.A/Brand\";v=\"24\", \"Google Chrome\";v=\"158\""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": "?0"
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": "\"Windows\""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": "1"
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": "none"
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": "navigate"
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": "?1"
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": "document"
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": "gzip, deflate, br, zstd"
+      },
+      {
+        "key": "accept-language",
+        "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": "u=0, i"
+      }
+    ]
+  },
+  "client_hints": {
+    "values": {
+      "sec-ch-ua-full-version": "\"158.0.8127.18\"",
+      "sec-ch-ua-arch": "\"x86\"",
+      "sec-ch-ua-platform-version": "\"10.0.0\"",
+      "sec-ch-ua-model": "\"\"",
+      "sec-ch-ua-bitness": "\"64\"",
+      "sec-ch-ua-wow64": "?0",
+      "sec-ch-ua-form-factors": "\"Desktop\"",
+      "sec-ch-ua-full-version-list": "\"Chromium\";v=\"158.0.8127.18\", \"Not.A/Brand\";v=\"24.0.0.0\", \"Google Chrome\";v=\"158.0.8127.18\"",
+      "device-memory": "16",
+      "sec-ch-device-memory": "16",
+      "dpr": "1",
+      "sec-ch-dpr": "1",
+      "viewport-width": "1920",
+      "sec-ch-viewport-width": "1920",
+      "sec-ch-viewport-height": "969",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g",
+      "sec-ch-prefers-color-scheme": "dark",
+      "sec-ch-prefers-reduced-motion": "no-preference",
+      "sec-ch-prefers-reduced-transparency": "no-preference"
+    },
+    "order": [
+      {
+        "key": "cache-control",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "upgrade-insecure-requests",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-user",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ],
+    "fetch_order": [
+      {
+        "key": "content-length",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version-list",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-bitness",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-model",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-mobile",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-form-factors",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-wow64",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-arch",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-full-version",
+        "value": ""
+      },
+      {
+        "key": "user-agent",
+        "value": ""
+      },
+      {
+        "key": "content-type",
+        "value": ""
+      },
+      {
+        "key": "sec-ch-ua-platform-version",
+        "value": ""
+      },
+      {
+        "key": "accept",
+        "value": ""
+      },
+      {
+        "key": "origin",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-site",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-mode",
+        "value": ""
+      },
+      {
+        "key": "sec-fetch-dest",
+        "value": ""
+      },
+      {
+        "key": "referer",
+        "value": ""
+      },
+      {
+        "key": "accept-encoding",
+        "value": ""
+      },
+      {
+        "key": "accept-language",
+        "value": ""
+      },
+      {
+        "key": "cookie",
+        "value": ""
+      },
+      {
+        "key": "if-none-match",
+        "value": ""
+      },
+      {
+        "key": "if-modified-since",
+        "value": ""
+      },
+      {
+        "key": "priority",
+        "value": ""
+      }
+    ]
+  },
+  "devices": [
+    {
+      "name": "Windows 10 22H2, Chrome 158.0.8127.18",
+      "platform_version": "10.0.0",
+      "full_version": "158.0.8127.18",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1920x969",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 10 22H2, 32-bit Chrome, Chrome 158.0.8127.18",
+      "platform_version": "10.0.0",
+      "full_version": "158.0.8127.18",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?1",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1.25",
+      "viewport": "1536x753",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 22H2, Chrome 158.0.8127.18",
+      "platform_version": "14.0.0",
+      "full_version": "158.0.8127.18",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "32",
+      "dpr": "1",
+      "viewport": "2560x1321",
+      "color_scheme": "dark",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 23H2, Chrome 158.0.8127.18",
+      "platform_version": "15.0.0",
+      "full_version": "158.0.8127.18",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1440x781",
+      "color_scheme": "light",
+      "rtt": "90",
+      "downlink": "1.456",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 24H2, Chrome 158.0.8127.18",
+      "platform_version": "19.0.0",
+      "full_version": "158.0.8127.18",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "16",
+      "dpr": "1",
+      "viewport": "1600x781",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    },
+    {
+      "name": "Windows 11 25H2, Chrome 158.0.8127.18",
+      "platform_version": "19.0.0",
+      "full_version": "158.0.8127.18",
+      "hint_arch": "x86",
+      "bitness": "64",
+      "wow64": "?0",
+      "form_factors": "Desktop",
+      "device_memory": "8",
+      "dpr": "1",
+      "viewport": "1920x961",
+      "color_scheme": "light",
+      "rtt": "116",
+      "downlink": "2.658",
+      "ect": "4g"
+    }
+  ],
+  "device_kind": "desktop"
+}

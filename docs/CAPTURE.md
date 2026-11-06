@@ -333,6 +333,36 @@ five-field line Firefox writes itself when "Accept the Risk" is clicked; a
 three-field one is ignored). Firefox 157 was captured that way, TLS and headers
 in one unattended run; before, the headers needed a click per window.
 
+### A Chrome the updater does not offer — measured 2026-11-06
+
+Chrome 157 had been stable for two weeks and the machine's updater still
+answered `noupdate` (its cohort had not been reached). Google's enterprise
+installer is the same consumer build without the rollout:
+`dl.google.com/dl/chrome/install/googlechromestandaloneenterprise.msi` (x86,
+the machine's own architecture; Authenticode Google LLC), unpacked without
+installing anything. The MSI is a compound file whose large stream is
+`UpdaterSetup.exe`; its `B7/UPDATER.PACKED.7Z` resource holds `updater.7z`,
+which holds `Offline\…\<version>_chrome_installer.exe` — Chrome's
+`mini_installer`, whose `B7/CHROME.PACKED.7Z` holds `chrome.7z` and in it
+`Chrome-bin\chrome.exe` with its version folder. Windows' own `tar` reads the
+first archive but not LZMA; WinRAR reads them all. `chrome-157-windows` was
+captured from `D:\curlPro-stand\chrome-157\Chrome-bin\chrome.exe`
+(157.0.8103.39): 156's hello — the 28 trust anchors in the same order, only
+the GREASE values and the ECH GREASE length drawn anew — frames, header sets,
+and over HTTP/2 and HTTP/1.1 the same subresource and cache requests, header
+for header. Chrome 158 was stable on chromiumdash from 2026-11-04 but in an
+early rollout: the updater, a fresh install's update check
+(`update.googleapis.com/service/update2/json` with version `0.0.0.0`, even
+with `targetversionprefix`) and the enterprise MSI all gave 157, so
+`chrome-158-*` is derived until it reaches the stand.
+
+That capture also found `curlpro capture` writing every delta without its
+hello: the wrapper that declines a parent's pool had a `tls` field of its own
+that shadowed the profile's, and only Brave's (no trust anchors) filled it.
+The deltas captured before it — Yandex, Brave, Chrome 156, Opera 139 — carry
+theirs; a delta's `http2` is now compared without the fields the stand
+cannot see (HPACK, DATA framing).
+
 ### Yandex Browser and Brave on the desktop — measured 2026-11-03
 
 **Yandex Browser 26.10** (26.10.3.771, Chromium 152.0.7977.771) installs per

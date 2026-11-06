@@ -3,7 +3,7 @@
 //! order. The contract is docs/C-ABI.md in the curlpro repository.
 //!
 //! ```no_run
-//! let s = curlpro::Session::new("chrome-156-windows")?;
+//! let s = curlpro::Session::new("chrome-157-windows")?;
 //! let r = s.get("https://example.com/")?;
 //! println!("{} {} {} bytes", r.status, r.proto, r.body.len());
 //! # Ok::<(), curlpro::Error>(())
@@ -28,7 +28,7 @@ use serde_json::{json, Map, Value};
 pub const REQUIRED: (u32, u32) = (0, 30);
 
 const FRAME_HEADER: usize = 4;
-const DEFAULT_PROFILE: &str = "chrome-156-windows";
+const DEFAULT_PROFILE: &str = "chrome-157-windows";
 
 // ---- errors -------------------------------------------------------------------------
 

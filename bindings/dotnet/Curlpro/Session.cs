@@ -11,7 +11,7 @@ namespace Curlpro;
 /// </summary>
 public sealed class SessionOptions
 {
-    public string Profile { get; set; } = "chrome-156-windows";
+    public string Profile { get; set; } = "chrome-157-windows";
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
     public TimeSpan? ConnectTimeout { get; set; }
     public TimeSpan? ResponseTimeout { get; set; }
@@ -137,7 +137,7 @@ public sealed class Session : IDisposable
 {
     private long _id;
 
-    public Session(string profile = "chrome-156-windows") : this(new SessionOptions { Profile = profile }) { }
+    public Session(string profile = "chrome-157-windows") : this(new SessionOptions { Profile = profile }) { }
 
     public Session(SessionOptions options)
     {

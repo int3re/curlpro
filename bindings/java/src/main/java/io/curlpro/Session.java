@@ -14,7 +14,7 @@ import java.util.concurrent.CompletableFuture;
  * headers. Thread-safe; requests run in parallel. Close it.
  */
 public final class Session implements AutoCloseable {
-    public static final String DEFAULT_PROFILE = "chrome-156-windows";
+    public static final String DEFAULT_PROFILE = "chrome-157-windows";
 
     /**
      * Session settings. The defaults are the browser's, as in the Python Session;

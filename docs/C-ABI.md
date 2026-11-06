@@ -133,7 +133,7 @@ devices — without opening a session) read the registry.
 ## Sessions
 
 ```c
-char *r = curlpro_session_new("{\"profile\":\"chrome-156-windows\"}");
+char *r = curlpro_session_new("{\"profile\":\"chrome-157-windows\"}");
 /* {"ok":true,"data":{"session":1}} */
 ```
 
@@ -149,7 +149,7 @@ defaults below explicitly, the way the Python `Session` does.
 
 | Field | Type | Binding default | Meaning |
 |---|---|---|---|
-| `profile` | string or object | `chrome-156-windows` | registered profile name, or a profile given whole (`{"based_on": …, "tls": …}`) used for this session and never registered (0.32) |
+| `profile` | string or object | `chrome-157-windows` | registered profile name, or a profile given whole (`{"based_on": …, "tls": …}`) used for this session and never registered (0.32) |
 | `timeout_ms` | int | `30000` | whole request, redirects, retries and the body included; 0 = none (until 0.31 a 0 became 30 s) |
 | `connect_timeout_ms` | int | 0 | connection setup; 0 = only `timeout_ms` |
 | `response_timeout_ms` | int | 0 | waiting for response headers |

@@ -56,7 +56,7 @@ curlpro.register_profile({
 
 ## Features
 
-- **343 profiles**: 50 captured whole (Chrome 118-153, 155 and 156, Edge, Firefox 133-159, Opera 139, Safari, Tor, Yandex Browser 26.8 for Android and 26.10 for Windows, Brave 1.98, okhttp 5.5), 14 captured but for their HTTP/2 SETTINGS, 238 transcribed from wreq-util, 20 from tls-client (Brave 1.88, OkHttp 4.10 on Android 7-13, the Zalando, Nike, Mesh, Confirmed and MMS apps' TLS) and 21 derived for the versions not yet on the stand (Chrome 154 and 157, Chrome 155 and 156 for macOS and Linux, Chrome 156 for Android, Edge 154 and 156, Opera 136 and 139 for macOS, Safari 27, Yandex 26.10 for macOS, Linux and iPhone) — each marked, and `list_profiles(measured=True)` is the captured list;
+- **346 profiles**: 51 captured whole (Chrome 118-153, 155-157, Edge, Firefox 133-159, Opera 139, Safari, Tor, Yandex Browser 26.8 for Android and 26.10 for Windows, Brave 1.98, okhttp 5.5), 14 captured but for their HTTP/2 SETTINGS, 238 transcribed from wreq-util, 20 from tls-client (Brave 1.88, OkHttp 4.10 on Android 7-13, the Zalando, Nike, Mesh, Confirmed and MMS apps' TLS) and 23 derived for the versions not yet on the stand (Chrome 154 and 158, Chrome 155 to 157 for macOS and Linux, Chrome 156 for Android, Edge 154 and 156, Opera 136 and 139 for macOS, Safari 27, Yandex 26.10 for macOS, Linux and iPhone) — each marked, and `list_profiles(measured=True)` is the captured list;
   mobile — Chrome and Yandex for Android, Safari for iOS.
 - **Every fingerprint layer at once** — TLS, HTTP/2, HTTP/3, HTTP/1.1 and WebSocket
   (table below).
@@ -192,7 +192,7 @@ The wheels on PyPI are built without the tag, so JA4H is present there.
 pip install curlpro
 ```
 
-Neither Go nor a compiler is needed: the native library and all 343 profiles are
+Neither Go nor a compiler is needed: the native library and all 346 profiles are
 already inside the wheel. Wheels are built for six platforms:
 
 | Platform | Wheel |
@@ -285,7 +285,7 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 
 | Parameter | Meaning |
 |---|---|
-| `impersonate` | profile name; `chrome-156-windows` by default (`chrome-151-windows` through 0.16.0, `chrome-155-windows` in 0.17 and 0.18) |
+| `impersonate` | profile name; `chrome-157-windows` by default (`chrome-151-windows` through 0.16.0, `chrome-155-windows` in 0.17 and 0.18, `chrome-156-windows` from 0.19 to 0.22) |
 | `timeout` | limit for the whole request; a `(connect, total)` pair bounds establishing the connection separately |
 | `connect_timeout`, `response_timeout` | the same limits by name: connecting (resolution, TCP, TLS) and the wait for the response headers. `response_timeout` covers the gap the other two leave — a server that accepts and then thinks — and does not bound the body: once the headers are in, only `timeout` applies |
 | `proxy` | `http://`, `https://`, `socks5://` or `socks5h://`, `user:pass` allowed. An address with no scheme — `1.2.3.4:8080` — is read as `http://`; there is no probing, a SOCKS proxy has to say so. `HTTP_PROXY` is read for `http://` requests and `HTTPS_PROXY` for `https://`, `ALL_PROXY` for both, `NO_PROXY` excludes. The first CONNECT goes without credentials and adds them after a 407, as Chrome does; a proxy that hangs up instead of challenging gets a second CONNECT with credentials on a fresh connection, and one that hangs up on that too is reported as such (`proxy_closed`) |

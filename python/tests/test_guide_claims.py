@@ -32,7 +32,7 @@ def _profiles():
 
 def test_the_profile_count_and_families():
     names = NAMES
-    assert len(names) == 343
+    assert len(names) == 346
     assert set(names) <= set(curlpro.list_profiles())
     # By the resolved profile, not the file: a captured delta inherits nothing
     # from a base whose mark covers a part it brings itself (source.covers).
@@ -53,13 +53,13 @@ def test_the_profile_count_and_families():
             out[n.split("-")[0]] = out.get(n.split("-")[0], 0) + 1
         return out
 
-    assert families("captured") == {"chrome": 22, "edge": 4, "firefox": 8, "opera": 1, "safari": 9,
+    assert families("captured") == {"chrome": 23, "edge": 4, "firefox": 8, "opera": 1, "safari": 9,
                                     "tor": 1, "yandex": 2, "brave": 1, "okhttp": 2}
     assert families("settings") == {"chrome": 9, "edge": 3, "safari": 2}
     assert families("transcribed") == {"chrome": 108, "edge": 37, "firefox": 39, "safari": 22, "opera": 32,
                                        "brave": 1, "okhttp": 7, "zalando": 2, "nike": 2, "mesh": 4,
                                        "confirmed": 3, "mms": 1}
-    assert families("derived") == {"chrome": 11, "edge": 2, "opera": 3, "safari": 2, "yandex": 3}
+    assert families("derived") == {"chrome": 13, "edge": 2, "opera": 3, "safari": 2, "yandex": 3}
     # The transcriptions by source: wreq-util's replay a captured twin;
     # tls-client's carry its hello field for field (Brave 1.88 aside).
     by_source: dict[str, int] = {}
@@ -67,11 +67,11 @@ def test_the_profile_count_and_families():
         src = curlpro.capabilities(n)["source"]["from"]
         by_source[src] = by_source.get(src, 0) + 1
     assert by_source == {"github.com/0x676e67/wreq-util": 238, "github.com/bogdanfinn/tls-client": 20}
-    assert "343 profiles" in TEXT and "50 of them are captured whole" in TEXT and "22 Chrome" in TEXT
+    assert "346 profiles" in TEXT and "51 of them are captured whole" in TEXT and "23 Chrome" in TEXT
     assert "14 more are captured but for their HTTP/2 SETTINGS" in TEXT
     assert "238 are transcribed" in TEXT and "20 from `bogdanfinn/tls-client`" in TEXT
-    assert "21 are derived" in TEXT
-    assert "238" in LLMS and "343" in LLMS and "20 from `bogdanfinn/tls-client`" in LLMS
+    assert "23 are derived" in TEXT
+    assert "238" in LLMS and "346" in LLMS and "20 from `bogdanfinn/tls-client`" in LLMS
 
 
 def test_the_number_of_distinct_ja4_values():

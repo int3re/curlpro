@@ -54,7 +54,7 @@ curlpro.register_profile({
 
 ## Что умеет
 
-- **343 профиля**: 50 сняты целиком (Chrome 118–153, 155 и 156, Edge, Firefox 133–159, Opera 139, Safari, Tor, Яндекс Браузер 26.8 для Android и 26.10 для Windows, Brave 1.98, okhttp 5.5), 14 сняты, кроме HTTP/2 SETTINGS, 238 транскрибированы из wreq-util, 20 из tls-client (Brave 1.88, OkHttp 4.10 на Android 7–13, TLS приложений Zalando, Nike, Mesh, Confirmed и MMS) и 21 выведен для версий, ещё не побывавших на стенде (Chrome 154 и 157, Chrome 155 и 156 для macOS и Linux, Chrome 156 для Android, Edge 154 и 156, Opera 136 и 139 для macOS, Safari 27, Яндекс 26.10 для macOS, Linux и iPhone), — все помечены, и `list_profiles(measured=True)` даёт список снятых;
+- **346 профилей**: 51 снят целиком (Chrome 118–153, 155–157, Edge, Firefox 133–159, Opera 139, Safari, Tor, Яндекс Браузер 26.8 для Android и 26.10 для Windows, Brave 1.98, okhttp 5.5), 14 сняты, кроме HTTP/2 SETTINGS, 238 транскрибированы из wreq-util, 20 из tls-client (Brave 1.88, OkHttp 4.10 на Android 7–13, TLS приложений Zalando, Nike, Mesh, Confirmed и MMS) и 23 выведены для версий, ещё не побывавших на стенде (Chrome 154 и 158, Chrome 155–157 для macOS и Linux, Chrome 156 для Android, Edge 154 и 156, Opera 136 и 139 для macOS, Safari 27, Яндекс 26.10 для macOS, Linux и iPhone), — все помечены, и `list_profiles(measured=True)` даёт список снятых;
   мобильные — Chrome и Яндекс для Android, Safari для iOS.
 - **Все слои отпечатка сразу** — TLS, HTTP/2, HTTP/3, HTTP/1.1 и WebSocket
   (таблица ниже).
@@ -188,7 +188,7 @@ go build -tags nofoxio -buildmode=c-shared -o dist/libcurlpro.so ./lib
 pip install curlpro
 ```
 
-Ни Go, ни компилятора не нужно: нативная библиотека и все 343 профиля уже
+Ни Go, ни компилятора не нужно: нативная библиотека и все 346 профилей уже
 внутри колеса. Готовые колёса собраны для шести платформ:
 
 | Платформа | Колесо |
@@ -279,7 +279,7 @@ curlpro.Session("chrome-151-windows", proxy="socks5://127.0.0.1:1080", retries=3
 
 | Параметр | Значение |
 |---|---|
-| `impersonate` | имя профиля; по умолчанию `chrome-156-windows` (по 0.16.0 включительно — `chrome-151-windows`, в 0.17 и 0.18 — `chrome-155-windows`) |
+| `impersonate` | имя профиля; по умолчанию `chrome-157-windows` (по 0.16.0 включительно — `chrome-151-windows`, в 0.17 и 0.18 — `chrome-155-windows`, с 0.19 по 0.22 — `chrome-156-windows`) |
 | `timeout` | предел на запрос целиком; пара `(соединение, всего)` ограничивает установку соединения отдельно |
 | `connect_timeout`, `response_timeout` | те же пределы по имени: установка соединения (резолв, TCP, TLS) и ожидание заголовков ответа. `response_timeout` закрывает дыру между двумя другими — сервер принял соединение и думает — и тело не ограничивает: как только заголовки пришли, действует только `timeout` |
 | `proxy` | `http://`, `https://`, `socks5://` или `socks5h://`, можно с `user:pass`. Адрес без схемы — `1.2.3.4:8080` — читается как `http://`; определения на ощупь нет, SOCKS надо назвать явно. `HTTP_PROXY` читается для запросов по `http://`, `HTTPS_PROXY` — по `https://`, `ALL_PROXY` для обоих, `NO_PROXY` исключает. Первый CONNECT идёт без учётных данных и добавляет их после 407, как Chrome; прокси, который вместо 407 рвёт соединение, получает второй CONNECT с учётными данными на новом соединении, а рвущий и его — ошибку с кодом `proxy_closed` |

@@ -96,13 +96,13 @@ assembly serves HTTP/1.1, HTTP/2 and HTTP/3 — there is one copy of the rules.
 
 ## 4. Sessions: every parameter
 
-`curlpro.Session(impersonate="chrome-156-windows", **options)`. Every option
+`curlpro.Session(impersonate="chrome-157-windows", **options)`. Every option
 has a default that reproduces a browser; the table says what changes when you
 touch it.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `impersonate` | `chrome-156-windows` | the profile name, the newest Chrome captured whole (`chrome-151-windows` through 0.16.0, `chrome-155-windows` in 0.17 and 0.18); `list_profiles()` has all 343 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 50 captured whole |
+| `impersonate` | `chrome-157-windows` | the profile name, the newest Chrome captured whole (`chrome-151-windows` through 0.16.0, `chrome-155-windows` in 0.17 and 0.18, `chrome-156-windows` from 0.19 to 0.22); `list_profiles()` has all 346 (and loads them first, like every profile function, since 0.15.2), `list_profiles(measured=True)` the 51 captured whole |
 | `verify` | `True` | `True` — system roots; a PEM path — trust only that root; `False` — no verification |
 | `cert` | `None` | `(certificate, key)` paths for mutual TLS |
 | `trust_env` | `True` | take the proxy from `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, honouring `NO_PROXY`; an explicit `proxy` always wins |
@@ -804,9 +804,9 @@ partitions, and a Firefox profile sent a captcha's frame no cookies at all.
 
 ## 11. Profiles, devices and mobile
 
-343 profiles ship in the wheel. 50 of them are captured whole — by this
+346 profiles ship in the wheel. 51 of them are captured whole — by this
 project's own runs of `curlpro capture` or by the curl-impersonate signatures
-it imported, each with the hashes to prove it: 22 Chrome (118 to 153, 155 and 156),
+it imported, each with the hashes to prove it: 23 Chrome (118 to 153, 155 to 157),
 4 Edge, 8 Firefox (133, 135, 144, 155 to 159), Opera 139, 9 Safari (15.6.1 to 26.0.1, macOS and
 iOS), Tor 14, Yandex Browser 26.8 for Android and 26.10 for Windows, Brave 1.98
 for Windows, and two okhttp 5.5 (JVM and Conscrypt). 14 more are captured but for their HTTP/2 SETTINGS (Chrome 98 to
@@ -816,8 +816,8 @@ empty one — a frame no browser sends; the values are now wreq-util's for each
 version, and the profile says so. 238 are transcribed from `0x676e67/wreq-util`
 (108 Chrome, 37 Edge, 39 Firefox, 22 Safari, 32 Opera) and 20 from `bogdanfinn/tls-client`
 (Brave 1.88, OkHttp 4.10 on Android 7 to 13, and the TLS of the Zalando, Nike,
-Mesh, Confirmed and MMS apps on Android and iOS), and 21 are derived here
-for the versions current on 2026-09-26, 2026-10-10, 2026-10-29 and 2026-11-03 that were not on the stand — see the
+Mesh, Confirmed and MMS apps on Android and iOS), and 23 are derived here
+for the versions current on 2026-09-26, 2026-10-10, 2026-10-29, 2026-11-03 and 2026-11-06 that were not on the stand — see the
 next paragraphs, and prefer `list_profiles(measured=True)` when drawing a
 profile at random. Many share a TLS fingerprint: all of them together form 28
 distinct JA4 values, because a transcribed or derived profile mostly replays a
@@ -846,12 +846,16 @@ captured Chrome 156 (156.0.8078.73: 155's hello, frames, header sets and resourc
 `chrome-156-android` on the same capture (Chrome 152 for Android, captured on a
 Pixel 7, had sent Chrome 152 for Windows's hello, frames and header sets but for
 the platform; Android's reduced User-Agent, `sec-ch-ua-mobile: ?1`, the 46 phones
-on Chrome's Android 156 builds), `chrome-157-windows`, `-macos` and `-linux` (Chrome 157 went stable on 2026-10-22,
-and the stand's updater had not rolled it out yet), `edge-156-windows` (on the
+on Chrome's Android 156 builds), `edge-156-windows` (on the
 captured Chrome 156; Edge updates are switched off on the stand's machine) and
 `opera-139-macos` (Opera 139 was captured on Windows: Chrome 155's hello to the
 byte, which settles for one version what wreq-util claims for every Opera); and since
-2026-11-03 `yandex-26.10-macos`, `-linux` and `-ios` (below). Their `source` block has kind
+2026-11-03 `yandex-26.10-macos`, `-linux` and `-ios` (below); since 2026-11-06
+`chrome-157-macos` and `-linux` on the captured Chrome 157 (157.0.8103.39: 156's
+hello, frames, header sets, resources and cache behaviour), and `chrome-158-windows`,
+`-macos` and `-linux` on it (Chrome 158 went stable on 2026-11-04 as an early
+rollout that reached no client of the stand: its updater, a fresh install's update
+check and the enterprise installer all gave 157). Their `source` block has kind
 `derived` and names the published fact each rests on; like a transcription
 they report `measured: False` and raise `transcribed_profile`, and a live
 capture replaces each the day its browser is on the stand. A mark may also
