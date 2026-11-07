@@ -9,7 +9,14 @@ when its registry token is in the secrets ([bindings/README.md](../bindings/READ
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.34.0** — a minor, and the first with one version for everything: the
+**0.35.0** — a minor: the third list of a transparent proxy. A plain CONNECT on
+HTTP/2 through an HTTPS proxy from `curlpro_upgrade_open` (`connect_authority`),
+on the proxy's connection with the profile's hello, SETTINGS and HPACK, as
+Chrome tunnels through googlezip.net; the connection an upgrade came over
+(`info`); the trailers as they came (`trailers_raw`). A profile whose
+pseudo-header order names only some of them no longer drops the rest (fhttp
+edit r). 346 profiles, 51 captured.
+Before it, **0.34.0** — a minor, and the first with one version for everything: the
 package jumped from 0.22.1 to the native library's number, so the wheel,
 libcurlpro, the header and the bindings' packages all say 0.34.0, and a patch
 adds nothing to the ABI from here on. The default profile is

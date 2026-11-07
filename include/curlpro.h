@@ -44,9 +44,9 @@ extern "C" {
  * refuse a library whose major.minor is lower than the one it was written
  * against, because an older library silently ignores options it does not know. */
 #define CURLPRO_ABI_VERSION_MAJOR 0
-#define CURLPRO_ABI_VERSION_MINOR 34
+#define CURLPRO_ABI_VERSION_MINOR 35
 #define CURLPRO_ABI_VERSION_PATCH 0
-#define CURLPRO_ABI_VERSION_STRING "0.34.0"
+#define CURLPRO_ABI_VERSION_STRING "0.35.0"
 
 /* Frame header size in bytes: a uint32 little-endian length of the JSON part. */
 #define CURLPRO_FRAME_HEADER 4

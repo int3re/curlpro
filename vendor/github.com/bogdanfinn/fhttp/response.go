@@ -102,6 +102,11 @@ type Response struct {
 	// transport; nil for a response built some other way.
 	RawHeader [][2]string
 
+	// curlpro: RawTrailer is the trailer block as it came, as RawHeader is
+	// the header block; set with Trailer, once the body has been read to
+	// its end (HTTP/1.1's chunked trailer, HTTP/2's trailing HEADERS).
+	RawTrailer [][2]string
+
 	// Trailer maps trailer keys to Values in the same
 	// format as Header.
 	//

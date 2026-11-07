@@ -413,6 +413,9 @@ type clientStream struct {
 	resetErr      error // populated before peerReset is closed
 
 	resTrailer   *http.Header           // client's Response.Trailer
+	// curlpro: the trailers as they came, and the client's Response.RawTrailer.
+	rawTrailer    [][2]string
+	resRawTrailer *[][2]string
 	startedWrite bool                   // started request body write; guarded by cc.mu
 	stopReqBody  error                  // if non-nil, stop writing req body; guarded by cc.mu
 	trace        *httptrace.ClientTrace // or nil
@@ -1833,15 +1836,23 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 		if m == "" {
 			m = http.MethodGet
 		}
+		// curlpro: an order that names only some pseudo-headers (none, or a
+		// CONNECT's two) must not drop the others: those it leaves out
+		// follow it, in Go's order.
+		wrote := map[string]bool{}
 		wroteProtocol := false // curlpro
 		if ok {
 			// follow based on pseudo header order
-			for _, p := range pHeaderOrder {
+			for _, p := range append(append([]string(nil), pHeaderOrder...), ":authority", ":method", ":path", ":scheme") {
+				if wrote[p] {
+					continue
+				}
+				wrote[p] = true
 				switch p {
 				case ":authority":
 					f(":authority", host)
 				case ":method":
-					f(":method", req.Method)
+					f(":method", m)
 				case ":path":
 					if !isNormalConnect(req) { // curlpro: extended CONNECT keeps it
 						f(":path", path)
@@ -2341,6 +2352,7 @@ func (rl *clientConnReadLoop) processHeaders(f *MetaHeadersFrame) error {
 		return nil
 	}
 	cs.resTrailer = &res.Trailer
+	cs.resRawTrailer = &res.RawTrailer // curlpro
 	cs.resc <- resAndError{res: res}
 
 	return nil
@@ -2491,6 +2503,7 @@ func (rl *clientConnReadLoop) processTrailers(cs *clientStream, f *MetaHeadersFr
 	for _, hf := range f.RegularFields() {
 		key := http.CanonicalHeaderKey(hf.Name)
 		trailer[key] = append(trailer[key], hf.Value)
+		cs.rawTrailer = append(cs.rawTrailer, [2]string{hf.Name, hf.Value}) // curlpro
 	}
 	cs.trailer = trailer
 
@@ -2773,6 +2786,9 @@ func (rl *clientConnReadLoop) endStreamError(cs *clientStream, err error) {
 }
 
 func (cs *clientStream) copyTrailers() {
+	if cs.resRawTrailer != nil && len(cs.rawTrailer) > 0 { // curlpro
+		*cs.resRawTrailer = cs.rawTrailer
+	}
 	for k, vv := range cs.trailer {
 		t := cs.resTrailer
 		if *t == nil {

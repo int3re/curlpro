@@ -17,6 +17,7 @@ ROOT = 'vendor/github.com/bogdanfinn/fhttp/http2/'
 TRANSPORT = ROOT + 'transport.go'
 PIPE = ROOT + 'pipe.go'
 RESPONSE = 'vendor/github.com/bogdanfinn/fhttp/response.go'
+TRANSFER = 'vendor/github.com/bogdanfinn/fhttp/transfer.go'
 RAWHEADER = 'vendor/github.com/bogdanfinn/fhttp/curlpro_rawheader.go'
 HPACK = ROOT + 'hpack/encode.go'
 
@@ -548,6 +549,128 @@ func (t *Transport) expectContinueTimeout() time.Duration {
 	defer cc.wmu.Unlock()
 
 	cc.fr.WriteSettingsAck()'''),
+# (r) An order that names only some pseudo-headers — none, as a profile built
+#     from a connection that began with a CONNECT has, or a CONNECT's two —
+#     wrote only those: a CONNECT went out without :method and :authority,
+#     a GET without :scheme and :path. The ones it leaves out follow it, in
+#     the order fhttp writes without one, each once; a plain CONNECT still
+#     skips :scheme and :path (q). :method falls back to GET as below.
+#     Found by Glasso on a phone's CONNECT to googlezip.net (2026-11-08);
+#     TestPseudoHeadersWithoutAnOrder fails without it. Its lines go before
+#     q's `wroteProtocol`, so q's result stays whole and a re-run skips both.
+('r', TRANSPORT,
+'''		wroteProtocol := false // curlpro
+		if ok {
+			// follow based on pseudo header order
+			for _, p := range pHeaderOrder {
+				switch p {
+				case ":authority":
+					f(":authority", host)
+				case ":method":
+					f(":method", req.Method)
+''',
+'''		// curlpro: an order that names only some pseudo-headers (none, or a
+		// CONNECT's two) must not drop the others: those it leaves out
+		// follow it, in Go's order.
+		wrote := map[string]bool{}
+		wroteProtocol := false // curlpro
+		if ok {
+			// follow based on pseudo header order
+			for _, p := range append(append([]string(nil), pHeaderOrder...), ":authority", ":method", ":path", ":scheme") {
+				if wrote[p] {
+					continue
+				}
+				wrote[p] = true
+				switch p {
+				case ":authority":
+					f(":authority", host)
+				case ":method":
+					f(":method", m)
+'''),
+# (s) Response.RawTrailer: the trailer block as it came, as RawHeader is the
+#     header block — names in the server's case and order, a repeated field
+#     once per line — set with Trailer when the body has been read to its
+#     end. HTTP/1.1 reads the chunked trailer line by line as (j) reads the
+#     headers (readRawMIMEHeader); HTTP/2 keeps the trailing HEADERS' fields
+#     and copies them with the map (copyTrailers). Trailer, a map, loses the
+#     order and the case an HTTP/1.1 server wrote. Ticket 2 of Glasso,
+#     2026-11-08. The client reads RawTrailer, so it does not build without
+#     this edit; TestRawTrailersAsTheyCame checks what it keeps.
+('s', RESPONSE,
+'''	RawHeader [][2]string
+''',
+'''	RawHeader [][2]string
+
+	// curlpro: RawTrailer is the trailer block as it came, as RawHeader is
+	// the header block; set with Trailer, once the body has been read to
+	// its end (HTTP/1.1's chunked trailer, HTTP/2's trailing HEADERS).
+	RawTrailer [][2]string
+'''),
+('s', TRANSFER,
+'''	hdr, err := textproto.NewReader(b.r).ReadMIMEHeader()
+	if err != nil {
+		if err == io.EOF {
+			return errTrailerEOF
+		}
+		return err
+	}
+	switch rr := b.hdr.(type) {
+	case *Request:
+		mergeSetHeader(&rr.Trailer, Header(hdr))
+	case *Response:
+		mergeSetHeader(&rr.Trailer, Header(hdr))
+	}
+''',
+'''	// curlpro: line by line, to keep the block as well (Response.RawTrailer).
+	hdr, raw, err := readRawMIMEHeader(textproto.NewReader(b.r))
+	if err != nil {
+		if err == io.EOF {
+			return errTrailerEOF
+		}
+		return err
+	}
+	switch rr := b.hdr.(type) {
+	case *Request:
+		mergeSetHeader(&rr.Trailer, Header(hdr))
+	case *Response:
+		mergeSetHeader(&rr.Trailer, Header(hdr))
+		rr.RawTrailer = append(rr.RawTrailer, raw...)
+	}
+'''),
+('s', TRANSPORT,
+'''	resTrailer   *http.Header           // client's Response.Trailer
+''',
+'''	resTrailer   *http.Header           // client's Response.Trailer
+	// curlpro: the trailers as they came, and the client's Response.RawTrailer.
+	rawTrailer    [][2]string
+	resRawTrailer *[][2]string
+'''),
+('s', TRANSPORT,
+'''		trailer[key] = append(trailer[key], hf.Value)
+	}
+	cs.trailer = trailer
+''',
+'''		trailer[key] = append(trailer[key], hf.Value)
+		cs.rawTrailer = append(cs.rawTrailer, [2]string{hf.Name, hf.Value}) // curlpro
+	}
+	cs.trailer = trailer
+'''),
+('s', TRANSPORT,
+'''	cs.resTrailer = &res.Trailer
+''',
+'''	cs.resTrailer = &res.Trailer
+	cs.resRawTrailer = &res.RawTrailer // curlpro
+'''),
+('s', TRANSPORT,
+'''func (cs *clientStream) copyTrailers() {
+	for k, vv := range cs.trailer {
+''',
+'''func (cs *clientStream) copyTrailers() {
+	if cs.resRawTrailer != nil && len(cs.rawTrailer) > 0 { // curlpro
+		*cs.resRawTrailer = cs.rawTrailer
+	}
+	for k, vv := range cs.trailer {
+'''),
 ]
 
 HPACK_FILE = ROOT + 'hpack/curlpro_hpack.go'

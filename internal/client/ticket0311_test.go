@@ -899,6 +899,103 @@ func TestWebSocketOverHTTP2(t *testing.T) {
 	}
 }
 
+// A plain CONNECT through an HTTPS proxy over HTTP/2, as Chrome tunnels through
+// googlezip.net: :method and :authority (the target) only, the caller's headers
+// as given, no SETTINGS_ENABLE_CONNECT_PROTOCOL needed; the stream carries the
+// bytes both ways and the connection carries the next tunnel.
+func TestPlainConnectThroughAnHTTP2Proxy(t *testing.T) {
+	addr, fields := connectServer(t, false)
+	s, err := New(auditProfile(t, "chrome-151-windows"), Options{DefaultHeaders: true, InsecureSkipVerify: true,
+		Timeout: 10 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	up, err := s.Upgrade(&Request{Method: "CONNECT", URL: "https://" + addr + "/", ConnectAuthority: "example.org:443",
+		HeadersRaw: [][2]string{{"chrome-tunnel", "key=dummytoken"}, {"user-agent", "Mozilla/5.0 (Linux; Android 14) Chrome/152"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up.Status != 200 || up.Conn == nil {
+		t.Fatalf("status %d, conn %v", up.Status, up.Conn)
+	}
+	var names []string
+	for _, f := range <-fields {
+		names = append(names, f.Name+"="+f.Value)
+	}
+	want := []string{":method=CONNECT", ":authority=example.org:443", "chrome-tunnel=key=dummytoken",
+		"user-agent=Mozilla/5.0 (Linux; Android 14) Chrome/152"}
+	if strings.Join(names, " | ") != strings.Join(want, " | ") {
+		t.Errorf("fields %v, want %v", names, want)
+	}
+	msg := []byte("\x16\x03\x01 a ClientHello's worth of bytes")
+	if _, err := up.Conn.Write(msg); err != nil {
+		t.Fatal(err)
+	}
+	back := make([]byte, len(msg))
+	if _, err := io.ReadFull(up.Conn, back); err != nil || !bytes.Equal(back, msg) {
+		t.Fatalf("echo %q, %v", back, err)
+	}
+	up.Conn.Close()
+	// Without headers_raw: the profile's User-Agent and the caller's own
+	// headers, none of a page's set — as the session's own proxy tunnel.
+	second, err := s.Upgrade(&Request{Method: "CONNECT", URL: "https://" + addr + "/", ConnectAuthority: "example.net:443",
+		Headers: map[string]string{"Proxy-Authorization": "Basic dTpw"}})
+	if err != nil {
+		t.Fatalf("a second tunnel: %v", err)
+	}
+	second.Conn.Close()
+	names = names[:0]
+	for _, f := range <-fields {
+		names = append(names, f.Name+"="+f.Value)
+	}
+	want = []string{":method=CONNECT", ":authority=example.net:443", "user-agent=" + s.profile.Headers.UserAgent,
+		"proxy-authorization=Basic dTpw"}
+	if strings.Join(names, " | ") != strings.Join(want, " | ") {
+		t.Errorf("without headers_raw: fields %v, want %v", names, want)
+	}
+	if _, err := s.Upgrade(&Request{Method: "CONNECT", URL: "https://" + addr + "/", ConnectAuthority: "no-port"}); err == nil {
+		t.Error("connect_authority without a port was taken")
+	}
+	if _, err := s.Upgrade(&Request{URL: "https://" + addr + "/", ConnectAuthority: "a:1", ConnectProtocol: "websocket"}); err == nil {
+		t.Error("connect_authority with connect_protocol was taken")
+	}
+}
+
+// A profile with no pseudo-header order (or one naming only a CONNECT's two)
+// still sends every pseudo-header a request needs, in Go's order after the
+// named ones: none goes missing.
+func TestPseudoHeadersWithoutAnOrder(t *testing.T) {
+	for _, order := range [][]string{nil, {":method", ":authority"}} {
+		addr, fields := connectServer(t, true)
+		p := auditProfile(t, "chrome-151-windows")
+		p.HTTP2.PseudoOrder = order
+		s, err := New(p, Options{DefaultHeaders: true, InsecureSkipVerify: true, Timeout: 10 * time.Second})
+		if err != nil {
+			t.Fatal(err)
+		}
+		up, err := s.Upgrade(&Request{Method: "GET", URL: "wss://" + addr + "/x", ConnectProtocol: "websocket"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var pseudo []string
+		for _, f := range <-fields {
+			if strings.HasPrefix(f.Name, ":") {
+				pseudo = append(pseudo, f.Name)
+			}
+		}
+		want := ":authority :method :path :scheme :protocol"
+		if order != nil {
+			want = ":method :authority :path :scheme :protocol"
+		}
+		if strings.Join(pseudo, " ") != want {
+			t.Errorf("order %v: pseudo-headers %v, want %s", order, pseudo, want)
+		}
+		up.Conn.Close()
+		s.Close()
+	}
+}
+
 // The browsers' :path on the wire: Chrome takes the static "/" and writes
 // any other path as a literal naming entry 4; Firefox writes "/" too as a
 // literal (naming 4, where it matched) and others naming 5, Huffman-coded.

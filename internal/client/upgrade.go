@@ -27,8 +27,9 @@ import (
 //
 // The request goes on a connection of its own, negotiated as http/1.1. With
 // ConnectProtocol set it is extended CONNECT on HTTP/2 instead (RFC 8441,
-// h2tunnel.go): a stream on the origin's HTTP/2 connection, a 2xx in place
-// of the 101. A response other than 101 (or 2xx) comes back with its body
+// h2tunnel.go), with ConnectAuthority a plain CONNECT through the origin as
+// an HTTPS proxy (RFC 9113 8.5): a stream on the origin's HTTP/2
+// connection, a 2xx in place of the 101. A response other than 101 (or 2xx) comes back with its body
 // (up to upgradeBodyLimit) and no connection.
 func (s *Session) Upgrade(r *Request) (*Upgraded, error) {
 	if err := s.ensureOpen(); err != nil {
@@ -70,7 +71,10 @@ func (s *Session) Upgrade(r *Request) (*Upgraded, error) {
 		ctx = withConnectLimit(ctx, *r.ConnectTimeout)
 	}
 
-	if r.ConnectProtocol != "" {
+	if r.ConnectProtocol != "" && r.ConnectAuthority != "" {
+		return nil, configErr("connect_protocol (extended CONNECT) and connect_authority (plain CONNECT) exclude each other")
+	}
+	if r.ConnectProtocol != "" || r.ConnectAuthority != "" {
 		return s.upgradeH2(ctx, r, &current, u)
 	}
 
@@ -125,6 +129,7 @@ func (s *Session) Upgrade(r *Request) (*Upgraded, error) {
 		Proto:   resp.Proto,
 		Headers: resp.Header,
 		URL:     current.URL,
+		Info:    c.describe(false),
 	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		data, rerr := io.ReadAll(io.LimitReader(resp.Body, upgradeBodyLimit))
@@ -209,6 +214,10 @@ type Upgraded struct {
 	Body []byte
 	// Conn is the switched connection after a 101, nil otherwise.
 	Conn *RawConn
+	// Info is the connection the answer came over, as a response's Conn:
+	// id, addresses, TLS, the JA4 of the hello sent — to a proxy, for a
+	// CONNECT through one (0.35).
+	Info *ConnInfo
 }
 
 // RawConn is a connection handed to the caller after a protocol switch: raw

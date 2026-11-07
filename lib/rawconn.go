@@ -93,13 +93,19 @@ func upgradedMeta(up *client.Upgraded, cid int64) map[string]any {
 	if cid != 0 {
 		m["conn"] = cid
 	}
+	// The connection the answer came over, as a response's conn and
+	// curlpro_tls_dial's info (0.35).
+	if up.Info != nil {
+		m["info"] = up.Info
+	}
 	return m
 }
 
 // curlpro_upgrade_open sends an upgrade request and waits for the answer.
 // frame: the request (as curlpro_request's). Out: the envelope {status,
-// proto, headers, url, body_len, conn} and, for an answer other than 101,
-// its body; conn is present after a 101 only.
+// proto, headers, url, body_len, conn, info} and, for an answer other than
+// 101, its body; conn is present after a 101 only, info — the connection, as
+// a response's conn — always.
 //
 //export curlpro_upgrade_open
 func curlpro_upgrade_open(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int) *C.char {

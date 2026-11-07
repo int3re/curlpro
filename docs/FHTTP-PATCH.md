@@ -160,6 +160,13 @@ first waits out its whole 15 s deadline on the 407, and the second reports
 `context deadline exceeded` — the status the proxy sent, and the word "proxy"
 with it, never arrive.
 
+`TestPseudoHeadersWithoutAnOrder` fails without edit (r): a profile whose
+pseudo-header order names none of them, or only a CONNECT's two, wrote only
+those, and a CONNECT went out without `:method` and `:authority`. Edit (s),
+`Response.RawTrailer` — the trailer block as it came — is read by the client,
+so a tree without it does not build; `TestRawTrailersAsTheyCame` checks what
+it keeps on HTTP/1.1 and HTTP/2 (HTTP/3's comes from `internal/h3`).
+
 `TestFlowControlTrace` in the same package is the live check against pypi. It is
 off by default and needs `FLOWTRACE` pointing at a profile directory.
 

@@ -238,7 +238,12 @@ func curlpro_free(s *C.char) {
 // ("target_raw"), resolve through a proxy ("resolve_via_proxy",
 // conn.resolved_by), and HTTP/3 failures with a phase and the codes of
 // TCP's (quic_protocol beside them).
-const Version = "0.34.0"
+// 0.35.0: the proxy's third list — a plain CONNECT on HTTP/2 through an
+// HTTPS proxy from curlpro_upgrade_open ("connect_authority"), as Chrome
+// tunnels through googlezip.net; the connection an upgrade came over
+// ("info"); the trailers as they came ("trailers_raw", in a response and
+// curlpro_stream_trailers).
+const Version = "0.35.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -876,13 +881,16 @@ type requestJSON struct {
 	InterimEvents bool `json:"interim_events"`
 	// ConnectProtocol makes curlpro_upgrade_open an extended CONNECT on
 	// HTTP/2 with this :protocol ("websocket").
-	ConnectProtocol string         `json:"connect_protocol"`
-	HeaderOrder     []string       `json:"header_order"`
-	DefaultHeaders  *bool          `json:"default_headers"`
-	Cookies         *bool          `json:"cookies"`
-	SessionHeaders  *bool          `json:"session_headers"`
-	Protocol        string         `json:"protocol"`
-	Multipart       *multipartJSON `json:"multipart"`
+	ConnectProtocol string `json:"connect_protocol"`
+	// ConnectAuthority makes curlpro_upgrade_open a plain CONNECT on HTTP/2
+	// to this host:port, through the URL's origin as an HTTPS proxy.
+	ConnectAuthority string         `json:"connect_authority"`
+	HeaderOrder      []string       `json:"header_order"`
+	DefaultHeaders   *bool          `json:"default_headers"`
+	Cookies          *bool          `json:"cookies"`
+	SessionHeaders   *bool          `json:"session_headers"`
+	Protocol         string         `json:"protocol"`
+	Multipart        *multipartJSON `json:"multipart"`
 	// BodyFile streams a file instead of reading it whole into memory.
 	BodyFile string `json:"body_file"`
 	// BodyStream: the body is written while the request is in flight
@@ -964,24 +972,25 @@ func (r requestJSON) applyOverrides(req *client.Request) {
 // toRequest builds a client.Request out of a frame.
 func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 	req := &client.Request{
-		Method:          r.Method,
-		URL:             r.URL,
-		Headers:         r.Headers,
-		HeadersRaw:      r.HeadersRaw,
-		H2Priority:      r.H2Priority,
-		NewConnection:   r.Connection.fresh,
-		ConnectionID:    r.Connection.id,
-		ConnectProtocol: r.ConnectProtocol,
-		TargetRaw:       r.TargetRaw,
-		Body:            body,
-		BodyFile:        r.BodyFile,
-		HeaderOrder:     r.HeaderOrder,
-		DefaultHeaders:  r.DefaultHeaders,
-		Cookies:         r.Cookies,
-		SessionHeaders:  r.SessionHeaders,
-		SuppressHeaders: r.SuppressHeaders,
-		Protocol:        r.Protocol,
-		TrackCookies:    r.TrackCookies,
+		Method:           r.Method,
+		URL:              r.URL,
+		Headers:          r.Headers,
+		HeadersRaw:       r.HeadersRaw,
+		H2Priority:       r.H2Priority,
+		NewConnection:    r.Connection.fresh,
+		ConnectionID:     r.Connection.id,
+		ConnectProtocol:  r.ConnectProtocol,
+		ConnectAuthority: r.ConnectAuthority,
+		TargetRaw:        r.TargetRaw,
+		Body:             body,
+		BodyFile:         r.BodyFile,
+		HeaderOrder:      r.HeaderOrder,
+		DefaultHeaders:   r.DefaultHeaders,
+		Cookies:          r.Cookies,
+		SessionHeaders:   r.SessionHeaders,
+		SuppressHeaders:  r.SuppressHeaders,
+		Protocol:         r.Protocol,
+		TrackCookies:     r.TrackCookies,
 	}
 	r.applyOverrides(req)
 	if r.InterimEvents {
@@ -1098,6 +1107,9 @@ type responseJSON struct {
 	// Trailers are the fields sent after the body ({name: [values]}, as
 	// headers): gRPC's grpc-status and grpc-message. Absent when none came.
 	Trailers map[string][]string `json:"trailers,omitempty"`
+	// TrailersRaw is the trailer block as it came, as headers_raw is the
+	// header block (0.35). Absent when none came.
+	TrailersRaw wireFields `json:"trailers_raw,omitempty"`
 	// Interim are the 1xx responses before the final one, in order.
 	Interim []client.Interim `json:"interim,omitempty"`
 	// Conn is the connection the response came over; Timing its wait.
@@ -1250,6 +1262,7 @@ func curlpro_request(id C.longlong, frame *C.char, frameLen C.int, outLen *C.int
 			History:       resp.History,
 			Preflights:    resp.Preflights,
 			Trailers:      resp.Trailers,
+			TrailersRaw:   resp.TrailersRaw,
 			Interim:       resp.Interim,
 			Conn:          resp.Conn,
 			Timing:        resp.Timing,

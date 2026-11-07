@@ -201,14 +201,18 @@ def test_response_trailers_in_the_response_and_on_a_stream(session, stand):
                                   body=b"\x00\x00\x00\x00\x00")
     assert data["trailers"]["Grpc-Status"] == ["5"]
     assert data["trailers"]["Grpc-Message"] == ["not found"]
+    # The block as it came (0.35): the server's case and order.
+    assert data["trailers_raw"] == [["grpc-status", "5"], ["grpc-message", "not found"]]
     assert body == b"\x00\x00\x00\x00\x00"
 
     head, _ = _ffi.call_framed("curlpro_stream_open", session, meta={"method": "POST", "url": stand.url + "/trailers"})
     sid = head["stream"]
     try:
-        assert _ffi._call("curlpro_stream_trailers", sid) == {"trailers": {}}
+        assert _ffi._call("curlpro_stream_trailers", sid) == {"trailers": {}, "trailers_raw": []}
         assert _read_all(sid) == b"\x00\x00\x00\x00\x00"
-        assert _ffi._call("curlpro_stream_trailers", sid)["trailers"]["Grpc-Status"] == ["5"]
+        after = _ffi._call("curlpro_stream_trailers", sid)
+        assert after["trailers"]["Grpc-Status"] == ["5"]
+        assert after["trailers_raw"] == [["grpc-status", "5"], ["grpc-message", "not found"]]
     finally:
         _ffi._call("curlpro_stream_close", sid)
 
@@ -248,6 +252,9 @@ def test_upgrade_hands_back_the_raw_connection(session, stand):
         "headers": {"connection": "Upgrade", "upgrade": "echo"}})
     assert data["status"] == 101 and body == b""
     cid = data["conn"]
+    # The connection the answer came over, as a response's conn (0.35).
+    info = data["info"]
+    assert info["proto"] == "http/1.1" and info["id"] > 0 and info["remote"] == stand.url.split("//")[1]
     assert stand.seen[-1]["headers"]["connection"] == "Upgrade"
     try:
         buf = ctypes.create_string_buffer(64)
@@ -277,6 +284,7 @@ def test_upgrade_hands_back_the_raw_connection(session, stand):
     data, body = _ffi.call_framed("curlpro_upgrade_open", session, meta={
         "method": "GET", "url": stand.url + "/refuse", "headers": {"connection": "Upgrade", "upgrade": "echo"}})
     assert data["status"] == 403 and "conn" not in data and body == b"go away"
+    assert data["info"]["remote"] == stand.url.split("//")[1] and data["info"]["id"] != info["id"]
     assert _ffi._call("curlpro_debug_counts")["conns"] == 0
 
 

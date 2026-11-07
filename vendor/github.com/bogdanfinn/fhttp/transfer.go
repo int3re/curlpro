@@ -981,7 +981,8 @@ func (b *body) readTrailer() error {
 		return errors.New("http: suspiciously long trailer after chunked body")
 	}
 
-	hdr, err := textproto.NewReader(b.r).ReadMIMEHeader()
+	// curlpro: line by line, to keep the block as well (Response.RawTrailer).
+	hdr, raw, err := readRawMIMEHeader(textproto.NewReader(b.r))
 	if err != nil {
 		if err == io.EOF {
 			return errTrailerEOF
@@ -993,6 +994,7 @@ func (b *body) readTrailer() error {
 		mergeSetHeader(&rr.Trailer, Header(hdr))
 	case *Response:
 		mergeSetHeader(&rr.Trailer, Header(hdr))
+		rr.RawTrailer = append(rr.RawTrailer, raw...)
 	}
 	return nil
 }

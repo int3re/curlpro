@@ -352,6 +352,7 @@ func okFrame(resp *client.Response) []byte {
 		CookieChanges: resp.CookieChanges,
 		Cache:         resp.Cache,
 		Trailers:      resp.Trailers,
+		TrailersRaw:   resp.TrailersRaw,
 		Interim:       resp.Interim,
 		Conn:          resp.Conn,
 		Timing:        resp.Timing,

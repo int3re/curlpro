@@ -82,6 +82,18 @@ func (s *Stream) Trailers() map[string][]string {
 	return sentTrailers(s.resp.Trailer)
 }
 
+// RawTrailers returns the trailer block as it came — names in the server's
+// case and order, a repeated field once per line — once the body has been
+// read to its end; nil before it and when the server sent none.
+func (s *Stream) RawTrailers() [][2]string {
+	if s == nil || s.resp == nil {
+		return nil
+	}
+	s.trailerMu.Lock()
+	defer s.trailerMu.Unlock()
+	return append([][2]string(nil), s.resp.RawTrailer...)
+}
+
 func sentTrailers(t map[string][]string) map[string][]string {
 	var out map[string][]string
 	for k, vv := range t {

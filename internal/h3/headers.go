@@ -186,6 +186,7 @@ func validateTrailerHeaderField(h qpack.HeaderField) error {
 
 func parseTrailers(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *[]qpack.HeaderField) (http.Header, error) {
 	h := make(http.Header)
+	var raw []string // curlpro: the block as it came (RawHeaderKey)
 	for {
 		hf, err := decodeFn()
 		if err != nil {
@@ -214,6 +215,10 @@ func parseTrailers(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *[]qpa
 			return nil, err
 		}
 		h.Add(hf.Name, hf.Value)
+		raw = append(raw, hf.Name, hf.Value)
+	}
+	if len(raw) > 0 {
+		h[RawHeaderKey] = raw
 	}
 	return h, nil
 }
@@ -329,7 +334,8 @@ func updateResponseFromHeaders(rsp *http.Response, decodeFn qpack.DecodeFunc, si
 
 // RawHeaderKey carries a response's header block as it came — names and
 // values alternating, in QPACK order — from here to the client, which takes
-// it out of the map (client.fromStdResponse) before anyone reads the map.
+// it out of the map (client.fromStdResponse) before anyone reads the map;
+// in the trailers it carries the trailer block, taken out when the body ends.
 // The NUL keeps it from ever meeting a real field name.
 const RawHeaderKey = "\x00raw-header"
 

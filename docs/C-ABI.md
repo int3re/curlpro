@@ -262,6 +262,7 @@ curlpro_free(resp);
 | `cookie_changes` | with `track_cookies` |
 | `cache` | `"hit"`, `"revalidated"`, `"miss"`, or absent |
 | `trailers` | {name: [values]} — the fields sent after the body (gRPC's `grpc-status`, `grpc-message`); absent when none came (0.31) |
+| `trailers_raw` | [[name, value], …] — the trailer block as it came, as `headers_raw` is the header block: the server's case and order, a repeated field once per line, a value that is not UTF-8 as `[name, base64, "base64"]`; absent when none came (0.35) |
 | `headers_raw` | [[name, value], …] — the header block as it came off the wire: the server's order and case, a repeated field once per line; absent for a cached response (0.32). A value that is not UTF-8 (obs-text, a `Set-Cookie` in cp1251) comes as `[name, base64, "base64"]`: JSON would turn its bytes into U+FFFD, as it does in `headers` (0.33) |
 | `interim` | [{status, headers}] — the 1xx responses before the final one (103 Early Hints, 100 Continue), in order (0.32). Since 0.33 a body announced with `Expect: 100-continue` waits for the `100` (`expect_continue_ms`) |
 | `conn` | the connection: `id` (same id, same connection), `reused`, `remote`, `local`, `proto`, `proxy`, `tls_version`, `cipher`, `resumed`, `ech`, `verified`, `ja4`/`ja4_r` of the ClientHello actually sent, and on a connection's first response `resolved_by` (`local`, or `proxy` when a proxy got the name, 0.34), `peer_certs` (DER, base64, leaf first), `connect_ms` (name resolution, TCP and a proxy's tunnel together; `dns_ms` the address lookup within it, 0.33) and `tls_ms` (0.32) |
@@ -287,8 +288,9 @@ curlpro_free(curlpro_stream_close(stream));
 on an error (or an unknown handle). Close the stream in every case.
 
 `curlpro_stream_trailers(stream)` gives the response's trailers once a read has
-returned `0`: `{"trailers": {name: [values]}}`, empty before the end and when the
-server sent none. A buffered response carries them as `trailers` (0.31).
+returned `0`: `{"trailers": {name: [values]}, "trailers_raw": [[name, value], …]}`
+(the block as it came, 0.35), empty before the end and when the server sent
+none. A buffered response carries them as `trailers` (0.31) and `trailers_raw`.
 
 `curlpro_decode(frame, len, &out_len)` (0.33) undoes a `Content-Encoding` on
 bytes you hold — the copy to show of a body relayed as it came (`decompress:
@@ -356,9 +358,27 @@ END_STREAM, `curlpro_conn_close` resets the stream and leaves the connection to
 its other streams. `headers_raw` sends the client's `sec-websocket-*` as they
 came. The URL is `wss://` or `https://`.
 
-The out frame is `{status, proto, headers, url, body_len, conn}` and, for an
-answer other than `101`, its body (up to 1 MiB); `conn` is a handle, present
-after `101` only. From there the bytes are yours, both ways — frames pass as
+With `"connect_authority": "host:port"` (0.35) the request is a plain CONNECT on
+HTTP/2 instead (RFC 9113 8.5): the URL's origin is the proxy, the stream
+carries `:method CONNECT` and `:authority` set to the target — no `:scheme`,
+`:path` or `:protocol` — and your `headers_raw` as given (a browser's proxy
+credentials, Chrome's `chrome-tunnel` to googlezip.net); without
+`headers_raw`, the profile's `User-Agent` and your `headers`, none of a page's
+set and no cookies, as the session's own proxy tunnel. It goes on the
+proxy's HTTP/2 connection beside its other streams, with the profile's
+ClientHello, SETTINGS, pseudo-header order and HPACK, as a browser tunnels
+through an HTTPS proxy; the proxy need not send
+`SETTINGS_ENABLE_CONNECT_PROTOCOL`. A `2xx` hands back `conn` as above; a
+proxy that negotiates HTTP/1.1 fails the call. Not together with
+`connect_protocol`; an authority without a port is `configuration`.
+
+The out frame is `{status, proto, headers, url, body_len, conn, info}` and,
+for an answer other than `101`, its body (up to 1 MiB); `conn` is a handle,
+present after `101` only. `info` is the connection the answer came over — the
+object a response has as `conn` and `curlpro_tls_dial` as `info`: id, `reused`,
+addresses, TLS, the JA4 of the hello actually sent, the chain, the setup times —
+on every answer, a refusal's too; for a CONNECT through a proxy it is the
+connection to the proxy (0.35). From there the bytes are yours, both ways — frames pass as
 your client wrote them, with its extensions, masking, fragmentation, pings and
 close codes:
 

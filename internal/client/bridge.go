@@ -16,16 +16,8 @@ import (
 // HTTP/3 response is converted into the fhttp representation.
 
 func fromStdResponse(r *nethttp.Response) *http.Response {
-	var raw [][2]string
-	if flat, ok := r.Header[h3.RawHeaderKey]; ok {
-		delete(r.Header, h3.RawHeaderKey)
-		raw = make([][2]string, 0, len(flat)/2)
-		for i := 0; i+1 < len(flat); i += 2 {
-			raw = append(raw, [2]string{flat[i], flat[i+1]})
-		}
-	}
 	out := &http.Response{
-		RawHeader:     raw,
+		RawHeader:     takeRawBlock(r.Header),
 		Status:        r.Status,
 		StatusCode:    r.StatusCode,
 		Proto:         r.Proto,
@@ -40,12 +32,28 @@ func fromStdResponse(r *nethttp.Response) *http.Response {
 	}
 	if r.Body != nil && r.Body != nethttp.NoBody {
 		out.Body = &stdTrailerBody{ReadCloser: r.Body, copy: func() {
+			out.RawTrailer = takeRawBlock(r.Trailer)
 			if len(r.Trailer) > 0 {
 				out.Trailer = http.Header(r.Trailer)
 			}
 		}}
 	}
 	return out
+}
+
+// takeRawBlock takes the block as it came out of a header map, where the h3
+// package carries it under RawHeaderKey, names and values alternating.
+func takeRawBlock(h nethttp.Header) [][2]string {
+	flat, ok := h[h3.RawHeaderKey]
+	if !ok {
+		return nil
+	}
+	delete(h, h3.RawHeaderKey)
+	raw := make([][2]string, 0, len(flat)/2)
+	for i := 0; i+1 < len(flat); i += 2 {
+		raw = append(raw, [2]string{flat[i], flat[i+1]})
+	}
+	return raw
 }
 
 // toFhttpCookies converts cookies from net/http to fhttp: the session cookie

@@ -310,6 +310,15 @@ type Request struct {
 	// Chrome opens it where the server allows it. Upgrade only.
 	ConnectProtocol string
 
+	// ConnectAuthority makes an Upgrade a plain CONNECT on HTTP/2 (RFC 9113
+	// 8.5) to this host:port, sent to the URL's origin as to a proxy:
+	// :method and :authority only, the headers as given (a browser's proxy
+	// credentials — Chrome's chrome-tunnel to googlezip.net), on the
+	// origin's connection beside its other streams, as a browser tunnels
+	// through an HTTPS proxy. No SETTINGS_ENABLE_CONNECT_PROTOCOL is needed.
+	// Upgrade only; not with ConnectProtocol.
+	ConnectAuthority string
+
 	// TargetRaw is the request-target — path and query — sent exactly as
 	// given in place of the URL's, which still names the host, the scheme
 	// and the cookies' path: the bytes a client relayed through a proxy sent
@@ -919,6 +928,9 @@ type Response struct {
 	// Trailers are the fields the server sent after the body (gRPC's
 	// grpc-status, grpc-message); nil when it sent none.
 	Trailers map[string][]string
+	// TrailersRaw is the trailer block as it came, as RawHeaders is the
+	// header block: names in the server's case and order (0.35).
+	TrailersRaw [][2]string
 }
 
 // Session performs requests with a single profile.
@@ -1294,6 +1306,7 @@ func (s *Session) Do(r *Request) (*Response, error) {
 		CookieChanges: stream.CookieChanges,
 		Cache:         stream.Cache,
 		Trailers:      stream.Trailers(),
+		TrailersRaw:   stream.RawTrailers(),
 		Interim:       stream.Interim,
 		Conn:          stream.Conn,
 		Timing:        bodyTiming(stream.Timing, time.Since(headersAt)),

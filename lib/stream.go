@@ -299,7 +299,8 @@ func curlpro_stream_error(sid C.longlong) (out *C.char) {
 }
 
 // curlpro_stream_trailers reports the trailers of a stream's response, the
-// fields sent after the body: {"trailers": {name: [values]}}, empty before
+// fields sent after the body: {"trailers": {name: [values]}, "trailers_raw":
+// [[name, value], …]} (the block as it came, 0.35), empty before
 // curlpro_stream_read has returned 0 and when the server sent none. gRPC
 // carries its status there (grpc-status, grpc-message).
 //
@@ -316,7 +317,11 @@ func curlpro_stream_trailers(sid C.longlong) (out *C.char) {
 	if trailers == nil {
 		trailers = map[string][]string{}
 	}
-	return respond(map[string]any{"trailers": trailers}, nil)
+	raw := wireFields(st.s.RawTrailers())
+	if raw == nil {
+		raw = wireFields{}
+	}
+	return respond(map[string]any{"trailers": trailers, "trailers_raw": raw}, nil)
 }
 
 // curlpro_decode undoes a Content-Encoding on bytes the caller holds — the
