@@ -2,6 +2,7 @@ package client
 
 import (
 	nethttp "net/http"
+	"strconv"
 
 	http "github.com/bogdanfinn/fhttp"
 
@@ -16,6 +17,7 @@ import (
 // HTTP/3 response is converted into the fhttp representation.
 
 func fromStdResponse(r *nethttp.Response) *http.Response {
+	takePeerSettings(r.Header) // ConnInfo's, taken already where it is read
 	out := &http.Response{
 		RawHeader:     takeRawBlock(r.Header),
 		Status:        r.Status,
@@ -37,6 +39,25 @@ func fromStdResponse(r *nethttp.Response) *http.Response {
 				out.Trailer = http.Header(r.Trailer)
 			}
 		}}
+	}
+	return out
+}
+
+// takePeerSettings takes the server's SETTINGS out of an HTTP/3 response's
+// header map, where the h3 package carries them under PeerSettingsKey.
+func takePeerSettings(h nethttp.Header) [][2]uint64 {
+	flat, ok := h[h3.PeerSettingsKey]
+	if !ok {
+		return nil
+	}
+	delete(h, h3.PeerSettingsKey)
+	out := make([][2]uint64, 0, len(flat)/2)
+	for i := 0; i+1 < len(flat); i += 2 {
+		id, err := strconv.ParseUint(flat[i], 10, 64)
+		val, err2 := strconv.ParseUint(flat[i+1], 10, 64)
+		if err == nil && err2 == nil {
+			out = append(out, [2]uint64{id, val})
+		}
 	}
 	return out
 }

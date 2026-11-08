@@ -165,7 +165,11 @@ pseudo-header order names none of them, or only a CONNECT's two, wrote only
 those, and a CONNECT went out without `:method` and `:authority`. Edit (s),
 `Response.RawTrailer` — the trailer block as it came — is read by the client,
 so a tree without it does not build; `TestRawTrailersAsTheyCame` checks what
-it keeps on HTTP/1.1 and HTTP/2 (HTTP/3's comes from `internal/h3`).
+it keeps on HTTP/1.1 and HTTP/2 (HTTP/3's comes from `internal/h3`). Edit
+(t) keeps the server's preface — its first SETTINGS as they came, its first
+connection WINDOW_UPDATE, the moment it acknowledged ours — for
+`conn.peer_settings` and `curlpro_preconnect`; `TestPeerSettingsAndPreconnect`
+reads them back.
 
 `TestFlowControlTrace` in the same package is the live check against pypi. It is
 off by default and needs `FLOWTRACE` pointing at a profile directory.

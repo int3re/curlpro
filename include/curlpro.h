@@ -44,9 +44,9 @@ extern "C" {
  * refuse a library whose major.minor is lower than the one it was written
  * against, because an older library silently ignores options it does not know. */
 #define CURLPRO_ABI_VERSION_MAJOR 0
-#define CURLPRO_ABI_VERSION_MINOR 35
+#define CURLPRO_ABI_VERSION_MINOR 36
 #define CURLPRO_ABI_VERSION_PATCH 0
-#define CURLPRO_ABI_VERSION_STRING "0.35.0"
+#define CURLPRO_ABI_VERSION_STRING "0.36.0"
 
 /* Frame header size in bytes: a uint32 little-endian length of the JSON part. */
 #define CURLPRO_FRAME_HEADER 4
@@ -215,6 +215,24 @@ CURLPRO_API char *curlpro_conn_write_start(curlpro_handle conn, const char *buf,
  * config: {host, port, alpn ([] none, absent the profile's), proxy,
  * connect_timeout_ms}. data: {"conn": <handle>, "info": {…}}. Since 0.32. */
 CURLPRO_API char *curlpro_tls_dial(curlpro_handle session, const char *config_json);
+
+/* Opens the connection a first request to the URL would open — ClientHello,
+ * ALPN, the HTTP/2 preface — without a request, and leaves it in the pool.
+ * request: a request's JSON (curlpro_request's meta: url, connection "new",
+ * proxy, protocol, timeouts). data: {"info": {…}}, a response's conn with the
+ * server's peer_settings and peer_window_update; "connection": info.id sends a
+ * request on it. TCP only. The _start form answers on the ready queue.
+ * Since 0.36. */
+CURLPRO_API char *curlpro_preconnect(curlpro_handle session, const char *request_json);
+CURLPRO_API char *curlpro_preconnect_start(curlpro_handle session, const char *request_json);
+
+/* A profile from what a client sent — its ClientHello, its HTTP/2 preface,
+ * frames and header blocks, its QUIC Initial, its HTTP/3 control stream —
+ * as the profile object session_new takes. wire: {name, based_on,
+ * client_hello, h2 (one connection's bytes or a list), quic_initial [],
+ * h3_control}, all base64. data: {"profile": {…}, "notes": […]}: only what
+ * the bytes show is set, based_on supplies the rest. Since 0.36. */
+CURLPRO_API char *curlpro_profile_from_wire(const char *wire_json);
 
 /* Ends the caller's direction (TLS close_notify / FIN), reading stays open. */
 CURLPRO_API char *curlpro_conn_close_write(curlpro_handle conn);

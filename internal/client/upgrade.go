@@ -106,7 +106,7 @@ func (s *Session) Upgrade(r *Request) (*Upgraded, error) {
 	}
 	req = req.WithContext(ctx)
 
-	c, err := s.dialHTTP1(ctx, u, r.Proxy)
+	c, err := s.dialHTTP1(ctx, u, r.Proxy, r.LocalAddress)
 	if err != nil {
 		if cl, ok := body.(io.Closer); ok {
 			cl.Close()
@@ -182,7 +182,7 @@ func (s *Session) DialTLS(ctx context.Context, host string, port int, alpn []str
 	dialCtx, done := s.connectContext(ctx)
 	defer done()
 	dialed := time.Now()
-	raw, err := s.dialRaw(dialCtx, ds.addr, ds.proxy)
+	raw, err := s.dialRaw(dialCtx, ds.addr, ds.proxy, ds.local)
 	if err != nil {
 		return nil, nil, err
 	}

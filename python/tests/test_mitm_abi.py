@@ -83,6 +83,8 @@ class RawStand:
         f = c.makefile("rb")
         try:
             line, h, lines = _read_head(f)
+            if not line:
+                return  # a connection opened ahead and closed unused (curlpro_preconnect)
             path = line.split(" ")[1]
             rec = {"path": path, "headers": h, "lines": lines}
             self.seen.append(rec)
@@ -500,4 +502,62 @@ def test_the_target_as_given_and_resolve_by_the_proxy(session, stand):
     assert data["conn"]["resolved_by"] == "local"
     with pytest.raises(CurlProError) as e:
         _ffi._call("curlpro_session_new", _ffi.encode({"profile": "chrome-156-windows", "resolve_via_proxy": "dns"}))
+    assert e.value.code == "configuration"
+
+
+def test_a_connection_opened_ahead_and_a_local_address(session, stand):
+    # 0.36: the connection a first request would open, opened without one;
+    # the request pinned to it is its first.
+    info = _ffi._call("curlpro_preconnect", session, _ffi.encode({"url": stand.url + "/", "connection": "new"}))["info"]
+    assert info["proto"] == "http/1.1" and info["id"] > 0 and info["reused"] is False
+    data, _ = _ffi.call_framed("curlpro_request", session, meta={
+        "method": "GET", "url": stand.url + "/early", "connection": info["id"]})
+    assert data["conn"]["id"] == info["id"] and data["conn"]["reused"] is False
+    # The asynchronous form answers on the ready queue.
+    rid = _ffi._call("curlpro_preconnect_start", session,
+                     _ffi.encode({"url": stand.url + "/", "connection": "new"}))["request"]
+    later, _ = _wait(rid)
+    assert later["info"]["id"] not in (0, info["id"])
+    with pytest.raises(CurlProError) as e:
+        _ffi._call("curlpro_preconnect", session, _ffi.encode({"url": stand.url + "/", "connection": info["id"]}))
+    assert e.value.code == "configuration"
+    # local_address: an IP, on the session and per request.
+    with pytest.raises(CurlProError) as e:
+        _ffi._call("curlpro_session_new", _ffi.encode({"profile": "chrome-157-windows", "local_address": "eth0"}))
+    assert e.value.code == "configuration"
+    data, _ = _ffi.call_framed("curlpro_request", session, meta={
+        "method": "GET", "url": stand.url + "/early", "local_address": "127.0.0.1"})
+    assert data["conn"]["local"].startswith("127.0.0.1:")
+
+
+def _h2_frame(typ: int, flags: int, stream: int, payload: bytes) -> bytes:
+    n = len(payload)
+    return bytes([n >> 16, (n >> 8) & 0xFF, n & 0xFF, typ, flags]) + stream.to_bytes(4, "big") + payload
+
+
+def test_a_profile_from_a_clients_bytes(session):
+    # 0.36: the profile a client's own bytes show, standing on based_on.
+    hello = _ffi._call("curlpro_profile_get", b"chrome-157-windows")["tls"]["raw_client_hello"]
+    settings = b"".join(i.to_bytes(2, "big") + v.to_bytes(4, "big")
+                        for i, v in ((1, 65536), (2, 0), (4, 6291456), (6, 262144)))
+    # :method GET, :authority example.org (a literal indexed by name 1), :scheme https, :path /
+    block = b"\x82\x41\x0bexample.org\x87\x84"
+    h2 = (b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" + _h2_frame(4, 0, 0, settings)
+          + _h2_frame(8, 0, 0, (15663105).to_bytes(4, "big"))
+          + _h2_frame(1, 0x25, 1, b"\x80\x00\x00\x00\xff" + block))
+    out = _ffi._call("curlpro_profile_from_wire", _ffi.encode({
+        "name": "phone", "based_on": "chrome-157-windows", "client_hello": hello,
+        "h2": base64.b64encode(h2).decode()}))
+    prof, notes = out["profile"], out["notes"]
+    assert prof["name"] == "phone" and prof["based_on"] == "chrome-157-windows"
+    assert prof["tls"]["raw_client_hello"] == hello
+    h = prof["http2"]
+    assert [[s["id"], s["value"]] for s in h["settings"]] == [[1, 65536], [2, 0], [4, 6291456], [6, 262144]]
+    assert h["connection_window_update"] == 15663105 and h["stream_weight"] == 256 and h["stream_exclusive"] is True
+    assert h["pseudo_order"] == [":method", ":authority", ":scheme", ":path"]
+    assert isinstance(notes, list)
+    sid = _ffi._call("curlpro_session_new", _ffi.encode({"profile": prof}))["session"]
+    _ffi._call("curlpro_session_close", sid)
+    with pytest.raises(CurlProError) as e:
+        _ffi._call("curlpro_profile_from_wire", _ffi.encode({"h2": base64.b64encode(b"GET / HTTP/1.1\r\n\r\n").decode()}))
     assert e.value.code == "configuration"

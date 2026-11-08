@@ -339,6 +339,11 @@ func updateResponseFromHeaders(rsp *http.Response, decodeFn qpack.DecodeFunc, si
 // The NUL keeps it from ever meeting a real field name.
 const RawHeaderKey = "\x00raw-header"
 
+// PeerSettingsKey carries the server's SETTINGS — ids and values alternating,
+// decimal, in its order — to the client, which takes it out of the response's
+// header map (client.takePeerSettings) as it does RawHeaderKey.
+const PeerSettingsKey = "\x00peer-settings"
+
 // extractAnnouncedTrailers extracts trailer keys from the "Trailer" header.
 // It returns a map with the announced keys set to nil values, and removes the "Trailer" header.
 // It handles both duplicate as well as comma-separated values for the Trailer header.

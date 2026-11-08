@@ -159,7 +159,7 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 			case "6":
 				network = "udp6"
 			}
-			udpConn, err := net.ListenUDP(network, nil)
+			udpConn, err := net.ListenUDP(network, localUDP(opts.LocalAddress))
 			if err != nil {
 				return nil, inPhase(PhaseConnect, err)
 			}
@@ -213,7 +213,7 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 				if spec, err = quicSpec(p); err != nil {
 					return nil, err
 				}
-				if udpConn, err = net.ListenUDP(network, nil); err != nil {
+				if udpConn, err = net.ListenUDP(network, localUDP(opts.LocalAddress)); err != nil {
 					return nil, err
 				}
 				ut = &quic.UTransport{Transport: &quic.Transport{Conn: udpConn}, QUICSpec: spec}

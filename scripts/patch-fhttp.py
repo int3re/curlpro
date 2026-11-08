@@ -671,6 +671,79 @@ func (t *Transport) expectContinueTimeout() time.Duration {
 	}
 	for k, vv := range cs.trailer {
 '''),
+# (t) The server's preface, kept: its first SETTINGS frame as it came — ids
+#     and values in its order, the ones fhttp ignores too — the increment of
+#     its first connection-level WINDOW_UPDATE, and the moment it
+#     acknowledged our SETTINGS (curlpro_connect.go reads them). A proxy that
+#     answers its client with the server's own SETTINGS needs them before the
+#     first request (Glasso's ticket 4): conn.peer_settings and
+#     curlpro_preconnect. The ACK channel is made beside q's, before it, and
+#     the fields follow q's, so q's results stay whole.
+('t', TRANSPORT,
+'''	curlproConnectProtocol bool
+
+	br         *bufio.Reader
+''',
+'''	curlproConnectProtocol bool
+
+	br         *bufio.Reader
+	// curlpro: the server's preface — its first SETTINGS in order, its first
+	// connection WINDOW_UPDATE — and the ACK of ours (curlpro_connect.go).
+	curlproGotSettings      bool
+	curlproPeerSettings     []Setting
+	curlproGotWindowUpdate  bool
+	curlproPeerWindowUpdate uint32
+	curlproPeerAck          chan struct{}
+'''),
+('t', TRANSPORT,
+'''	cc.curlproSettings = make(chan struct{}) // curlpro
+''',
+'''	cc.curlproPeerAck = make(chan struct{}) // curlpro
+	cc.curlproSettings = make(chan struct{}) // curlpro
+'''),
+('t', TRANSPORT,
+'''		if cc.wantSettingsAck {
+			cc.wantSettingsAck = false
+
+			return nil
+		}
+''',
+'''		if cc.wantSettingsAck {
+			cc.wantSettingsAck = false
+			if cc.curlproPeerAck != nil { // curlpro: the server has read our SETTINGS
+				close(cc.curlproPeerAck)
+			}
+
+			return nil
+		}
+'''),
+('t', TRANSPORT,
+'''	err := f.ForeachSetting(func(s Setting) error {
+		switch s.ID {
+''',
+'''	first := !cc.curlproGotSettings // curlpro: the server's first SETTINGS, kept as they came
+	cc.curlproGotSettings = true
+	err := f.ForeachSetting(func(s Setting) error {
+		if first {
+			cc.curlproPeerSettings = append(cc.curlproPeerSettings, s)
+		}
+		switch s.ID {
+'''),
+('t', TRANSPORT,
+'''	fl := &cc.flow
+	if cs != nil {
+		fl = &cs.flow
+	}
+''',
+'''	if f.StreamID == 0 && !cc.curlproGotWindowUpdate { // curlpro: the server's first one for the connection
+		cc.curlproGotWindowUpdate = true
+		cc.curlproPeerWindowUpdate = f.Increment
+	}
+	fl := &cc.flow
+	if cs != nil {
+		fl = &cs.flow
+	}
+'''),
 ]
 
 HPACK_FILE = ROOT + 'hpack/curlpro_hpack.go'
@@ -926,7 +999,10 @@ func curlproWholeCookie(req *http.Request) bool {
 
 FILES.append((ROOT + 'curlpro_connect.go', """package http2
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // CurlproExtendedConnect waits for the server's first SETTINGS and reports
 // whether they allow extended CONNECT — RFC 8441's
@@ -941,6 +1017,37 @@ func (cc *ClientConn) CurlproExtendedConnect(ctx context.Context) (bool, error) 
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 	return cc.curlproConnectProtocol, nil
+}
+
+// CurlproPeer returns the server's preface as it came: its first SETTINGS
+// frame — every id and value in its order, the ones fhttp does not act on as
+// well — and the increment of its first connection-level WINDOW_UPDATE, 0
+// while none has come.
+func (cc *ClientConn) CurlproPeer() ([]Setting, uint32) {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	return append([]Setting(nil), cc.curlproPeerSettings...), cc.curlproPeerWindowUpdate
+}
+
+// CurlproAwaitPeer waits for the server's first SETTINGS, then — up to
+// ackWait more — for its ACK of ours: a server writes the frames of its
+// preface, its connection WINDOW_UPDATE among them, before it gets to the
+// client's. A server that never acknowledges costs ackWait, not the call.
+func (cc *ClientConn) CurlproAwaitPeer(ctx context.Context, ackWait time.Duration) error {
+	select {
+	case <-cc.curlproSettings:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	t := time.NewTimer(ackWait)
+	defer t.Stop()
+	select {
+	case <-cc.curlproPeerAck:
+	case <-t.C:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return nil
 }
 """))
 

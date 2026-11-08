@@ -39,15 +39,20 @@ def _profiles():
     curlpro.load_profiles(REPO / "profiles")
 
 
+# The sessions here ignore the environment's proxy (trust_env=False): HTTP/3
+# cannot go through an http:// one, and a machine with HTTPS_PROXY set failed
+# the whole module on configuration rather than on anything about QUIC.
+
+
 def test_http3_negotiated():
-    with curlpro.Session(http3=True) as s:
+    with curlpro.Session(http3=True, trust_env=False) as s:
         r = s.get(ORACLE)
     assert r.status == 200
     assert r.proto.startswith("HTTP/3")
 
 
 def test_http3_fingerprint_matches_chrome():
-    with curlpro.Session(http3=True) as s:
+    with curlpro.Session(http3=True, trust_env=False) as s:
         body = s.get(ORACLE).json()
     assert body["h3_text"] == CHROME_H3
 
@@ -59,14 +64,14 @@ def test_http3_fingerprint_is_stable():
     parallel with the request, and PRIORITY_UPDATE sent once instead of per
     request.
     """
-    with curlpro.Session(http3=True) as s:
+    with curlpro.Session(http3=True, trust_env=False) as s:
         seen = {s.get(ORACLE).json()["h3_text"] for _ in range(4)}
     assert seen == {CHROME_H3}, f"the fingerprint is unstable: {seen}"
 
 
 def test_ja4_marks_quic_transport():
     """JA4 over QUIC starts with 'q', over TCP with 't'."""
-    with curlpro.Session(http3=True) as s:
+    with curlpro.Session(http3=True, trust_env=False) as s:
         quic_ja4 = s.get(ORACLE).json()["ja4"]
     assert quic_ja4.startswith("q13d"), quic_ja4
 
@@ -74,7 +79,7 @@ def test_ja4_marks_quic_transport():
 def test_http3_requires_profile_support():
     """A profile without an http3 section must not quietly fall back to TCP."""
     with pytest.raises(curlpro.CurlProError, match="no http3 section"):
-        curlpro.Session("firefox-144-macos", http3=True)
+        curlpro.Session("firefox-144-macos", http3=True, trust_env=False)
 
 
 def test_brotli_response_is_decompressed():
@@ -83,6 +88,6 @@ def test_brotli_response_is_decompressed():
     Before decompression existed this request returned compressed bytes and JSON
     parsing failed on the first character.
     """
-    with curlpro.Session(http3=True) as s:
+    with curlpro.Session(http3=True, trust_env=False) as s:
         r = s.get(ORACLE)
     assert r.json()["h3_text"]  # it parsed, so it was decompressed

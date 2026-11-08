@@ -27,10 +27,9 @@ import (
 // the tunnel lives until it is closed.
 func (s *Session) upgradeH2(ctx context.Context, r, current *Request, u *url.URL) (*Upgraded, error) {
 	plain := r.ConnectAuthority != ""
-	if u.Scheme != "https" {
-		if plain {
-			return nil, configErr("connect_authority is a CONNECT through an HTTPS proxy over HTTP/2, which needs https")
-		}
+	// A plain CONNECT also goes through a cleartext proxy (http://), on
+	// HTTP/1.1 as Chrome sends it there (connecth1.go).
+	if u.Scheme != "https" && !plain {
 		return nil, configErr("connect_protocol is extended CONNECT over HTTP/2, which needs https or wss")
 	}
 	if plain {
@@ -41,16 +40,20 @@ func (s *Session) upgradeH2(ctx context.Context, r, current *Request, u *url.URL
 	if len(current.Body) > 0 || current.BodyFile != "" || current.Multipart != nil {
 		return nil, configErr("an upgrade takes no body: write to the connection after the answer")
 	}
-	spec := s.partition(s.newDialSpec(u, s.proxyForHost(current, u.Scheme, u.Host), false), current, u)
+	spec := s.newDialSpec(u, s.proxyForHost(current, u.Scheme, u.Host), false)
+	if u.Scheme == "http" {
+		spec.plain = true
+	}
+	spec = s.partition(spec, current, u)
 	c, reused, err := s.conn(ctx, u, spec, r.NewConnection)
 	if err != nil {
 		return nil, err
 	}
 	if c.h2 == nil {
-		s.release(c)
 		if plain {
-			return nil, fmt.Errorf("upgrade: the proxy negotiated %s, and connect_authority is a CONNECT stream on HTTP/2", c.proto)
+			return s.connectH1(ctx, current, u, c, reused)
 		}
+		s.release(c)
 		return nil, fmt.Errorf("upgrade: the server negotiated %s, and extended CONNECT needs HTTP/2: "+
 			"upgrade without connect_protocol", c.proto)
 	}

@@ -126,6 +126,9 @@ func (s *Session) socks5Associate(ctx context.Context, pu *url.URL, addr string)
 		host = net.JoinHostPort(pu.Hostname(), "1080")
 	}
 	d := &net.Dialer{Resolver: s.dns.resolver}
+	if ip := net.ParseIP(s.opts.LocalAddress); ip != nil {
+		d.LocalAddr = &net.TCPAddr{IP: ip}
+	}
 	ctrl, err := d.DialContext(ctx, "tcp", host)
 	if err != nil {
 		return nil, proxyFail(ProxyStageDial, 0, fmt.Errorf("connecting to proxy: %w", err))
@@ -157,7 +160,7 @@ func (s *Session) socks5Associate(ctx context.Context, pu *url.URL, addr string)
 	if relay.IP.IsUnspecified() {
 		relay.IP = ctrl.RemoteAddr().(*net.TCPAddr).IP
 	}
-	udp, err := net.ListenUDP("udp", nil)
+	udp, err := net.ListenUDP("udp", localUDP(s.opts.LocalAddress))
 	if err != nil {
 		return fail(err)
 	}

@@ -10,22 +10,12 @@ import socket
 from pathlib import Path
 
 import pytest
+from ws_stand import GREETING, WsStand
 
 import curlpro
 
 REPO = Path(__file__).resolve().parents[2]
-ECHO = "wss://echo.websocket.org/"
-
-
-def _online() -> bool:
-    try:
-        with socket.create_connection(("echo.websocket.org", 443), timeout=5):
-            return True
-    except OSError:
-        return False
-
-
-pytestmark = pytest.mark.skipif(not _online(), reason="no access to echo.websocket.org")
+LIVE_ECHO = "wss://echo.websocket.org/"
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -33,11 +23,19 @@ def _profiles():
     curlpro.load_profiles(REPO / "profiles")
 
 
+# A local echo stand (ws_stand.py): the tests used to depend on
+# echo.websocket.org, whose TLS this machine's network resets.
+@pytest.fixture(scope="module")
+def stand():
+    with WsStand() as st:
+        yield st
+
+
 @pytest.fixture
-def ws():
-    with curlpro.Session("chrome-151-windows") as s:
-        with s.websocket(ECHO) as sock:
-            sock.recv()  # the server sends a greeting first
+def ws(stand):
+    with curlpro.Session("chrome-151-windows", trust_env=False) as s:
+        with s.websocket(stand.url) as sock:
+            assert sock.recv() == GREETING  # the server sends a greeting first
             yield sock
 
 
@@ -88,9 +86,9 @@ def test_ping_does_not_break_stream(ws):
     assert ws.recv() == "after the ping"
 
 
-def test_close_is_idempotent():
-    with curlpro.Session() as s:
-        sock = s.websocket(ECHO)
+def test_close_is_idempotent(stand):
+    with curlpro.Session(trust_env=False) as s:
+        sock = s.websocket(stand.url)
         sock.close()
         sock.close()
         with pytest.raises(RuntimeError, match="closed"):
@@ -106,15 +104,38 @@ def test_rejects_schemes_that_are_not_websocket():
             s.websocket("ftp://example.com/")
 
 
-def test_handshake_uses_profile_headers():
-    """The handshake fingerprint must depend on the profile.
+def test_handshake_uses_profile_headers(stand):
+    """The handshake fingerprint must depend on the profile: the stand records
+    the handshake, and Firefox's carries Firefox's User-Agent and a header
+    order of its own, not Go's defaults and not Chrome's."""
+    heads = {}
+    for name in ("firefox-144-macos", "chrome-151-windows"):
+        with curlpro.Session(name, trust_env=False) as s:
+            with s.websocket(stand.url) as sock:
+                sock.recv()
+                sock.send(name)
+                assert sock.recv() == name
+        heads[name] = stand.handshakes[-1]
+    ua = next(ln for ln in heads["firefox-144-macos"] if ln.lower().startswith("user-agent:"))
+    assert "Firefox/144" in ua
+    order = {n: [ln.split(":", 1)[0].lower() for ln in h[1:]] for n, h in heads.items()}
+    assert order["firefox-144-macos"] != order["chrome-151-windows"]
 
-    Checking the headers directly needs a server of our own; here it is checked
-    that a connection with the Firefox profile is established just as
-    successfully — that is, the headers are assembled rather than taken from Go's defaults.
-    """
-    with curlpro.Session("firefox-144-macos") as s:
-        with s.websocket(ECHO) as sock:
-            sock.recv()
-            sock.send("firefox")
-            assert sock.recv() == "firefox"
+
+def _online() -> bool:
+    try:
+        with socket.create_connection(("echo.websocket.org", 443), timeout=5):
+            return True
+    except OSError:
+        return False
+
+
+@pytest.mark.network
+@pytest.mark.skipif(not _online(), reason="no access to echo.websocket.org")
+def test_a_live_echo_server():
+    """The same round trip against a server on the internet, over TLS."""
+    with curlpro.Session("chrome-151-windows") as s:
+        with s.websocket(LIVE_ECHO) as sock:
+            sock.recv()  # its greeting
+            sock.send("hello from curlpro")
+            assert sock.recv() == "hello from curlpro"

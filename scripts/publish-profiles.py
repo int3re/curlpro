@@ -4,8 +4,9 @@
 
 Builds profiles.json.gz and its Ed25519 signature from profiles/ with
 `curlpro bundle`, stamped with the package version of python/pyproject.toml,
-its `X.Y.0` as the oldest library that reads it (a patch adds nothing to the
-ABI, so a 0.34.0 install reads what 0.34.3 publishes), and the commit; then replaces the assets of the GitHub release tagged
+the profile format's version as the oldest library that reads it
+(FormatVersion in internal/profile/format.go: an install of any release since
+then takes the bundle), and the commit; then replaces the assets of the GitHub release tagged
 `profiles` (created on the first run, never marked latest) with `gh`.
 curlpro.update_profiles() fetches from there.
 
@@ -52,7 +53,7 @@ def main() -> int:
     if version.problems():
         sys.exit("the versions disagree, see python scripts/version.py")
     package = version.declared()["python/pyproject.toml"]
-    abi = version.min_abi(package)
+    abi = version.min_abi()
     out = ROOT / "dist" / "bundle"
     print(run("go", "run", "./cmd/curlpro", "bundle", "-key", str(a.key), "-package", package,
               "-min-abi", abi, "-commit", commit, "-out", str(out)))

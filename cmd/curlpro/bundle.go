@@ -23,12 +23,13 @@ import (
 func runBundle(args []string) error {
 	fs := newFlagSet("bundle", `curlpro bundle — build and sign the profile bundle
 
-    curlpro bundle -key KEY -package 0.19.0 -min-abi 0.28.0 -out dist/
+    curlpro bundle -key KEY -package 0.35.0 -out dist/
     curlpro bundle -genkey KEY
 
 Writes profiles.json.gz and profiles.json.gz.sig: every profile of the
 directory, the version and commit they come from, and the oldest native
-library that reads them all, signed with Ed25519. -genkey writes a new
+library that reads them all — the profile format's version, not the
+package's, unless -min-abi says otherwise — signed with Ed25519. -genkey writes a new
 private key (the seed, base64) and prints its public key for
 internal/profile/bundle.go. Keep the private key out of the repository.
 
@@ -37,7 +38,8 @@ internal/profile/bundle.go. Keep the private key out of the repository.
 	key := fs.String("key", os.Getenv("CURLPRO_SIGNING_KEY"), "the private key file (default $CURLPRO_SIGNING_KEY)")
 	out := fs.String("out", "dist", "output directory")
 	pkg := fs.String("package", "", "the curlpro version of this tree")
-	minABI := fs.String("min-abi", "", "the oldest native library that reads every profile")
+	minABI := fs.String("min-abi", profile.FormatVersion,
+		"the oldest native library that reads every profile (default: the profile format's version)")
 	commit := fs.String("commit", "", "the commit the profiles come from")
 	genkey := fs.String("genkey", "", "write a new private key to this file and print its public key")
 	if err := fs.Parse(args); err != nil {
@@ -64,7 +66,7 @@ internal/profile/bundle.go. Keep the private key out of the repository.
 	}
 
 	if *key == "" || *pkg == "" || *minABI == "" {
-		return errors.New("-key, -package and -min-abi are required")
+		return errors.New("-key and -package are required, and -min-abi may not be empty")
 	}
 	seedText, err := os.ReadFile(*key)
 	if err != nil {

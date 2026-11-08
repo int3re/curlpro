@@ -11,6 +11,7 @@ import (
 	"github.com/bogdanfinn/fhttp/http2/hpack"
 
 	"github.com/curlpro/curlpro/internal/hpackwire"
+	"github.com/curlpro/curlpro/internal/profile"
 )
 
 // The browsers' header blocks, recorded field by field (cmd/hcapture,
@@ -29,18 +30,23 @@ func TestTheHeaderBlocksMatchTheBrowsers(t *testing.T) {
 	}
 }
 
-func matchCapture(t *testing.T, capture, name string) {
+// hpackRecord is one request of a capture/hpack recording.
+type hpackRecord struct {
+	Conn        int      `json:"conn"`
+	At          int64    `json:"at_ms"`
+	Path        string   `json:"path"`
+	Headers     []string `json:"headers"`
+	HPACK       []string `json:"hpack"`
+	ClientHello string   `json:"client_hello"`
+}
+
+// hpackCapture reads a recording, its requests in connection order.
+func hpackCapture(t *testing.T, capture string) []hpackRecord {
 	raw, err := os.ReadFile("../../capture/hpack/" + capture + ".json")
 	if err != nil {
 		t.Skip(err)
 	}
-	var recs []struct {
-		Conn    int      `json:"conn"`
-		At      int64    `json:"at_ms"`
-		Path    string   `json:"path"`
-		Headers []string `json:"headers"`
-		HPACK   []string `json:"hpack"`
-	}
+	var recs []hpackRecord
 	if err := json.Unmarshal(raw, &recs); err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +56,17 @@ func matchCapture(t *testing.T, capture, name string) {
 		}
 		return recs[i].At < recs[j].At
 	})
-	h2 := auditProfile(t, name).HTTP2
+	return recs
+}
+
+func matchCapture(t *testing.T, capture, name string) {
+	matchCaptureSpec(t, capture, auditProfile(t, name).HTTP2)
+}
+
+// matchCaptureSpec encodes a recording's header sets under h2's HPACK
+// fields and compares every representation with the browser's.
+func matchCaptureSpec(t *testing.T, capture string, h2 profile.HTTP2Spec) {
+	recs := hpackCapture(t, capture)
 	var block bytes.Buffer
 	var enc *hpack.Encoder
 	conn := -1

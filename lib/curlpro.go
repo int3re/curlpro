@@ -243,7 +243,13 @@ func curlpro_free(s *C.char) {
 // tunnels through googlezip.net; the connection an upgrade came over
 // ("info"); the trailers as they came ("trailers_raw", in a response and
 // curlpro_stream_trailers).
-const Version = "0.35.0"
+// 0.36.0: the proxy's fourth list — the server's SETTINGS and connection
+// WINDOW_UPDATE in conn and info (peer_settings, peer_window_update), a
+// connection opened ahead of its first request (curlpro_preconnect,
+// curlpro_preconnect_start), local_address on the session and per request,
+// connect_authority through a proxy that speaks HTTP/1.1 or is cleartext,
+// and a profile from a client's own bytes (curlpro_profile_from_wire).
+const Version = "0.36.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -445,7 +451,9 @@ type sessionConfig struct {
 	// ResolveViaProxy: "name" (default) or "ip" — what resolve does
 	// behind a proxy.
 	ResolveViaProxy string `json:"resolve_via_proxy"`
-	IPVersion       string `json:"ip_version"`
+	// LocalAddress: the IP connections leave from (0.36).
+	LocalAddress string `json:"local_address"`
+	IPVersion    string `json:"ip_version"`
 	// DNS: "" the system's servers for HTTPS records, "off", servers, or a
 	// DoH URL (internal/client/dns.go).
 	DNS string `json:"dns"`
@@ -576,6 +584,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		DisableAltSvc:         c.AltSvc != nil && !*c.AltSvc,
 		Resolve:               c.Resolve,
 		ResolveViaProxy:       c.ResolveViaProxy,
+		LocalAddress:          c.LocalAddress,
 		IPVersion:             c.IPVersion,
 		DNS:                   c.DNS,
 		DisableKeepAlive:      c.KeepAlive != nil && !*c.KeepAlive,
@@ -876,6 +885,8 @@ type requestJSON struct {
 	Connection connectionRef `json:"connection"`
 	// TargetRaw is the request-target sent as given (client.Request.TargetRaw).
 	TargetRaw string `json:"target_raw"`
+	// LocalAddress overrides the session's for this request (0.36).
+	LocalAddress string `json:"local_address"`
 	// InterimEvents: each 1xx comes to a *_start call's caller as a result
 	// of the call's number before the final one (async.go).
 	InterimEvents bool `json:"interim_events"`
@@ -982,6 +993,7 @@ func (r requestJSON) toRequest(body []byte) (*client.Request, error) {
 		ConnectProtocol:  r.ConnectProtocol,
 		ConnectAuthority: r.ConnectAuthority,
 		TargetRaw:        r.TargetRaw,
+		LocalAddress:     r.LocalAddress,
 		Body:             body,
 		BodyFile:         r.BodyFile,
 		HeaderOrder:      r.HeaderOrder,

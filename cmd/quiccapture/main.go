@@ -13,13 +13,8 @@
 package main
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/hkdf"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -32,6 +27,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	qi "github.com/curlpro/curlpro/internal/quicinitial"
 )
 
 func main() {
@@ -224,34 +221,34 @@ func captureOne(conns []*net.UDPConn, timeout time.Duration) (sample, error) {
 
 	var s sample
 	var dcid []byte
-	var crypto []frag // CRYPTO frames as they are; the join accounts for overlaps
+	var crypto []qi.Frag // CRYPTO frames as they are; the join accounts for overlaps
 	seenPN := map[uint64]bool{}
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	for {
 		select {
 		case d := <-ch:
-			pkts, err := splitPackets(d.data)
+			pkts, err := qi.SplitPackets(d.data)
 			if err != nil {
 				continue
 			}
 			counted := false
 			for _, p := range pkts {
-				if p.typ != 0 { // not an Initial: 0-RTT and the rest are skipped
+				if p.Type != 0 { // not an Initial: 0-RTT and the rest are skipped
 					continue
 				}
 				if dcid == nil {
-					dcid = p.dcid
-					s.Version = fmt.Sprintf("0x%08x", p.version)
-					s.DCIDLen, s.SCIDLen, s.TokenLen = len(p.dcid), len(p.scid), len(p.token)
-				} else if string(p.dcid) != string(dcid) {
+					dcid = p.DCID
+					s.Version = fmt.Sprintf("0x%08x", p.Version)
+					s.DCIDLen, s.SCIDLen, s.TokenLen = len(p.DCID), len(p.SCID), len(p.Token)
+				} else if string(p.DCID) != string(dcid) {
 					continue // another connection (a browser retry)
 				}
 				if !counted {
 					s.Datagrams = append(s.Datagrams, len(d.data))
 					counted = true
 				}
-				pn, pnLen, frames, err := decryptInitial(p, dcid)
+				pn, pnLen, frames, err := qi.DecryptInitial(p, dcid)
 				if err != nil {
 					s.Frames = append(s.Frames, "error: "+err.Error())
 					continue
@@ -263,12 +260,12 @@ func captureOne(conns []*net.UDPConn, timeout time.Duration) (sample, error) {
 				s.PacketNumbers = append(s.PacketNumbers, pn)
 				s.PNLengths = append(s.PNLengths, pnLen)
 				summary, err := walkFrames(frames, &crypto)
-				s.Frames = append(s.Frames, fmt.Sprintf("pn=%d (%d bytes, datagram %d): %s", pn, len(p.raw), len(d.data), summary))
+				s.Frames = append(s.Frames, fmt.Sprintf("pn=%d (%d bytes, datagram %d): %s", pn, len(p.Raw), len(d.data), summary))
 				if err != nil {
 					s.Frames = append(s.Frames, "frames: "+err.Error())
 				}
 			}
-			if hello := assemble(crypto); hello != nil {
+			if hello := qi.Assemble(crypto); hello != nil {
 				if err := parseClientHello(hello, &s); err != nil {
 					s.RawClientHello = base64.StdEncoding.EncodeToString(hello)
 					return s, err
@@ -285,178 +282,14 @@ func captureOne(conns []*net.UDPConn, timeout time.Duration) (sample, error) {
 	}
 }
 
-// packet is the header of one long-header packet inside a datagram.
-type packet struct {
-	typ      byte // 0 Initial, 1 0-RTT, 2 Handshake, 3 Retry
-	version  uint32
-	dcid     []byte
-	scid     []byte
-	token    []byte
-	raw      []byte // the whole packet, from the first byte to the end of the payload
-	pnOffset int
-}
-
-// splitPackets cuts a datagram into the packets glued into it.
-func splitPackets(data []byte) ([]packet, error) {
-	var out []packet
-	for len(data) > 0 {
-		if data[0]&0x80 == 0 {
-			break // short header — not our case
-		}
-		if len(data) < 6 {
-			return out, errors.New("short header")
-		}
-		p := packet{typ: (data[0] >> 4) & 0x03, version: binary.BigEndian.Uint32(data[1:5])}
-		i := 5
-		dl := int(data[i])
-		i++
-		if i+dl > len(data) {
-			return out, errors.New("DCID out of bounds")
-		}
-		p.dcid = data[i : i+dl]
-		i += dl
-		sl := int(data[i])
-		i++
-		if i+sl > len(data) {
-			return out, errors.New("SCID out of bounds")
-		}
-		p.scid = data[i : i+sl]
-		i += sl
-		if p.typ == 0 {
-			tl, n := readVarint(data[i:])
-			if n == 0 {
-				return out, errors.New("token length")
-			}
-			i += n
-			if i+int(tl) > len(data) {
-				return out, errors.New("token out of bounds")
-			}
-			p.token = data[i : i+int(tl)]
-			i += int(tl)
-		}
-		if p.typ == 3 {
-			p.raw = data
-			out = append(out, p)
-			break
-		}
-		length, n := readVarint(data[i:])
-		if n == 0 {
-			return out, errors.New("length")
-		}
-		i += n
-		p.pnOffset = i
-		end := i + int(length)
-		if end > len(data) {
-			return out, errors.New("the packet is longer than the datagram")
-		}
-		p.raw = data[:end]
-		out = append(out, p)
-		data = data[end:]
-	}
-	return out, nil
-}
-
-var (
-	saltV1 = mustHex("38762cf7f55934b34d179ae6a4c80cadccbb7f0a")
-	saltV2 = mustHex("0dede3def700a6db819381be6e269dcbf9bd2ed9")
-)
-
-func mustHex(s string) []byte {
-	b, err := hex.DecodeString(s)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
-
-// decryptInitial removes the header protection and decrypts the payload.
-func decryptInitial(p packet, dcid []byte) (pn uint64, pnLen int, payload []byte, err error) {
-	salt, prefix := saltV1, "quic "
-	if p.version == 0x6b3343cf {
-		salt, prefix = saltV2, "quicv2 "
-	}
-	initial, err := hkdf.Extract(sha256.New, dcid, salt)
-	if err != nil {
-		return 0, 0, nil, err
-	}
-	clientSecret := expandLabel(initial, "client in", 32)
-	key := expandLabel(clientSecret, prefix+"key", 16)
-	iv := expandLabel(clientSecret, prefix+"iv", 12)
-	hp := expandLabel(clientSecret, prefix+"hp", 16)
-
-	raw := append([]byte(nil), p.raw...)
-	sampleAt := p.pnOffset + 4
-	if sampleAt+16 > len(raw) {
-		return 0, 0, nil, errors.New("no room for the sample")
-	}
-	block, err := aes.NewCipher(hp)
-	if err != nil {
-		return 0, 0, nil, err
-	}
-	mask := make([]byte, 16)
-	block.Encrypt(mask, raw[sampleAt:sampleAt+16])
-	raw[0] ^= mask[0] & 0x0f
-	pnLen = int(raw[0]&0x03) + 1
-	for i := 0; i < pnLen; i++ {
-		raw[p.pnOffset+i] ^= mask[1+i]
-	}
-	for i := 0; i < pnLen; i++ {
-		pn = pn<<8 | uint64(raw[p.pnOffset+i])
-	}
-
-	nonce := append([]byte(nil), iv...)
-	for i := 0; i < 8; i++ {
-		nonce[len(nonce)-1-i] ^= byte(pn >> (8 * i))
-	}
-	aead, err := cipher.NewGCM(mustAES(key))
-	if err != nil {
-		return 0, 0, nil, err
-	}
-	header := raw[:p.pnOffset+pnLen]
-	ciphertext := raw[p.pnOffset+pnLen:]
-	payload, err = aead.Open(nil, nonce, ciphertext, header)
-	if err != nil {
-		return 0, 0, nil, fmt.Errorf("AEAD: %w", err)
-	}
-	return pn, pnLen, payload, nil
-}
-
-func mustAES(key []byte) cipher.Block {
-	b, err := aes.NewCipher(key)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
-
-// expandLabel is HKDF-Expand-Label from TLS 1.3 (RFC 8446, 7.1).
-func expandLabel(secret []byte, label string, length int) []byte {
-	full := "tls13 " + label
-	info := make([]byte, 0, 4+len(full))
-	info = binary.BigEndian.AppendUint16(info, uint16(length))
-	info = append(info, byte(len(full)))
-	info = append(info, full...)
-	info = append(info, 0)
-	out, err := hkdf.Expand(sha256.New, secret, string(info), length)
-	if err != nil {
-		panic(err)
-	}
-	return out
-}
-
 // walkFrames parses the Initial frames: CRYPTO is collected by offset, the rest
-// is counted for the report.
-// frag is one CRYPTO frame.
-type frag struct {
-	off  uint64
-	data []byte
-}
-
-func walkFrames(payload []byte, crypto *[]frag) (string, error) {
+// is counted for the report. The decryption and the assembly are
+// internal/quicinitial's, shared with the profile built from a client's bytes.
+func walkFrames(payload []byte, crypto *[]qi.Frag) (string, error) {
 	counts := map[string]int{}
 	var cryptoParts []string
 	for len(payload) > 0 {
-		typ, n := readVarint(payload)
+		typ, n := qi.ReadVarint(payload)
 		if n == 0 {
 			return describe(counts, cryptoParts), errors.New("frame type")
 		}
@@ -470,7 +303,7 @@ func walkFrames(payload []byte, crypto *[]frag) (string, error) {
 			// ACK: largest, delay, range count, first range, ranges (gap, len)…
 			var vals []uint64
 			for k := 0; k < 4; k++ {
-				v, n := readVarint(payload)
+				v, n := qi.ReadVarint(payload)
 				if n == 0 {
 					return describe(counts, cryptoParts), errors.New("ACK")
 				}
@@ -479,25 +312,25 @@ func walkFrames(payload []byte, crypto *[]frag) (string, error) {
 			}
 			for k := uint64(0); k < vals[2]; k++ {
 				for j := 0; j < 2; j++ {
-					_, n := readVarint(payload)
+					_, n := qi.ReadVarint(payload)
 					payload = payload[n:]
 				}
 			}
 			if typ == 0x03 {
 				for j := 0; j < 3; j++ {
-					_, n := readVarint(payload)
+					_, n := qi.ReadVarint(payload)
 					payload = payload[n:]
 				}
 			}
 			counts["ACK"]++
 		case typ == 0x06:
-			off, n1 := readVarint(payload)
-			length, n2 := readVarint(payload[n1:])
+			off, n1 := qi.ReadVarint(payload)
+			length, n2 := qi.ReadVarint(payload[n1:])
 			payload = payload[n1+n2:]
 			if int(length) > len(payload) {
 				return describe(counts, cryptoParts), errors.New("CRYPTO out of bounds")
 			}
-			*crypto = append(*crypto, frag{off: off, data: append([]byte(nil), payload[:length]...)})
+			*crypto = append(*crypto, qi.Frag{Off: off, Data: append([]byte(nil), payload[:length]...)})
 			cryptoParts = append(cryptoParts, fmt.Sprintf("CRYPTO[%d+%d]", off, length))
 			payload = payload[length:]
 		case typ == 0x1c || typ == 0x1d:
@@ -523,47 +356,12 @@ func describe(counts map[string]int, cryptoParts []string) string {
 	return strings.Join(parts, " ")
 }
 
-func cryptoLen(crypto []frag) int {
+func cryptoLen(crypto []qi.Frag) int {
 	n := 0
 	for _, f := range crypto {
-		n += len(f.data)
+		n += len(f.Data)
 	}
 	return n
-}
-
-// assemble joins the CRYPTO data when it forms a complete message.
-//
-// Fragments are placed byte by byte at their offsets: a Chrome Initial
-// retransmission re-cuts CRYPTO at random boundaries and the pieces overlap —
-// assembling by fragment start produced a shifted message.
-func assemble(crypto []frag) []byte {
-	var buf []byte
-	var have []bool
-	for _, f := range crypto {
-		off := int(f.off)
-		end := off + len(f.data)
-		if end > len(buf) {
-			buf = append(buf, make([]byte, end-len(buf))...)
-			have = append(have, make([]bool, end-len(have))...)
-		}
-		copy(buf[off:], f.data)
-		for i := off; i < end; i++ {
-			have[i] = true
-		}
-	}
-	if len(buf) < 4 || !have[0] || !have[1] || !have[2] || !have[3] {
-		return nil
-	}
-	need := 4 + int(buf[1])<<16 | int(buf[2])<<8 | int(buf[3])
-	if len(buf) < need {
-		return nil
-	}
-	for i := 0; i < need; i++ {
-		if !have[i] {
-			return nil // a hole: that packet has not arrived yet
-		}
-	}
-	return buf[:need]
 }
 
 // parseClientHello extracts the ciphers, extensions and transport parameters.
@@ -621,11 +419,11 @@ func hexOrGrease(v uint16) string {
 func parseTransportParameters(b []byte) []string {
 	var out []string
 	for len(b) > 0 {
-		id, n1 := readVarint(b)
+		id, n1 := qi.ReadVarint(b)
 		if n1 == 0 {
 			break
 		}
-		length, n2 := readVarint(b[n1:])
+		length, n2 := qi.ReadVarint(b[n1:])
 		b = b[n1+n2:]
 		if int(length) > len(b) {
 			break
@@ -662,7 +460,7 @@ func describeTP(id uint64, val []byte) string {
 	case 0x0f:
 		return fmt.Sprintf("15 initial_source_connection_id: %d bytes", len(val))
 	case 0x20:
-		v, _ := readVarint(val)
+		v, _ := qi.ReadVarint(val)
 		return fmt.Sprintf("32 max_datagram_frame_size: %d", v)
 	}
 	names := map[uint64]string{
@@ -679,25 +477,10 @@ func describeTP(id uint64, val []byte) string {
 	if len(val) == 0 {
 		return fmt.Sprintf("%d %s", id, name)
 	}
-	if v, n := readVarint(val); n == len(val) {
+	if v, n := qi.ReadVarint(val); n == len(val) {
 		return fmt.Sprintf("%d %s: %d", id, name, v)
 	}
 	return fmt.Sprintf("%d %s: %x", id, name, val)
-}
-
-func readVarint(b []byte) (uint64, int) {
-	if len(b) == 0 {
-		return 0, 0
-	}
-	l := 1 << (b[0] >> 6)
-	if len(b) < l {
-		return 0, 0
-	}
-	v := uint64(b[0] & 0x3f)
-	for i := 1; i < l; i++ {
-		v = v<<8 | uint64(b[i])
-	}
-	return v, l
 }
 
 func printSample(i int, s sample) {

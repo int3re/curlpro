@@ -9,7 +9,18 @@ when its registry token is in the secrets ([bindings/README.md](../bindings/READ
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.35.0** — a minor: the third list of a transparent proxy. A plain CONNECT on
+**0.36.0** — a minor: the fourth list of a transparent proxy. The server's
+SETTINGS and connection WINDOW_UPDATE on every connection's description
+(`peer_settings`, `peer_window_update`, HTTP/3's from its control stream), a
+connection opened ahead of its first request (`curlpro_preconnect`), a profile
+built from a client's own bytes (`curlpro_profile_from_wire`: the HPACK fields
+read off its header blocks — Chrome 156's and Firefox 159's give back their
+profiles' — and the QUIC hello out of its Initials), `local_address`,
+`connect_authority` through a proxy that speaks HTTP/1.1 or is cleartext. A
+profile bundle asks for the profile format's version, 0.33.0, not the
+release's: 0.22.x takes the bundles of later releases. 346 profiles, 51
+captured.
+Before it, **0.35.0** — a minor: the third list of a transparent proxy. A plain CONNECT on
 HTTP/2 through an HTTPS proxy from `curlpro_upgrade_open` (`connect_authority`),
 on the proxy's connection with the profile's hello, SETTINGS and HPACK, as
 Chrome tunnels through googlezip.net; the connection an upgrade came over
@@ -375,8 +386,10 @@ python scripts/publish-profiles.py --dry-run  # build and sign only
 ```
 
 The bundle is every profile of the committed tree, stamped with the package
-version (a bundle older than an installed package is ignored by it), that
-version's `X.Y.0` as the oldest library that reads it, and the commit; it is signed
+version (a bundle older than an installed package is ignored by it), the
+profile format's version as the oldest library that reads it (`FormatVersion`
+in internal/profile/format.go, 0.33.0 so far: 0.22.x takes the bundles of
+later releases), and the commit; it is signed
 with the maintainer's Ed25519 key — `--key`, `CURLPRO_SIGNING_KEY`, or
 `%APPDATA%/curlpro/profile-signing.key` (`~/.config/curlpro/` elsewhere) —
 whose public half is compiled into the library (`internal/profile/bundle.go`).

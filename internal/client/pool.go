@@ -66,6 +66,9 @@ type dialSpec struct {
 	// alpn, when set, replaces the hello's ALPN list (comma-separated; "-"
 	// for none): a raw TLS connection for a protocol that is not HTTP.
 	alpn string
+	// local is the address the connection leaves from (LocalAddress): two
+	// routes out are two connections.
+	local string
 }
 
 // newDialSpec builds the connection key.
@@ -89,12 +92,16 @@ func (s *Session) newDialSpec(u *url.URL, proxy string, forceHTTP1 bool) dialSpe
 		forceHTTP1: forceHTTP1,
 		plain:      plain,
 		target:     resolveAddr(s.opts.Resolve, addr),
+		local:      s.opts.LocalAddress,
 	}
 }
 
 // partition fills the pool key's partition for a request: whether it
 // carries credentials, and the top-level site it is made under.
 func (s *Session) partition(spec dialSpec, r *Request, u *url.URL) dialSpec {
+	if r.LocalAddress != "" {
+		spec.local = r.LocalAddress // the request's own route out
+	}
 	p := s.connPolicy
 	if p.SplitCredentials {
 		spec.anon = !s.includesCredentials(r, u)

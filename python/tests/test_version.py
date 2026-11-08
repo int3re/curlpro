@@ -43,7 +43,8 @@ def test_one_number_for_the_package_the_library_and_the_bindings():
     versions = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(versions)
     assert versions.problems() == []
-    assert versions.min_abi("0.34.7") == "0.34.0"
+    # A profile bundle asks for the profile format's version, not the release's.
+    assert re.fullmatch(r"\d+\.\d+\.\d+", versions.min_abi())
 
 
 def test_exported_version_is_readable():

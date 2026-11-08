@@ -182,6 +182,10 @@ type settingsFrame struct {
 	// random order on every connection — the fingerprint would be unstable and
 	// would match no browser at all.
 	Order []uint64
+
+	// Received is a parsed frame's settings as they came — [id, value] in
+	// the peer's order, every one (curlpro: ConnInfo.PeerSettings).
+	Received [][2]uint64
 }
 
 // settingsMap folds every setting into one map: from there they are written
@@ -253,6 +257,7 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 		if err != nil { // should not happen. We allocated the whole frame already.
 			return nil, err
 		}
+		frame.Received = append(frame.Received, [2]uint64{id, val})
 
 		switch id {
 		case settingMaxFieldSectionSize:

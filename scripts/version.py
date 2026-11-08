@@ -4,14 +4,18 @@
     python scripts/version.py              # every place that declares it; fails if they differ
     python scripts/version.py check v0.34.0  # the same, and all of them equal to the tag
     python scripts/version.py set 0.35.0   # write it everywhere
-    python scripts/version.py min-abi      # X.Y.0: the oldest library a profile bundle asks for
+    python scripts/version.py min-abi      # the oldest library a profile bundle asks for
 
 Until 0.22.1 the package and the C ABI were numbered apart — package 0.22.x
 carried ABI 0.33 — and two numbers for one release only confused. Since 0.34.0
 there is one: the wheel, libcurlpro, the header and the bindings' packages all
 say the same. The rule that makes it hold is in docs/VERSIONING.md: a patch
-adds nothing to the ABI, so `major.minor` is enough to check against and a
-profile bundle asks for `X.Y.0`, not for the patch it was published from.
+adds nothing to the ABI, so `major.minor` is enough to check against.
+
+A profile bundle asks for the profile format's version (FormatVersion in
+internal/profile/format.go), not for the release it is published from: the
+format moves seldom, and asking for the release would cut every older minor
+off the profile updates it could read.
 
 The bindings' and Python's *floors* (REQUIRED, REQUIRED_VERSION) are not the
 version: they are the oldest library a binding works with and are raised by
@@ -98,14 +102,21 @@ def problems(want: str | None = None) -> list[str]:
         top = tuple(int(p) for p in version.split(".")[:2])
         out += [f"{rel}: floor {a}.{b} is above the version {version}: its own library would be refused"
                 for rel, (a, b) in floors().items() if (a, b) > top]
+        fmt = min_abi()
+        if not SEMVER.fullmatch(fmt) or tuple(int(p) for p in fmt.split(".")) > tuple(int(p) for p in version.split(".")):
+            out.append(f"{FORMAT[0]}: FormatVersion {fmt} is not X.Y.Z at most {version}: a bundle from this "
+                       f"release would ask for a library that does not exist")
     else:
         out.append(f"{version!r} is not X.Y.Z")
     return out
 
 
-def min_abi(version: str) -> str:
-    major, minor, _ = version.split(".", 2)
-    return f"{major}.{minor}.0"
+FORMAT = ("internal/profile/format.go", r'^const FormatVersion = "([^"]+)"')
+
+
+def min_abi() -> str:
+    """The oldest library a profile bundle asks for: the profile format's version."""
+    return _find(*FORMAT).group(1)
 
 
 def set_version(version: str) -> None:
@@ -134,7 +145,7 @@ def main(argv: list[str]) -> int:
         set_version(argv[1])
         argv = ["check", argv[1]]
     if argv[:1] == ["min-abi"] and len(argv) == 1:
-        print(min_abi(_find(*PLACES[2]).group(1)))
+        print(min_abi())
         return 0
     if (argv and argv[0] != "check") or len(argv) > 2:
         print(__doc__.split("\n\n")[1], file=sys.stderr)

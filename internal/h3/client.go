@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/textproto"
+	"strconv"
 	"sync"
 	"time"
 
@@ -612,6 +613,19 @@ func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Res
 		TLSUnique:                   connState.TLSUnique,
 	}
 	// [/uQUIC]
+	// curlpro: the server's SETTINGS, when they are in, for the client's
+	// ConnInfo (PeerSettingsKey).
+	select {
+	case <-c.rawConn.ReceivedSettings():
+		if s := c.rawConn.Settings(); s != nil && len(s.Raw) > 0 {
+			flat := make([]string, 0, 2*len(s.Raw))
+			for _, kv := range s.Raw {
+				flat = append(flat, strconv.FormatUint(kv[0], 10), strconv.FormatUint(kv[1], 10))
+			}
+			res.Header[PeerSettingsKey] = flat
+		}
+	default:
+	}
 	res.Request = req
 	return res, nil
 }

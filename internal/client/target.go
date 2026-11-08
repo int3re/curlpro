@@ -1,6 +1,7 @@
 package client
 
 import (
+	"net"
 	"net/url"
 	"strings"
 )
@@ -44,6 +45,24 @@ func rawTarget(out *url.URL, target string) {
 // checkTarget refuses a TargetRaw no request line can carry: origin-form
 // (or "*"), no CR, LF or NUL — and "//…", which url.URL would read as an
 // authority. A space is refused where the request goes on HTTP/1.1 only.
+// checkLocalAddress refuses a local address that is not an IP: a name
+// would be resolved on every dial, and an interface name is not portable.
+func checkLocalAddress(addr string) error {
+	if addr != "" && net.ParseIP(addr) == nil {
+		return configErr("local_address %q is not an IP address", addr)
+	}
+	return nil
+}
+
+// localUDP is the address a QUIC socket binds to: the session's local
+// address, or the system's choice.
+func localUDP(addr string) *net.UDPAddr {
+	if ip := net.ParseIP(addr); ip != nil {
+		return &net.UDPAddr{IP: ip}
+	}
+	return nil
+}
+
 func checkTarget(target string) error {
 	switch {
 	case target == "*":

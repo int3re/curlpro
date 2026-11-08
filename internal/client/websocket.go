@@ -160,7 +160,7 @@ func (s *Session) DialWebSocket(rawURL string, opts WebSocketOptions) (*WebSocke
 
 	// The handshake runs over HTTP/1.1: Upgrade in HTTP/2 works differently
 	// (RFC 8441, extended CONNECT) and is not supported everywhere.
-	c, err := s.dialHTTP1(ctx, u, opts.Proxy)
+	c, err := s.dialHTTP1(ctx, u, opts.Proxy, "")
 	if err != nil {
 		return nil, err
 	}
@@ -341,12 +341,16 @@ func (s *Session) websocketRequest(u *url.URL, key string, opts WebSocketOptions
 // editing s.opts on the fly was a race and changed the ALPN in the ClientHello
 // for every connection, ordinary requests included. A WebSocket connection is
 // not pooled: it becomes the socket's property and lives until it closes.
-func (s *Session) dialHTTP1(ctx context.Context, u *url.URL, proxyOverride *string) (*conn, error) {
+func (s *Session) dialHTTP1(ctx context.Context, u *url.URL, proxyOverride *string, local string) (*conn, error) {
 	proxy := s.opts.Proxy
 	if proxyOverride != nil {
 		proxy = *proxyOverride
 	}
-	c, err := s.dial(ctx, u, s.newDialSpec(u, proxy, true))
+	spec := s.newDialSpec(u, proxy, true)
+	if local != "" {
+		spec.local = local
+	}
+	c, err := s.dial(ctx, u, spec)
 	if err != nil {
 		return nil, err
 	}

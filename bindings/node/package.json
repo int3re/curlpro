@@ -1,6 +1,6 @@
 {
   "name": "curlpro",
-  "version": "0.35.0",
+  "version": "0.36.0",
   "description": "HTTP client with a browser's network fingerprint (TLS ClientHello, HTTP/2, HTTP/3, header order) — Node.js binding of libcurlpro",
   "main": "index.js",
   "types": "index.d.ts",

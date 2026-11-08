@@ -2,7 +2,7 @@
 
 `libcurlpro` (`curlpro.dll`, `libcurlpro.so`, `libcurlpro.dylib`) is a Go
 library built with `-buildmode=c-shared`. Every language other than Go talks to
-it through the 62 functions declared in [include/curlpro.h](../include/curlpro.h).
+it through the 65 functions declared in [include/curlpro.h](../include/curlpro.h).
 This file is the contract those functions keep: what goes in, what comes out,
 who frees what, which errors exist, and what is safe from several threads.
 
@@ -128,6 +128,27 @@ in `CURLPRO_CACHE_DIR` or `%LOCALAPPDATA%\curlpro` / `~/.cache/curlpro`. A bindi
 does this once, while the registry is still empty: before the first session, and
 before registering a profile of the caller's — which may be `based_on` a stock one.
 
+`curlpro_profile_from_wire(wire)` (0.36) builds a profile from what a client
+sent, for a proxy that mirrors the client it relays: `wire` is `{name,
+based_on, client_hello, h2, quic_initial, h3_control}`, all base64 — the
+ClientHello (record or message), one HTTP/2 connection's bytes after the
+handshake or a list of connections' (the preface, SETTINGS, WINDOW_UPDATE,
+PRIORITY and every HEADERS block), the client's first QUIC datagrams, its
+HTTP/3 control stream. The answer `{"profile": {…}, "notes": […]}` is the
+object `session_new`'s `profile` takes: `tls.raw_client_hello` with its trust
+anchors; `http2.settings` in order, `connection_window_update`,
+`priority_frames`, the HEADERS priority, `pseudo_order`; the HPACK fields read
+off the header blocks with the tables tracked — `hpack_indexing_policy` per
+name (`literal` where a literal went over a whole match, `never<N` where short
+values were never indexed and long ones were), `hpack_name_index` from which
+entry a literal named, `hpack_huffman` from a string Huffman would not
+shorten; `quic.raw_client_hello` decrypted out of the Initials;
+`http3.settings` and `settings_order`, `send_grease_frame`. Only what the bytes
+show is set and `based_on` supplies the rest; the notes say what one
+connection could not tell — a CONNECT carries two pseudo-headers of four, a
+field always whole in a table shows no mode. Chrome 156's and Firefox 159's
+recorded blocks give back the HPACK fields of their profiles.
+
 `curlpro_profiles_list()`, `curlpro_profile_get(name)` (inheritance resolved)
 and `curlpro_profile_capabilities(name)` (what it can do — fetch headers, HTTP/3,
 devices — without opening a session) read the registry.
@@ -182,6 +203,7 @@ marked "absent = `true`" are the exceptions, read as on when missing.
 | `max_response_size` | int | 0 | bytes; 0 = no limit; past it → `too_large` |
 | `resolve` | {host: ip} | | fixed DNS answers |
 | `resolve_via_proxy` | string | absent = `"name"` | what `resolve` does behind a proxy: `"name"` nothing — the tunnel names the host and the proxy resolves it, as curl's `--resolve`; `"ip"` the tunnel goes to the table's address (`CONNECT ip:port`, SOCKS5's address form, MASQUE's target), SNI and `Host` keeping the name. `conn.resolved_by` says which happened (0.34) |
+| `local_address` | string | absent = the system's choice | the IP connections leave from — a route past a VPN, one interface of several: TCP, a proxy's connection included, and QUIC's UDP; a request's own overrides it for TCP and keeps its connections apart in the pool. Not an IP is `configuration` (0.36) |
 | `ip_version` | string | `""` | `"4"`, `"6"` or `""` |
 | `dns` | string | `""` | HTTPS-record lookups: `""` system, `"off"`, servers, or a DoH URL |
 | `max_idle_conns`, `idle_conn_timeout_ms` | int | | pool limits |
@@ -230,6 +252,7 @@ curlpro_free(resp);
 | `headers_raw` | [[name, value], …] | the whole header set, sent as given: order, case on HTTP/1.1 (lowercase on HTTP/2 and HTTP/3), a name twice sent twice — repeats of one name go out together, where its first stands; nothing of the profile's, the session's or the jar's is added; pseudo-headers in the list are skipped. Exclusive with `headers` and `header_order` (0.32). A value that is not UTF-8 goes as `[name, base64, "base64"]`; on HTTP/1.1 `Content-Length` and `Transfer-Encoding` in the list mark where the transport writes its own, from the body (0.33; they went out twice) |
 | `h2_priority` | {weight, exclusive, depends_on} | this request's HTTP/2 priority (weight 1–256) in place of the profile's (0.32) |
 | `target_raw` | string | the request-target — path and query — sent exactly as given, in place of the URL's (which still names the host, the scheme and the cookies' path): the bytes a relayed client sent, an app's own encoding, a path a signature was computed over. In origin form (`/…`) or `*`; CR, LF and NUL are refused, and so is a target starting with `//`; on HTTP/1.1 a space too, since it would split the request line. The first hop only (0.34) |
+| `local_address` | string | the IP this request's connection leaves from, in place of the session's (TCP; HTTP/3 keeps the session's). Part of the pool key (0.36) |
 | `interim_events` | bool | on a `*_start` call, each 1xx response becomes a result of the call's own handle the moment it is read — `{"interim": {status, headers}}` — before the final one (Asynchronous calls); a 103's preloads or the 100 a client waits on reach it in time (0.34) |
 | `connection` | `"new"` or an id | `"new"`: a connection of its own, opened for this request and pooled after; an id (a response's `conn.id`): that open connection — a proxy keeps each client connection to one server connection so. Either covers the first hop, takes the request past HTTP/3 and past the silent resend on a fresh connection; a named connection that is gone fails with `conn_closed`, one to another origin (not coalescable) or a busy HTTP/1.1 one with `configuration` (0.33) |
 | `decompress` | bool or absent | per-request `decompress` (0.32) |
@@ -265,7 +288,7 @@ curlpro_free(resp);
 | `trailers_raw` | [[name, value], …] — the trailer block as it came, as `headers_raw` is the header block: the server's case and order, a repeated field once per line, a value that is not UTF-8 as `[name, base64, "base64"]`; absent when none came (0.35) |
 | `headers_raw` | [[name, value], …] — the header block as it came off the wire: the server's order and case, a repeated field once per line; absent for a cached response (0.32). A value that is not UTF-8 (obs-text, a `Set-Cookie` in cp1251) comes as `[name, base64, "base64"]`: JSON would turn its bytes into U+FFFD, as it does in `headers` (0.33) |
 | `interim` | [{status, headers}] — the 1xx responses before the final one (103 Early Hints, 100 Continue), in order (0.32). Since 0.33 a body announced with `Expect: 100-continue` waits for the `100` (`expect_continue_ms`) |
-| `conn` | the connection: `id` (same id, same connection), `reused`, `remote`, `local`, `proto`, `proxy`, `tls_version`, `cipher`, `resumed`, `ech`, `verified`, `ja4`/`ja4_r` of the ClientHello actually sent, and on a connection's first response `resolved_by` (`local`, or `proxy` when a proxy got the name, 0.34), `peer_certs` (DER, base64, leaf first), `connect_ms` (name resolution, TCP and a proxy's tunnel together; `dns_ms` the address lookup within it, 0.33) and `tls_ms` (0.32) |
+| `conn` | the connection: `id` (same id, same connection), `reused`, `remote`, `local`, `proto`, `proxy`, `tls_version`, `cipher`, `resumed`, `ech`, `verified`, `ja4`/`ja4_r` of the ClientHello actually sent, and on a connection's first response `resolved_by` (`local`, or `proxy` when a proxy got the name, 0.34), `peer_certs` (DER, base64, leaf first), `peer_settings` — the server's first SETTINGS as `[[id, value], …]` in its order, HTTP/2's or HTTP/3's (from its control stream), ids nobody defines included — and `peer_window_update`, the increment of its first connection WINDOW_UPDATE (HTTP/2) (0.36), `connect_ms` (name resolution, TCP and a proxy's tunnel together; `dns_ms` the address lookup within it, 0.33) and `tls_ms` (0.32) |
 | `timing` | `{wait_ms, body_ms}` — from the request leaving to its headers (0.32); from the headers to the body's last byte, on a buffered response (0.33) |
 
 The body is already decompressed (gzip, br, zstd, deflate).
@@ -368,8 +391,12 @@ set and no cookies, as the session's own proxy tunnel. It goes on the
 proxy's HTTP/2 connection beside its other streams, with the profile's
 ClientHello, SETTINGS, pseudo-header order and HPACK, as a browser tunnels
 through an HTTPS proxy; the proxy need not send
-`SETTINGS_ENABLE_CONNECT_PROTOCOL`. A `2xx` hands back `conn` as above; a
-proxy that negotiates HTTP/1.1 fails the call. Not together with
+`SETTINGS_ENABLE_CONNECT_PROTOCOL`. A `2xx` hands back `conn` as above. A
+proxy that negotiates HTTP/1.1 — and a cleartext one, `http://` — gets
+`CONNECT host:port HTTP/1.1` on a connection of its own (0.36): `Host` first
+unless your `headers_raw` has it, then those as given; without them Chrome's
+`Host`, `Proxy-Connection: keep-alive`, `User-Agent` and your `headers`. After
+a `2xx` that connection is yours. Not together with
 `connect_protocol`; an authority without a port is `configuration`.
 
 The out frame is `{status, proto, headers, url, body_len, conn, info}` and,
@@ -391,6 +418,7 @@ close codes:
 | `curlpro_conn_close_write(conn)` | ends your direction (TLS close_notify), reading stays open |
 | `curlpro_tls_dial(session, config)` | no HTTP at all: a TLS connection with the profile's ClientHello to `{host, port}`, `alpn` replacing its list (`[]` none, absent the profile's), through `proxy` or the session's; `{conn, info}`, `info` as a response's `conn` (0.32) |
 | `curlpro_conn_close(conn)` | closes; a read blocked on it returns `-1` |
+| `curlpro_preconnect(session, request)`, `curlpro_preconnect_start` | opens the connection a first request to the URL would open — the profile's ClientHello, ALPN and HTTP/2 preface — without a request, waits for the server's SETTINGS (and up to a second for its ACK of ours, before which it writes its WINDOW_UPDATE), leaves it in the pool and answers `{"info": {…}}`, a response's `conn` with `peer_settings`; `"connection": info.id` sends a request on it, the first one not `reused`. `request` is a request's JSON: `url`, `connection: "new"`, `proxy`, `protocol`, timeouts. TCP only: HTTP/3 forced is `configuration` (0.36) |
 
 `curlpro_ws_*` is the other choice, where the library speaks WebSocket itself.
 

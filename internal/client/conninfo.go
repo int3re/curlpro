@@ -57,6 +57,13 @@ type ConnInfo struct {
 	ConnectMS float64 `json:"connect_ms"`
 	DNSMS     float64 `json:"dns_ms"`
 	TLSMS     float64 `json:"tls_ms"`
+	// PeerSettings is the server's first SETTINGS frame as it came — [id,
+	// value] in its order, HTTP/2's, or HTTP/3's from its control stream —
+	// and PeerWindowUpdate the increment of its first connection-level
+	// WINDOW_UPDATE (HTTP/2): the server's preface, which a proxy passes on
+	// to its own client (0.36).
+	PeerSettings     [][2]uint64 `json:"peer_settings,omitempty"`
+	PeerWindowUpdate uint32      `json:"peer_window_update,omitempty"`
 }
 
 // Timing is the request's own clock.
@@ -121,6 +128,15 @@ func (c *conn) describe(reused bool) *ConnInfo {
 	if reused {
 		info.PeerCerts = nil
 		info.ConnectMS, info.DNSMS, info.TLSMS = 0, 0, 0
+	}
+	if c.h2 != nil {
+		// Read when described: they arrive after the dial, before the first
+		// response.
+		settings, wu := c.h2.CurlproPeer()
+		for _, st := range settings {
+			info.PeerSettings = append(info.PeerSettings, [2]uint64{uint64(st.ID), uint64(st.Val)})
+		}
+		info.PeerWindowUpdate = wu
 	}
 	return &info
 }

@@ -64,8 +64,16 @@ against all of them before anything is built. A test fails while they differ.
 
 What keeps one number honest is a rule about the ABI: **a patch adds nothing to
 it**. A new export or a new configuration field comes in a minor. So
-`major.minor` is all a caller has to compare, and a profile bundle asks for
-`X.Y.0` — an installed 0.34.0 reads what 0.34.3 publishes.
+`major.minor` is all a caller has to compare.
+
+A profile bundle is the exception that does not follow the release: it asks
+for the profile format's version, `FormatVersion` in
+[internal/profile/format.go](../internal/profile/format.go) — the release that
+brought the newest field a profile can carry, 0.33.0 so far. The library reads
+profiles strictly, so the bundle may not ask for less; asking for the release
+it is published from would cut every older minor off the profile updates it
+could read. `TestTheProfileFormatIsDeclared` keeps the list of profile fields
+and fails when it changes, which is when `FormatVersion` is raised.
 
 `REQUIRED_VERSION` in `python/curlpro/_ffi.py` and the bindings' `REQUIRED` are
 not the version but its floor: the oldest library that side works with. It is

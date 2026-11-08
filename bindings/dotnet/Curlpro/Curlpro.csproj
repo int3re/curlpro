@@ -12,7 +12,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsAotCompatible>true</IsAotCompatible>
-    <Version>0.35.0</Version>
+    <Version>0.36.0</Version>
     <PackageId>Curlpro</PackageId>
     <Description>HTTP client with a browser's network fingerprint (TLS ClientHello, HTTP/2, HTTP/3, header order) — .NET binding of libcurlpro.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

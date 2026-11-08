@@ -236,7 +236,7 @@ func (s *Session) dialMasqueLink(ctx context.Context, pu *url.URL) (*masqueLink,
 	case "6", "ipv6":
 		network = "udp6"
 	}
-	udpConn, err := net.ListenUDP(network, nil)
+	udpConn, err := net.ListenUDP(network, localUDP(s.opts.LocalAddress))
 	if err != nil {
 		return nil, proxyFail(ProxyStageDial, 0, fmt.Errorf("opening a socket for the proxy: %w", err))
 	}

@@ -329,6 +329,13 @@ type ClientConn struct {
 	curlproConnectProtocol bool
 
 	br         *bufio.Reader
+	// curlpro: the server's preface — its first SETTINGS in order, its first
+	// connection WINDOW_UPDATE — and the ACK of ours (curlpro_connect.go).
+	curlproGotSettings      bool
+	curlproPeerSettings     []Setting
+	curlproGotWindowUpdate  bool
+	curlproPeerWindowUpdate uint32
+	curlproPeerAck          chan struct{}
 	bw         *bufio.Writer
 	closed     bool
 	closing    bool
@@ -866,6 +873,7 @@ func (t *Transport) newClientConn(c net.Conn, addr string, singleUse bool) (*Cli
 	cc.henc = hpack.NewEncoder(&cc.hbuf)
 	cc.henc.SetRepresentation(t.HPACKIndexPolicy, t.HPACKNameRef, t.HPACKHuffmanAlways) // curlpro
 
+	cc.curlproPeerAck = make(chan struct{}) // curlpro
 	cc.curlproSettings = make(chan struct{}) // curlpro
 
 	if t.AllowHTTP {
@@ -2818,6 +2826,9 @@ func (rl *clientConnReadLoop) processSettings(f *SettingsFrame) error {
 	if f.IsAck() {
 		if cc.wantSettingsAck {
 			cc.wantSettingsAck = false
+			if cc.curlproPeerAck != nil { // curlpro: the server has read our SETTINGS
+				close(cc.curlproPeerAck)
+			}
 
 			return nil
 		}
@@ -2825,7 +2836,12 @@ func (rl *clientConnReadLoop) processSettings(f *SettingsFrame) error {
 		return ConnectionError(ErrCodeProtocol)
 	}
 
+	first := !cc.curlproGotSettings // curlpro: the server's first SETTINGS, kept as they came
+	cc.curlproGotSettings = true
 	err := f.ForeachSetting(func(s Setting) error {
+		if first {
+			cc.curlproPeerSettings = append(cc.curlproPeerSettings, s)
+		}
 		switch s.ID {
 		case SettingMaxFrameSize:
 			cc.maxFrameSize = s.Val
@@ -2894,6 +2910,10 @@ func (rl *clientConnReadLoop) processWindowUpdate(f *WindowUpdateFrame) error {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
+	if f.StreamID == 0 && !cc.curlproGotWindowUpdate { // curlpro: the server's first one for the connection
+		cc.curlproGotWindowUpdate = true
+		cc.curlproPeerWindowUpdate = f.Increment
+	}
 	fl := &cc.flow
 	if cs != nil {
 		fl = &cs.flow

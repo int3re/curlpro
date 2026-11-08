@@ -158,6 +158,12 @@ type Options struct {
 	// keeps it. Response.Conn.ResolvedBy says which happened.
 	ResolveViaProxy string
 
+	// LocalAddress is the address connections leave from — an IP of this
+	// machine, the port chosen by the system: a route past a VPN, one
+	// interface of several (0.36). TCP, the proxy's connection included,
+	// and QUIC's UDP. Empty: the system's choice.
+	LocalAddress string
+
 	// DNS chooses what resolves names and whether HTTPS records are asked for
 	// first, as the browser asks (dns.go): "" the system's servers, "off" none,
 	// "1.1.1.1,8.8.8.8" those servers, "https://..." DNS over HTTPS.
@@ -326,6 +332,12 @@ type Request struct {
 	// HTTP/1.1 a space would split the request line and is refused. The
 	// first hop only.
 	TargetRaw string
+
+	// LocalAddress overrides the session's for this request's connection
+	// (TCP; HTTP/3 keeps the session's, its transport being one per
+	// session). Part of the pool key: a connection from another address is
+	// not taken.
+	LocalAddress string
 
 	// OnInterim hears of each 1xx response the moment it is read, before the
 	// final one: a proxy relays a 103 Early Hints or a 100 Continue as it
@@ -823,6 +835,9 @@ func (r *Request) validate(hasJar bool) error {
 			return configErr("%s cannot be negative, got %s (0 is no limit)", t.name, *t.d)
 		}
 	}
+	if err := checkLocalAddress(r.LocalAddress); err != nil {
+		return err
+	}
 	if r.TargetRaw != "" {
 		if err := checkTarget(r.TargetRaw); err != nil {
 			return err
@@ -1072,6 +1087,9 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	}
 	if opts.IdleTimeout < 0 {
 		return nil, configErr("idle timeout cannot be negative, got %s", opts.IdleTimeout)
+	}
+	if err := checkLocalAddress(opts.LocalAddress); err != nil {
+		return nil, err
 	}
 	switch opts.ResolveViaProxy {
 	case "", "name", "ip":
@@ -1691,7 +1709,8 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 			resp, err := s.sendH3(req.Context(), r, u, proxy)
 			err = headersDone(err)
 			if err == nil {
-				info := &ConnInfo{Proto: "h3", ResolvedBy: s.resolvedBy(u.Host, proxy)}
+				info := &ConnInfo{Proto: "h3", ResolvedBy: s.resolvedBy(u.Host, proxy),
+					PeerSettings: takePeerSettings(resp.Header)}
 				if proxy != "" {
 					info.Proxy = redactProxy(proxy)
 				}
@@ -1834,7 +1853,7 @@ func (s *Session) dialWith(ctx context.Context, u *url.URL, ds dialSpec, spare f
 	for attempt := 0; ; attempt++ {
 		var err error
 		dialed := time.Now()
-		raw, err = s.dialRaw(traced, ds.addr, ds.proxy)
+		raw, err = s.dialRaw(traced, ds.addr, ds.proxy, ds.local)
 		if err != nil {
 			return nil, inPhase(PhaseConnect, err)
 		}

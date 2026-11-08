@@ -175,6 +175,10 @@ for _name, _args in (
     # 0.33: the ready queue as a handle for an event loop.
     ("curlpro_result_event", []),
     ("curlpro_decode", [ctypes.c_char_p, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]),
+    # 0.36: a connection opened ahead of its first request.
+    ("curlpro_preconnect", [ctypes.c_longlong, ctypes.c_char_p]),
+    ("curlpro_preconnect_start", [ctypes.c_longlong, ctypes.c_char_p]),
+    ("curlpro_profile_from_wire", [ctypes.c_char_p]),
 ):
     try:
         _fn = getattr(_lib, _name)
@@ -244,7 +248,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Minimum version of the native part: major and minor. Raise it together
 # with lib/curlpro.go whenever Python starts depending on a new export or field.
-REQUIRED_VERSION = (0, 34)
+REQUIRED_VERSION = (0, 36)
 
 
 def _check_version() -> None:

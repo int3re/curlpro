@@ -29,6 +29,9 @@ type Settings struct {
 	EnableExtendedConnect bool
 	// Other settings, defined by the application
 	Other map[uint64]uint64
+	// Raw is every setting as the peer sent it, [id, value] in its order
+	// (curlpro: what a proxy passes on to its own client).
+	Raw [][2]uint64
 }
 
 // RoundTripOpt are options for the Transport.RoundTripOpt method.

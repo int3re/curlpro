@@ -240,6 +240,7 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 		EnableDatagrams:       sf.Datagram,
 		EnableExtendedConnect: sf.ExtendedConnect,
 		Other:                 sf.Other,
+		Raw:                   sf.Received,
 	}
 	close(c.receivedSettings)
 	if sf.Datagram {
