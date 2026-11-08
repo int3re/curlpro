@@ -156,7 +156,7 @@ func curlpro_stream_open_start(id C.longlong, frame *C.char, frameLen C.int) (ou
 		if sid := atomic.LoadInt64(opened); sid != 0 {
 			closeStream(sid)
 		}
-	}, withInterimEvents(req, before), func(rid int64) []byte {
+	}, withDialLabel(req, withInterimEvents(req, before)), func(rid int64) []byte {
 		st, err := sess.DoStream(req)
 		if err != nil {
 			cancel()

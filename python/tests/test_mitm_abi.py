@@ -561,3 +561,118 @@ def test_a_profile_from_a_clients_bytes(session):
     with pytest.raises(CurlProError) as e:
         _ffi._call("curlpro_profile_from_wire", _ffi.encode({"h2": base64.b64encode(b"GET / HTTP/1.1\r\n\r\n").decode()}))
     assert e.value.code == "configuration"
+
+
+def _take_ready(timeout: float = 10) -> tuple[int, dict, bytes]:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        done = lib.curlpro_result_wait(200)
+        if done:
+            out = ctypes.c_int(0)
+            ptr = lib.curlpro_result_take(done, ctypes.byref(out))
+            try:
+                data, body = _ffi._take("curlpro_result_take", ptr, out.value)
+            finally:
+                lib.curlpro_free(ptr)
+            return done, data, body
+    raise AssertionError("nothing on the ready queue")
+
+
+def _pump(cid: int, sock: socket.socket) -> None:
+    def up():
+        buf = ctypes.create_string_buffer(65536)
+        while True:
+            n = lib.curlpro_conn_read(cid, buf, 65536)
+            if n <= 0:
+                break
+            try:
+                sock.sendall(buf.raw[:n])
+            except OSError:
+                break
+
+    def down():
+        while True:
+            try:
+                data = sock.recv(65536)
+            except OSError:
+                break
+            if not data or lib.curlpro_conn_write(cid, data, len(data)) < 0:
+                break
+
+    threading.Thread(target=up, daemon=True).start()
+    threading.Thread(target=down, daemon=True).start()
+
+
+def test_the_callers_own_transport(stand):
+    # 0.37: "dial": "caller" asks for every TCP connection on the ready queue;
+    # the caller makes it its own way and pumps the bytes through conn.
+    sid = _ffi._call("curlpro_session_new", _ffi.encode({"profile": "chrome-157-windows", "dial": "caller",
+                                                        "timeout_ms": 10000}))["session"]
+    host, port = stand.url.split("//")[1].split(":")
+    try:
+        rid = _ffi.call_with_frame("curlpro_request_start", sid, body=b"",
+                                   meta={"method": "GET", "url": stand.url + "/early"})["request"]
+        ask_rid, ask, _ = _take_ready()
+        d = ask["dial"]
+        assert ask_rid != rid and d["request"] == rid and d["session"] == sid
+        assert d["host"] == host and d["port"] == int(port)
+        sock = socket.create_connection((d["host"], d["port"]))
+        _pump(d["conn"], sock)
+        assert _ffi._call("curlpro_dial_result", d["conn"], b"") is None
+        done, final, _ = _take_ready()
+        assert done == rid and final["status"] == 200
+        c = final["conn"]
+        assert c["resolved_by"] == "caller" and c["remote"] == f"{host}:{port}" and c["local"] == "caller"
+
+        # A dial the caller could not make fails the request with its code.
+        rid = _ffi.call_with_frame("curlpro_request_start", sid, body=b"",
+                                   meta={"method": "GET", "url": "http://unreachable.test:81/",
+                                         "connection": "new"})["request"]
+        _, ask, _ = _take_ready()
+        _ffi._call("curlpro_dial_result", ask["dial"]["conn"],
+                   _ffi.encode({"error": "no route from the phone's network", "code": "connect_unreachable"}))
+        with pytest.raises(CurlProError) as e:
+            _take_ready()
+        assert e.value.code == "connect_unreachable"
+        with pytest.raises(CurlProError) as e:
+            _ffi._call("curlpro_session_new", _ffi.encode({"profile": "chrome-157-windows", "dial": "socks"}))
+        assert e.value.code == "configuration"
+    finally:
+        _ffi._call("curlpro_session_close", sid)
+
+
+def test_the_callers_udp_and_its_local_address(stand):
+    # 0.38: with http3 a "dial": "caller" session asks for QUIC's UDP too —
+    # "udp": true, a pipe of datagrams — and every ask names the local
+    # address the session or the request gives.
+    sid = _ffi._call("curlpro_session_new", _ffi.encode({"profile": "chrome-157-windows", "dial": "caller",
+                                                        "http3": True, "local_address": "127.0.0.1",
+                                                        "timeout_ms": 10000}))["session"]
+    try:
+        rid = _ffi.call_with_frame("curlpro_request_start", sid, body=b"",
+                                   meta={"method": "GET", "url": "https://localhost:4433/"})["request"]
+        _, ask, _ = _take_ready()
+        d = ask["dial"]
+        assert d["udp"] is True and d["local_address"] == "127.0.0.1" and d["request"] == rid
+        assert d["host"] == "localhost" and d["port"] == 4433
+        _ffi._call("curlpro_dial_result", d["conn"], _ffi.encode({"error": "QUIC is not let out", "code": "connect_unreachable"}))
+        with pytest.raises(CurlProError) as e:
+            _take_ready()
+        assert e.value.code == "connect_unreachable"
+    finally:
+        _ffi._call("curlpro_session_close", sid)
+
+    sid = _ffi._call("curlpro_session_new", _ffi.encode({"profile": "chrome-157-windows", "dial": "caller",
+                                                        "timeout_ms": 10000}))["session"]
+    try:
+        _ffi.call_with_frame("curlpro_request_start", sid, body=b"",
+                             meta={"method": "GET", "url": stand.url + "/early", "local_address": "127.0.0.1"})
+        _, ask, _ = _take_ready()
+        d = ask["dial"]
+        assert "udp" not in d and d["local_address"] == "127.0.0.1"
+        _ffi._call("curlpro_dial_result", d["conn"], _ffi.encode({"error": "no", "code": "connect_refused"}))
+        with pytest.raises(CurlProError) as e:
+            _take_ready()
+        assert e.value.code == "connect_refused"
+    finally:
+        _ffi._call("curlpro_session_close", sid)

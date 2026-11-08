@@ -72,6 +72,12 @@ func transportCode(err error) ErrorCode {
 	if errnoIs(err, syscall.ECONNREFUSED, 10061, 1225) {
 		return CodeConnectRefused
 	}
+	// WSAENETUNREACH, WSAEHOSTUNREACH, WSAEADDRNOTAVAIL, and Windows's
+	// ERROR_NETWORK_UNREACHABLE and ERROR_HOST_UNREACHABLE.
+	if errnoIs(err, syscall.ENETUNREACH, 10051, 1231) || errnoIs(err, syscall.EHOSTUNREACH, 10065, 1232) ||
+		errnoIs(err, syscall.EADDRNOTAVAIL, 10049) {
+		return CodeConnectUnreachable
+	}
 	if errnoIs(err, syscall.ECONNRESET, 10054) || errnoIs(err, syscall.ECONNABORTED, 10053) {
 		return CodeReset
 	}

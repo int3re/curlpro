@@ -64,7 +64,7 @@ func curlpro_preconnect_start(id C.longlong, request *C.char) (out *C.char) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	req.Ctx = ctx
-	return startAsync(cancel, nil, func(int64) []byte {
+	return startAsyncWith(cancel, nil, withDialLabel(req, nil), func(int64) []byte {
 		defer cancel()
 		info, err := s.Preconnect(req)
 		if err != nil {

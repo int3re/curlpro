@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	http "github.com/bogdanfinn/fhttp"
@@ -32,9 +33,13 @@ import (
 func (s *Session) dialRaw(ctx context.Context, addr, proxy, local string) (net.Conn, error) {
 	// The session's resolver, when Options.DNS names servers or DoH: the
 	// target on a direct connection and a proxy's own name alike.
-	d := &net.Dialer{Resolver: s.dns.resolver}
+	nd := &net.Dialer{Resolver: s.dns.resolver}
 	if ip := net.ParseIP(local); ip != nil {
-		d.LocalAddr = &net.TCPAddr{IP: ip}
+		nd.LocalAddr = &net.TCPAddr{IP: ip}
+	}
+	var d contextDialer = nd
+	if s.opts.Dialer != nil {
+		d = callerDialer{s.opts.Dialer, local} // the caller's transport, to the origin or the proxy
 	}
 	network := "tcp"
 	switch s.opts.IPVersion {
@@ -46,7 +51,14 @@ func (s *Session) dialRaw(ctx context.Context, addr, proxy, local string) (net.C
 	if proxy == "" {
 		// The override applies to direct connections only: through a proxy the
 		// name is resolved by the proxy, and our table decides nothing there.
-		return d.DialContext(ctx, network, resolveAddr(s.opts.Resolve, addr))
+		c, err := d.DialContext(ctx, network, resolveAddr(s.opts.Resolve, addr))
+		// Linux answers a socket bound to an address that cannot reach the
+		// target (loopback to the outside) with EINVAL: with a local address
+		// set that is the route, not the call.
+		if err != nil && local != "" && errnoIs(err, syscall.EINVAL) {
+			err = CodeError(CodeConnectUnreachable, err)
+		}
+		return c, err
 	}
 
 	pu, err := parseProxy(proxy)
@@ -117,6 +129,9 @@ func (s *Session) tunnelTarget(addr string) string {
 // address) — or "proxy", which got the name.
 func (s *Session) resolvedBy(addr, proxy string) string {
 	if proxy == "" {
+		if s.opts.Dialer != nil {
+			return "caller"
+		}
 		return "local"
 	}
 	host, _, err := net.SplitHostPort(s.tunnelTarget(addr))
@@ -165,7 +180,7 @@ func resolveAddr(table map[string]string, addr string) string {
 // sent to the proxy for socks5:// and socks5h:// alike — as it always was
 // here, and as a browser with a SOCKS proxy does: no local lookup that could
 // leak the target.
-func dialSOCKS5(ctx context.Context, d *net.Dialer, pu *url.URL, addr string) (net.Conn, error) {
+func dialSOCKS5(ctx context.Context, d contextDialer, pu *url.URL, addr string) (net.Conn, error) {
 	host := pu.Host
 	if pu.Port() == "" {
 		host = net.JoinHostPort(pu.Hostname(), "1080")
@@ -381,7 +396,7 @@ func socksReplyText(code byte) string {
 // HTTP CONNECT
 // ---------------------------------------------------------------------------
 
-func (s *Session) dialHTTPProxy(ctx context.Context, d *net.Dialer, pu *url.URL, addr, userAgent string) (net.Conn, error) {
+func (s *Session) dialHTTPProxy(ctx context.Context, d contextDialer, pu *url.URL, addr, userAgent string) (net.Conn, error) {
 	// A proxy already spoken to over HTTP/2 takes the tunnel as one more
 	// stream on that connection, as a browser's proxy session does
 	// (proxyh2.go). If the shared connection fails under the tunnel -- the
@@ -548,7 +563,7 @@ func deadSocket(err error) bool {
 //
 // The handshake itself is the profile's, not Go's — see proxyTLS, which also
 // says what that cost before.
-func (s *Session) dialProxyConn(ctx context.Context, d *net.Dialer, pu *url.URL) (net.Conn, error) {
+func (s *Session) dialProxyConn(ctx context.Context, d contextDialer, pu *url.URL) (net.Conn, error) {
 	host := pu.Host
 	if pu.Port() == "" {
 		host = net.JoinHostPort(pu.Hostname(), defaultProxyPort(pu.Scheme))

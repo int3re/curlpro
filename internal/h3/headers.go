@@ -344,6 +344,11 @@ const RawHeaderKey = "\x00raw-header"
 // header map (client.takePeerSettings) as it does RawHeaderKey.
 const PeerSettingsKey = "\x00peer-settings"
 
+// ConnKey carries the connection a response came over — its pointer, as
+// text — to the client, which finds its record of the connection by it and
+// takes the key out of the map.
+const ConnKey = "\x00conn"
+
 // extractAnnouncedTrailers extracts trailer keys from the "Trailer" header.
 // It returns a map with the announced keys set to nil values, and removes the "Trailer" header.
 // It handles both duplicate as well as comma-separated values for the Trailer header.

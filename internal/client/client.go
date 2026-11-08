@@ -114,12 +114,15 @@ type Options struct {
 	// process memory whole: for a scraper that is not theory.
 	MaxResponseSize int64
 
-	// DisableAltSvc turns off the automatic HTTP/3 upgrade driven by Alt-Svc.
+	// DisableAltSvc turns off every HTTP/3 the client was not asked for: the
+	// upgrade an Alt-Svc header advertises, and the one an HTTPS record's
+	// alpn=h3 advertises by DNS (0.37; before it the record still led to
+	// QUIC). HTTP/3 then goes only where asked — Options.HTTP3, a request's
+	// Protocol h3.
 	//
-	// The upgrade is on by default: that is what a browser does — the first
-	// request to a site always goes over TCP, and the client moves to HTTP/3 only
-	// after seeing the advertisement. Worth turning off where UDP is known to be
-	// blocked and the extra attempt only wastes time.
+	// Both upgrades are on by default: that is what a browser does. Worth
+	// turning off where UDP is known to be blocked, or where every connection
+	// has to be TCP — a proxy whose own stack carries its client's TCP.
 	DisableAltSvc bool
 
 	// TicketCache names a group of sessions that share their TLS tickets, so
@@ -157,6 +160,21 @@ type Options struct {
 	// and Host keep the name; a proxy pinned to the address a client chose
 	// keeps it. Response.Conn.ResolvedBy says which happened.
 	ResolveViaProxy string
+
+	// Dialer, when set, opens the TCP connections — to the origin, or to
+	// the proxy — in place of the system: the caller's own transport, given
+	// the address (host:port, or the resolve table's address) and the
+	// local address the session or the request names, for the caller's
+	// stack to leave from. curlpro speaks TLS and HTTP over what it returns
+	// (0.37).
+	Dialer func(ctx context.Context, addr, local string) (net.Conn, error)
+
+	// DialUDP is Dialer for QUIC: a packet conn of the caller's, and the
+	// peer to send to (0.38). Without it a session with a Dialer has no
+	// HTTP/3 — http3 is refused, Alt-Svc and HTTPS records are not followed
+	// — since QUIC from the system's sockets would leave from another
+	// machine than the caller's TCP.
+	DialUDP func(ctx context.Context, addr, local string) (net.PacketConn, net.Addr, error)
 
 	// LocalAddress is the address connections leave from — an IP of this
 	// machine, the port chosen by the system: a route past a VPN, one
@@ -1091,6 +1109,12 @@ func New(p *profile.Profile, opts Options) (*Session, error) {
 	if err := checkLocalAddress(opts.LocalAddress); err != nil {
 		return nil, err
 	}
+	if opts.Dialer != nil && opts.DialUDP == nil {
+		if opts.HTTP3 {
+			return nil, configErr("http3 needs UDP, and the caller's dialer gives TCP connections only")
+		}
+		opts.DisableAltSvc = true // no QUIC behind the caller's back
+	}
 	switch opts.ResolveViaProxy {
 	case "", "name", "ip":
 	default:
@@ -1626,6 +1650,10 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// The Alt-Svc upgrade applies to direct connections only: QUIC does not pass
 	// through a proxy, and there is nothing to offer there.
 	forced := r.protocol()
+	if forced == ProtoH3 && s.opts.Dialer != nil && s.opts.DialUDP == nil {
+		return fail(&fatalError{configErr("protocol=%s needs UDP, and the session's connections come from the "+
+			"caller's dialer, which gives TCP", ProtoH3)})
+	}
 	// Over cleartext there is no ALPN and no Alt-Svc to act on: h2c is not what
 	// a browser does, and QUIC is TLS by definition. Rather than negotiate down
 	// silently, an explicit demand for h2 or h3 is refused here — a request that
@@ -1653,7 +1681,11 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 	// network.dns.use_https_rr_as_altsvc. Only on a direct connection — behind
 	// a proxy nothing is resolved here at all.
 	viaDNS := false
-	if !plain && forced == "" && !s.opts.HTTP3 && !viaAltSvc && s.profile.HTTP3.Enabled() && !s.h3Broken(u) {
+	// DisableAltSvc turns this one off too: an HTTPS record's alpn=h3 is the
+	// same advertisement by DNS, and a caller that asked for no unasked-for
+	// HTTP/3 got QUIC from it (Glasso's ticket 5).
+	if !plain && forced == "" && !s.opts.HTTP3 && !s.opts.DisableAltSvc && !viaAltSvc && s.profile.HTTP3.Enabled() &&
+		!s.h3Broken(u) {
 		if px := s.proxyForHost(r, u.Scheme, u.Host); px == "" {
 			rec := s.httpsRecord(req.Context(), u, px, dnsRecordWait)
 			// An ECH configuration in the record goes with it into QUIC (h3ECH).
@@ -1709,8 +1741,9 @@ func (s *Session) send(r *Request, deadline time.Time) (*http.Response, context.
 			resp, err := s.sendH3(req.Context(), r, u, proxy)
 			err = headersDone(err)
 			if err == nil {
-				info := &ConnInfo{Proto: "h3", ResolvedBy: s.resolvedBy(u.Host, proxy),
-					PeerSettings: takePeerSettings(resp.Header)}
+				info := s.h3.conns.describe(takeConnKey(resp.Header), resp.TLS)
+				info.ResolvedBy = s.resolvedBy(u.Host, proxy)
+				info.PeerSettings = takePeerSettings(resp.Header)
 				if proxy != "" {
 					info.Proxy = redactProxy(proxy)
 				}

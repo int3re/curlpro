@@ -611,8 +611,12 @@ func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Res
 		SignedCertificateTimestamps: connState.SignedCertificateTimestamps,
 		OCSPResponse:                connState.OCSPResponse,
 		TLSUnique:                   connState.TLSUnique,
+		ECHAccepted:                 connState.ECHAccepted, // curlpro
 	}
 	// [/uQUIC]
+	// curlpro: the connection, as the client's record of the connections it
+	// opened names it (ConnKey).
+	res.Header[ConnKey] = []string{fmt.Sprintf("%p", c.rawConn.conn)}
 	// curlpro: the server's SETTINGS, when they are in, for the client's
 	// ConnInfo (PeerSettingsKey).
 	select {

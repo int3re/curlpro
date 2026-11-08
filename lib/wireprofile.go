@@ -20,8 +20,10 @@ import (
 type fromWireJSON struct {
 	Name    string `json:"name"`
 	BasedOn string `json:"based_on"`
-	// ClientHello: the TLS record, or the handshake message.
-	ClientHello string `json:"client_hello"`
+	// ClientHello: the TLS record, or the handshake message — or a list of
+	// the client's hellos on several connections, the first one the
+	// profile's (their extension order tells permute_extensions).
+	ClientHello json.RawMessage `json:"client_hello"`
 	// H2: one connection's bytes after the handshake — the preface and the
 	// frames — or a list of connections'.
 	H2 json.RawMessage `json:"h2"`
@@ -58,9 +60,25 @@ func curlpro_profile_from_wire(wire *C.char) (out *C.char) {
 	}
 	var in wireprofile.Input
 	var err error
-	if w.ClientHello != "" {
-		if in.ClientHello, err = decodeB64("client_hello", w.ClientHello); err != nil {
-			return respond(nil, err)
+	if len(w.ClientHello) > 0 && string(w.ClientHello) != "null" {
+		var hellos []string
+		var one string
+		if json.Unmarshal(w.ClientHello, &one) == nil {
+			hellos = []string{one}
+		} else if err := json.Unmarshal(w.ClientHello, &hellos); err != nil || len(hellos) == 0 {
+			return respond(nil, client.CodeError(client.CodeConfiguration,
+				fmt.Errorf("client_hello: a base64 string or a list of them")))
+		}
+		for i, h := range hellos {
+			b, err := decodeB64(fmt.Sprintf("client_hello[%d]", i), h)
+			if err != nil {
+				return respond(nil, err)
+			}
+			if i == 0 {
+				in.ClientHello = b
+			} else {
+				in.MoreClientHellos = append(in.MoreClientHellos, b)
+			}
 		}
 	}
 	if len(w.H2) > 0 && string(w.H2) != "null" {
@@ -106,18 +124,21 @@ func curlpro_profile_from_wire(wire *C.char) (out *C.char) {
 		p.Name = "from-wire"
 	}
 	p.BasedOn = w.BasedOn
-	if p.BasedOn != "" {
-		// The result must stand on its parent as session_new will put it.
-		data, err := json.Marshal(p)
-		if err != nil {
-			return respond(nil, err)
-		}
-		if _, err := registry.ResolveInline(data); err != nil {
-			return respond(nil, client.CodeError(client.CodeConfiguration,
-				fmt.Errorf("the profile on %s: %s", p.BasedOn, strings.TrimPrefix(err.Error(), "parsing profile: "))))
-		}
-	}
+	// The result must be what session_new takes — on its parent, or alone.
+	// What it lacks then is said, not refused: a caller may add it.
 	notes := res.Notes
+	data, err := json.Marshal(p)
+	if err != nil {
+		return respond(nil, err)
+	}
+	if _, err := registry.ResolveInline(data); err != nil {
+		why := strings.TrimPrefix(err.Error(), "parsing profile: ")
+		if p.BasedOn != "" {
+			return respond(nil, client.CodeError(client.CodeConfiguration,
+				fmt.Errorf("the profile on %s: %s", p.BasedOn, why)))
+		}
+		notes = append(notes, "not yet a profile session_new takes: "+why)
+	}
 	if notes == nil {
 		notes = []string{}
 	}

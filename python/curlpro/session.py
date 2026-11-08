@@ -907,7 +907,9 @@ class Session:
         always goes over TCP, and it moves to QUIC only after the
         advertisement. A failed attempt postpones the next one and falls back
         to TCP. Requires a profile with an ``http3`` section; does not apply
-        through a proxy
+        through a proxy. Off, no HTTP/3 goes unasked: neither an ``Alt-Svc``
+        header nor an HTTPS record's ``alpn=h3`` leads to QUIC (0.37) — only
+        ``http3=True`` or a request's ``protocol="h3"`` does
     :param resolve: address override for a host:
         ``{"example.com:443": "10.0.0.7"}``. The name in SNI and in the Host
         header stays the same — only the socket destination changes. The

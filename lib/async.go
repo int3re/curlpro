@@ -61,6 +61,21 @@ func withInterimEvents(req *client.Request, before func(int64)) func(int64) {
 	}
 }
 
+// withDialLabel puts the call's number on the request's context, where a
+// "dial": "caller" session's asks carry it as "request" (0.37).
+func withDialLabel(req *client.Request, before func(int64)) func(int64) {
+	return func(rid int64) {
+		ctx := req.Ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		req.Ctx = client.WithDialLabel(ctx, rid)
+		if before != nil {
+			before(rid)
+		}
+	}
+}
+
 func interimSender(rid int64) func(client.Interim) {
 	return func(in client.Interim) {
 		frame := buildFrame(map[string]any{"interim": in}, nil, nil)
@@ -201,7 +216,7 @@ func curlpro_request_start(id C.longlong, frame *C.char, frameLen C.int) (out *C
 		bp.Attach(req)
 		before = func(rid int64) { registerBody(rid, bp) }
 	}
-	return startAsyncWith(cancel, nil, withInterimEvents(req, before), func(rid int64) []byte {
+	return startAsyncWith(cancel, nil, withDialLabel(req, withInterimEvents(req, before)), func(rid int64) []byte {
 		defer cancel()
 		resp, err := s.Do(req)
 		if bp != nil {

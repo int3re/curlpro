@@ -2,7 +2,7 @@
 
 `libcurlpro` (`curlpro.dll`, `libcurlpro.so`, `libcurlpro.dylib`) is a Go
 library built with `-buildmode=c-shared`. Every language other than Go talks to
-it through the 65 functions declared in [include/curlpro.h](../include/curlpro.h).
+it through the 66 functions declared in [include/curlpro.h](../include/curlpro.h).
 This file is the contract those functions keep: what goes in, what comes out,
 who frees what, which errors exist, and what is safe from several threads.
 
@@ -131,7 +131,8 @@ before registering a profile of the caller's — which may be `based_on` a stock
 `curlpro_profile_from_wire(wire)` (0.36) builds a profile from what a client
 sent, for a proxy that mirrors the client it relays: `wire` is `{name,
 based_on, client_hello, h2, quic_initial, h3_control}`, all base64 — the
-ClientHello (record or message), one HTTP/2 connection's bytes after the
+ClientHello (record or message) — or a list of the client's hellos on
+several connections, the first the profile's — one HTTP/2 connection's bytes after the
 handshake or a list of connections' (the preface, SETTINGS, WINDOW_UPDATE,
 PRIORITY and every HEADERS block), the client's first QUIC datagrams, its
 HTTP/3 control stream. The answer `{"profile": {…}, "notes": […]}` is the
@@ -143,8 +144,14 @@ name (`literal` where a literal went over a whole match, `never<N` where short
 values were never indexed and long ones were), `hpack_name_index` from which
 entry a literal named, `hpack_huffman` from a string Huffman would not
 shorten; `quic.raw_client_hello` decrypted out of the Initials;
-`http3.settings` and `settings_order`, `send_grease_frame`. Only what the bytes
-show is set and `based_on` supplies the rest; the notes say what one
+`http3.settings` and `settings_order`, `send_grease_frame`;
+`tls.permute_extensions` (0.37), which a profile must carry — `true` when the
+extension order moved between the hellos, `false` when it held, and from a
+single hello `true` only with ALPS, which Chromium alone sends (GREASE is no
+sign: Safari sends it and keeps its order). The answer stands alone in
+`session_new`, or on `based_on`; only what the bytes show is set, `based_on`
+supplies the rest, and a profile alone that still lacks something says so in
+the notes; the notes say what one
 connection could not tell — a CONNECT carries two pseudo-headers of four, a
 field always whole in a table shows no mode. Chrome 156's and Firefox 159's
 recorded blocks give back the HPACK fields of their profiles.
@@ -189,7 +196,7 @@ marked "absent = `true`" are the exceptions, read as on when missing.
 | `resume` | bool | **`true`** (absent: `false`) | TLS session resumption, as browsers do; `ticket_cache` needs it on |
 | `trust_env` | bool | **`true`** (absent: `false`) | `HTTPS_PROXY`/`NO_PROXY` from the environment |
 | `post_quantum` | bool | absent = `true` | the X25519MLKEM768 key share |
-| `alt_svc` | bool | absent = `true` | follow `Alt-Svc` to HTTP/3 |
+| `alt_svc` | bool | absent = `true` | follow HTTP/3's advertisements: an `Alt-Svc` header, an HTTPS record's `alpn=h3`. `false`: no HTTP/3 unless asked — `http3`, a request's `protocol: "h3"` — every connection TCP (the record too since 0.37) |
 | `keep_alive` | bool | absent = `true` | reuse connections |
 | `samesite` | bool | absent = `true` | apply SameSite rules to cookies |
 | `preflight` | bool | absent = `true` | send the CORS preflight a browser would |
@@ -204,6 +211,7 @@ marked "absent = `true`" are the exceptions, read as on when missing.
 | `resolve` | {host: ip} | | fixed DNS answers |
 | `resolve_via_proxy` | string | absent = `"name"` | what `resolve` does behind a proxy: `"name"` nothing — the tunnel names the host and the proxy resolves it, as curl's `--resolve`; `"ip"` the tunnel goes to the table's address (`CONNECT ip:port`, SOCKS5's address form, MASQUE's target), SNI and `Host` keeping the name. `conn.resolved_by` says which happened (0.34) |
 | `local_address` | string | absent = the system's choice | the IP connections leave from — a route past a VPN, one interface of several: TCP, a proxy's connection included, and QUIC's UDP; a request's own overrides it for TCP and keeps its connections apart in the pool. Not an IP is `configuration` (0.36) |
+| `dial` | string | absent = the system's | `"caller"`: every connection the session would open is asked of the caller on the ready queue and made by its own transport (`curlpro_dial_result`) — TCP to the origin or the proxy (0.37), and QUIC's UDP for HTTP/3 (0.38): with `http3`, a request's `protocol: "h3"` or an Alt-Svc upgrade the ask has `"udp": true`. The session's or the request's `local_address` is not used by curlpro then: it goes in the ask, for the caller's stack to leave from |
 | `ip_version` | string | `""` | `"4"`, `"6"` or `""` |
 | `dns` | string | `""` | HTTPS-record lookups: `""` system, `"off"`, servers, or a DoH URL |
 | `max_idle_conns`, `idle_conn_timeout_ms` | int | | pool limits |
@@ -288,7 +296,7 @@ curlpro_free(resp);
 | `trailers_raw` | [[name, value], …] — the trailer block as it came, as `headers_raw` is the header block: the server's case and order, a repeated field once per line, a value that is not UTF-8 as `[name, base64, "base64"]`; absent when none came (0.35) |
 | `headers_raw` | [[name, value], …] — the header block as it came off the wire: the server's order and case, a repeated field once per line; absent for a cached response (0.32). A value that is not UTF-8 (obs-text, a `Set-Cookie` in cp1251) comes as `[name, base64, "base64"]`: JSON would turn its bytes into U+FFFD, as it does in `headers` (0.33) |
 | `interim` | [{status, headers}] — the 1xx responses before the final one (103 Early Hints, 100 Continue), in order (0.32). Since 0.33 a body announced with `Expect: 100-continue` waits for the `100` (`expect_continue_ms`) |
-| `conn` | the connection: `id` (same id, same connection), `reused`, `remote`, `local`, `proto`, `proxy`, `tls_version`, `cipher`, `resumed`, `ech`, `verified`, `ja4`/`ja4_r` of the ClientHello actually sent, and on a connection's first response `resolved_by` (`local`, or `proxy` when a proxy got the name, 0.34), `peer_certs` (DER, base64, leaf first), `peer_settings` — the server's first SETTINGS as `[[id, value], …]` in its order, HTTP/2's or HTTP/3's (from its control stream), ids nobody defines included — and `peer_window_update`, the increment of its first connection WINDOW_UPDATE (HTTP/2) (0.36), `connect_ms` (name resolution, TCP and a proxy's tunnel together; `dns_ms` the address lookup within it, 0.33) and `tls_ms` (0.32) |
+| `conn` | the connection: `id` (same id, same connection), `reused`, `remote`, `local`, `proto`, `proxy`, `tls_version`, `cipher`, `resumed`, `ech`, `verified`, `ja4`/`ja4_r` of the ClientHello actually sent, and on a connection's first response `resolved_by` (`local`, or `proxy` when a proxy got the name, 0.34), `peer_certs` (DER, base64, leaf first; `verified` is from the chains the handshake built), `peer_settings` — the server's first SETTINGS as `[[id, value], …]` in its order, HTTP/2's or HTTP/3's (from its control stream), ids nobody defines included — and `peer_window_update`, the increment of its first connection WINDOW_UPDATE (HTTP/2) (0.36), `connect_ms` (name resolution, TCP and a proxy's tunnel together; `dns_ms` the address lookup within it, 0.33) and `tls_ms` (0.32); on HTTP/3 the same since 0.37 — `id`, `remote` and `local` (the address the system routes to the peer from and the socket's port — not `[::]`, since 0.38), `tls_version`, `cipher`, `verified`, the chain, `ja4`/`ja4_r` with QUIC's `q`, `connect_ms` the name resolution and `tls_ms` the QUIC handshake |
 | `timing` | `{wait_ms, body_ms}` — from the request leaving to its headers (0.32); from the headers to the body's last byte, on a buffered response (0.33) |
 
 The body is already decompressed (gzip, br, zstd, deflate).
@@ -419,6 +427,7 @@ close codes:
 | `curlpro_tls_dial(session, config)` | no HTTP at all: a TLS connection with the profile's ClientHello to `{host, port}`, `alpn` replacing its list (`[]` none, absent the profile's), through `proxy` or the session's; `{conn, info}`, `info` as a response's `conn` (0.32) |
 | `curlpro_conn_close(conn)` | closes; a read blocked on it returns `-1` |
 | `curlpro_preconnect(session, request)`, `curlpro_preconnect_start` | opens the connection a first request to the URL would open — the profile's ClientHello, ALPN and HTTP/2 preface — without a request, waits for the server's SETTINGS (and up to a second for its ACK of ours, before which it writes its WINDOW_UPDATE), leaves it in the pool and answers `{"info": {…}}`, a response's `conn` with `peer_settings`; `"connection": info.id` sends a request on it, the first one not `reused`. `request` is a request's JSON: `url`, `connection: "new"`, `proxy`, `protocol`, timeouts. TCP only: HTTP/3 forced is `configuration` (0.36) |
+| `curlpro_dial_result(conn, result)` | answers a `"dial": "caller"` session's ask — `{"dial": {conn, session, host, port, request, local_address, udp}}` on the ready queue under a number of its own, `request` the call it is made for, `local_address` where the session or the request wants the connection to leave from, `udp` on QUIC's ask. `conn` is your end of a pipe: `curlpro_conn_read` what curlpro sends and put it on your transport, `curlpro_conn_write` what comes back — on a `udp` ask one datagram per call each way, its bounds kept (a 64 KiB buffer takes any; a smaller one cuts the datagram, as a UDP read does). `result`: `""` when the connection is up, `{"error": text, "code": connect_refused \| connect_unreachable \| dns \| timeout \| reset}` when it failed — the request fails with that code. Closing `conn` first fails it too. The conn of a response over it has `local: "caller"`, `remote` the address asked, `resolved_by: "caller"` (0.37; UDP and `local_address` 0.38) |
 
 `curlpro_ws_*` is the other choice, where the library speaks WebSocket itself.
 
@@ -506,6 +515,7 @@ for (;;) {
 | `conn_closed` | a raw connection, or a streamed request body, is closed — by you, or because its request ended (0.31) | no |
 | `dns` | the name did not resolve | maybe |
 | `connect_refused` | the TCP connection was refused | maybe |
+| `connect_unreachable` | no route from here to the address: the network or the host unreachable, or a `local_address` that cannot reach it (0.37) | maybe |
 | `tls_alert` | the server ended the handshake with an alert. `details: {alert, name}` | depends |
 | `tls_verify` | the server's certificate did not verify. `details: {reason, chain}` (0.33) | **no** |
 | `reset` | the peer reset the connection, or the HTTP/2 stream. `details: {h2_code, stream_id}` for a stream | maybe |

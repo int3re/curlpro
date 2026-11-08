@@ -217,3 +217,49 @@ func TestQUICInitialFromTheClient(t *testing.T) {
 		t.Errorf("the QUIC ClientHello: %d bytes, %v", len(hello), err)
 	}
 }
+
+// A profile from a client's bytes stands without based_on: permute_extensions,
+// which the library will not guess, is read off the hellos — an order that
+// moves between several, or from one, ALPS (Chromium's alone, and every
+// Chromium that sends it shuffles). Safari sends GREASE and keeps its order.
+func TestAProfileFromHellosStandsAlone(t *testing.T) {
+	helloOf := func(name string) []byte {
+		p := auditProfile(t, name)
+		spec, err := profile.BuildSpec(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fp, err := fingerprint.FromSpec(spec, "example.com")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fp.Raw
+	}
+	chrome1, chrome2 := helloOf("chrome-157-windows"), helloOf("chrome-157-windows")
+	safari := helloOf("safari-26-ios")
+	for _, c := range []struct {
+		name    string
+		hellos  [][]byte
+		permute bool
+		note    string
+	}{
+		{"one Chromium hello", [][]byte{chrome1}, true, "ALPS"},
+		{"one Safari hello", [][]byte{safari}, false, "no ALPS"},
+		{"two Chromium hellos", [][]byte{chrome1, chrome2}, true, "moved"},
+		{"two Safari hellos", [][]byte{safari, safari}, false, "one extension order"},
+	} {
+		res, err := wireprofile.Build(wireprofile.Input{ClientHello: c.hellos[0], MoreClientHellos: c.hellos[1:]})
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		p := res.Profile
+		if p.TLS.PermuteExtensions == nil || *p.TLS.PermuteExtensions != c.permute ||
+			!strings.Contains(strings.Join(res.Notes, "\n"), c.note) {
+			t.Errorf("%s: permute %v, notes %q", c.name, p.TLS.PermuteExtensions, res.Notes)
+		}
+		p.Name = "from-wire"
+		if _, err := New(p, Options{}); err != nil {
+			t.Errorf("%s: a session refused the profile alone: %v", c.name, err)
+		}
+	}
+}

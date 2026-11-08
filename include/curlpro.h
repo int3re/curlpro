@@ -44,9 +44,9 @@ extern "C" {
  * refuse a library whose major.minor is lower than the one it was written
  * against, because an older library silently ignores options it does not know. */
 #define CURLPRO_ABI_VERSION_MAJOR 0
-#define CURLPRO_ABI_VERSION_MINOR 36
+#define CURLPRO_ABI_VERSION_MINOR 38
 #define CURLPRO_ABI_VERSION_PATCH 0
-#define CURLPRO_ABI_VERSION_STRING "0.36.0"
+#define CURLPRO_ABI_VERSION_STRING "0.38.0"
 
 /* Frame header size in bytes: a uint32 little-endian length of the JSON part. */
 #define CURLPRO_FRAME_HEADER 4
@@ -233,6 +233,17 @@ CURLPRO_API char *curlpro_preconnect_start(curlpro_handle session, const char *r
  * h3_control}, all base64. data: {"profile": {…}, "notes": […]}: only what
  * the bytes show is set, based_on supplies the rest. Since 0.36. */
 CURLPRO_API char *curlpro_profile_from_wire(const char *wire_json);
+
+/* A session with "dial": "caller" asks for every connection it would open,
+ * TCP and (since 0.38) QUIC's UDP: the ready queue carries {"dial": {conn,
+ * session, host, port, request, local_address, udp}} under a number of its
+ * own. conn is the caller's end of a pipe: curlpro_conn_read what curlpro
+ * sends and put it on the caller's transport, curlpro_conn_write what comes
+ * back — on a "udp" ask one datagram per call. result: "" when the connection is up,
+ * {"error": text, "code": connect_refused | connect_unreachable | dns |
+ * timeout | reset} when it failed. Closing conn first fails the dial too.
+ * Since 0.37. */
+CURLPRO_API char *curlpro_dial_result(curlpro_handle conn, const char *result_json);
 
 /* Ends the caller's direction (TLS close_notify / FIN), reading stays open. */
 CURLPRO_API char *curlpro_conn_close_write(curlpro_handle conn);

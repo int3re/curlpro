@@ -185,6 +185,9 @@ func (s *Session) joinGroupLocked(ctx context.Context, u *url.URL, spec dialSpec
 		if d, ok := ctx.Value(connectLimitKey{}).(time.Duration); ok {
 			gctx = withConnectLimit(gctx, d)
 		}
+		if l := DialLabel(ctx); l != 0 {
+			gctx = WithDialLabel(gctx, l) // the request a caller's dial is made for
+		}
 		ph := &dialPhase{}
 		gctx = context.WithValue(gctx, dialPhaseKey{}, ph)
 		g = &dialGroup{ctx: gctx, cancel: cancel, changed: make(chan struct{}), phase: ph}

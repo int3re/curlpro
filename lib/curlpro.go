@@ -24,12 +24,14 @@ import "C"
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"net"
 	"os"
 	"runtime"
 	"strings"
@@ -249,7 +251,15 @@ func curlpro_free(s *C.char) {
 // curlpro_preconnect_start), local_address on the session and per request,
 // connect_authority through a proxy that speaks HTTP/1.1 or is cleartext,
 // and a profile from a client's own bytes (curlpro_profile_from_wire).
-const Version = "0.36.0"
+// 0.37.0: the proxy's fifth list — alt_svc false is no unasked-for HTTP/3 at
+// all (an HTTPS record's alpn=h3 included), HTTP/3's conn as full as TCP's,
+// profile_from_wire standing alone (permute_extensions from the hellos),
+// connect_unreachable, and the caller's own transport ("dial": "caller",
+// curlpro_dial_result).
+// 0.38.0: the caller's UDP for QUIC ("udp" asks, a datagram pipe), so
+// "dial": "caller" and HTTP/3 go together; local_address in the ask; an
+// HTTP/3 conn's local address as routed, not the socket's [::].
+const Version = "0.38.0"
 
 //export curlpro_version
 func curlpro_version() *C.char {
@@ -453,7 +463,10 @@ type sessionConfig struct {
 	ResolveViaProxy string `json:"resolve_via_proxy"`
 	// LocalAddress: the IP connections leave from (0.36).
 	LocalAddress string `json:"local_address"`
-	IPVersion    string `json:"ip_version"`
+	// Dial: "caller" asks the caller for every connection, TCP (0.37) and
+	// QUIC's UDP (0.38) (callerdial.go); absent, the system's.
+	Dial      string `json:"dial"`
+	IPVersion string `json:"ip_version"`
 	// DNS: "" the system's servers for HTTPS records, "off", servers, or a
 	// DoH URL (internal/client/dns.go).
 	DNS string `json:"dns"`
@@ -557,7 +570,20 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 		// retrying it a minute later finds the same nothing.
 		return respond(nil, client.AsConfigError(err))
 	}
+	sid := new(atomic.Int64)
+	var dialer func(context.Context, string, string) (net.Conn, error)
+	var dialUDP func(context.Context, string, string) (net.PacketConn, net.Addr, error)
+	switch c.Dial {
+	case "":
+	case "caller":
+		dialer, dialUDP = callerDialer(sid), callerUDPDialer(sid)
+	default:
+		return respond(nil, client.CodeError(client.CodeConfiguration,
+			fmt.Errorf("dial %q: \"caller\" or absent", c.Dial)))
+	}
 	s, err := client.New(p, client.Options{
+		Dialer:                dialer,
+		DialUDP:               dialUDP,
 		InsecureSkipVerify:    c.InsecureSkipVerify,
 		Timeout:               time.Duration(c.TimeoutMS) * time.Millisecond,
 		Proxy:                 c.Proxy,
@@ -606,6 +632,7 @@ func curlpro_session_new(cfg *C.char) (out *C.char) {
 	}
 
 	id := nextID.Add(1)
+	sid.Store(id)
 	sessionsMu.Lock()
 	sessions[id] = s
 	sessionsMu.Unlock()

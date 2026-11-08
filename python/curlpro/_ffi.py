@@ -179,6 +179,8 @@ for _name, _args in (
     ("curlpro_preconnect", [ctypes.c_longlong, ctypes.c_char_p]),
     ("curlpro_preconnect_start", [ctypes.c_longlong, ctypes.c_char_p]),
     ("curlpro_profile_from_wire", [ctypes.c_char_p]),
+    # 0.37: the caller's own transport.
+    ("curlpro_dial_result", [ctypes.c_longlong, ctypes.c_char_p]),
 ):
     try:
         _fn = getattr(_lib, _name)
@@ -248,7 +250,7 @@ def _call(name: str, *args: Any) -> Any:
 
 # Minimum version of the native part: major and minor. Raise it together
 # with lib/curlpro.go whenever Python starts depending on a new export or field.
-REQUIRED_VERSION = (0, 36)
+REQUIRED_VERSION = (0, 37)
 
 
 def _check_version() -> None:

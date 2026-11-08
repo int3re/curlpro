@@ -30,7 +30,7 @@ import (
 
 // Version is the library version the profiles are checked against. It is kept
 // equal to Version in lib/curlpro.go (the C ABI version); a test enforces it.
-const Version = "0.36.0"
+const Version = "0.38.0"
 
 // The client types. They are aliases, so their methods and fields are the
 // ones documented in internal/client.

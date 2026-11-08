@@ -9,7 +9,16 @@ when its registry token is in the secrets ([bindings/README.md](../bindings/READ
 
 The first release was **0.2.0, 5 September 2026**:
 [pypi.org/project/curlpro](https://pypi.org/project/curlpro/). The current one is
-**0.36.0** — a minor: the fourth list of a transparent proxy. The server's
+**0.38.0** — a minor, with 0.37's changes in it (0.37 was never released on
+its own): the fifth and sixth lists of a transparent proxy. `alt_svc: false`
+is no unasked-for HTTP/3 at all — an HTTPS record's `alpn=h3` had still led to
+QUIC; an HTTP/3 response's `conn` is as full as a TCP one's, `verified` from
+the chains the handshake built; `curlpro_profile_from_wire` stands without
+`based_on` (`permute_extensions` from the hellos); `connect_unreachable`; and
+the caller's own transport — `"dial": "caller"` asks for every connection,
+TCP and QUIC's UDP, on the ready queue, `curlpro_dial_result` answers. 346
+profiles, 51 captured.
+Before it, **0.36.0** — a minor: the fourth list of a transparent proxy. The server's
 SETTINGS and connection WINDOW_UPDATE on every connection's description
 (`peer_settings`, `peer_window_update`, HTTP/3's from its control stream), a
 connection opened ahead of its first request (`curlpro_preconnect`), a profile

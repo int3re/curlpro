@@ -37,6 +37,10 @@ type h3Transport struct {
 	// h3.Transport knows nothing about it. Without tracking, every session left
 	// behind a UDP socket and two goroutines.
 	udp udpTransports
+
+	// conns describes the connections Dial opened, for the responses'
+	// ConnInfo (h3conns.go).
+	conns h3Conns
 }
 
 type udpTransports struct {
@@ -63,7 +67,7 @@ func (u *udpTransports) closeAll() {
 func (s *Session) http3() (*h3.Transport, error) {
 	s.h3.once.Do(func() {
 		s.h3.tr, s.h3.err = buildH3Transport(s.profile, s.opts, &s.h3.udp, s.roots, s.clientCerts, s.dns.resolver, nil,
-			s.h3ECH)
+			s.h3ECH, &s.h3.conns)
 	})
 	if s.h3.tr == nil && s.h3.err == nil {
 		// once already ran in closeH3: the transport was never created and never will be.
@@ -93,7 +97,8 @@ type h3ECHFor func(ctx context.Context, addr string) ([]byte, utls.ECHInnerStyle
 // TCP one. A rejection with retry configurations is retried once with them, or
 // without ECH when there are none, as on TCP.
 func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
-	roots *x509.CertPool, certs []utls.Certificate, resolver *net.Resolver, dial h3Dial, echFor h3ECHFor) (*h3.Transport, error) {
+	roots *x509.CertPool, certs []utls.Certificate, resolver *net.Resolver, dial h3Dial, echFor h3ECHFor,
+	conns *h3Conns) (*h3.Transport, error) {
 	if !p.HTTP3.Enabled() {
 		return nil, capabilityErr("profile %q has no http3 section, so it cannot speak HTTP/3", p.Name)
 	}
@@ -145,6 +150,7 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 		Dial: dialOr(dial, func(ctx context.Context, addr string, cfg *utls.Config, qcfg *quic.Config) (*quic.Conn, error) {
 			// The spec is rebuilt for every connection: extensions are shuffled and
 			// GREASE values are drawn anew.
+			started := time.Now()
 			spec, err := quicSpec(p)
 			if err != nil {
 				return nil, err
@@ -159,15 +165,33 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 			case "6":
 				network = "udp6"
 			}
-			udpConn, err := net.ListenUDP(network, localUDP(opts.LocalAddress))
+			target := resolveAddr(opts.Resolve, addr)
+			var ua net.Addr
+			// open is the socket a connection runs on: the system's, or the
+			// caller's (Options.DialUDP), which names the peer as well.
+			open := func() (net.PacketConn, error) {
+				if opts.DialUDP != nil {
+					pc, peer, err := opts.DialUDP(ctx, target, opts.LocalAddress)
+					if err == nil {
+						ua = peer
+					}
+					return pc, err
+				}
+				return net.ListenUDP(network, localUDP(opts.LocalAddress))
+			}
+			udpConn, err := open()
 			if err != nil {
 				return nil, inPhase(PhaseConnect, err)
 			}
-			ua, err := resolveUDP(ctx, resolver, network, resolveAddr(opts.Resolve, addr))
-			if err != nil {
-				udpConn.Close()
-				return nil, inPhase(PhaseConnect, err)
+			if opts.DialUDP == nil {
+				r, err := resolveUDP(ctx, resolver, network, target)
+				if err != nil {
+					udpConn.Close()
+					return nil, inPhase(PhaseConnect, err)
+				}
+				ua = r
 			}
+			resolved := time.Now()
 			ut := &quic.UTransport{
 				Transport: &quic.Transport{Conn: udpConn},
 				QUICSpec:  spec,
@@ -213,7 +237,7 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 				if spec, err = quicSpec(p); err != nil {
 					return nil, err
 				}
-				if udpConn, err = net.ListenUDP(network, localUDP(opts.LocalAddress)); err != nil {
+				if udpConn, err = open(); err != nil {
 					return nil, err
 				}
 				ut = &quic.UTransport{Transport: &quic.Transport{Conn: udpConn}, QUICSpec: spec}
@@ -231,6 +255,11 @@ func buildH3Transport(p *profile.Profile, opts Options, udp *udpTransports,
 				return nil, inPhase(PhaseTLS, err)
 			}
 			udp.add(ut.Transport)
+			serverName := cfg.ServerName
+			if serverName == "" {
+				serverName, _, _ = net.SplitHostPort(addr)
+			}
+			conns.opened(conn, p, serverName, shownLocal(network, udpConn, ua), resolved, started, resolved)
 			return conn, nil
 		}),
 	}, nil

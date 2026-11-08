@@ -18,6 +18,7 @@ import (
 
 func fromStdResponse(r *nethttp.Response) *http.Response {
 	takePeerSettings(r.Header) // ConnInfo's, taken already where it is read
+	takeConnKey(r.Header)
 	out := &http.Response{
 		RawHeader:     takeRawBlock(r.Header),
 		Status:        r.Status,
@@ -60,6 +61,17 @@ func takePeerSettings(h nethttp.Header) [][2]uint64 {
 		}
 	}
 	return out
+}
+
+// takeConnKey takes the key of the connection an HTTP/3 response came over
+// out of its header map (h3.ConnKey).
+func takeConnKey(h nethttp.Header) string {
+	v := h[h3.ConnKey]
+	delete(h, h3.ConnKey)
+	if len(v) == 0 {
+		return ""
+	}
+	return v[0]
 }
 
 // takeRawBlock takes the block as it came out of a header map, where the h3

@@ -21,6 +21,7 @@ import (
 
 	"github.com/bogdanfinn/fhttp/http2/hpack"
 
+	"github.com/curlpro/curlpro/internal/fingerprint"
 	"github.com/curlpro/curlpro/internal/profile"
 	"github.com/curlpro/curlpro/internal/quicinitial"
 )
@@ -30,6 +31,9 @@ type Input struct {
 	// ClientHello is its TLS ClientHello: the record (0x16…) or the
 	// handshake message (0x01…).
 	ClientHello []byte
+	// MoreClientHellos are the same client's hellos on other connections:
+	// whether their extension order moves tells permute_extensions.
+	MoreClientHellos [][]byte
 	// H2 holds, per connection, the client's bytes after the TLS
 	// handshake: the preface and the frames that follow, as many as there
 	// are. More connections and more requests show more of the encoder.
@@ -56,6 +60,9 @@ func Build(in Input) (*Result, error) {
 	r := &Result{Profile: &profile.Profile{}}
 	if len(in.ClientHello) > 0 {
 		if err := r.tls(in.ClientHello); err != nil {
+			return nil, err
+		}
+		if err := r.permute(append([][]byte{in.ClientHello}, in.MoreClientHellos...)); err != nil {
 			return nil, err
 		}
 	}
@@ -119,6 +126,54 @@ func (r *Result) tls(hello []byte) error {
 	if len(ids) > 0 {
 		p.TLS.TrustAnchors = ids
 	}
+	return nil
+}
+
+// permute decides tls.permute_extensions, which a profile must set and the
+// library will not guess: Chrome 110 and later shuffle the extensions of
+// every hello, the rest keep one order. Several hellos of the client tell it
+// outright — an order that moves between them. One hello tells it by family:
+// ALPS (application_settings, 0x4469 or 0x44cd) is Chromium's alone, and
+// every Chromium that sends it shuffles; GREASE is no sign, Safari sends it
+// and keeps its order.
+func (r *Result) permute(hellos [][]byte) error {
+	var orders []string
+	alps := false
+	for i, h := range hellos {
+		msg := h
+		if len(msg) > 5 && msg[0] == 0x16 {
+			msg = msg[5:]
+		}
+		fp, err := fingerprint.FromRaw(msg)
+		if err != nil {
+			return fmt.Errorf("client_hello[%d]: %w", i, err)
+		}
+		orders = append(orders, strings.Join(fp.Extensions, ","))
+		for _, e := range fp.Extensions {
+			if e == "4469" || e == "44cd" {
+				alps = true
+			}
+		}
+	}
+	moved := false
+	for _, o := range orders[1:] {
+		if o != orders[0] {
+			moved = true
+		}
+	}
+	yes := moved
+	switch {
+	case moved:
+		r.note("permute_extensions: true — the extension order moved between the %d hellos", len(orders))
+	case len(orders) > 1:
+		r.note("permute_extensions: false — %d hellos, one extension order", len(orders))
+	case alps:
+		yes = true
+		r.note("permute_extensions: true from one hello — it carries ALPS, which only Chromium sends, and Chromium shuffles; give more hellos to see it")
+	default:
+		r.note("permute_extensions: false from one hello — no ALPS, so not a shuffling Chromium; give more hellos to see it")
+	}
+	r.Profile.TLS.PermuteExtensions = &yes
 	return nil
 }
 

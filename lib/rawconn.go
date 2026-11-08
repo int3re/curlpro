@@ -8,6 +8,7 @@ import "C"
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -78,6 +79,8 @@ func closeConn(cid int64) error {
 	if !ok {
 		return fmt.Errorf("connection %d not found", cid)
 	}
+	// A dial the caller closes instead of answering has failed.
+	answerDial(cid, errors.New("the caller closed the connection it was asked for"))
 	return e.c.Close()
 }
 
@@ -148,11 +151,11 @@ func curlpro_upgrade_open_start(id C.longlong, frame *C.char, frameLen C.int) (o
 	ctx, cancel := context.WithCancel(context.Background())
 	req.Ctx = ctx
 	opened := new(int64)
-	return startAsync(cancel, func([]byte) {
+	return startAsyncWith(cancel, func([]byte) {
 		if cid := atomic.LoadInt64(opened); cid != 0 {
 			_ = closeConn(cid)
 		}
-	}, func(int64) []byte {
+	}, withDialLabel(req, nil), func(int64) []byte {
 		defer cancel()
 		up, err := sess.Upgrade(req)
 		if err != nil {

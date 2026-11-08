@@ -75,6 +75,11 @@ const (
 	CodeDNS ErrorCode = "dns"
 	// CodeConnectRefused — the TCP connection was refused (nothing listens).
 	CodeConnectRefused ErrorCode = "connect_refused"
+	// CodeConnectUnreachable — no route from here to the address: the
+	// network or the host unreachable, or a local address that cannot reach
+	// it (local_address on another interface, loopback to the outside)
+	// (0.37).
+	CodeConnectUnreachable ErrorCode = "connect_unreachable"
 	// CodeTLSAlert — the server ended the handshake with an alert;
 	// details.alert is its number.
 	CodeTLSAlert ErrorCode = "tls_alert"
